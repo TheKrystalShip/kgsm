@@ -48,6 +48,18 @@ function __dispatch_event_from_exit_code() {
       "$module_events" --emit --instance-directories-removed "$instance_name"
       return $?
       ;;
+    $EC_SUCCESS_INSTANCE_STARTED)
+      "$module_events" --emit --instance-started "$instance_name"
+      return $?
+      ;;
+    $EC_SUCCESS_INSTANCE_STOPPED)
+      "$module_events" --emit --instance-stopped "$instance_name"
+      return $?
+      ;;
+    $EC_SUCCESS_INSTANCE_RESTARTED)
+      "$module_events" --emit --instance-restarted "$instance_name"
+      return $?
+      ;;
     $EC_SUCCESS_CONFIG_SET)
       # TODO: Implement global config events when global event infrastructure is ready
       # "$module_events" --emit --config-set "$key" "$value"
