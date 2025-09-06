@@ -24,7 +24,7 @@ if [[ $@ =~ "--debug" ]]; then
 fi
 
 # Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 
 # Security function to validate configuration keys
 # Prevents code injection through malicious config files by ensuring
