@@ -190,11 +190,7 @@ function run_kgsm() {
     log_test "KGSM output: $output"
   fi
 
-  if [[ $exit_code -eq $expected_exit_code ]]; then
-    return $EC_SUCCESS
-  else
-    return $EC_FAILURE
-  fi
+  return $exit_code
 }
 
 # Create test instance
