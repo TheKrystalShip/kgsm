@@ -37,9 +37,6 @@ ${UNDERLINE}Examples:${END}
 "
 }
 
-# Disable error checking for this script to allow proper error handling
-__disable_error_checking
-
 if [[ "$#" -eq 0 ]]; then
   usage
   exit $EC_MISSING_ARG

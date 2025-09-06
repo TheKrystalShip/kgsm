@@ -54,9 +54,6 @@ if [[ -z "$KGSM_CONFIG_LOADED" ]]; then
 fi
 
 function __merge_user_config_with_default() {
-  if [[ $(type -t __disable_error_checking) == function ]]; then
-    __disable_error_checking
-  fi
 
   backup_file="${CONFIG_FILE}.$(get_version).bak"
 
@@ -130,9 +127,7 @@ function __merge_user_config_with_default() {
 
   __print_info "Please check ${CONFIG_FILE} for modified/new options"
 
-  if [[ $(type -t __enable_error_checking) == function ]]; then
-    __enable_error_checking
-  fi
+  # Global error trap system removed - errors handled explicitly
 }
 
 export -f __merge_user_config_with_default

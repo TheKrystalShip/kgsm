@@ -143,7 +143,10 @@ export EC_SUCCESS_INSTANCE_STARTED
 declare -g -r EC_SUCCESS_INSTANCE_STOPPED=212
 export EC_SUCCESS_INSTANCE_STOPPED
 
-declare -g -r EC_SUCCESS_INSTANCE_REMOVED=213
+declare -g -r EC_SUCCESS_INSTANCE_RESTARTED=213
+export EC_SUCCESS_INSTANCE_RESTARTED
+
+declare -g -r EC_SUCCESS_INSTANCE_REMOVED=214
 export EC_SUCCESS_INSTANCE_REMOVED
 
 # Deployment events (reserved for future use)
@@ -210,41 +213,5 @@ declare -A EXIT_CODES=(
   [$EC_SUCCESS]="Operation successful"
 )
 
-function __print_error_code() {
-  local code=$1
-  local script="${BASH_SOURCE[1]}" # The script where the error occurred
-  local func="${FUNCNAME[1]}"      # The function where the error occurred
-  local line="${BASH_LINENO[0]}"   # The line number where the error occurred
-
-  # Exit codes >200 represent success codes mapped to specific events used
-  # but the events.sh library to be emitted when needed.
-  # We don't need the events to bubble all the way to the top so we can declare
-  # them as a generic success exit code 0.
-  if [[ $code -gt 200 ]]; then
-    exit 0
-  fi
-
-  echo "Error $code: ${EXIT_CODES[$code]:-Unknown error}" >&2
-  echo "Occurred in script: $script, function: $func, line: $line" >&2
-  exit $code
-}
-
-export -f __print_error_code
-
-function __enable_error_checking() {
-  set -o pipefail
-  trap '__print_error_code $?; exit $?' ERR
-}
-
-export -f __enable_error_checking
-
-function __disable_error_checking() {
-  set +o pipefail
-  trap '' ERR
-}
-
-export -f __disable_error_checking
-
-__enable_error_checking
 
 export KGSM_ERRORS_LOADED=1

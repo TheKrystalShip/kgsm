@@ -224,10 +224,9 @@ function test_common_library_reload_protection() {
 function test_common_library_error_handling() {
   log_step "Testing common library error handling"
 
-  # Test that error handling functions are available
-  assert_function_exists "__print_error_code" "Error handling function __print_error_code should be available"
-  assert_function_exists "__enable_error_checking" "Error handling function __enable_error_checking should be available"
-  assert_function_exists "__disable_error_checking" "Error handling function __disable_error_checking should be available"
+  assert_not_null "$EC_INVALID_ARG" "Error constant EC_INVALID_ARG should be available"
+  assert_not_null "$EC_FILE_NOT_FOUND" "Error constant EC_FILE_NOT_FOUND should be available"
+  assert_not_null "$EC_SUCCESS_INSTANCE_STARTED" "Event code EC_SUCCESS_INSTANCE_STARTED should be available"
 }
 
 function test_common_library_environment_variables() {

@@ -487,7 +487,6 @@ function process_instance() {
     ;;
   --is-active)
     # Inactive instances return exit code 1.
-    __disable_error_checking
     "$module_lifecycle" --is-active "$instance"
     ;;
   --backups)
