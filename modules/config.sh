@@ -57,7 +57,7 @@ ${UNDERLINE}Notes:${END}
 json_format=""
 
 # Command handler functions that call pure logic and manage I/O
-function handle_set_command() {
+function _cmd_set() {
   local key_value="$1"
 
   # Use centralized validation for key=value argument
@@ -112,7 +112,7 @@ function handle_set_command() {
   return $exit_code
 }
 
-function handle_get_command() {
+function _cmd_get() {
   local key="$1"
 
   # Use centralized validation for key argument
@@ -154,7 +154,7 @@ function handle_get_command() {
   return $exit_code
 }
 
-function handle_list_command() {
+function _cmd_list() {
   # Call pure logic function and handle result
   __list_config_values "$json_format"
   local exit_code=$?
@@ -182,7 +182,7 @@ function handle_list_command() {
   return $exit_code
 }
 
-function handle_reset_command() {
+function _cmd_reset() {
   # Call pure logic function and handle result
   __reset_config
   local exit_code=$?
@@ -209,7 +209,7 @@ function handle_reset_command() {
   return $exit_code
 }
 
-function handle_validate_command() {
+function _cmd_validate() {
   # Call pure logic function and handle result
   __validate_current_config
   local exit_code=$?
@@ -239,7 +239,7 @@ function handle_validate_command() {
   return $exit_code
 }
 
-function handle_edit_command() {
+function _cmd_edit() {
   # Call pure logic function and handle result
   __open_config_editor
   local exit_code=$?
@@ -248,11 +248,11 @@ function handle_edit_command() {
     $EC_OKAY)
       # Nothing to do
       return 0
-    ;;
+      ;;
     $EC_MISSING_DEPENDENCY)
       __print_error "EDITOR could not be used"
       __print_error "Set EDITOR variable to fix this error"
-    ;;
+      ;;
     *)
       __print_error "Operation failed: edit"
       ;;
@@ -261,7 +261,7 @@ function handle_edit_command() {
   return $exit_code
 }
 
-function handle_help_command() {
+function _cmd_help() {
   local command="$1"
 
   if [[ -z "$command" ]]; then
@@ -385,31 +385,31 @@ fi
 # Route to appropriate command handler
 case "$command" in
   set)
-    handle_set_command "$1"
+    _cmd_set "$1"
     exit $?
     ;;
   get)
-    handle_get_command "$1"
+    _cmd_get "$1"
     exit $?
     ;;
   list)
-    handle_list_command
+    _cmd_list
     exit $?
     ;;
   reset)
-    handle_reset_command
+    _cmd_reset
     exit $?
     ;;
   validate)
-    handle_validate_command
+    _cmd_validate
     exit $?
     ;;
   edit)
-    handle_edit_command
+    _cmd_edit
     exit $?
     ;;
   help)
-    handle_help_command "$1"
+    _cmd_help "$1"
     exit $?
     ;;
   *)
