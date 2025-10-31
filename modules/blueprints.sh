@@ -1,359 +1,465 @@
 #!/usr/bin/env bash
 
+# Disabling SC2086 globally:
+# Exit code variables are guaranteed to be numeric and safe for unquoted use.
+# shellcheck disable=SC2086
+
 # shellcheck disable=SC1091
 source "$(dirname "$(readlink -f "$0")")/../lib/bootstrap.sh"
 
-function usage() {
+self="$(basename "$0")"
+
+function show_usage() {
   local UNDERLINE="\e[4m"
   local END="\e[0m"
 
   echo -e "${UNDERLINE}Blueprint Management for Krystal Game Server Manager${END}
 
-Provides tools to create, list, and manage game server blueprints - the templates used to create server instances.
+Manages game server blueprints - the templates used to create server instances.
 
 ${UNDERLINE}Usage:${END}
-  $(basename "$0") [OPTIONS]
+  $self [command] [arguments] [options]
 
-${UNDERLINE}General Options:${END}
-  -h, --help                    Display this help information
+${UNDERLINE}Commands:${END}
+  list [filter]               List available blueprints
+  info <blueprint>            Display blueprint contents
+  find <blueprint>            Get blueprint file path
+  help [command]              Show help information
 
-${UNDERLINE}Blueprint Listing & Information:${END}
-  --list                        Display all available blueprints
-    --default                   Show only official default blueprints
-    --custom                    Show only user-created custom blueprints
-    --detailed --json           Output detailed blueprint information in JSON format
-  --info <blueprint>            Display the contents of a specific blueprint file
-    --json                      Format the output as JSON
-  --find <blueprint>            Locate the absolute path to a blueprint file
-
-${UNDERLINE}Blueprint Creation:${END}
-  Blueprints should be created manually by copying and modifying the template file:
-  $KGSM_ROOT/templates/blueprint.tp
+${UNDERLINE}Options:${END}
+  --json                      Output in JSON format
+  -h, --help                  Show help and exit
 
 ${UNDERLINE}Examples:${END}
-  $(basename "$0") --list
-  $(basename "$0") --list --custom
-  $(basename "$0") --list --default
+  $self list
+  $self list default
+  $self list custom
+  $self list detailed
+  $self list --json
+  $self info factorio
+  $self info terraria --json
+  $self find minecraft
+  $self help list
+
+${UNDERLINE}Notes:${END}
+  • Blueprints define server configuration templates
+  • Use 'default' filter to show official blueprints
+  • Use 'custom' filter to show user-created blueprints
+  • Create new blueprints by copying templates/blueprint.tp
+  • Both native and container blueprints are supported
 "
 }
 
-if [[ "$#" -eq 0 ]]; then
-  usage
-  exit $EC_MISSING_ARG
-fi
+function usage_list() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
 
+  echo -e "${UNDERLINE}List Blueprints${END}
+
+List all available game server blueprints with optional filtering.
+
+${UNDERLINE}Usage:${END}
+  $self list [filter] [options]
+
+${UNDERLINE}Filters:${END}
+  (none)                      List all blueprints
+  default                     Show only official default blueprints
+  custom                      Show only user-created custom blueprints
+  detailed                    Show detailed information for each blueprint
+
+${UNDERLINE}Options:${END}
+  --json                      Output in JSON format
+  --help                      Display this help information
+
+${UNDERLINE}Description:${END}
+Lists available blueprints from both native and container directories.
+Default blueprints are provided by KGSM, while custom blueprints are
+user-created. The detailed filter shows additional metadata for each blueprint.
+
+${UNDERLINE}Examples:${END}
+  $self list
+  $self list default
+  $self list custom --json
+  $self list detailed
+"
+}
+
+function usage_info() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Blueprint Info${END}
+
+Display the contents of a specific blueprint file.
+
+${UNDERLINE}Usage:${END}
+  $self info <blueprint> [options]
+
+${UNDERLINE}Arguments:${END}
+  blueprint                   Name of the blueprint to display
+
+${UNDERLINE}Options:${END}
+  --json                      Output in JSON format
+  --help                      Display this help information
+
+${UNDERLINE}Description:${END}
+Displays the complete contents of a blueprint file, including all
+configuration parameters. The blueprint name can refer to either a
+native (.bp) or container (docker-compose.yml) blueprint.
+
+${UNDERLINE}Examples:${END}
+  $self info factorio
+  $self info terraria --json
+  $self info minecraft
+"
+}
+
+function usage_find() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Find Blueprint${END}
+
+Locate the absolute path to a blueprint file.
+
+${UNDERLINE}Usage:${END}
+  $self find <blueprint>
+
+${UNDERLINE}Arguments:${END}
+  blueprint                   Name of the blueprint to find
+
+${UNDERLINE}Options:${END}
+  --help                      Display this help information
+
+${UNDERLINE}Description:${END}
+Returns the absolute file path to the specified blueprint. This is
+useful for scripting and debugging. The command validates that the
+blueprint exists and is valid before returning the path.
+
+${UNDERLINE}Examples:${END}
+  $self find factorio
+  $self find terraria
+  path=\$($self find minecraft)
+"
+}
+
+# Source logic library
+logic_library=$(__find_logic_library blueprints.sh)
+# shellcheck disable=SC1090
+source "$logic_library" || {
+  __print_error "Failed to load blueprints logic library"
+  exit $EC_FAILED_SOURCE
+}
+
+# Module references
 module_native="$(__find_module blueprints.native.sh)"
 module_container="$(__find_module blueprints.container.sh)"
 
-function _combine_blueprint_results() {
-  local native_results
-  native_results=$("$(__find_module blueprints.native.sh)" "$@")
+# Command handler functions
+function _cmd_list() {
+  local filter=""
+  local json_opt=""
+
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help | -h)
+        usage_list
+        return 0
+        ;;
+      --json)
+        json_opt="--json"
+        shift
+        ;;
+      default | custom | detailed)
+        filter="$1"
+        shift
+        ;;
+      *)
+        __print_error "Invalid argument: $1"
+        __print_error "Use '$self list --help' for usage information"
+        return $EC_INVALID_ARG
+        ;;
+    esac
+  done
+
+  # Build command args for native and container modules
+  local cmd_args="list"
+
+  if [[ -n "$filter" ]]; then
+    cmd_args="$cmd_args $filter"
+  fi
+
+  if [[ -n "$json_opt" ]]; then
+    cmd_args="$cmd_args --json"
+  fi
+
+  # Get results from both modules
+  local native_result
+  native_result=$("$module_native" $cmd_args 2>/dev/null)
   local native_exit=$?
 
-  local container_results
-  container_results=$("$(__find_module blueprints.container.sh)" "$@")
+  local container_result
+  container_result=$("$module_container" $cmd_args 2>/dev/null)
   local container_exit=$?
 
-  # If both modules failed, return an error
-  if [[ $native_exit -ne 0 && $container_exit -ne 0 ]]; then
-    return $EC_NOT_FOUND
-  fi
-
-  # Output the combined results
-  if [[ -n "$native_results" ]]; then
-    echo "$native_results"
-  fi
-
-  if [[ -n "$container_results" ]]; then
-    echo "$container_results"
-  fi
-
-  return 0
-}
-
-function _list_blueprints() {
-  # Get blueprints from both native and container modules and combine them
-  local native_cmd_args="--list"
-  local container_cmd_args="--list"
-
-  # Pass the json flag if set
-  if [[ -n "$json_format" ]]; then
-    native_cmd_args="$native_cmd_args --json"
-    container_cmd_args="$container_cmd_args --json"
-  fi
-
-  local native_blueprints
-  native_blueprints=$("$(__find_module blueprints.native.sh)" $native_cmd_args)
-  local native_exit=$?
-
-  local container_blueprints
-  container_blueprints=$("$(__find_module blueprints.container.sh)" $container_cmd_args)
-  local container_exit=$?
-
-  # If JSON output is requested, combine the JSON objects
-  if [[ -n "$json_format" ]]; then
-    if [[ $native_exit -eq 0 && $container_exit -eq 0 && -n "$native_blueprints" && -n "$container_blueprints" ]]; then
-      # Merge both JSON arrays, remove empty strings, and ensure unique entries
-      jq -s 'add | map(select(length > 0)) | unique' <(echo "$native_blueprints") <(echo "$container_blueprints")
-      return 0
-    elif [[ $native_exit -eq 0 && -n "$native_blueprints" ]]; then
-      # Filter out empty strings from native blueprints
-      jq 'map(select(length > 0)) | unique' <(echo "$native_blueprints")
-      return 0
-    elif [[ $container_exit -eq 0 && -n "$container_blueprints" ]]; then
-      # Filter out empty strings from container blueprints
-      jq 'map(select(length > 0)) | unique' <(echo "$container_blueprints")
-      return 0
-    fi
-    # If we got here, no valid JSON was returned
-    echo "[]"
-    return 0
-  else
-    # For non-JSON, combine and sort unique blueprints
-    printf "%s\n%s\n" "$native_blueprints" "$container_blueprints" | grep -v '^$' | sort -u
-    return 0
-  fi
-}
-
-function _list_custom_blueprints() {
-  # Get blueprints from both native and container modules and combine them
-  local native_cmd_args="--list --custom"
-  local container_cmd_args="--list --custom"
-
-  # Pass the json flag if set
-  if [[ -n "$json_format" ]]; then
-    native_cmd_args="$native_cmd_args --json"
-    container_cmd_args="$container_cmd_args --json"
-  fi
-
-  local native_blueprints
-  native_blueprints=$("$(__find_module blueprints.native.sh)" $native_cmd_args)
-  local native_exit=$?
-
-  local container_blueprints
-  container_blueprints=$("$(__find_module blueprints.container.sh)" $container_cmd_args)
-  local container_exit=$?
-
-  # If JSON output is requested, combine the JSON objects
-  if [[ -n "$json_format" ]]; then
-    if [[ $native_exit -eq 0 && $container_exit -eq 0 && -n "$native_blueprints" && -n "$container_blueprints" ]]; then
-      # Merge both JSON arrays, remove empty strings, and ensure unique entries
-      jq -s 'add | map(select(length > 0)) | unique' <(echo "$native_blueprints") <(echo "$container_blueprints")
-      return 0
-    elif [[ $native_exit -eq 0 && -n "$native_blueprints" ]]; then
-      # Filter out empty strings from native blueprints
-      jq 'map(select(length > 0)) | unique' <(echo "$native_blueprints")
-      return 0
-    elif [[ $container_exit -eq 0 && -n "$container_blueprints" ]]; then
-      # Filter out empty strings from container blueprints
-      jq 'map(select(length > 0)) | unique' <(echo "$container_blueprints")
-      return 0
-    fi
-    # If we got here, no valid JSON was returned
-    echo "[]"
-    return 0
-  else
-    # For non-JSON, combine and sort unique blueprints
-    printf "%s\n%s\n" "$native_blueprints" "$container_blueprints" | grep -v '^$' | sort -u
-    return 0
-  fi
-}
-
-function _list_default_blueprints() {
-  # Get blueprints from both native and container modules and combine them
-  local native_cmd_args="--list --default"
-  local container_cmd_args="--list --default"
-
-  # Pass the json flag if set
-  if [[ -n "$json_format" ]]; then
-    native_cmd_args="$native_cmd_args --json"
-    container_cmd_args="$container_cmd_args --json"
-  fi
-
-  local native_blueprints
-  native_blueprints=$("$(__find_module blueprints.native.sh)" $native_cmd_args)
-  local native_exit=$?
-
-  local container_blueprints
-  container_blueprints=$("$(__find_module blueprints.container.sh)" $container_cmd_args)
-  local container_exit=$?
-
-  # If JSON output is requested, combine the JSON objects
-  if [[ -n "$json_format" ]]; then
-    if [[ $native_exit -eq 0 && $container_exit -eq 0 && -n "$native_blueprints" && -n "$container_blueprints" ]]; then
-      # Merge both JSON arrays, remove empty strings, and ensure unique entries
-      jq -s 'add | map(select(length > 0)) | unique' <(echo "$native_blueprints") <(echo "$container_blueprints")
-      return 0
-    elif [[ $native_exit -eq 0 && -n "$native_blueprints" ]]; then
-      # Filter out empty strings from native blueprints
-      jq 'map(select(length > 0)) | unique' <(echo "$native_blueprints")
-      return 0
-    elif [[ $container_exit -eq 0 && -n "$container_blueprints" ]]; then
-      # Filter out empty strings from container blueprints
-      jq 'map(select(length > 0)) | unique' <(echo "$container_blueprints")
-      return 0
-    fi
-    # If we got here, no valid JSON was returned
-    echo "[]"
-    return 0
-  else
-    # For non-JSON, combine and sort unique blueprints
-    printf "%s\n%s\n" "$native_blueprints" "$container_blueprints" | grep -v '^$' | sort -u
-    return 0
-  fi
-}
-
-function _list_detailed_blueprints() {
-  # For detailed listings, we need to handle JSON format separately
-  if [[ -n "$json_format" ]]; then
-    local native_json
-    native_json=$("$module_native" --list --detailed --json 2>/dev/null)
-    local native_exit=$?
-
-    local container_json
-    container_json=$("$module_container" --list --detailed --json 2>/dev/null)
-    local container_exit=$?
-
-    # Combine the JSON results (this assumes the outputs are valid JSON objects)
-    if [[ $native_exit -eq 0 && $container_exit -eq 0 && -n "$native_json" && -n "$container_json" ]]; then
-      # Merge both JSON objects and filter out any empty key entries
-      jq -s '.[0] * .[1] | with_entries(select(.key != ""))' <(echo "$native_json") <(echo "$container_json")
-    elif [[ $native_exit -eq 0 && -n "$native_json" ]]; then
-      # Filter out any empty key entries from native JSON
-      jq 'with_entries(select(.key != ""))' <(echo "$native_json")
-    elif [[ $container_exit -eq 0 && -n "$container_json" ]]; then
-      # Filter out any empty key entries from container JSON
-      jq 'with_entries(select(.key != ""))' <(echo "$container_json")
+  # Combine results based on format
+  if [[ -n "$json_opt" ]]; then
+    # JSON format - merge arrays or objects
+    if [[ "$filter" == "detailed" ]]; then
+      # Detailed returns objects, not arrays
+      if [[ $native_exit -eq 0 && $container_exit -eq 0 && -n "$native_result" && -n "$container_result" ]]; then
+        jq -s '.[0] * .[1] | with_entries(select(.key != ""))' <(echo "$native_result") <(echo "$container_result")
+      elif [[ $native_exit -eq 0 && -n "$native_result" ]]; then
+        jq 'with_entries(select(.key != ""))' <(echo "$native_result")
+      elif [[ $container_exit -eq 0 && -n "$container_result" ]]; then
+        jq 'with_entries(select(.key != ""))' <(echo "$container_result")
+      else
+        echo "{}"
+      fi
     else
-      # Return empty object if no results
-      echo "{}"
+      # Regular list returns arrays
+      if [[ $native_exit -eq 0 && $container_exit -eq 0 && -n "$native_result" && -n "$container_result" ]]; then
+        jq -s 'add | map(select(length > 0)) | unique' <(echo "$native_result") <(echo "$container_result")
+      elif [[ $native_exit -eq 0 && -n "$native_result" ]]; then
+        jq 'map(select(length > 0)) | unique' <(echo "$native_result")
+      elif [[ $container_exit -eq 0 && -n "$container_result" ]]; then
+        jq 'map(select(length > 0)) | unique' <(echo "$container_result")
+      else
+        echo "[]"
+      fi
     fi
   else
-    # If not JSON, just use the regular list function
-    _list_blueprints
-  fi
-}
-
-function _print_blueprint() {
-  local blueprint="$1"
-
-  # VALIDATION: Ensure blueprint exists and is valid before printing
-  validate_blueprint "$blueprint"
-  local validation_result=$?
-  if [[ $validation_result -ne 0 ]]; then
-    return $validation_result
+    # Text format - combine and sort
+    if [[ $native_exit -eq 0 || $container_exit -eq 0 ]]; then
+      printf "%s\n%s\n" "$native_result" "$container_result" | grep -v '^$' | sort -u
+    fi
   fi
 
-  # Try to get the blueprint from the native module
-  local blueprint_content
-  blueprint_content=$("$(__find_module blueprints.native.sh)" --info "$blueprint" 2>/dev/null)
-  local native_exit=$?
-
-  if [[ $native_exit -eq 0 && -n "$blueprint_content" ]]; then
-    echo "$blueprint_content"
-    return 0
-  fi
-
-  # If not found in native module, try the container module
-  blueprint_content=$("$(__find_module blueprints.container.sh)" --info "$blueprint" 2>/dev/null)
-  local container_exit=$?
-
-  if [[ $container_exit -eq 0 && -n "$blueprint_content" ]]; then
-    echo "$blueprint_content"
+  # Return success if at least one module succeeded
+  if [[ $native_exit -eq 0 || $container_exit -eq 0 ]]; then
     return 0
   fi
 
   return $EC_NOT_FOUND
 }
 
-function _find_blueprint() {
-  local blueprint="$1"
+function _cmd_info() {
+  local blueprint=""
+  local json_opt=""
 
-  # VALIDATION: Ensure blueprint exists and is valid before finding path
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help | -h)
+        usage_info
+        return 0
+        ;;
+      --json)
+        json_opt="--json"
+        shift
+        ;;
+      -*)
+        __print_error "Invalid option: $1"
+        __print_error "Use '$self info --help' for usage information"
+        return $EC_INVALID_ARG
+        ;;
+      *)
+        if [[ -z "$blueprint" ]]; then
+          blueprint="$1"
+          shift
+        else
+          __print_error "Too many arguments"
+          __print_error "Use '$self info --help' for usage information"
+          return $EC_INVALID_ARG
+        fi
+        ;;
+    esac
+  done
+
+  # Validate blueprint argument
+  if [[ -z "$blueprint" ]]; then
+    __print_error "Missing required argument: <blueprint>"
+    __print_error "Use '$self info --help' for usage information"
+    return $EC_MISSING_ARG
+  fi
+
+  # Validate blueprint exists
   validate_blueprint "$blueprint"
   local validation_result=$?
   if [[ $validation_result -ne 0 ]]; then
     return $validation_result
   fi
 
-  # If validation passed, get the blueprint path
+  # Try native module first
+  local cmd_args="info $blueprint"
+  if [[ -n "$json_opt" ]]; then
+    cmd_args="$cmd_args --json"
+  fi
+
+  local result
+  result=$("$module_native" $cmd_args 2>/dev/null)
+  local exit_code=$?
+
+  if [[ $exit_code -eq 0 && -n "$result" ]]; then
+    echo "$result"
+    return 0
+  fi
+
+  # Try container module
+  result=$("$module_container" $cmd_args 2>/dev/null)
+  exit_code=$?
+
+  if [[ $exit_code -eq 0 && -n "$result" ]]; then
+    echo "$result"
+    return 0
+  fi
+
+  __print_error "Blueprint not found: $blueprint"
+  return $EC_BLUEPRINT_NOT_FOUND
+}
+
+function _cmd_find() {
+  local blueprint=""
+
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help | -h)
+        usage_find
+        return 0
+        ;;
+      -*)
+        __print_error "Invalid option: $1"
+        __print_error "Use '$self find --help' for usage information"
+        return $EC_INVALID_ARG
+        ;;
+      *)
+        if [[ -z "$blueprint" ]]; then
+          blueprint="$1"
+          shift
+        else
+          __print_error "Too many arguments"
+          __print_error "Use '$self find --help' for usage information"
+          return $EC_INVALID_ARG
+        fi
+        ;;
+    esac
+  done
+
+  # Validate blueprint argument
+  if [[ -z "$blueprint" ]]; then
+    __print_error "Missing required argument: <blueprint>"
+    __print_error "Use '$self find --help' for usage information"
+    return $EC_MISSING_ARG
+  fi
+
+  # Validate blueprint exists
+  validate_blueprint "$blueprint"
+  local validation_result=$?
+  if [[ $validation_result -ne 0 ]]; then
+    return $validation_result
+  fi
+
+  # Get blueprint path
   local blueprint_path
   blueprint_path=$(validate_blueprint_exists "$blueprint")
   echo "$blueprint_path"
   return 0
 }
 
-# shellcheck disable=SC2199
-if [[ $@ =~ "--json" ]]; then
-  json_format=1
-  for a; do
-    shift
-    case $a in
-    --json) continue ;;
-    *) set -- "$@" "$a" ;;
-    esac
-  done
+function _cmd_help() {
+  local command="$1"
+
+  if [[ -z "$command" ]]; then
+    show_usage
+    return 0
+  fi
+
+  case "$command" in
+    list)
+      usage_list
+      ;;
+    info)
+      usage_info
+      ;;
+    find)
+      usage_find
+      ;;
+    *)
+      __print_error "Unknown command: $command"
+      __print_error "Use '$self help' for available commands"
+      return $EC_INVALID_ARG
+      ;;
+  esac
+
+  return 0
+}
+
+# Check for no arguments
+if [[ "$#" -eq 0 ]]; then
+  show_usage
+  exit 0
 fi
 
-while [ $# -gt 0 ]; do
+# Handle legacy dash-style arguments for backward compatibility
+# This supports the old `--list`, `--info`, `--find` syntax
+if [[ "$1" == --* ]]; then
   case "$1" in
-  -h | --help)
-    usage
-    exit 0
-    ;;
-  --list)
-    shift
-    if [[ -z "$1" ]]; then
-      _list_blueprints
-      exit $?
-    fi
-    case "$1" in
-    --default)
-      _list_default_blueprints
+    --help | -h)
+      show_usage
+      exit 0
+      ;;
+    --list)
+      shift
+      _cmd_list "$@"
       exit $?
       ;;
-    --custom)
-      _list_custom_blueprints
+    --info)
+      shift
+      _cmd_info "$@"
       exit $?
       ;;
-    --detailed)
-      _list_detailed_blueprints
+    --find)
+      shift
+      _cmd_find "$@"
       exit $?
       ;;
     *)
-      __print_error "Invalid argument $1"
+      __print_error "Unknown option: $1"
+      __print_error "Use '$self help' for available commands"
       exit $EC_INVALID_ARG
       ;;
-    esac
-    ;;
-  --info)
-    shift
-    if [[ -z "$1" ]]; then
-      __print_error "Missing argument <blueprint>"
-      exit $EC_MISSING_ARG
-    fi
+  esac
+fi
 
-    blueprint=$1
-    _print_blueprint "$blueprint"
+# Main command parsing (modern style)
+command="$1"
+shift
+
+case "$command" in
+  list)
+    _cmd_list "$@"
     exit $?
     ;;
-  --find)
-    shift
-    if [[ -z "$1" ]]; then
-      __print_error "Missing argument <blueprint>"
-      exit $EC_MISSING_ARG
-    fi
-
-    blueprint=$1
-    _find_blueprint "$blueprint"
+  info)
+    _cmd_info "$@"
+    exit $?
+    ;;
+  find)
+    _cmd_find "$@"
+    exit $?
+    ;;
+  help | -h | --help)
+    _cmd_help "$@"
     exit $?
     ;;
   *)
-    __print_error "Invalid argument $1"
+    __print_error "Unknown command: $command"
+    __print_error "Use '$self help' for available commands"
     exit $EC_INVALID_ARG
     ;;
-  esac
-  shift
-done
+esac
 
-exit $?
+# Mark module as loaded
+export KGSM_MODULE_BLUEPRINTS_LOADED=1

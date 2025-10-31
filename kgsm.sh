@@ -90,33 +90,26 @@ ${BOLD}${UNDERLINE}Event System Management:${END}
       --status                Show webhook transport status
 
 ${BOLD}${UNDERLINE}Blueprint Management:${END}
+  blueprints                  Display a list of all available server blueprints
+    [no subcommand]           Show basic blueprint list (default behavior)
     [-h, --help]              Display help information for the blueprint creation process
-  --blueprints                Display a list of all available server blueprints
-  --blueprints --detailed     Show detailed information about all available blueprints
-  --blueprints --json         Output blueprint list in JSON format
-  --blueprints --json --detailed
-                              Output detailed blueprint information in JSON format
+    default                   Show only default built-in blueprints
+    custom                    Show only user-added custom blueprints
+    detailed --json           Show detailed information about all available blueprints
+                              (Output in JSON format, useful for scripting)
 
-  --create BLUEPRINT          Create a new game server instance from an existing blueprint
-                              BLUEPRINT must be the name of a valid blueprint
-                              Use --blueprints to see available options
-    [--install-dir <dir>]     Specify custom installation directory
-                              Required if KGSM_DEFAULT_INSTALL_DIR is not set
-    [--version <version>]     Specify a particular version to install
-                              Note: Not applicable for Steam-based game servers
-    [--name <name>]           Provide a custom instance name
-                              Instead of using auto-generated name
-  --install BLUEPRINT         Alias for --create
+  ${BOLD}${UNDERLINE}Blueprint options:${END}
+    --json                    Output blueprint list in JSON format
 
 ${BOLD}${UNDERLINE}Instance Management:${END}
   --remove <instance>         Remove a game server instance completely
   --uninstall <instance>      Alias for --remove
   --instances                 List all installed game server instances
   --instances <blueprint>     List instances of a specific blueprint/game type
-  --instances --detailed      Show detailed information about all instances
+  --instances detailed      Show detailed information about all instances
   --instances --status        Show runtime status for all instances
   --instances --json          Output instance list in JSON format
-  --instances --json --detailed
+  --instances --json detailed
                               Output detailed instance information in JSON format
   --instances --json --status
                               Output runtime status for all instances in JSON format
@@ -285,7 +278,7 @@ function _remove() {
 
   "$module_events" --emit --instance-uninstall-finished "${instance}"
 
-  __print_success "Instance ${instance} uninstalled"
+  __print_success "Instance '${instance}' uninstalled"
 
   "$module_events" --emit --instance-uninstalled "${instance}"
 
@@ -369,17 +362,16 @@ function process_create_instance() {
 # Process blueprint listing with options
 function process_blueprints() {
   shift
-  if [[ -z "$1" ]]; then
-    "$module_blueprints" --list
-    exit $?
-  fi
-
-  local detailed=
+  
+  local filter=
 
   # Parse optional flags
   while [[ $# -ne 0 ]]; do
     case "$1" in
-    --detailed) detailed=1 ;;
+    detailed | default | custom)
+      # Extract the filter name without the dashes
+      filter="${1#--}"
+      ;;
     *)
       __print_error "Invalid argument $1"
       exit $EC_INVALID_ARG
@@ -388,7 +380,7 @@ function process_blueprints() {
     shift
   done
 
-  "$module_blueprints" --list ${detailed:+--detailed} ${json_format:+--json}
+  "$module_blueprints" list ${filter:+$filter} ${json_format:+--json}
   exit $?
 }
 
@@ -601,7 +593,7 @@ while [[ "$#" -gt 0 ]]; do
     _remove "$1"
     exit $?
     ;;
-  --blueprints)
+  blueprints)
     process_blueprints "$@"
     ;;
   # General options

@@ -44,19 +44,19 @@ function test_module_existence_and_permissions() {
 function test_module_help_functionality() {
   log_step "Testing module help functionality"
 
-  assert_command_succeeds "$BLUEPRINTS_MODULE --help" "blueprints.sh --help should work"
+  assert_command_succeeds "$BLUEPRINTS_MODULE help" "blueprints.sh help should work"
 }
 
 function test_blueprint_listing_functionality() {
   log_step "Testing blueprint listing functionality"
 
-  assert_command_succeeds "$BLUEPRINTS_MODULE --list" "blueprints.sh --list should work"
+  assert_command_succeeds "$BLUEPRINTS_MODULE list" "blueprints.sh list should work"
 }
 
 function test_blueprint_json_listing() {
   log_step "Testing blueprint JSON listing functionality"
 
-  assert_command_succeeds "$BLUEPRINTS_MODULE --list --json" "blueprints.sh --list --json should work"
+  assert_command_succeeds "$BLUEPRINTS_MODULE list --json" "blueprints.sh list --json should work"
 }
 
 function test_blueprint_directory_structure() {
@@ -116,19 +116,19 @@ function test_invalid_argument_handling() {
 function test_module_output_format() {
   log_step "Testing module output format consistency"
 
-  # Test that --list produces parseable output
+  # Test that list produces parseable output
   local list_output
-  if list_output=$("$BLUEPRINTS_MODULE" --list 2>/dev/null); then
+  if list_output=$("$BLUEPRINTS_MODULE" list 2>/dev/null); then
     assert_not_null "$list_output" "List command should produce output"
     log_test "List command produces output"
   else
     log_test "List command failed - this may indicate no blueprints are available"
   fi
 
-  # Test that --list --json produces valid format (if jq is available)
+  # Test that list --json produces valid format (if jq is available)
   if command -v jq >/dev/null 2>&1; then
     local json_output
-    if json_output=$("$BLUEPRINTS_MODULE" --list --json 2>/dev/null); then
+    if json_output=$("$BLUEPRINTS_MODULE" list --json 2>/dev/null); then
       if echo "$json_output" | jq . >/dev/null 2>&1; then
         assert_true "true" "JSON output should be valid JSON"
       else

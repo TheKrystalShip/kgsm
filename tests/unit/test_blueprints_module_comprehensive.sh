@@ -107,20 +107,20 @@ function test_module_existence_and_permissions() {
 function test_help_functionality() {
   log_step "Testing help functionality"
 
-  # Test --help flag
-  assert_command_succeeds "$BLUEPRINTS_MODULE --help" "blueprints.sh --help should work"
+  # Test help command
+  assert_command_succeeds "$BLUEPRINTS_MODULE help" "blueprints.sh help should work"
 
   # Test -h flag
   assert_command_succeeds "$BLUEPRINTS_MODULE -h" "blueprints.sh -h should work"
 
   # Test help output contains expected sections
   local help_output
-  help_output=$("$BLUEPRINTS_MODULE" --help 2>&1)
+  help_output=$("$BLUEPRINTS_MODULE" help 2>&1)
 
   assert_contains "$help_output" "Blueprint Management" "Help should contain title"
-  assert_contains "$help_output" "--list" "Help should contain --list option"
-  assert_contains "$help_output" "--info" "Help should contain --info option"
-  assert_contains "$help_output" "--find" "Help should contain --find option"
+  assert_contains "$help_output" "list" "Help should contain list command"
+  assert_contains "$help_output" "info" "Help should contain info command"
+  assert_contains "$help_output" "find" "Help should contain find command"
 
   log_test "Help functionality validated"
 }
@@ -128,8 +128,8 @@ function test_help_functionality() {
 function test_no_arguments_behavior() {
   log_step "Testing no arguments behavior"
 
-  # Module should show usage when called without arguments
-  assert_command_fails "$BLUEPRINTS_MODULE" "blueprints.sh with no arguments should fail"
+  # Module should show usage when called without arguments (exit 0, not fail)
+  assert_command_succeeds "$BLUEPRINTS_MODULE" "blueprints.sh with no arguments should show help"
 
   # Should show usage message
   local output
@@ -147,7 +147,7 @@ function test_basic_listing() {
   log_step "Testing basic blueprint listing functionality"
 
   # Basic --list should work
-  assert_command_succeeds "$BLUEPRINTS_MODULE --list" "blueprints.sh --list should work"
+  assert_command_succeeds "$BLUEPRINTS_MODULE list" "blueprints.sh --list should work"
 
   # List output should contain blueprints
   local list_output
@@ -162,12 +162,12 @@ function test_basic_listing() {
 function test_list_default_blueprints() {
   log_step "Testing default blueprints listing"
 
-  # --list --default should work
-  assert_command_succeeds "$BLUEPRINTS_MODULE --list --default" "blueprints.sh --list --default should work"
+  # list default should work
+  assert_command_succeeds "$BLUEPRINTS_MODULE list default" "blueprints.sh list default should work"
 
   # Should list default blueprints
   local default_output
-  default_output=$("$BLUEPRINTS_MODULE" --list --default 2>&1)
+  default_output=$("$BLUEPRINTS_MODULE" list default 2>&1)
 
   # Should contain known default blueprints
   if [[ -f "$KGSM_ROOT/blueprints/default/native/factorio.bp" ]]; then
@@ -180,8 +180,8 @@ function test_list_default_blueprints() {
 function test_list_custom_blueprints() {
   log_step "Testing custom blueprints listing"
 
-  # --list --custom should work (even if empty)
-  assert_command_succeeds "$BLUEPRINTS_MODULE --list --custom" "blueprints.sh --list --custom should work"
+  # list custom should work (even if empty)
+  assert_command_succeeds "$BLUEPRINTS_MODULE list custom" "blueprints.sh list custom should work"
 
   log_test "Custom blueprints listing validated"
 }
@@ -189,8 +189,8 @@ function test_list_custom_blueprints() {
 function test_list_detailed_blueprints() {
   log_step "Testing detailed blueprints listing"
 
-  # --list --detailed should work
-  assert_command_succeeds "$BLUEPRINTS_MODULE --list --detailed" "blueprints.sh --list --detailed should work"
+  # list detailed should work
+  assert_command_succeeds "$BLUEPRINTS_MODULE list detailed" "blueprints.sh list detailed should work"
 
   log_test "Detailed blueprints listing validated"
 }
@@ -199,7 +199,7 @@ function test_json_listing_functionality() {
   log_step "Testing JSON listing functionality"
 
   # Basic JSON listing
-  assert_command_succeeds "$BLUEPRINTS_MODULE --list --json" "blueprints.sh --list --json should work"
+  assert_command_succeeds "$BLUEPRINTS_MODULE list --json" "blueprints.sh --list --json should work"
 
   # JSON output should be valid JSON
   local json_output
@@ -211,13 +211,13 @@ function test_json_listing_functionality() {
   fi
 
   # Test detailed JSON
-  assert_command_succeeds "$BLUEPRINTS_MODULE --list --detailed --json" "blueprints.sh --list --detailed --json should work"
+  assert_command_succeeds "$BLUEPRINTS_MODULE list detailed --json" "blueprints.sh list detailed --json should work"
 
   # Test default JSON
-  assert_command_succeeds "$BLUEPRINTS_MODULE --list --default --json" "blueprints.sh --list --default --json should work"
+  assert_command_succeeds "$BLUEPRINTS_MODULE list default --json" "blueprints.sh list default --json should work"
 
   # Test custom JSON
-  assert_command_succeeds "$BLUEPRINTS_MODULE --list --custom --json" "blueprints.sh --list --custom --json should work"
+  assert_command_succeeds "$BLUEPRINTS_MODULE list custom --json" "blueprints.sh list custom --json should work"
 
   log_test "JSON listing functionality validated"
 }
@@ -243,30 +243,16 @@ function test_blueprint_info_functionality() {
   # It should find a blueprint
   assert_not_null "$test_blueprint" "Test blueprint should not be null"
 
-  # Test --info with valid blueprint
-  assert_command_succeeds "$BLUEPRINTS_MODULE --info '$test_blueprint'" "blueprints.sh --info should work with valid blueprint"
-  output=$("$BLUEPRINTS_MODULE" --info "$test_blueprint" 2>&1)
+  # Test info with valid blueprint
+  assert_command_succeeds "$BLUEPRINTS_MODULE info '$test_blueprint'" "blueprints.sh info should work with valid blueprint"
+  output=$("$BLUEPRINTS_MODULE" info "$test_blueprint" 2>&1)
   exit_code=$?
   assert_equals "$exit_code" "0" "Blueprint info should exit with code 0"
   assert_not_null "$output" "Blueprint info should not be empty"
 
-  # Test --info --json with valid blueprint
-  assert_command_succeeds "$BLUEPRINTS_MODULE --info '$test_blueprint' --json" "blueprints.sh --info --json should work with valid blueprint"
-  output=$("$BLUEPRINTS_MODULE" --info "$test_blueprint" --json 2>&1)
-  exit_code=$?
-  assert_equals "$exit_code" "0" "Blueprint info should exit with code 0"
-  assert_not_null "$output" "Blueprint info should not be empty"
-
-  # Test --info --detailed with valid blueprint
-  assert_command_succeeds "$BLUEPRINTS_MODULE --info '$test_blueprint' --detailed" "blueprints.sh --info --detailed should work with valid blueprint"
-  output=$("$BLUEPRINTS_MODULE" --info "$test_blueprint" --detailed 2>&1)
-  exit_code=$?
-  assert_equals "$exit_code" "0" "Blueprint info should exit with code 0"
-  assert_not_null "$output" "Blueprint info should not be empty"
-
-  # Test --info --json --detailed with valid blueprint
-  assert_command_succeeds "$BLUEPRINTS_MODULE --info '$test_blueprint' --json --detailed" "blueprints.sh --info --json --detailed should work with valid blueprint"
-  output=$("$BLUEPRINTS_MODULE" --info "$test_blueprint" --json --detailed 2>&1)
+  # Test info --json with valid blueprint
+  assert_command_succeeds "$BLUEPRINTS_MODULE info '$test_blueprint' --json" "blueprints.sh info --json should work with valid blueprint"
+  output=$("$BLUEPRINTS_MODULE" info "$test_blueprint" --json 2>&1)
   exit_code=$?
   assert_equals "$exit_code" "0" "Blueprint info should exit with code 0"
   assert_not_null "$output" "Blueprint info should not be empty"
@@ -290,11 +276,11 @@ function test_blueprint_find_functionality() {
 
   if [[ -n "$test_blueprint" ]]; then
     # Test --find with valid blueprint
-    assert_command_succeeds "$BLUEPRINTS_MODULE --find '$test_blueprint'" "blueprints.sh --find should work with valid blueprint"
+    assert_command_succeeds "$BLUEPRINTS_MODULE find '$test_blueprint'" "blueprints.sh --find should work with valid blueprint"
 
     # Find output should be a valid path
     local find_output
-    find_output=$("$BLUEPRINTS_MODULE" --find "$test_blueprint" 2>&1)
+    find_output=$("$BLUEPRINTS_MODULE" find "$test_blueprint" 2>&1)
     assert_file_exists "$find_output" "Blueprint path returned by --find should exist"
   else
     log_test "No valid blueprints found for find testing - this is expected in minimal test environments"
@@ -311,14 +297,14 @@ function test_validation_with_invalid_blueprints() {
   log_step "Testing validation behavior with invalid blueprints"
 
   # Test --info with non-existent blueprint - should fail predictably
-  assert_command_fails "$BLUEPRINTS_MODULE --info 'nonexistent_blueprint.bp'" "blueprints.sh --info should fail with non-existent blueprint"
+  assert_command_fails "$BLUEPRINTS_MODULE info 'nonexistent_blueprint.bp'" "blueprints.sh --info should fail with non-existent blueprint"
 
   # Test --find with non-existent blueprint - should fail predictably
-  assert_command_fails "$BLUEPRINTS_MODULE --find 'nonexistent_blueprint.bp'" "blueprints.sh --find should fail with non-existent blueprint"
+  assert_command_fails "$BLUEPRINTS_MODULE find 'nonexistent_blueprint.bp'" "blueprints.sh --find should fail with non-existent blueprint"
 
   # Error messages should be helpful
   local error_output
-  error_output=$("$BLUEPRINTS_MODULE" --info "nonexistent_blueprint.bp" 2>&1 || true)
+  error_output=$("$BLUEPRINTS_MODULE" info "nonexistent_blueprint.bp" 2>&1 || true)
   assert_contains "$error_output" "not found" "Error message should indicate blueprint not found"
 
   log_test "Invalid blueprint validation behavior confirmed"
@@ -328,15 +314,15 @@ function test_validation_with_empty_arguments() {
   log_step "Testing validation behavior with empty arguments"
 
   # Test --info without blueprint argument
-  assert_command_fails "$BLUEPRINTS_MODULE --info" "blueprints.sh --info without argument should fail"
+  assert_command_fails "$BLUEPRINTS_MODULE info" "blueprints.sh --info without argument should fail"
 
   # Test --find without blueprint argument
-  assert_command_fails "$BLUEPRINTS_MODULE --find" "blueprints.sh --find without argument should fail"
+  assert_command_fails "$BLUEPRINTS_MODULE find" "blueprints.sh --find without argument should fail"
 
   # Error messages should be clear
   local error_output
-  error_output=$("$BLUEPRINTS_MODULE" --info 2>&1 || true)
-  assert_contains "$error_output" "Missing argument" "Error message should indicate missing argument"
+  error_output=$("$BLUEPRINTS_MODULE" info 2>&1 || true)
+  assert_contains "$error_output" "Missing required argument" "Error message should indicate missing argument"
 
   log_test "Empty argument validation behavior confirmed"
 }
@@ -352,10 +338,10 @@ function test_validation_with_corrupted_blueprints() {
   echo "" >"$corrupted_bp"
 
   # Test --info with corrupted blueprint - should fail predictably
-  assert_command_fails "$BLUEPRINTS_MODULE --info 'corrupted_test.bp'" "blueprints.sh --info should fail with corrupted blueprint"
+  assert_command_fails "$BLUEPRINTS_MODULE info 'corrupted_test.bp'" "blueprints.sh --info should fail with corrupted blueprint"
 
   # Test --find with corrupted blueprint - should fail predictably
-  assert_command_fails "$BLUEPRINTS_MODULE --find 'corrupted_test.bp'" "blueprints.sh --find should fail with corrupted blueprint"
+  assert_command_fails "$BLUEPRINTS_MODULE find 'corrupted_test.bp'" "blueprints.sh --find should fail with corrupted blueprint"
 
   # Cleanup
   cleanup_test_blueprint "$corrupted_bp"
@@ -377,10 +363,10 @@ description="This blueprint is missing required fields"
 EOF
 
   # Test --info with malformed blueprint - should fail predictably
-  assert_command_fails "$BLUEPRINTS_MODULE --info 'malformed_test.bp'" "blueprints.sh --info should fail with malformed blueprint"
+  assert_command_fails "$BLUEPRINTS_MODULE info 'malformed_test.bp'" "blueprints.sh --info should fail with malformed blueprint"
 
   # Test --find with malformed blueprint - should fail predictably
-  assert_command_fails "$BLUEPRINTS_MODULE --find 'malformed_test.bp'" "blueprints.sh --find should fail with malformed blueprint"
+  assert_command_fails "$BLUEPRINTS_MODULE find 'malformed_test.bp'" "blueprints.sh --find should fail with malformed blueprint"
 
   # Cleanup
   cleanup_test_blueprint "$malformed_bp"
@@ -399,12 +385,12 @@ function test_invalid_argument_handling() {
   assert_command_fails "$BLUEPRINTS_MODULE --invalid-argument" "blueprints.sh should reject invalid arguments"
 
   # Test invalid list sub-arguments
-  assert_command_fails "$BLUEPRINTS_MODULE --list --invalid-subarg" "blueprints.sh --list should reject invalid sub-arguments"
+  assert_command_fails "$BLUEPRINTS_MODULE list --invalid-subarg" "blueprints.sh list should reject invalid sub-arguments"
 
   # Error messages should be helpful
   local error_output
   error_output=$("$BLUEPRINTS_MODULE" --invalid-argument 2>&1 || true)
-  assert_contains "$error_output" "Invalid argument" "Error message should indicate invalid argument"
+  assert_contains "$error_output" "Unknown" "Error message should indicate invalid/unknown command or option"
 
   log_test "Invalid argument handling validated"
 }
@@ -420,7 +406,7 @@ function test_permission_error_handling() {
   chmod 000 "$restricted_bp"
 
   # Test --info with unreadable blueprint - should fail predictably
-  assert_command_fails "$BLUEPRINTS_MODULE --info 'restricted_test.bp'" "blueprints.sh --info should fail with unreadable blueprint"
+  assert_command_fails "$BLUEPRINTS_MODULE info 'restricted_test.bp'" "blueprints.sh --info should fail with unreadable blueprint"
 
   # Restore permissions for cleanup
   chmod 644 "$restricted_bp"
@@ -439,13 +425,13 @@ function test_all_command_combinations() {
   # Test all valid --list combinations
   local list_commands=(
     "--list"
-    "--list --default"
-    "--list --custom"
-    "--list --detailed"
+    "list default"
+    "list custom"
+    "list detailed"
     "--list --json"
-    "--list --default --json"
-    "--list --custom --json"
-    "--list --detailed --json"
+    "list default --json"
+    "list custom --json"
+    "list detailed --json"
   )
 
   for cmd in "${list_commands[@]}"; do
@@ -507,9 +493,9 @@ function test_validation_error_consistency() {
   # Test that the same invalid input always produces the same error
   local error1 error2 error3
 
-  error1=$("$BLUEPRINTS_MODULE" --info "nonexistent.bp" 2>&1 || true)
-  error2=$("$BLUEPRINTS_MODULE" --info "nonexistent.bp" 2>&1 || true)
-  error3=$("$BLUEPRINTS_MODULE" --info "nonexistent.bp" 2>&1 || true)
+  error1=$("$BLUEPRINTS_MODULE" info "nonexistent.bp" 2>&1 || true)
+  error2=$("$BLUEPRINTS_MODULE" info "nonexistent.bp" 2>&1 || true)
+  error3=$("$BLUEPRINTS_MODULE" info "nonexistent.bp" 2>&1 || true)
 
   assert_equals "$error1" "$error2" "Same invalid input should produce identical errors"
   assert_equals "$error2" "$error3" "Error messages should be consistent"
@@ -525,14 +511,14 @@ function test_edge_cases() {
   log_step "Testing edge cases and boundary conditions"
 
   # Test with very long blueprint names
-  assert_command_fails "$BLUEPRINTS_MODULE --info '$(printf 'a%.0s' {1..1000}).bp'" "Should handle very long blueprint names gracefully"
+  assert_command_fails "$BLUEPRINTS_MODULE info '$(printf 'a%.0s' {1..1000}).bp'" "Should handle very long blueprint names gracefully"
 
   # Test with special characters in blueprint names
-  assert_command_fails "$BLUEPRINTS_MODULE --info 'blueprint with spaces.bp'" "Should handle spaces in blueprint names"
-  assert_command_fails "$BLUEPRINTS_MODULE --info 'blueprint@#\$%.bp'" "Should handle special characters in blueprint names"
+  assert_command_fails "$BLUEPRINTS_MODULE info 'blueprint with spaces.bp'" "Should handle spaces in blueprint names"
+  assert_command_fails "$BLUEPRINTS_MODULE info 'blueprint@#\$%.bp'" "Should handle special characters in blueprint names"
 
   # Test with empty string arguments
-  assert_command_fails "$BLUEPRINTS_MODULE --info ''" "Should reject empty blueprint names"
+  assert_command_fails "$BLUEPRINTS_MODULE info ''" "Should reject empty blueprint names"
 
   log_test "Edge cases handled appropriately"
 }
