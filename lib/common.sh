@@ -18,21 +18,21 @@ if [[ ! $KGSM_LOADER_LOADED ]]; then
   source "$include_loader" || exit 1
 fi
 
-# System
-if [[ -z "$KGSM_SYSTEM_LOADED" ]]; then
-  # shellcheck disable=SC1090
-  source "$(__find_library system.sh)" || {
-    echo -e "ERROR: Failed to load system.sh library"
-    exit 1
-  }
-fi
-
 # Error codes and definitions
 if [[ ! "$KGSM_ERRORS_LOADED" ]]; then
   # shellcheck disable=SC1090
   source "$(__find_library errors.sh)" || {
     echo -e "ERROR: Failed to load errors.sh library"
     exit 1
+  }
+fi
+
+# Directories logic (provides __create_dir and __create_file utilities)
+if [[ -z "$KGSM_LOGIC_DIRECTORIES_LOADED" ]]; then
+  # shellcheck disable=SC1090
+  source "$(__find_logic_library directories.sh)" || {
+    echo -e "ERROR: Failed to load directories.sh logic library"
+    exit $EC_FAILED_SOURCE
   }
 fi
 

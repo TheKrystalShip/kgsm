@@ -75,6 +75,20 @@ function __dispatch_event_from_exit_code() {
       # "$module_events" --emit --config-validated
       return 0
       ;;
+    $EC_SUCCESS_SYSTEM_SHUTDOWN)
+      # TODO: Implement global system events when global event infrastructure is ready
+      # "$module_events" --emit --system-shutdown "${additional_params[@]}"
+      return 0
+      ;;
+    $EC_SUCCESS_SYSTEM_RESTART)
+      # TODO: Implement global system events when global event infrastructure is ready
+      # "$module_events" --emit --system-restart "${additional_params[@]}"
+      return 0
+      ;;
+    $EC_SUCCESS_SYSTEM_INFO_RETRIEVED)
+      # No event emission needed for info retrieval
+      return 0
+      ;;
     *)
       # No event needed for other exit codes
       return 0

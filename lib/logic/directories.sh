@@ -18,6 +18,88 @@
 # Success event exit codes are now centralized in lib/errors.sh
 # They are automatically available through the bootstrap process
 
+# =============================================================================
+# FILESYSTEM UTILITIES
+# =============================================================================
+
+# Create a directory with specific permissions
+# Args:
+#   $1 - Directory path
+#   $2 - Permissions (optional, defaults to 755)
+# Returns:
+#   EC_OKAY - Directory created or already exists
+#   EC_INVALID_ARG - No directory specified
+#   EC_FAILED_MKDIR - Failed to create directory
+#   EC_PERMISSION - Failed to set permissions
+function __create_dir() {
+  local dir="$1"
+  local permissions="${2:-755}" # Default to 755 if no permissions are specified
+
+  if [[ -z "$dir" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  # If directory already exists, there's nothing to do
+  if [[ -d "$dir" ]]; then
+    return $EC_OKAY
+  fi
+
+  # Create the directory with appropriate permissions
+  mkdir -p "$dir" || {
+    return $EC_FAILED_MKDIR
+  }
+
+  # Set permissions
+  chmod $permissions "$dir" || {
+    return $EC_PERMISSION
+  }
+
+  return $EC_OKAY
+}
+
+export -f __create_dir
+
+# Create a file with specific permissions
+# Args:
+#   $1 - File path
+#   $2 - Permissions (optional, defaults to 644)
+# Returns:
+#   EC_OKAY - File created or already exists
+#   EC_INVALID_ARG - No file specified
+#   EC_FAILED_TOUCH - Failed to create file
+#   EC_PERMISSION - Failed to set permissions
+function __create_file() {
+  local file="$1"
+  local permissions="${2:-644}" # Default to 644 if no permissions are specified
+
+  if [[ -z "$file" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  # If file already exists, there's nothing to do
+  if [[ -f "$file" ]]; then
+    return $EC_OKAY
+  fi
+
+  # Create the file with appropriate permissions
+  touch "$file" || {
+    return $EC_FAILED_TOUCH
+  }
+
+  # Set permissions
+  chmod $permissions "$file" || {
+    return $EC_PERMISSION
+  }
+
+  return $EC_OKAY
+}
+
+export -f __create_file
+
+# =============================================================================
+# DIRECTORY STRUCTURE MANAGEMENT
+# =============================================================================
+
 # Creates directory structure for an instance
 # Args: $1 = instance_name, $2 = instance_config_file, $3 = instance_working_dir
 # Returns: 200 on success (triggers directories-created event), error codes on failure
