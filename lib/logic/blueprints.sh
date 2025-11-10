@@ -17,6 +17,11 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
+declare -g -r KGSM_BLUEPRINT_TYPE_NATIVE="native"
+export KGSM_BLUEPRINT_TYPE_NATIVE
+declare -g -r KGSM_BLUEPRINT_TYPE_CONTAINER="container"
+export KGSM_BLUEPRINT_TYPE_CONTAINER
+
 # Validates a blueprint name and returns its type (native or container)
 # Args: $1 = blueprint_name
 # Returns: 0 and echoes "native" or "container", or error code on failure
@@ -30,7 +35,7 @@ function __logic_get_blueprint_type() {
 
   # Validate blueprint exists (using existing validation from lib/validation.sh)
   local blueprint_path
-  blueprint_path=$(validate_blueprint_exists "$blueprint_name" 2>/dev/null)
+  blueprint_path=$(validate_blueprint_exists "$blueprint_name" 2> /dev/null)
   local validation_result=$?
 
   if [[ $validation_result -ne 0 ]]; then
@@ -39,10 +44,10 @@ function __logic_get_blueprint_type() {
 
   # Determine blueprint type based on file extension
   if [[ "$blueprint_path" == *.bp ]]; then
-    echo "native"
+    echo "$KGSM_BLUEPRINT_TYPE_NATIVE"
     return 0
   elif [[ "$blueprint_path" == *docker-compose.yml ]] || [[ "$blueprint_path" == *docker-compose.yaml ]]; then
-    echo "container"
+    echo "$KGSM_BLUEPRINT_TYPE_CONTAINER"
     return 0
   else
     return $EC_INVALID_BLUEPRINT
@@ -62,9 +67,8 @@ function __logic_validate_blueprint() {
     return $EC_INVALID_ARG
   fi
 
-  # Use existing comprehensive validation from lib/validation.sh
   # This checks existence, readability, and format
-  validate_blueprint "$blueprint_name" >/dev/null 2>&1
+  validate_blueprint "$blueprint_name" > /dev/null 2>&1
   return $?
 }
 
@@ -83,7 +87,7 @@ function __logic_get_blueprint_path() {
 
   # Validate blueprint and get path
   local blueprint_path
-  blueprint_path=$(validate_blueprint_exists "$blueprint_name" 2>/dev/null)
+  blueprint_path=$(validate_blueprint_exists "$blueprint_name" 2> /dev/null)
   local validation_result=$?
 
   if [[ $validation_result -ne 0 ]]; then
@@ -91,7 +95,7 @@ function __logic_get_blueprint_path() {
   fi
 
   # Validate the blueprint is readable and properly formatted
-  if ! validate_blueprint "$blueprint_name" >/dev/null 2>&1; then
+  if ! validate_blueprint "$blueprint_name" > /dev/null 2>&1; then
     return $EC_INVALID_BLUEPRINT
   fi
 

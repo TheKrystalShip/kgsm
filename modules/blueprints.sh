@@ -196,11 +196,11 @@ function _cmd_list() {
 
   # Get results from both modules
   local native_result
-  native_result=$("$module_native" $cmd_args 2>/dev/null)
+  native_result=$("$module_native" $cmd_args 2> /dev/null)
   local native_exit=$?
 
   local container_result
-  container_result=$("$module_container" $cmd_args 2>/dev/null)
+  container_result=$("$module_container" $cmd_args 2> /dev/null)
   local container_exit=$?
 
   # Combine results based on format
@@ -298,7 +298,7 @@ function _cmd_info() {
   fi
 
   local result
-  result=$("$module_native" $cmd_args 2>/dev/null)
+  result=$("$module_native" $cmd_args 2> /dev/null)
   local exit_code=$?
 
   if [[ $exit_code -eq 0 && -n "$result" ]]; then
@@ -307,7 +307,7 @@ function _cmd_info() {
   fi
 
   # Try container module
-  result=$("$module_container" $cmd_args 2>/dev/null)
+  result=$("$module_container" $cmd_args 2> /dev/null)
   exit_code=$?
 
   if [[ $exit_code -eq 0 && -n "$result" ]]; then
@@ -402,38 +402,7 @@ if [[ "$#" -eq 0 ]]; then
   exit 0
 fi
 
-# Handle legacy dash-style arguments for backward compatibility
-# This supports the old `--list`, `--info`, `--find` syntax
-if [[ "$1" == --* ]]; then
-  case "$1" in
-    --help | -h)
-      show_usage
-      exit 0
-      ;;
-    --list)
-      shift
-      _cmd_list "$@"
-      exit $?
-      ;;
-    --info)
-      shift
-      _cmd_info "$@"
-      exit $?
-      ;;
-    --find)
-      shift
-      _cmd_find "$@"
-      exit $?
-      ;;
-    *)
-      __print_error "Unknown option: $1"
-      __print_error "Use '$self help' for available commands"
-      exit $EC_INVALID_ARG
-      ;;
-  esac
-fi
-
-# Main command parsing (modern style)
+# Main command parsing
 command="$1"
 shift
 
@@ -460,6 +429,3 @@ case "$command" in
     exit $EC_INVALID_ARG
     ;;
 esac
-
-# Mark module as loaded
-export KGSM_MODULE_BLUEPRINTS_LOADED=1
