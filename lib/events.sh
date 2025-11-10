@@ -48,6 +48,14 @@ function __dispatch_event_from_exit_code() {
       "$module_events" --emit --instance-directories-removed "$instance_name"
       return $?
       ;;
+    $EC_SUCCESS_INSTANCE_CREATED)
+      "$module_events" --emit --instance-created "$instance_name" "${additional_params[@]}"
+      return $?
+      ;;
+    $EC_SUCCESS_INSTANCE_REMOVED)
+      "$module_events" --emit --instance-removed "$instance_name"
+      return $?
+      ;;
     $EC_SUCCESS_INSTANCE_STARTED)
       "$module_events" --emit --instance-started "$instance_name"
       return $?

@@ -3,438 +3,337 @@
 # Disabling SC2086 globally:
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
+# shellcheck disable=SC2254
 
 # shellcheck disable=SC1091
 source "$(dirname "$(readlink -f "$0")")/../lib/bootstrap.sh"
 
-function usage() {
+self="$(basename "$0")"
+
+function show_usage() {
   local UNDERLINE="\e[4m"
   local END="\e[0m"
 
   echo -e "${UNDERLINE}Instance Management for Krystal Game Server Manager${END}
 
-Manages instance creation and provides comprehensive information about game server instances.
+Manages game server instance lifecycle including creation, configuration, and monitoring.
 
 ${UNDERLINE}Usage:${END}
-  $(basename "$0") [OPTIONS]
+  $self [command] [arguments] [options]
+
+${UNDERLINE}Commands:${END}
+  create <blueprint>          Create a new instance from a blueprint
+  remove <instance>           Remove an instance configuration
+  list [blueprint]            List all instances or filter by blueprint
+  info <instance>             Display instance configuration
+  status <instance>           Show instance runtime status
+  find <instance>             Get instance config file path
+  generate-id <blueprint>     Generate unique instance identifier
+  save <instance>             Send save command to instance
+  input <instance> <command>  Send command to instance console
+  regenerate <type>           Regenerate instance files
+  help [command]              Show help information
 
 ${UNDERLINE}Options:${END}
-  -h, --help                      Display this help information
+  --json                      Output in JSON format
+  --fast                      Fast mode (skip version checks)
+  -h, --help                  Show help and exit
 
-${UNDERLINE}Instance Creation & Identification:${END}
-  --generate-id <blueprint>       Create a unique instance identifier for a new server
+${UNDERLINE}Examples:${END}
+  $self create factorio --install-dir /opt --name factorio-01
+  $self list
+  $self list factorio
+  $self list --json
+  $self status factorio-01
+  $self status factorio-01 --json --fast
+  $self info factorio-01
+  $self info factorio-01 --json
+  $self find terraria-01
+  $self save factorio-01
+  $self input factorio-01 \"/say Hello players!\"
+  $self regenerate management-script
+  $self help create
 
-${UNDERLINE}Listing & Information:${END}
-  --list [blueprint]              Display all instances with basic information
-                                  Optionally filter by blueprint name
-  --list --detailed [blueprint]   Show detailed information about instances
-                                  Includes configuration and status details
-  --list --status [blueprint]     Show runtime status for all instances
-                                  Displays comprehensive status information for each instance
-  --list --json [blueprint]       Output instance list in JSON format
-  --list --json --detailed        Output detailed instance information in JSON format
-      [blueprint]                 Suitable for programmatic consumption
-  --list --json --status          Output runtime status for all instances in JSON format
-      [blueprint]                 Perfect for monitoring dashboards and automation
-
-${UNDERLINE}Instance Monitoring:${END}
-  --status <instance>             Display comprehensive runtime status for monitoring and troubleshooting
-                                  Shows: active/inactive state, process info, resource usage, version status,
-                                  disk usage, backup count, and recent log activity
-                                  Human-readable format designed for administrators
-  --status <instance> --json      Output runtime status information as structured JSON data
-                                  Same information as --status but in JSON format
-                                  Perfect for web interfaces, APIs, and automation
-  --status <instance> --fast      Display rapid runtime status without update checking (< 50ms)
-                                  Skips version comparison and latest version lookup for speed
-                                  Ideal for web APIs and frequent monitoring
-  --status <instance> --json --fast
-                                  Output rapid runtime status as JSON without update checking
-                                  Combines JSON format with fast mode for optimal API performance
-
-${UNDERLINE}Instance Control:${END}
-  --save <instance>               Issue a save command to the specified instance
-  --input <command>               Send a command to the instance's interactive console
-                                  Shows the last 10 log lines after execution
-  --create <blueprint>
-    --install-dir <install_dir>   Creates a new instance for the given blueprint
-                                  and returns the name of the instance config
-                                  file.
-                                  <blueprint> The blueprint file to create an
-                                  instance from.
-                                  <install_dir> Directory where the instance
-                                  will be created.
-    --name <name>                 Optional: Specify an instance identifier
-                                  instead of using an auto-generated one.
-  --remove <instance>             Remove an instance's configuration
-  --find <instance>               Find the absolute path to an instance config file
-
-${UNDERLINE}Configuration Access (Programmatic):${END}
-  --info <instance>               Output raw instance configuration file contents
-                                  Displays the complete .ini file exactly as stored on disk
-                                  Use for manual configuration review or debugging
-  --info <instance> --json        Output instance configuration as structured JSON data
-                                  Parses all configuration keys/values into JSON format
-                                  Ideal for automation, scripting, and programmatic access
-
-${UNDERLINE}Bulk Operations:${END}
-  --regenerate --management-script Regenerate management scripts for all instances
-                                  Updates all instance.manage.sh files to latest template version
-                                  Useful after KGSM updates or template improvements
-  --regenerate --all              Regenerate all files for all instances
-                                  Regenerates management scripts, systemd files, UFW rules, etc.
-                                  Complete refresh of all instance-related files
-
-Examples:
-  $(basename "$0") --create factorio.bp --name factorio-01 --install-dir /opt
-  $(basename "$0") --status factorio-01         # Human-readable runtime status
-  $(basename "$0") --status factorio-01 --json  # Runtime status as JSON for APIs
-  $(basename "$0") --info factorio-01           # Raw configuration file
-  $(basename "$0") --info factorio-01 --json    # Configuration as JSON for scripts
-  $(basename "$0") --list --detailed factorio.bp
-  $(basename "$0") --find factorio-01
+${UNDERLINE}Notes:${END}
+  • Instance names are auto-generated if not specified
+  • Use --json for programmatic consumption
+  • Status command shows process state, version, and resource usage
+  • Regenerate updates instance files after KGSM updates
 "
 }
 
-[[ $# -eq 0 ]] && usage && exit 1
+function usage_create() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
 
-# Read the argument values
-while [[ "$#" -gt 0 ]]; do
-  case $1 in
-  -h | --help)
-    usage && exit 0
-    ;;
-  *)
-    break
-    ;;
-  esac
-done
+  echo -e "${UNDERLINE}Create Instance${END}
 
-module_events=$(__find_module events.sh)
+Create a new game server instance from a blueprint.
 
-function _generate_unique_instance_name() {
-  # VALIDATION: Ensure blueprint exists and is valid before generating ID
-  if ! validate_blueprint "$1"; then
-    return $EC_BLUEPRINT_NOT_FOUND
-  fi
+${UNDERLINE}Usage:${END}
+  $self create <blueprint> [options]
 
-  local blueprint_name
-  blueprint_name="$(__extract_blueprint_name $1)"
-  local instance_name
+${UNDERLINE}Arguments:${END}
+  blueprint                   Blueprint name (with or without .bp extension)
 
-  # If no instance with the same name as the blueprint exists, then don't
-  # create a name with a numbered id, just use the same name as the blueprint
-  if [[ ! -f "$INSTANCES_SOURCE_DIR/$blueprint_name/${blueprint_name}.ini" ]]; then
-    echo "$blueprint_name" && return
-  fi
+${UNDERLINE}Options:${END}
+  --install-dir <path>        Installation directory (required)
+  --name <name>               Custom instance name (optional, auto-generated if not provided)
+  --help                      Display this help information
 
-  while :; do
-    instance_name=$(tr -dc 0-9 </dev/urandom | head -c "${config_instance_suffix_length:-2}")
-    instance_name="${blueprint_name}-${instance_name}"
+${UNDERLINE}Description:${END}
+Creates a new instance configuration file and sets up the instance structure.
+If --name is not provided, a unique name will be auto-generated based on the
+blueprint name. The installation directory must be specified and will contain
+all instance data, saves, backups, and logs.
 
-    if [[ ! -f "$INSTANCES_SOURCE_DIR/$blueprint_name/${instance_name}.ini" ]]; then
-      echo "$instance_name" && return
-    fi
-  done
+${UNDERLINE}Examples:${END}
+  $self create factorio --install-dir /opt/gameservers
+  $self create terraria --install-dir /home/user/servers --name terraria-main
+  $self create minecraft.bp --install-dir /var/games
+"
 }
 
-# Function to check if an instance config file exists
-function __instance_config_file_exists() {
-  local instance_name="$1"
-  local blueprint="$2"
+function usage_remove() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
 
-  if [[ -z "$instance_name" ]]; then
-    __print_error "Instance ID is not set"
-    return $EC_INVALID_ARG
-  fi
+  echo -e "${UNDERLINE}Remove Instance${END}
 
-  if [[ -z "$blueprint" ]]; then
-    __print_error "Blueprint is not set"
-    return $EC_INVALID_ARG
-  fi
+Remove an instance configuration file.
 
-  # If $instance_name doesn't end in .ini, append it
-  if [[ ! "$instance_name" =~ \.ini$ ]]; then
-    instance_name="${instance_name}.ini"
-  fi
+${UNDERLINE}Usage:${END}
+  $self remove <instance>
 
-  # Path to the instance config file
-  local instance_config_file="${INSTANCES_SOURCE_DIR}/${blueprint}/${instance_name}.ini"
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name to remove
 
-  # Check if the instance config file exists
-  # If it does, return 0 (success), otherwise return 1 (failure)
-  if [[ -f "$instance_config_file" ]]; then
-    return 0
-  else
-    return 1
-  fi
+${UNDERLINE}Options:${END}
+  --help                      Display this help information
+
+${UNDERLINE}Warning:${END}
+This only removes the instance configuration file, not the actual server
+files. Use the instance management script or directories module to remove
+actual server data.
+
+${UNDERLINE}Examples:${END}
+  $self remove factorio-01
+  $self remove terraria-main
+"
 }
 
-# Create an instance config file for the given instance id and blueprint
-# Returns the path to the instance config file.
-function _create_instance_config_file() {
-  local instance_name="$1"
-  local blueprint="$2"
+function usage_list() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
 
-  if [[ -z "$instance_name" ]]; then
-    __print_error "Instance ID name is not set"
-    return $EC_INVALID_ARG
-  fi
+  echo -e "${UNDERLINE}List Instances${END}
 
-  if [[ -z "$blueprint" ]]; then
-    __print_error "Blueprint is not set"
-    return $EC_INVALID_ARG
-  fi
+List all instances or filter by blueprint.
 
-  local blueprint_name
-  blueprint_name="$(__extract_blueprint_name "$blueprint")"
+${UNDERLINE}Usage:${END}
+  $self list [blueprint] [options]
 
-  # Create the instance directory if it doesn't exist
-  local instance_dir_path="${INSTANCES_SOURCE_DIR}/${blueprint_name}"
-  __create_dir "$instance_dir_path"
+${UNDERLINE}Arguments:${END}
+  blueprint                   Optional blueprint name to filter by
 
-  # Create the instance config file
-  local instance_config_file="${instance_dir_path}/${instance_name}.ini"
-  __create_file "$instance_config_file"
+${UNDERLINE}Options:${END}
+  --detailed                  Show detailed instance information
+  --status                    Show runtime status for all instances
+  --json                      Output in JSON format
+  --help                      Display this help information
 
-  # Return the instance config file path
-  echo "$instance_config_file"
+${UNDERLINE}Examples:${END}
+  $self list
+  $self list factorio
+  $self list --detailed
+  $self list --json
+  $self list factorio --detailed --json
+  $self list --status
+"
 }
 
-# Create a base instance configuration file with common variables
-function __create_base_instance() {
-  local instance_config_file="$1"
-  local instance_name="$2"
-  local blueprint_abs_path="$3"
-  local install_dir="$4"
+function usage_info() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
 
-  ############################################################################
-  # Common instance variables
-  ############################################################################
+  echo -e "${UNDERLINE}Instance Info${END}
 
-  # Source the blueprint file to get the blueprint variables
-  # Only do this for native instances, container instances have
-  # docker-compose.yml files which can't be sourced as a blueprint
-  if [[ "$blueprint_abs_path" == *.bp ]]; then
-    __source_blueprint "$blueprint_abs_path"
-  fi
+Display instance configuration information.
 
-  # Set the instance variables
-  export instance_name=$instance_name
-  export instance_blueprint_file=$blueprint_abs_path
-  export instance_working_dir="${install_dir}/${instance_name}"
+${UNDERLINE}Usage:${END}
+  $self info <instance> [options]
 
-  # shellcheck disable=SC2155
-  export instance_install_datetime="$(date +"%Y-%m-%dT%H:%M:%S")"
-  export instance_version_file="${instance_working_dir}/.${instance_name}.version"
-  export instance_lifecycle_manager="standalone"
-  export instance_manage_file="${instance_working_dir}/${instance_name}.manage.sh"
-  export instance_auto_update_before_start="${config_instance_auto_update_before_start:-false}"
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
 
-  # Process management files
-  export instance_pid_file="${instance_working_dir}/.${instance_name}.pid"
-  export instance_socket_file="${instance_working_dir}/.${instance_name}.sock"
-  export instance_log_file="${instance_working_dir}/${instance_name}.log"
-  export instance_port_forwarding_state_file="${instance_working_dir}/.${instance_name}.upnp_enabled"
+${UNDERLINE}Options:${END}
+  --json                      Output in JSON format
+  --help                      Display this help information
 
-  export instance_startup_success_regex="${blueprint_startup_success_regex:-}"
+${UNDERLINE}Description:${END}
+Shows the raw instance configuration file or outputs it as JSON for
+programmatic consumption.
 
-  export instance_install_subdir
-  instance_install_subdir=$(grep "executable_subdirectory=" <"$blueprint_abs_path" | cut -d "=" -f2 | tr -d '"')
-
-  export instance_launch_dir="${instance_working_dir}/install"
-  if [[ -n "$instance_install_subdir" ]]; then
-    instance_launch_dir="${instance_launch_dir}/${instance_install_subdir}"
-  fi
-
-  export instance_ports="${blueprint_ports:-}"
-  export instance_stop_command="${blueprint_stop_command:-}"
-  export instance_save_command="${blueprint_save_command:-}"
-  export instance_platform="${blueprint_platform:-linux}"
-  export instance_level_name="${blueprint_level_name:-default}"
-  export instance_steam_app_id="${blueprint_steam_app_id:-0}"
-  export instance_is_steam_account_required="${blueprint_is_steam_account_required:-false}"
-
-  export instance_save_command_timeout_seconds="${config_instance_save_command_timeout_seconds:-5}"
-  export instance_stop_command_timeout_seconds="${config_instance_stop_command_timeout_seconds:-30}"
-  export instance_compress_backups="${config_enable_backup_compression:-false}"
-  export instance_enable_port_forwarding="${config_instance_enable_port_forwarding:-false}"
-
-  local instance_executable_file
-
-  # The executable file needs "./" appended to it if it's not a global bin
-  # like java, python, wine64, etc.
-  case "${blueprint_executable_file:-}" in
-  java | python | wine64 | wine32 | wine | mono | mono64 | mono-wine | mono-wine64 | mono-wine32 | mono-wine-wine64 | mono-wine-wine32 | mono-wine-wine)
-    instance_executable_file="${blueprint_executable_file}"
-    ;;
-  *)
-    instance_executable_file="./${blueprint_executable_file}"
-    ;;
-  esac
-  export instance_executable_file
-  export instance_executable_arguments="${blueprint_executable_arguments:-}"
-
-  # Some variables need to be extracted and parsed from the blueprint file
-  # but because of the way container based blueprints are set up, we need
-  # different logic for native and container instances.
-
-  if [[ "$blueprint_abs_path" == *.bp ]]; then
-
-    # Native instance
-    instance_runtime="native"
-    instance_compose_file=""
-
-    instance_upnp_ports=()
-    if [[ -n "${blueprint_ports:-}" ]]; then
-      if ! output=$(__parse_ufw_to_upnp_ports "$blueprint_ports") || ! read -ra instance_upnp_ports <<<"$output"; then
-        __print_warning "Failed to generate 'instance_upnp_ports'. Disabling UPnP for instance $instance_name"
-        export instance_enable_port_forwarding="false"
-      fi
-    fi
-
-  elif
-    [[ "$blueprint_abs_path" == *.docker-compose.yml ]] || [[ "$blueprint_abs_path" == *.yaml ]]
-  then
-
-    # Container instance
-    instance_runtime="container"
-    instance_compose_file="${instance_working_dir}/${instance_name}.docker-compose.yml"
-
-    local blueprint_parsed_ports
-    if ! blueprint_parsed_ports=$(__parse_docker_compose_to_ufw_ports "$blueprint_abs_path"); then
-      __print_error "Failed to parse ports from the docker-compose file: $blueprint_abs_path"
-      return $EC_INVALID_ARG
-    fi
-
-    export instance_ports="$blueprint_parsed_ports"
-
-    instance_upnp_ports=()
-    if [[ -n "${blueprint_parsed_ports:-}" ]]; then
-      if ! output=$(__parse_ufw_to_upnp_ports "$blueprint_parsed_ports") || ! read -ra instance_upnp_ports <<<"$output"; then
-        __print_warning "Failed to generate 'instance_upnp_ports'. Disabling UPnP for instance $instance_name"
-        export instance_enable_port_forwarding="false"
-      fi
-    fi
-
-  else
-    __print_error "Invalid blueprint file: $blueprint_abs_path"
-    return $EC_INVALID_BLUEPRINT
-  fi
-
-  export instance_runtime
-  export instance_compose_file
-  export instance_upnp_ports
-
-  # Render the instance config file template
-  local instance_config_file_template
-  instance_config_file_template="$(__find_template instance.tp)"
-
-  if ! eval "cat <<EOF
-$(<"$instance_config_file_template")
-EOF
-" >"$instance_config_file" 2>/dev/null; then
-    __print_error "Failed to render instance config file template"
-    return $EC_FAILED_TEMPLATE
-  fi
-
-  return 0
+${UNDERLINE}Examples:${END}
+  $self info factorio-01
+  $self info terraria-main --json
+"
 }
 
-# IMPORTANT: This function cannot echo or print anything to stdout
-# other than the final instance file path.
-function _create_instance() {
-  local blueprint=$1
-  local install_dir=$2
-  local identifier=${3:-}
+function usage_status() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
 
-  # VALIDATION: Ensure blueprint exists and is valid before proceeding
-  if ! validate_blueprint "$blueprint"; then
-    return $EC_BLUEPRINT_NOT_FOUND
-  fi
+  echo -e "${UNDERLINE}Instance Status${END}
 
-  # VALIDATION: Ensure install directory exists and is writable if provided
-  if [[ -n "$install_dir" ]]; then
-    if ! validate_directory_exists "$install_dir" "install directory"; then
-      return $EC_FILE_NOT_FOUND
-    fi
-    if ! validate_directory_writable "$install_dir" "install directory"; then
-      return $EC_PERMISSION
-    fi
-  fi
+Show comprehensive runtime status for an instance.
 
-  local blueprint_abs_path
-  if ! blueprint_abs_path="$(__find_blueprint "$blueprint")"; then
-    __print_error "Could not find blueprint $blueprint"
-    return $EC_FILE_NOT_FOUND
-  fi
+${UNDERLINE}Usage:${END}
+  $self status <instance> [options]
 
-  # Extract the blueprint name from the path (remove extension and directory)
-  local blueprint_name
-  blueprint_name="$(__extract_blueprint_name "$blueprint_abs_path")"
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
 
-  local instance_name
-  instance_name=$identifier
+${UNDERLINE}Options:${END}
+  --json                      Output in JSON format
+  --fast                      Fast mode (skip version checks)
+  --help                      Display this help information
 
-  # Ensure instance_name is unique
-  if [[ -z "$instance_name" ]]; then
-    # If no identifier is provided, we generate a unique instance name
-    instance_name="$(_generate_unique_instance_name "$blueprint_name")"
-    export instance_name
-  else
-    # If an identifier is provided, we use it as the instance_name
-    # We also need to ensure that the identifier is valid
-    if __instance_config_file_exists "$instance_name" "$blueprint_name"; then
-      __print_error "Instance with id \"$instance_name\" already exists for blueprint \"$blueprint_name\""
-      return $EC_INVALID_INSTANCE
-    fi
-  fi
+${UNDERLINE}Description:${END}
+Displays runtime status including: active/inactive state, process info,
+resource usage, version status, disk usage, backup count, and recent log
+activity.
 
-  # Temporary instance config file, we build from here until it's ready
-  local instance_config_file
-  instance_config_file="$(_create_instance_config_file "$instance_name" "$blueprint_name")"
+Fast mode skips version comparison for faster response times, ideal for
+frequent monitoring or web APIs.
 
-  # All common instance variables are set in this function
-  __create_base_instance "$instance_config_file" "$instance_name" "$blueprint_abs_path" "$install_dir"
-
-  # All done
-  "$module_events" --emit --instance-created "$instance_name" "$blueprint"
-
-  echo "$instance_name"
+${UNDERLINE}Examples:${END}
+  $self status factorio-01
+  $self status terraria-main --json
+  $self status minecraft-server --fast
+  $self status factorio-01 --json --fast
+"
 }
 
-function _remove() {
-  local instance=$1
+function usage_find() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
 
-  # Find the instance config symlink path (works even if broken)
-  local instance_config_symlink
-  if ! instance_config_symlink=$(__find_instance_config "$instance"); then
-    __print_error "Instance '$instance' not found"
-    return $EC_NOT_FOUND
-  fi
+  echo -e "${UNDERLINE}Find Instance${END}
 
-  # Extract blueprint name from the symlink path (parent directory name)
-  local blueprint_name
-  blueprint_name="$(basename "$(dirname "$instance_config_symlink")")"
+Get the absolute path to an instance configuration file.
 
-  # Remove the symlink (works for both valid and broken symlinks)
-  if ! rm "$instance_config_symlink"; then
-    __print_error "Failed to remove instance config symlink: $instance_config_symlink"
-    return $EC_FAILED_RM
-  fi
+${UNDERLINE}Usage:${END}
+  $self find <instance>
 
-  # Remove directory if no other instances are found
-  local instances_dir
-  instances_dir="${INSTANCES_SOURCE_DIR}/${blueprint_name}"
-  if [[ -d "$instances_dir" ]] && [[ -z "$(ls -A "$instances_dir" 2>/dev/null)" ]]; then
-    if ! rmdir "$instances_dir"; then
-      __print_warning "Failed to remove empty directory: $instances_dir"
-      # Don't return error here, the main task (removing the symlink) succeeded
-    fi
-  fi
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
 
-  "$module_events" --emit --instance-removed "${instance}"
-  return 0
+${UNDERLINE}Options:${END}
+  --help                      Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self find factorio-01
+  $self find terraria-main
+"
+}
+
+function usage_generate_id() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Generate Instance ID${END}
+
+Generate a unique instance identifier for a blueprint.
+
+${UNDERLINE}Usage:${END}
+  $self generate-id <blueprint>
+
+${UNDERLINE}Arguments:${END}
+  blueprint                   Blueprint name
+
+${UNDERLINE}Options:${END}
+  --help                      Display this help information
+
+${UNDERLINE}Description:${END}
+Generates a unique instance name based on the blueprint name. If no instance
+with the blueprint name exists, returns the blueprint name. Otherwise, appends
+a random numeric suffix.
+
+${UNDERLINE}Examples:${END}
+  $self generate-id factorio
+  $self generate-id terraria.bp
+"
+}
+
+function usage_save() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Save Instance${END}
+
+Send a save command to a running instance.
+
+${UNDERLINE}Usage:${END}
+  $self save <instance>
+
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
+
+${UNDERLINE}Options:${END}
+  --help                      Display this help information
+
+${UNDERLINE}Description:${END}
+Issues a save command to the instance's running process using the
+save_command defined in the blueprint.
+
+${UNDERLINE}Examples:${END}
+  $self save factorio-01
+  $self save terraria-main
+"
+}
+
+function usage_input() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Send Input to Instance${END}
+
+Send a command to an instance's interactive console.
+
+${UNDERLINE}Usage:${END}
+  $self input <instance> <command>
+
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
+  command                     Command to send to instance
+
+${UNDERLINE}Options:${END}
+  --help                      Display this help information
+
+${UNDERLINE}Description:${END}
+Sends a command directly to the instance's console and displays the last
+10 log lines after execution.
+
+${UNDERLINE}Examples:${END}
+  $self input factorio-01 \"/say Hello world\"
+  $self input terraria-main \"save-all\"
+"
+}
+
+# Load required libraries
+logic_instances=$(__find_logic_library instances.sh)
+# shellcheck disable=SC1090
+source "$logic_instances" || {
+  __print_error "Failed to load instances logic library"
+  exit $EC_FAILED_SOURCE
+}
+
+events_library=$(__find_library events.sh)
+# shellcheck disable=SC1090
+source "$events_library" || {
+  __print_error "Failed to load events library"
+  exit $EC_FAILED_SOURCE
 }
 
 function _print_info() {
@@ -594,7 +493,7 @@ function _check_management_file_status_support() {
   fi
 
   # Check if the management file supports --status by looking for it in help output
-  if "$management_file" --help 2>/dev/null | grep -q -- "--status"; then
+  if "$management_file" --help 2> /dev/null | grep -q -- "--status"; then
     return 0
   fi
 
@@ -606,6 +505,7 @@ function _get_instance_status() {
   __source_instance "$instance"
 
   # Check if management file supports the new --status command
+  # shellcheck disable=SC2154
   if _check_management_file_status_support "$instance_management_file"; then
     # Use the new unified status command from the management file
     local status_args=""
@@ -620,8 +520,7 @@ function _get_instance_status() {
   else
     # Fallback for older management files that don't support --status
     __print_warning "Instance '$instance' uses an older management file that doesn't support the --status command."
-    __print_warning "To enable faster status queries, regenerate the management file using:"
-    __print_warning "  ./kgsm.sh --regenerate-management-files"
+    __print_warning "To enable faster status queries, regenerate the management file"
 
     # TODO: Implement fallback status gathering logic here
     # For now, just indicate the instance is not compatible
@@ -659,295 +558,537 @@ function _get_instance_status_json() {
   fi
 }
 
-function _send_save_to_instance() {
-  local instance=$1
+# Command handler functions
+
+function _cmd_create() {
+  local blueprint=""
+  local install_dir=""
+  local instance_name=""
+
+  # First positional argument is blueprint (required)
+  if [[ $# -gt 0 ]] && [[ "$1" != --* ]]; then
+    blueprint="$1"
+    shift
+  fi
+
+  # Parse options
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --install-dir)
+        shift
+        [[ -z "$1" ]] && __print_error "Missing argument for --install-dir" && exit $EC_MISSING_ARG
+        install_dir="$1"
+        shift
+        ;;
+      --name)
+        shift
+        [[ -z "$1" ]] && __print_error "Missing argument for --name" && exit $EC_MISSING_ARG
+        instance_name="$1"
+        shift
+        ;;
+      --help)
+        usage_create && exit 0
+        ;;
+      *)
+        __print_error "Invalid option for create command: $1"
+        __print_error "Use '$self create --help' for usage information"
+        exit $EC_INVALID_ARG
+        ;;
+    esac
+  done
+
+  # Validate required parameters
+  if [[ -z "$blueprint" ]]; then
+    __print_error "Missing required argument: <blueprint>"
+    __print_error "Use '$self create --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  # Create instance
+  local created_instance
+  created_instance=$(__logic_create_instance "$blueprint" "$install_dir" "$instance_name")
+  local exit_code=$?
+
+  case $exit_code in
+    $EC_SUCCESS_INSTANCE_CREATED)
+      __print_success "Created instance: $created_instance"
+      __dispatch_event_from_exit_code "$exit_code" "$created_instance" "$blueprint"
+      exit 0
+      ;;
+    *)
+      __print_error "Failed to create instance"
+      exit $exit_code
+      ;;
+  esac
+}
+
+function _cmd_remove() {
+  local instance=""
+
+  # First positional argument is instance (required)
+  if [[ $# -gt 0 ]] && [[ "$1" != --* ]]; then
+    instance="$1"
+    shift
+  fi
+
+  # Parse options
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help)
+        usage_remove && exit 0
+        ;;
+      *)
+        __print_error "Invalid option for remove command: $1"
+        __print_error "Use '$self remove --help' for usage information"
+        exit $EC_INVALID_ARG
+        ;;
+    esac
+  done
+
+  # Validate required parameter
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self remove --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  # Remove instance
+  __logic_remove_instance "$instance"
+  local exit_code=$?
+
+  case $exit_code in
+    $EC_SUCCESS_INSTANCE_REMOVED)
+      __print_success "Removed instance: $instance"
+      __dispatch_event_from_exit_code "$exit_code" "$instance"
+      exit 0
+      ;;
+    *)
+      __print_error "Failed to remove instance: $instance"
+      exit $exit_code
+      ;;
+  esac
+}
+
+function _cmd_list() {
+  local blueprint=""
+  local detailed=""
+  local status=""
+
+  # Parse options and arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --detailed)
+        detailed=1
+        shift
+        ;;
+      --status)
+        status=1
+        shift
+        ;;
+      --help)
+        usage_list && exit 0
+        ;;
+      -*)
+        __print_error "Invalid option for list command: $1"
+        __print_error "Use '$self list --help' for usage information"
+        exit $EC_INVALID_ARG
+        ;;
+      *)
+        # Positional argument is blueprint filter
+        blueprint="$1"
+        shift
+        ;;
+    esac
+  done
+
+  # Execute based on mode
+  if [[ -n "$status" ]]; then
+    # Status listing
+    if [[ -z "$json_format" ]]; then
+      _list_instances_status "$blueprint"
+      exit $?
+    else
+      _list_instances_status_json "$blueprint"
+      exit $?
+    fi
+  else
+    # Regular listing
+    if [[ -z "$json_format" ]]; then
+      _list_instances "$blueprint" "$detailed"
+      exit $?
+    else
+      _list_instances_json "$blueprint" "$detailed"
+      exit $?
+    fi
+  fi
+}
+
+function _cmd_info() {
+  local instance=""
+
+  # First positional argument is instance (required)
+  if [[ $# -gt 0 ]] && [[ "$1" != --* ]]; then
+    instance="$1"
+    shift
+  fi
+
+  # Parse options
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help)
+        usage_info && exit 0
+        ;;
+      *)
+        __print_error "Invalid option for info command: $1"
+        __print_error "Use '$self info --help' for usage information"
+        exit $EC_INVALID_ARG
+        ;;
+    esac
+  done
+
+  # Validate required parameter
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self info --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  if [[ -z "$json_format" ]]; then
+    _print_info "$instance"
+  else
+    _print_info_json "$instance"
+  fi
+  exit $?
+}
+
+function _cmd_status() {
+  local instance=""
+
+  # First positional argument is instance (required)
+  if [[ $# -gt 0 ]] && [[ "$1" != --* ]]; then
+    instance="$1"
+    shift
+  fi
+
+  # Parse options
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help)
+        usage_status && exit 0
+        ;;
+      *)
+        __print_error "Invalid option for status command: $1"
+        __print_error "Use '$self status --help' for usage information"
+        exit $EC_INVALID_ARG
+        ;;
+    esac
+  done
+
+  # Validate required parameter
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self status --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  if [[ -z "$json_format" ]]; then
+    _get_instance_status "$instance"
+  else
+    _get_instance_status_json "$instance"
+  fi
+  exit $?
+}
+
+function _cmd_find() {
+  local instance=""
+
+  # First positional argument is instance (required)
+  if [[ $# -gt 0 ]] && [[ "$1" != --* ]]; then
+    instance="$1"
+    shift
+  fi
+
+  # Parse options
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help)
+        usage_find && exit 0
+        ;;
+      *)
+        __print_error "Invalid option for find command: $1"
+        __print_error "Use '$self find --help' for usage information"
+        exit $EC_INVALID_ARG
+        ;;
+    esac
+  done
+
+  # Validate required parameter
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self find --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  local instance_path
+  instance_path=$(__find_instance_config "$instance")
+  if [[ -z "$instance_path" ]]; then
+    __print_error "Instance '$instance' not found"
+    exit $EC_NOT_FOUND
+  fi
+
+  echo "$instance_path"
+  exit 0
+}
+
+function _cmd_generate_id() {
+  local blueprint=""
+
+  # First positional argument is blueprint (required)
+  if [[ $# -gt 0 ]] && [[ "$1" != --* ]]; then
+    blueprint="$1"
+    shift
+  fi
+
+  # Parse options
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help)
+        usage_generate_id && exit 0
+        ;;
+      *)
+        __print_error "Invalid option for generate-id command: $1"
+        __print_error "Use '$self generate-id --help' for usage information"
+        exit $EC_INVALID_ARG
+        ;;
+    esac
+  done
+
+  # Validate required parameter
+  if [[ -z "$blueprint" ]]; then
+    __print_error "Missing required argument: <blueprint>"
+    __print_error "Use '$self generate-id --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  # VALIDATION: Ensure blueprint exists and is valid before generating ID
+  if ! validate_blueprint "$blueprint"; then
+    __print_error "Blueprint '$blueprint' not found or invalid"
+    return $EC_BLUEPRINT_NOT_FOUND
+  fi
+
+  local blueprint_name
+  blueprint_name="$(__extract_blueprint_name "$blueprint")"
+
+  # Call logic function
+  __logic_generate_unique_instance_name "$blueprint_name"
+}
+
+function _cmd_save() {
+  local instance=""
+
+  # First positional argument is instance (required)
+  if [[ $# -gt 0 ]] && [[ "$1" != --* ]]; then
+    instance="$1"
+    shift
+  fi
+
+  # Parse options
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help)
+        usage_save && exit 0
+        ;;
+      *)
+        __print_error "Invalid option for save command: $1"
+        __print_error "Use '$self save --help' for usage information"
+        exit $EC_INVALID_ARG
+        ;;
+    esac
+  done
+
+  # Validate required parameter
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self save --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
 
   __source_instance "$instance"
-
   "$instance_management_file" --save
 }
 
-function _send_input_to_instance() {
-  local instance=$1
-  local command=$2
+function _cmd_input() {
+  local instance=""
+  local command=""
+
+  # First positional argument is instance (required)
+  if [[ $# -gt 0 ]] && [[ "$1" != --* ]]; then
+    instance="$1"
+    shift
+  fi
+
+  # Second positional argument is command (required)
+  if [[ $# -gt 0 ]] && [[ "$1" != --* ]]; then
+    command="$1"
+    shift
+  fi
+
+  # Parse options
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --help)
+        usage_input && exit 0
+        ;;
+      *)
+        __print_error "Invalid option for input command: $1"
+        __print_error "Use '$self input --help' for usage information"
+        exit $EC_INVALID_ARG
+        ;;
+    esac
+  done
+
+  # Validate required parameters
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self input --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  if [[ -z "$command" ]]; then
+    __print_error "Missing required argument: <command>"
+    __print_error "Use '$self input --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
 
   __source_instance "$instance"
-
   "$instance_management_file" --input "$command"
 }
 
-function _regenerate_files() {
-  local operation="$1" # "management-script" or "all"
+function _cmd_help() {
+  local command="$1"
 
-  local operation_name
-  local files_args
+  if [[ -z "$command" ]]; then
+    show_usage
+    exit 0
+  fi
 
-  case "$operation" in
-  "management-script")
-    operation_name="management scripts"
-    files_args="--create --manage"
-    ;;
-  "all")
-    operation_name="all files"
-    files_args="--create"
-    ;;
-  *)
-    __print_error "Invalid regenerate operation: $operation"
-    return $EC_INVALID_ARG
-    ;;
+  case "$command" in
+    create)
+      usage_create
+      ;;
+    remove)
+      usage_remove
+      ;;
+    list)
+      usage_list
+      ;;
+    info)
+      usage_info
+      ;;
+    status)
+      usage_status
+      ;;
+    find)
+      usage_find
+      ;;
+    generate-id)
+      usage_generate_id
+      ;;
+    save)
+      usage_save
+      ;;
+    input)
+      usage_input
+      ;;
+    *)
+      __print_error "Unknown command: $command"
+      __print_error "Use '$self help' for available commands"
+      exit $EC_INVALID_ARG
+      ;;
   esac
 
-  __print_info "Regenerating $operation_name for all instances..."
-
-  local files_module
-  files_module="$(__find_module files.sh)"
-
-  local instance_count=0
-  local success_count=0
-  local error_count=0
-
-  # Get list of all instances using existing function
-  local instances
-  instances=$(_list_instances)
-
-  if [[ -z "$instances" ]]; then
-    __print_info "No instances found to regenerate"
-    return 0
-  fi
-
-  # Process each instance
-  while IFS= read -r instance_name; do
-    [[ -z "$instance_name" ]] && continue
-
-    __print_info "Regenerating $operation_name for instance: $instance_name"
-
-    # Call files.sh module with appropriate arguments
-    # Capture both stdout and stderr to check for actual success/failure
-    local files_output
-    files_output=$("$files_module" --instance "$instance_name" $files_args 2>&1)
-    local files_exit_code=$?
-
-    # Check if the command succeeded and didn't produce error messages
-    if [[ $files_exit_code -eq 0 ]] && ! echo "$files_output" | grep -q "ERROR\|Failed to"; then
-      __print_success "Successfully regenerated $operation_name for: $instance_name"
-      ((success_count++))
-    else
-      __print_error "Failed to regenerate $operation_name for: $instance_name"
-      # Log the actual error for debugging
-      if [[ -n "$files_output" ]]; then
-        __print_error "Error details: $files_output"
-      fi
-      ((error_count++))
-    fi
-
-    ((instance_count++))
-  done <<<"$instances"
-
-  __print_info "Regeneration complete: $success_count successful, $error_count failed, $instance_count total"
-
-  if [[ $error_count -gt 0 ]]; then
-    return 1
-  fi
-
-  return 0
+  exit 0
 }
 
+# Global flag extraction and main routing
+
+# Extract --json flag if present
 # shellcheck disable=SC2199
 if [[ $@ =~ "--json" ]]; then
   json_format=1
   for a; do
     shift
     case $a in
-    --json) continue ;;
-    *) set -- "$@" "$a" ;;
+      --json) continue ;;
+      *) set -- "$@" "$a" ;;
     esac
   done
 fi
 
+# Extract --fast flag if present
 # shellcheck disable=SC2199
 if [[ $@ =~ "--fast" ]]; then
   fast_mode=1
   for a; do
     shift
     case $a in
-    --fast) continue ;;
-    *) set -- "$@" "$a" ;;
+      --fast) continue ;;
+      *) set -- "$@" "$a" ;;
     esac
   done
 fi
 
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-  --list)
-    shift
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-      --detailed)
-        detailed=1
-        ;;
-      --status)
-        status=1
-        ;;
-      *)
-        blueprint=$1
-        ;;
-      esac
-      shift
-    done
-    if [[ -n "$status" ]]; then
-      # Status listing
-      if [[ -z "$json_format" ]]; then
-        _list_instances_status "$blueprint"
-        exit $?
-      else
-        _list_instances_status_json "$blueprint"
-        exit $?
-      fi
-    else
-      # Regular listing (existing functionality)
-      if [[ -z "$json_format" ]]; then
-        _list_instances "$blueprint" "$detailed"
-        exit $?
-      else
-        _list_instances_json "$blueprint" "$detailed"
-        exit $?
-      fi
-    fi
-    ;;
-  --generate-id)
-    shift
-    [[ -z "$1" ]] && __print_error "Missing argument <blueprint>" && exit $EC_MISSING_ARG
+# Handle global help flag
+if [[ "$1" == "-h" || "$1" == "--help" ]]; then
+  show_usage
+  exit 0
+fi
 
-    _generate_unique_instance_name "$1"
-    exit $?
-    ;;
-  --input)
-    shift
-    [[ -z "$1" ]] && __print_error "Missing argument <instance>" && exit $EC_MISSING_ARG
-    instance=$1
-    shift
-    [[ -z "$1" ]] && __print_error "Missing argument <command>" && exit $EC_MISSING_ARG
-    command=$1
-    _send_input_to_instance "$instance" "$command"
-    exit $?
-    ;;
-  --create)
-    blueprint=
-    install_dir=
-    identifier=
-    shift
-    [[ -z "$1" ]] && __print_error "Missing argument <blueprint>" && exit $EC_MISSING_ARG
-    blueprint=$1
-    shift
-    if [[ -n "$1" ]]; then
-      while [[ $# -ne 0 ]]; do
-        case "$1" in
-        --install-dir)
-          shift
-          [[ -z "$1" ]] && __print_error "Missing argument <install_dir>" && exit $EC_MISSING_ARG
-          install_dir=$1
-          ;;
-        --name)
-          shift
-          [[ -z "$1" ]] && __print_error "Missing argument <id>" && exit $EC_MISSING_ARG
-          identifier=$1
-          ;;
-        *)
-          __print_error "Invalid argument $1" && exit $EC_INVALID_ARG
-          ;;
-        esac
-        shift
-      done
-    fi
+# Require at least one argument (command)
+if [[ $# -eq 0 ]]; then
+  show_usage
+  exit 0
+fi
 
-    _create_instance "$blueprint" "$install_dir" $identifier
-    exit $?
-    ;;
-  --status)
-    shift
-    [[ -z "$1" ]] && __print_error "Missing argument <instance>" && exit $EC_MISSING_ARG
-    instance=$1
-    if [[ -z "$json_format" ]]; then
-      _get_instance_status "$instance"
-    else
-      _get_instance_status_json "$instance"
-    fi
-    exit $?
-    ;;
-  --save)
-    shift
-    [[ -z "$1" ]] && __print_error "Missing argument <instance>" && exit $EC_MISSING_ARG
-    _send_save_to_instance "$1"
-    exit $?
-    ;;
-  --remove)
-    shift
-    [[ -z "$1" ]] && __print_error "Missing argument <instance>" && exit $EC_MISSING_ARG
-    _remove "$1"
-    exit $?
-    ;;
-  --find)
-    shift
-    if [[ -z "$1" ]]; then
-      __print_error "Missing argument <instance>"
-      exit $EC_MISSING_ARG
-    fi
+# Parse command
+command="$1"
+shift
 
-    instance=$1
-    instance_path=$(__find_instance_config "$instance")
-    if [[ -z "$instance_path" ]]; then
-      __print_error "Instance '$instance' not found"
-      exit $EC_NOT_FOUND
-    fi
-
-    echo "$instance_path"
-    exit 0
+# Route to appropriate command handler
+case "$command" in
+  create)
+    _cmd_create "$@"
     ;;
-  --info)
-    shift
-    [[ -z "$1" ]] && __print_error "Missing argument <instance>" && exit $EC_MISSING_ARG
-    instance=$1
-    if [[ -z "$json_format" ]]; then
-      _print_info "$instance"
-    else
-      _print_info_json "$instance"
-    fi
-    exit $?
+  remove)
+    _cmd_remove "$@"
     ;;
-  --regenerate)
-    shift
-    [[ -z "$1" ]] && __print_error "Missing regenerate option (--management-script or --all)" && exit $EC_MISSING_ARG
-
-    # Validate that only one regenerate option is provided
-    regenerate_option="$1"
-    shift
-
-    # Check for additional regenerate options (conflicting)
-    if [[ -n "$1" ]] && [[ "$1" == "--management-script" || "$1" == "--all" ]]; then
-      __print_error "Multiple regenerate options provided: $regenerate_option and $1"
-      __print_error "Only one regenerate option allowed: --management-script or --all"
-      exit $EC_INVALID_ARG
-    fi
-
-    case "$regenerate_option" in
-    --management-script)
-      _regenerate_files "management-script"
-      exit $?
-      ;;
-    --all)
-      _regenerate_files "all"
-      exit $?
-      ;;
-    *)
-      __print_error "Invalid regenerate option: $regenerate_option"
-      __print_error "Valid options: --management-script, --all"
-      exit $EC_INVALID_ARG
-      ;;
-    esac
+  list)
+    _cmd_list "$@"
+    ;;
+  info)
+    _cmd_info "$@"
+    ;;
+  status)
+    _cmd_status "$@"
+    ;;
+  find)
+    _cmd_find "$@"
+    ;;
+  generate-id)
+    _cmd_generate_id "$@"
+    ;;
+  save)
+    _cmd_save "$@"
+    ;;
+  input)
+    _cmd_input "$@"
+    ;;
+  help)
+    _cmd_help "$@"
     ;;
   *)
-    __print_error "Invalid argument $1" && exit $EC_INVALID_ARG
+    __print_error "Unknown command: $command"
+    __print_error "Use '$self help' for available commands"
+    exit $EC_INVALID_ARG
     ;;
-  esac
-  shift
-done
+esac
