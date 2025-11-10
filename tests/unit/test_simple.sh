@@ -66,7 +66,7 @@ function test_instances_module_list() {
   log_step "Testing instances module list functionality"
 
   local instances_module="$KGSM_ROOT/modules/instances.sh"
-  assert_command_succeeds "$instances_module --list" "instances.sh --list should work"
+  assert_command_succeeds "$instances_module list" "instances.sh list should work"
 }
 
 function test_basic_directory_structure() {

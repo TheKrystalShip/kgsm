@@ -55,7 +55,7 @@ function test_blueprint_discovery() {
   log_step "Testing blueprint discovery"
 
   local blueprint_list
-  if blueprint_list=$("$BLUEPRINTS_MODULE" --list 2>/dev/null); then
+  if blueprint_list=$("$BLUEPRINTS_MODULE" list 2>/dev/null); then
     assert_not_null "$blueprint_list" "Blueprints module should return a list of blueprints"
 
     local blueprint_count
@@ -64,7 +64,7 @@ function test_blueprint_discovery() {
     assert_greater_than "$blueprint_count" 0 "Should find at least one blueprint"
     log_test "Found $blueprint_count blueprints"
   else
-    assert_true "false" "Blueprints module --list should succeed"
+    assert_true "false" "Blueprints module list should succeed"
   fi
 }
 
@@ -87,7 +87,7 @@ function test_instance_id_generation() {
 
   if [[ -n "$test_blueprint" ]]; then
     local instance_id
-    if instance_id=$("$INSTANCES_MODULE" --generate-id "$test_blueprint" 2>/dev/null); then
+    if instance_id=$("$INSTANCES_MODULE" generate-id "$test_blueprint" 2>/dev/null); then
       assert_not_null "$instance_id" "Should generate instance ID for blueprint '$test_blueprint'"
 
       # Automatically generated instance IDs should contain the blueprint name
@@ -105,7 +105,7 @@ function test_json_output_compatibility() {
   log_step "Testing JSON output compatibility"
 
   local blueprints_json
-  if blueprints_json=$("$BLUEPRINTS_MODULE" --list --json 2>/dev/null); then
+  if blueprints_json=$("$BLUEPRINTS_MODULE" list --json 2>/dev/null); then
     assert_not_null "$blueprints_json" "Blueprints module should produce JSON output"
     assert_not_equals "null" "$blueprints_json" "Blueprints JSON should not be null"
 
@@ -122,7 +122,7 @@ function test_json_output_compatibility() {
   fi
 
   local instances_json
-  if instances_json=$("$INSTANCES_MODULE" --list --json 2>/dev/null); then
+  if instances_json=$("$INSTANCES_MODULE" list --json 2>/dev/null); then
     assert_not_null "$instances_json" "Instances module should produce JSON output"
 
     # Validate JSON format if jq is available
@@ -185,8 +185,8 @@ function test_blueprint_instance_workflow() {
   log_step "Testing basic blueprint-to-instance workflow compatibility"
 
   # Test that the workflow components are available
-  assert_command_succeeds "$BLUEPRINTS_MODULE --list" "Blueprint listing should work for instance creation workflow"
-  assert_command_succeeds "$INSTANCES_MODULE --list" "Instance listing should work for management workflow"
+  assert_command_succeeds "$BLUEPRINTS_MODULE list" "Blueprint listing should work for instance creation workflow"
+  assert_command_succeeds "$INSTANCES_MODULE list" "Instance listing should work for management workflow"
 
   log_test "Basic workflow components are available"
 }

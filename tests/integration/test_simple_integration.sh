@@ -81,12 +81,12 @@ function test_blueprints_instances_integration() {
   local instances_module="$KGSM_ROOT/modules/instances.sh"
 
   # Both modules should be able to list their content
-  assert_command_succeeds "$blueprints_module --list" "blueprints --list should work"
-  assert_command_succeeds "$instances_module --list" "instances --list should work"
+  assert_command_succeeds "$blueprints_module list" "blueprints list should work"
+  assert_command_succeeds "$instances_module list" "instances list should work"
 
   # Test JSON output consistency
-  assert_command_succeeds "$blueprints_module --list --json" "blueprints --list --json should work"
-  assert_command_succeeds "$instances_module --list --json" "instances --list --json should work"
+  assert_command_succeeds "$blueprints_module list --json" "blueprints list --json should work"
+  assert_command_succeeds "$instances_module list --json" "instances list --json should work"
 }
 
 function test_configuration_module_integration() {
@@ -146,13 +146,13 @@ function test_output_format_consistency() {
     local blueprints_json instances_json
 
     # Get JSON output from both modules
-    if blueprints_json=$("$KGSM_ROOT/modules/blueprints.sh" --list --json 2>/dev/null); then
+    if blueprints_json=$("$KGSM_ROOT/modules/blueprints.sh" list --json 2>/dev/null); then
       if echo "$blueprints_json" | jq . >/dev/null 2>&1; then
         assert_true "true" "blueprints module should produce valid JSON"
       fi
     fi
 
-    if instances_json=$("$KGSM_ROOT/modules/instances.sh" --list --json 2>/dev/null); then
+    if instances_json=$("$KGSM_ROOT/modules/instances.sh" list --json 2>/dev/null); then
       if echo "$instances_json" | jq . >/dev/null 2>&1; then
         assert_true "true" "instances module should produce valid JSON"
       fi

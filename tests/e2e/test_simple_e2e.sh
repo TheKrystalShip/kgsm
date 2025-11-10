@@ -126,10 +126,10 @@ function test_blueprints_listing() {
   local blueprints_module="$KGSM_ROOT/modules/blueprints.sh"
 
   if [[ -f "$blueprints_module" ]]; then
-    assert_command_succeeds "$blueprints_module --list" "blueprints --list should work"
+    assert_command_succeeds "$blueprints_module list" "blueprints list should work"
 
     # Test JSON output if module supports it
-    if "$blueprints_module" --list --json >/dev/null 2>&1; then
+    if "$blueprints_module" list --json >/dev/null 2>&1; then
       log_test "blueprints module supports JSON output"
     else
       log_test "blueprints module may not support JSON output"
@@ -145,10 +145,10 @@ function test_instances_listing() {
   local instances_module="$KGSM_ROOT/modules/instances.sh"
 
   if [[ -f "$instances_module" ]]; then
-    assert_command_succeeds "$instances_module --list" "instances --list should work"
+    assert_command_succeeds "$instances_module list" "instances list should work"
 
     # Test JSON output if module supports it
-    if "$instances_module" --list --json >/dev/null 2>&1; then
+    if "$instances_module" list --json >/dev/null 2>&1; then
       log_test "instances module supports JSON output"
     else
       log_test "instances module may not support JSON output"

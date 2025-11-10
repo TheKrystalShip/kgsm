@@ -747,7 +747,7 @@ function test_module_integration_with_kgsm() {
   assert_not_null "$found_module" "Module should be discoverable in modules directory"
 
   # Test integration with KGSM CLI
-  assert_command_succeeds "$KGSM_ROOT/kgsm.sh --events --help" "Events module should work through KGSM CLI"
+  assert_command_succeeds "$KGSM_ROOT/kgsm.sh events --help" "Events module should work through KGSM CLI"
 
   log_test "Module integration with KGSM validated"
 }

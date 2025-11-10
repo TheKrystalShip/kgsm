@@ -146,12 +146,12 @@ function test_no_arguments_behavior() {
 function test_basic_listing() {
   log_step "Testing basic blueprint listing functionality"
 
-  # Basic --list should work
-  assert_command_succeeds "$BLUEPRINTS_MODULE list" "blueprints.sh --list should work"
+  # Basic list should work
+  assert_command_succeeds "$BLUEPRINTS_MODULE list" "blueprints.sh list should work"
 
   # List output should contain blueprints
   local list_output
-  list_output=$("$BLUEPRINTS_MODULE" --list 2>&1)
+  list_output=$("$BLUEPRINTS_MODULE" list 2>&1)
 
   # Should have some output (at least default blueprints)
   assert_not_null "$list_output" "Blueprint list should not be empty"
@@ -199,11 +199,11 @@ function test_json_listing_functionality() {
   log_step "Testing JSON listing functionality"
 
   # Basic JSON listing
-  assert_command_succeeds "$BLUEPRINTS_MODULE list --json" "blueprints.sh --list --json should work"
+  assert_command_succeeds "$BLUEPRINTS_MODULE list --json" "blueprints.sh list --json should work"
 
   # JSON output should be valid JSON
   local json_output
-  json_output=$("$BLUEPRINTS_MODULE" --list --json 2>&1)
+  json_output=$("$BLUEPRINTS_MODULE" list --json 2>&1)
 
   # Validate JSON format
   if command -v jq >/dev/null 2>&1; then
@@ -422,13 +422,13 @@ function test_permission_error_handling() {
 function test_all_command_combinations() {
   log_step "Testing all command combinations for comprehensive coverage"
 
-  # Test all valid --list combinations
+  # Test all valid list combinations
   local list_commands=(
-    "--list"
+    "list"
     "list default"
     "list custom"
     "list detailed"
-    "--list --json"
+    "list --json"
     "list default --json"
     "list custom --json"
     "list detailed --json"
@@ -446,7 +446,7 @@ function test_debug_mode_functionality() {
 
   # Test --debug flag with various commands
   assert_command_succeeds "$BLUEPRINTS_MODULE --debug --help" "blueprints.sh --debug --help should work"
-  assert_command_succeeds "$BLUEPRINTS_MODULE --debug --list" "blueprints.sh --debug --list should work"
+  assert_command_succeeds "$BLUEPRINTS_MODULE --debug list" "blueprints.sh --debug list should work"
 
   log_test "Debug mode functionality validated"
 }
@@ -470,13 +470,13 @@ function test_behavioral_certainty_consistency() {
   # Run the same command multiple times - should always produce the same result
   local result1 result2 result3
 
-  # Test --list consistency
-  result1=$("$BLUEPRINTS_MODULE" --list 2>&1 || echo "FAILED")
-  result2=$("$BLUEPRINTS_MODULE" --list 2>&1 || echo "FAILED")
-  result3=$("$BLUEPRINTS_MODULE" --list 2>&1 || echo "FAILED")
+  # Test list consistency
+  result1=$("$BLUEPRINTS_MODULE" list 2>&1 || echo "FAILED")
+  result2=$("$BLUEPRINTS_MODULE" list 2>&1 || echo "FAILED")
+  result3=$("$BLUEPRINTS_MODULE" list 2>&1 || echo "FAILED")
 
-  assert_equals "$result1" "$result2" "Multiple --list calls should produce identical results"
-  assert_equals "$result2" "$result3" "All --list calls should be consistent"
+  assert_equals "$result1" "$result2" "Multiple list calls should produce identical results"
+  assert_equals "$result2" "$result3" "All list calls should be consistent"
 
   # Test --help consistency
   result1=$("$BLUEPRINTS_MODULE" --help 2>&1 || echo "FAILED")

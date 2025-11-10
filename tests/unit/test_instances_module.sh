@@ -51,13 +51,13 @@ function test_module_list_functionality() {
   log_step "Testing module list functionality"
 
   # List should work even with no instances
-  assert_command_succeeds "$INSTANCES_MODULE --list" "instances.sh --list should work"
+  assert_command_succeeds "$INSTANCES_MODULE list" "instances.sh list should work"
 }
 
 function test_module_json_list_functionality() {
   log_step "Testing module JSON list functionality"
 
-  assert_command_succeeds "$INSTANCES_MODULE --list --json" "instances.sh --list --json should work"
+  assert_command_succeeds "$INSTANCES_MODULE list --json" "instances.sh list --json should work"
 }
 
 function test_instance_id_generation() {
@@ -68,7 +68,7 @@ function test_instance_id_generation() {
 
   if [[ -f "$factorio_blueprint" ]]; then
     local instance_id
-    if instance_id=$("$INSTANCES_MODULE" --generate-id factorio.bp 2>/dev/null); then
+    if instance_id=$("$INSTANCES_MODULE" generate-id factorio.bp 2>/dev/null); then
       assert_not_null "$instance_id" "Generated instance ID should not be empty"
       log_test "Generated instance ID: $instance_id"
     else
@@ -88,32 +88,32 @@ function test_invalid_argument_handling() {
 function test_missing_argument_handling() {
   log_step "Testing missing argument handling"
 
-  # --create should require arguments
-  assert_command_fails "$INSTANCES_MODULE --create" "Module should require arguments for --create"
+  # create should require arguments
+  assert_command_fails "$INSTANCES_MODULE create" "Module should require arguments for create"
 }
 
 function test_find_nonexistent_instance() {
   log_step "Testing find functionality with non-existent instance"
 
   local nonexistent_name="nonexistent-test-instance-$(date +%s)"
-  assert_command_fails "$INSTANCES_MODULE --find '$nonexistent_name'" "Module should fail when finding non-existent instance"
+  assert_command_fails "$INSTANCES_MODULE find '$nonexistent_name'" "Module should fail when finding non-existent instance"
 }
 
 function test_module_output_format() {
   log_step "Testing module output format consistency"
 
-  # Test that --list produces parseable output (even if empty)
+  # Test that list produces parseable output (even if empty)
   local list_output
-  if list_output=$("$INSTANCES_MODULE" --list 2>/dev/null); then
+  if list_output=$("$INSTANCES_MODULE" list 2>/dev/null); then
     log_test "List command produces output (may be empty if no instances)"
   else
     log_test "List command failed - this may indicate a configuration issue"
   fi
 
-  # Test that --list --json produces valid format (if jq is available)
+  # Test that list --json produces valid format (if jq is available)
   if command -v jq >/dev/null 2>&1; then
     local json_output
-    if json_output=$("$INSTANCES_MODULE" --list --json 2>/dev/null); then
+    if json_output=$("$INSTANCES_MODULE" list --json 2>/dev/null); then
       if echo "$json_output" | jq . >/dev/null 2>&1; then
         assert_true "true" "JSON output should be valid JSON"
       else
@@ -132,7 +132,7 @@ function test_module_status_functionality() {
   local test_instance="test-nonexistent-$(date +%s)"
 
   # Status check for non-existent instance should fail
-  if "$INSTANCES_MODULE" --status "$test_instance" >/dev/null 2>&1; then
+  if "$INSTANCES_MODULE" status "$test_instance" >/dev/null 2>&1; then
     log_test "Status command succeeded for non-existent instance (unexpected but not necessarily wrong)"
   else
     log_test "Status command failed for non-existent instance (expected behavior)"
