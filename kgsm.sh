@@ -31,7 +31,11 @@ function get_version() {
   "$installer_script" --version
 }
 
+
 function usage() {
+  local self
+  self=$(basename "$0")
+
   local UNDERLINE="\e[4m"
   local END="\e[0m"
   local BOLD="\e[1m"
@@ -45,108 +49,92 @@ issue on GitHub: https://github.com/TheKrystalShip/KGSM/issues"
 
   echo -e "
 ${UNDERLINE}Usage:${END}
-  $(basename "$0") [OPTIONS] [COMMANDS]
+  ${self} <command> [arguments] [options]
 
-${BOLD}${UNDERLINE}General Options:${END}
-  -h, --help                  Display comprehensive help information
-    [--interactive]           Show help specifically for interactive mode
-  --interactive               Launch KGSM in user-friendly interactive menu mode
-  -v, --version               Display the current KGSM version
-  --check-update              Check if a newer version of KGSM is available
-  --update                    Update KGSM to the latest version
-    [--force]                 Skip version verification and force download of latest version
-  --migrate                   Migrate existing game server instances to the latest KGSM version
-  --ip                        Display this server's external IP address
+${BOLD}${UNDERLINE}Built-in Commands:${END}
+  create <blueprint>          Alias for install
+  install <blueprint>         Install a new game server instance
+    [--install-dir <path>]    Installation directory (default: from config)
+    [--version <version>]     Specific version to install (default: latest)
+    [--name <name>]           Custom instance name (default: auto-generated)
 
-${BOLD}${UNDERLINE}Configuration Management:${END}
-  config                      Manage KGSM configuration settings
-    [no subcommand]           Open configuration in editor (default behavior)
-    set KEY=VALUE             Set a configuration value
-                              Example: config set enable_logging=true
-                              Example: config set instance_suffix_length=3
-    get KEY                   Get a configuration value
-                              Example: config get enable_systemd
-    list                      List all configuration values
-    list --json               Output configuration in JSON format
-    reset                     Reset configuration to defaults
-    validate                  Validate current configuration
+  remove <instance>           Alias for uninstall
+  uninstall <instance>        Remove a game server instance completely
 
-${BOLD}${UNDERLINE}Event System Management:${END}
-  --events                    Manage KGSM's event broadcasting system
-    --status                  Show comprehensive event system status
-    --test-all                Test all configured event transports
-    --test-socket             Test Unix Domain Socket transport only
-    --test-webhook            Test HTTP webhook transport only
-    --socket COMMAND          Manage Unix Domain Socket transport
-      --enable                Enable socket transport
-      --disable               Disable socket transport
-      --test                  Test socket functionality
-      --status                Show socket transport status
-    --webhook COMMAND         Manage HTTP webhook transport
-      --enable                Enable webhook transport
-      --disable               Disable webhook transport
-      --configure             Interactive webhook configuration wizard
-      --test                  Test webhook functionality
-      --status                Show webhook transport status
+  interactive                 Launch interactive menu mode
 
-${BOLD}${UNDERLINE}Blueprint Management:${END}
-  blueprints                  Display a list of all available server blueprints
-    [no subcommand]           Show basic blueprint list (default behavior)
-    [-h, --help]              Display help information for the blueprint creation process
-    default                   Show only default built-in blueprints
-    custom                    Show only user-added custom blueprints
-    detailed --json           Show detailed information about all available blueprints
-                              (Output in JSON format, useful for scripting)
+  -h, --help                  Display this help information
+  -v, --version               Display KGSM version
+  --check-update              Check for KGSM updates
+  --update                    Update KGSM to latest version
 
-  ${BOLD}${UNDERLINE}Blueprint options:${END}
-    --json                    Output blueprint list in JSON format
+${BOLD}${UNDERLINE}Module Commands:${END}
+  blueprints <command>        Manage server blueprints
+  config <command>            Manage KGSM configuration
+  directories <command>       Manage directory structures
+  events <command>            Manage event system
+  files <command>             Manage instance files
+  instances <command>         Manage server instances
+  lifecycle <command>         Control server lifecycle
+  network <command>           Manage network and ports
+  system <command>            Manage system operations
+  watcher <command>           Manage monitoring watchers
 
-${BOLD}${UNDERLINE}Instance Management:${END}
-  --remove <instance>         Remove a game server instance completely
-  --uninstall <instance>      Alias for --remove
-  --instances                 List all installed game server instances
-  --instances <blueprint>     List instances of a specific blueprint/game type
-  --instances detailed      Show detailed information about all instances
-  --instances --status        Show runtime status for all instances
-  --instances --json          Output instance list in JSON format
-  --instances --json detailed
-                              Output detailed instance information in JSON format
-  --instances --json --status
-                              Output runtime status for all instances in JSON format
-  --instances --regenerate    Regenerate files for all instances
-    --management-script       Regenerate only the management scripts
-    --all                     Regenerate all instance files (management, systemd, ufw, etc.)
+${UNDERLINE}For detailed help on any module:${END}
+  ${self} <module> help
+  ${self} <module> <command> --help
 
-  -i, --instance <name> COMMAND   Interact with a specific instance:
+${BOLD}${UNDERLINE}Examples:${END}
+  ${BOLD}Installation:${END}
+  ${self} install factorio --install-dir /opt/servers --name factorio-01
+  ${self} uninstall factorio-01
 
-    ${UNDERLINE}Information & Monitoring:${END}
-    --logs                    Display the most recent log entries
-      [-f, --follow]          Continuously monitor new log entries in real-time
-    --status                  Show detailed runtime status and resource usage
-    --info                    Display configuration information
-      [--json]                Output information in JSON format
-    --is-active               Check if the instance is currently running
-    --backups                 List all created backups for this instance
+  ${BOLD}Blueprints:${END}
+  ${self} blueprints list
+  ${self} blueprints list --json
+  ${self} blueprints info factorio
 
-    ${UNDERLINE}Server Control:${END}
-    --start                   Launch the server instance
-    --stop                    Gracefully stop the server
-    --restart                 Perform a complete stop and start sequence
-    --save                    Trigger a server save operation
-    --input <command>         Send a command to the server's console
-                              Shows the last 10 log lines after execution
+  ${BOLD}Configuration:${END}
+  ${self} config list
+  ${self} config set enable_logging=true
+  ${self} config get enable_systemd
 
-    ${UNDERLINE}Maintenance:${END}
-    -v, --version             Show version information for this instance
-      [--installed]           Display currently installed version
-      [--latest]              Check for the latest available version
-    --check-update            Check if updates are available
-    --update                  Perform update process to latest version
-    --create-backup           Create a backup of the current installation
-    --restore-backup NAME     Restore from a previously created backup
-    --modify                  Modify instance configuration or integrations
-      --add OPTION            Add functionality: ufw, systemd, or symlink
-      --remove OPTION         Remove functionality: ufw, systemd, or symlink
+  ${BOLD}Instances:${END}
+  ${self} instances list
+  ${self} instances list factorio
+  ${self} instances info factorio-01
+  ${self} instances status factorio-01
+  ${self} instances regenerate management-script
+
+  ${BOLD}Lifecycle:${END}
+  ${self} lifecycle start factorio-01
+  ${self} lifecycle stop factorio-01
+  ${self} lifecycle restart factorio-01
+  ${self} lifecycle logs factorio-01 --follow
+
+  ${BOLD}Network:${END}
+  ${self} network ip
+  ${self} network ports check 27015
+  ${self} network ports conflicts
+  ${self} network test-port 27015
+  ${self} network test-all
+
+  ${BOLD}System:${END}
+  ${self} system info
+  ${self} system info --json
+  ${self} system uptime
+  ${self} system shutdown 10
+  ${self} system restart 5
+
+  ${BOLD}Directories & Files:${END}
+  ${self} directories create --instance factorio-01
+  ${self} files create systemd --instance factorio-01
+  ${self} files remove ufw --instance factorio-01
+
+  ${BOLD}Events:${END}
+  ${self} events status
+  ${self} events test-all
+  ${self} events webhook configure
 "
 }
 
@@ -189,35 +177,74 @@ while [[ "$#" -gt 0 ]]; do
   shift
 done
 
-module_blueprints=$(__find_module blueprints.sh)
-module_config=$(__find_module config.sh)
-module_directories=$(__find_module directories.sh)
-module_events=$(__find_module events.sh)
-module_files=$(__find_module files.sh)
-module_instances=$(__find_module instances.sh)
-module_lifecycle=$(__find_module lifecycle.sh)
-module_migrator=$(__find_module migrator.sh)
-# module_interactive is already loaded earlier
+# ============================================================================
+# BUILT-IN COMMAND FUNCTIONS
+# ============================================================================
 
-function _create() {
+# Install command - orchestrates instance creation across multiple modules
+function _cmd_install() {
   local blueprint=$1
-  local install_dir=$2
-  # Value of 0 means get latest
-  local version=$3
-  # Optional identifier for the instance, if not provided, KGSM will generate one
-  local identifier=${4:-}
+  shift
+
+  if [[ -z "$blueprint" ]]; then
+    __print_error "Missing required argument: <blueprint>"
+    __print_error "Usage: $(basename "$0") install <blueprint> [--install-dir <path>] [--version <version>] [--name <name>]"
+    exit $EC_MISSING_ARG
+  fi
+
+  # shellcheck disable=SC2154
+  local install_dir=$config_default_install_directory
+  local version=0  # 0 means get latest
+  local identifier=
+
+  # Parse optional arguments
+  while [[ $# -ne 0 ]]; do
+    case "$1" in
+    --install-dir)
+      shift
+      if [[ -z "$1" ]]; then
+        __print_error "Missing argument for --install-dir"
+        exit $EC_MISSING_ARG
+      fi
+      install_dir="$1"
+      ;;
+    --version)
+      shift
+      if [[ -z "$1" ]]; then
+        __print_error "Missing argument for --version"
+        exit $EC_MISSING_ARG
+      fi
+      version=$1
+      ;;
+    --name)
+      shift
+      if [[ -z "$1" ]]; then
+        __print_error "Missing argument for --name"
+        exit $EC_MISSING_ARG
+      fi
+      identifier=$1
+      ;;
+    *)
+      __print_error "Invalid argument: $1"
+      exit $EC_INVALID_ARG
+      ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$install_dir" ]]; then
+    __print_error "Installation directory not specified and no default configured"
+    exit $EC_MISSING_ARG
+  fi
 
   __print_info "Creating a new instance of $blueprint in $install_dir..."
 
   local instance
 
-  # The user can pass an instance identifier instead of having KGSM generate
-  # one, for ease of use or easy identification. However it's not mandatory,
-  # if the user doen't pass one, the $module_instances will generate one
-  # and use it without any issues.
+  # Create instance configuration
   instance="$(
-    "$module_instances" \
-      --create "$blueprint" \
+    "$(__find_module instances.sh)" \
+      create "$blueprint" \
       --install-dir "$install_dir" \
       ${identifier:+--name $identifier}
   )"
@@ -225,25 +252,25 @@ function _create() {
   # Emit after the instance has been created, so we can use the identifier
   "$module_events" --emit --instance-installation-started "${instance}" "${blueprint}"
 
-  "$module_directories" create --instance "$instance" || return $?
-  "$module_files" -i "$instance" --create || return $?
+  # Create directory structure
+  "$(__find_module directories.sh)" create --instance "$instance" || return $?
 
-  # After generating the instance and the files, we need to load the instance
-  # config file so we can use the variables defined in it.
-  # From this point on, we will use the instance managment file to handle
-  # the next installation steps.
+  # Create instance files
+  "$(__find_module files.sh)" -i "$instance" --create || return $?
 
+  # Load instance config to access variables
   __source_instance "$instance"
 
+  # Determine version
   if [[ "$version" == 0 ]]; then
     # shellcheck disable=SC2154
     version=$("$instance_management_file" --version --latest)
   fi
 
-  # The instance management file doesn't emit any events, so we need to
-  # emit them manually during this process
+  local module_events
+  module_events="$(__find_module events.sh)"
 
-  # Download the required files for the instance
+  # Download game files
   "$module_events" --emit --instance-download-started "${instance}"
   "$instance_management_file" --download "${version}" || return $EC_FAILED_DOWNLOAD
   "$module_events" --emit --instance-download-finished "${instance}"
@@ -255,7 +282,7 @@ function _create() {
   "$module_events" --emit --instance-deploy-finished "${instance}"
   "$module_events" --emit --instance-deployed "${instance}"
 
-  # Save the new version
+  # Save version
   "$instance_management_file" --version --save "$version" || return $EC_FAILED_VERSION_SAVE
   "$module_events" --emit --instance-version-updated "${instance}" "0" "${version}"
 
@@ -267,14 +294,24 @@ function _create() {
   return 0
 }
 
-function _remove() {
+# Uninstall command - orchestrates instance removal across multiple modules
+function _cmd_uninstall() {
   local instance=$1
+
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Usage: $(basename "$0") uninstall <instance>"
+    exit $EC_MISSING_ARG
+  fi
+
+  local module_events
+  module_events="$(__find_module events.sh)"
 
   "$module_events" --emit --instance-uninstall-started "${instance}"
 
-  "$module_files" -i "$instance" --remove || return $?
-  "$module_directories" remove --instance "$instance" || return $?
-  "$module_instances" --remove "$instance" || return $?
+  "$(__find_module files.sh)" -i "$instance" --remove || return $?
+  "$(__find_module directories.sh)" remove --instance "$instance" || return $?
+  "$(__find_module instances.sh)" remove "$instance" || return $?
 
   "$module_events" --emit --instance-uninstall-finished "${instance}"
 
@@ -285,6 +322,17 @@ function _remove() {
   return 0
 }
 
+# Version command - display KGSM version
+function _cmd_version() {
+  echo "KGSM, version $(get_version)
+Copyright (C) 2024 TheKrystalShip
+License GPL-3.0: GNU GPL version 3 <https://www.gnu.org/licenses/gpl-3.0.en.html>
+
+This is free software; you are free to change and redistribute it.
+There is NO WARRANTY, to the extent permitted by law."
+  return 0
+}
+
 # Interactive mode function moved to modules/interactive.sh
 # If it's started with no args, default to interactive mode
 if [[ "$#" -eq 0 ]]; then
@@ -292,363 +340,91 @@ if [[ "$#" -eq 0 ]]; then
   exit $?
 fi
 
-# shellcheck disable=SC2199
-if [[ $@ =~ "--json" ]]; then
-  export json_format=1
-  for a; do
-    shift
-    case $a in
-    --json) continue ;;
-    *) set -- "$@" "$a" ;;
-    esac
-  done
-fi
+# ============================================================================
+# MAIN ARGUMENT PROCESSING
+# ============================================================================
+command="$1"
+shift
 
-# Function to handle check for required arguments and exit with error if missing
-function require_arg() {
-  local arg_name="$1"
-  local arg_value="$2"
-  local exit_code="$3"
-
-  if [[ -z "$arg_value" ]]; then
-    __print_error "Missing argument $arg_name"
-    exit ${exit_code:-$EC_MISSING_ARG}
-  fi
-}
-
-# Process instance creation with options
-function process_create_instance() {
-  shift
-  require_arg "<blueprint>" "$1"
-
-  local bp_to_install="$1"
-  # shellcheck disable=SC2154
-  local bp_install_dir=$config_default_install_directory
-  local bp_install_version=0
-  local bp_id=
-  shift
-
-  # Parse optional arguments
-  while [[ $# -ne 0 ]]; do
-    case "$1" in
-    --install-dir)
-      shift
-      require_arg "<install_dir>" "$1"
-      bp_install_dir="$1"
-      ;;
-    --version)
-      shift
-      require_arg "<version>" "$1"
-      bp_install_version=$1
-      ;;
-    --name)
-      shift
-      require_arg "<name>" "$1"
-      bp_id=$1
-      ;;
-    *)
-      __print_error "Invalid argument $1"
-      exit $EC_INVALID_ARG
-      ;;
-    esac
-    shift
-  done
-
-  require_arg "<dir>" "$bp_install_dir"
-  _create "$bp_to_install" "$bp_install_dir" $bp_install_version $bp_id
-  exit $?
-}
-
-# Process blueprint listing with options
-function process_blueprints() {
-  shift
-  
-  local filter=
-
-  # Parse optional flags
-  while [[ $# -ne 0 ]]; do
-    case "$1" in
-    detailed | default | custom)
-      # Extract the filter name without the dashes
-      filter="${1#--}"
-      ;;
-    *)
-      __print_error "Invalid argument $1"
-      exit $EC_INVALID_ARG
-      ;;
-    esac
-    shift
-  done
-
-  "$module_blueprints" list ${filter:+$filter} ${json_format:+--json}
-  exit $?
-}
-
-# Process instance listing with options
-function process_instances() {
-  shift
-  if [[ -z "$1" ]]; then
-    "$module_instances" --list
+case "$command" in
+  # BUILT-IN COMMANDS
+  install | create)
+    _cmd_install "$@"
     exit $?
-  fi
-
-  local detailed=
-  local status=
-  local blueprint=
-
-  # Parse optional flags and blueprint
-  while [[ $# -ne 0 ]]; do
-    case "$1" in
-    --detailed) detailed=1 ;;
-    --status) status=1 ;;
-    --regenerate)
-      shift
-      # Handle regenerate subcommands
-      case "$1" in
-      --management-script)
-        "$module_instances" --regenerate --management-script
-        exit $?
-        ;;
-      --all)
-        "$module_instances" --regenerate --all
-        exit $?
-        ;;
-      *)
-        __print_error "Invalid regenerate option: $1"
-        __print_error "Valid options: --management-script, --all"
-        exit $EC_INVALID_ARG
-        ;;
-      esac
-      ;;
-    --list) ;; # Allowed but no action needed
-    *)
-      blueprint=$1
-      break
-      ;;
-    esac
-    shift
-  done
-
-  "$module_instances" --list ${detailed:+--detailed} ${status:+--status} ${json_format:+--json} $blueprint
-  exit $?
-}
-
-# Process instance management commands
-function process_instance() {
-  shift
-  require_arg "<instance>" "$1"
-  local instance=$1
-
-  __source_instance "$instance"
-  shift
-  require_arg "[OPTION]" "$1"
-
-  case "$1" in
-  # Information & Monitoring commands
-  --logs)
-    shift
-    local follow=""
-    if [[ "$1" == "-f" || "$1" == "--follow" ]]; then
-      follow="--follow"
-    fi
-    "$module_lifecycle" --logs "$instance" $follow
     ;;
-  --status)
-    shift
-    local additional_flags=""
-
-    # Process additional status flags
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-      --json | --fast)
-        additional_flags="$additional_flags $1"
-        shift
-        ;;
-      *)
-        # Put the argument back for next iteration
-        set -- "$1" "$@"
-        break
-        ;;
-      esac
-    done
-
-    "$module_instances" --status "$instance" $additional_flags
+  uninstall | remove)
+    _cmd_uninstall "$@"
+    exit $?
     ;;
-  --info)
-    "$module_instances" --info "$instance" ${json_format:+--json}
-    ;;
-  --is-active)
-    # Inactive instances return exit code 1.
-    "$module_lifecycle" --is-active "$instance"
-    ;;
-  --backups)
-    "$instance_management_file" --list-backups
+  interactive)
+    "$module_interactive" -i
+    exit $?
     ;;
 
-  # Server Control commands
-  --start)
-    "$module_lifecycle" --start "$instance"
+  # KGSM META COMMANDS
+  -h | --help)
+    usage
+    exit 0
     ;;
-  --stop)
-    "$module_lifecycle" --stop "$instance"
-    ;;
-  --restart)
-    "$module_lifecycle" --restart "$instance"
-    ;;
-  --save)
-    "$instance_management_file" --save
-    ;;
-  --input)
-    shift
-    require_arg "<command>" "$1"
-    "$module_instances" --input "$instance" "$1"
-    ;;
-
-  # Version & Updates
   -v | --version)
-    shift
-    if [[ -z "$1" ]]; then
-      "$instance_management_file" --version
-    else
-      case "$1" in
-      --latest)
-        "$instance_management_file" --version --latest
-        ;;
-      *)
-        __print_error "Invalid argument $1"
-        exit $EC_INVALID_ARG
-        ;;
-      esac
-    fi
+    _cmd_version
+    exit 0
     ;;
   --check-update)
-    "$instance_management_file" --version --compare
-    ;;
-  --update)
-    "$instance_management_file" --update
-    ;;
-  --create-backup)
-    "$instance_management_file" --create-backup
-    ;;
-  --restore-backup)
-    shift
-    require_arg "<backup>" "$1"
-    "$instance_management_file" --restore-backup "$1"
-    ;;
-
-  # Modification options
-  --modify)
-    shift
-    require_arg "<option>" "$1"
-    case "$1" in
-    --add)
-      shift
-      require_arg "<option>" "$1"
-      case "$1" in
-      ufw | systemd | symlink | upnp)
-        "$module_files" -i "$instance" --create --"$1"
-        ;;
-      *)
-        __print_error "Invalid argument $1"
-        exit $EC_INVALID_ARG
-        ;;
-      esac
-      ;;
-    --remove)
-      shift
-      require_arg "<option>" "$1"
-      case "$1" in
-      ufw | systemd | symlink | upnp)
-        "$module_files" -i "$instance" --remove --"$1"
-        ;;
-      *)
-        __print_error "Invalid argument $1"
-        exit $EC_INVALID_ARG
-        ;;
-      esac
-      ;;
-    *)
-      __print_error "Invalid argument $1"
-      exit $EC_INVALID_ARG
-      ;;
-    esac
-    ;;
-  *)
-    __print_error "Invalid argument $1"
-    exit $EC_INVALID_ARG
-    ;;
-  esac
-  exit $?
-}
-
-# Main argument processing loop
-while [[ "$#" -gt 0 ]]; do
-  case $1 in
-  --create | --install)
-    process_create_instance "$@"
-    ;;
-  --remove | --uninstall)
-    shift
-    require_arg "<instance>" "$1"
-    _remove "$1"
-    exit $?
-    ;;
-  blueprints)
-    process_blueprints "$@"
-    ;;
-  # General options
-  --ip)
-    if command -v wget >/dev/null 2>&1; then
-      wget -qO- https://icanhazip.com
-    else
-      __print_error "wget is required but not installed"
-      exit $EC_MISSING_DEPENDENCY
-    fi
-    exit $?
-    ;;
-  config)
-    shift
-    "$module_config" "$@"
-    exit $?
-    ;;
-  --events)
-    shift
-    "$module_events" "$@"
+    check_for_update
     exit $?
     ;;
   --update)
     update_script "$@"
     exit $?
     ;;
-  --migrate)
-    "$module_migrator" --all
+
+  # MODULE PASSTHROUGHS
+  blueprints)
+    "$(__find_module blueprints.sh)" "$@"
     exit $?
     ;;
-  # Instance commands
-  --instances)
-    process_instances "$@"
+  config)
+    "$(__find_module config.sh)" "$@"
+    exit $?
     ;;
-  -i | --instance)
-    process_instance "$@"
+  directories)
+    "$(__find_module directories.sh)" "$@"
+    exit $?
     ;;
-
-  # Version information
-  -v | --version)
-    echo "KGSM, version $(get_version)
-Copyright (C) 2024 TheKrystalShip
-License GPL-3.0: GNU GPL version 3 <https://www.gnu.org/licenses/gpl-3.0.en.html>
-
-This is free software; you are free to change and redistribute it.
-There is NO WARRANTY, to the extent permitted by law."
-    exit 0
+  events)
+    "$(__find_module events.sh)" "$@"
+    exit $?
+    ;;
+  files)
+    "$(__find_module files.sh)" "$@"
+    exit $?
+    ;;
+  instances)
+    "$(__find_module instances.sh)" "$@"
+    exit $?
+    ;;
+  lifecycle)
+    "$(__find_module lifecycle.sh)" "$@"
+    exit $?
+    ;;
+  network)
+    "$(__find_module network.sh)" "$@"
+    exit $?
+    ;;
+  system)
+    "$(__find_module system.sh)" "$@"
+    exit $?
+    ;;
+  watcher)
+    "$(__find_module watcher.sh)" "$@"
+    exit $?
     ;;
   *)
-    __print_error "Invalid argument $1"
+    __print_error "Unknown command: $command"
+    __print_error "Use '$(basename "$0") --help' for available commands"
     exit $EC_INVALID_ARG
     ;;
-  esac
-  # Prevent infinite loops
-  shift
-done
+esac
 
 exit 0
