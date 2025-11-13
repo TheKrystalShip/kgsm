@@ -17,26 +17,15 @@ KGSM simplifies the process of setting up, managing, and maintaining game server
 
 ## 🎯 Supported Game Servers
 
-KGSM supports a wide range of popular game servers, including:
+KGSM supports a growing list of game servers through its blueprint system. To see all currently available game servers, run:
 
-### Native Installation
-- Minecraft, Valheim, Terraria, Project Zomboid
-- 7 Days to Die, ARK: Survival Evolved
-- Counter-Strike: Source, Garry's Mod
-- Left 4 Dead 1 & 2, Killing Floor 1 & 2
-- Don't Starve Together, Factorio
-- And many more!
+```sh
+./kgsm.sh blueprints list
+```
 
-### Container-Based (Docker)
-- V Rising, Enshrouded, The Forest
-- Empyrion: Galactic Survival
-- Lords of the Rings: Return to Moria
-- Abiotic Factor
+You can also check the `blueprints/default` directory to browse available blueprints directly.
 
-> [!NOTE]
-> The list of supported game servers is constantly growing! New blueprints are added regularly to support more games. Check the `blueprints/default` directory for the latest additions or run `./kgsm.sh --blueprints` to see all currently available options.
-
-Contributions of new game server blueprints are enthusiastically welcomed! If you've set up a game server that isn't currently supported, consider contributing your blueprint to the project.
+New blueprints are added regularly, and contributions are enthusiastically welcomed! If you've successfully set up a game server that isn't currently supported, consider contributing your blueprint to the project.
 
 ## 💻 Compatibility
 
@@ -63,11 +52,11 @@ steamcmd inotify-tools
 
 These packages enable additional features when configured:
 
-| Package     | Purpose             | Config Setting                           |
-| ----------- | ------------------- | ---------------------------------------- |
-| `ufw`       | Firewall management | `config_enable_firewall_management=true` |
-| `socat`     | Event handling      | `config_enable_event_broadcasting=true`  |
-| `miniupnpc` | Port forwarding     | `config_enable_port_forwarding=true`     |
+| Package     | Purpose             | Config Setting                    |
+| ----------- | ------------------- | --------------------------------- |
+| `ufw`       | Firewall management | `enable_firewall_management=true` |
+| `socat`     | Event handling      | `enable_event_broadcasting=true`  |
+| `miniupnpc` | Port forwarding     | `enable_port_forwarding=true`     |
 
 > [!NOTE]
 > If [SteamCMD][1] isn't available through your distribution's package manager, you'll need to [install it manually](https://developer.valvesoftware.com/wiki/SteamCMD#Linux).
@@ -127,10 +116,10 @@ For automation or quick actions, use command-line arguments:
 ./kgsm.sh --help --interactive
 
 # See available game servers
-./kgsm.sh --blueprints
+./kgsm.sh blueprints list
 
 # Create a new game server instance
-./kgsm.sh --create minecraft --name myserver
+./kgsm.sh install minecraft --name myserver
 ```
 
 ### Documentation
