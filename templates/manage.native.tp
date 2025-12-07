@@ -6,7 +6,7 @@
 # Any changes made to this file will be overwritten if the file is regenerated.
 # KGSM will not regenerated this file on its own, but there is a command that
 # can be manually used to regenerate the file in case something breaks:
-# > $KGSM_ROOT/modules/files.sh --instance <instance> --create --manage
+# > $KGSM_ROOT/commands/files.sh --instance <instance> --create --manage
 
 debug=
 # shellcheck disable=SC2199
@@ -1009,15 +1009,16 @@ function _download_wrapper() {
   local app_id=${3:-$instance_steam_app_id}
 
   __print_info "Starting download process..."
+  sleep 1
 
   # Call the actual download function
-  if _download "$version" "$dest" "$app_id"; then
-    __print_success "Download process completed successfully"
-    return 0
-  else
+  if ! _download "$version" "$dest" "$app_id"; then
     __print_error "Download process failed"
     return 1
   fi
+
+  __print_success "Download process completed successfully"
+  return 0
 }
 
 function _deploy() {
@@ -1052,13 +1053,13 @@ function _deploy_wrapper() {
   __print_info "Starting deployment process..."
 
   # Call the actual deploy function
-  if _deploy; then
-    __print_success "Deployment process completed successfully"
-    return 0
-  else
+  if ! _deploy; then
     __print_error "Deployment process failed"
     return 1
   fi
+
+  __print_success "Deployment process completed successfully"
+  return 0
 }
 
 function _get_status() {

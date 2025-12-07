@@ -36,9 +36,9 @@ source "$SCRIPT_DIR/../framework/common.sh"
 # =============================================================================
 
 readonly TEST_NAME="config_module_refactored"
-readonly CONFIG_MODULE="$KGSM_ROOT/modules/config.sh"
-readonly BOOTSTRAP_LIB="$KGSM_ROOT/lib/bootstrap.sh"
-readonly CONFIG_LIB="$KGSM_ROOT/lib/config.sh"
+readonly CONFIG_MODULE="$KGSM_ROOT/commands/config.sh"
+readonly BOOTSTRAP_LIB="$KGSM_ROOT/core/bootstrap.sh"
+readonly CONFIG_LIB="$KGSM_ROOT/core/config.sh"
 readonly CONFIG_FILE="$KGSM_ROOT/config.ini"
 readonly DEFAULT_CONFIG_FILE="$KGSM_ROOT/config.default.ini"
 readonly BACKUP_CONFIG_FILE="$CONFIG_FILE.backup.test"
@@ -313,7 +313,7 @@ function test_command_based_cli_help() {
   # Test no command (should show usage)
   result=$("$CONFIG_MODULE" 2>&1)
   exit_code=$?
-  assert_equals "0" "$exit_code" "No command should show usage and exit 0"
+  assert_command_fails "No command should show usage and exit $EC_GENERAL"
   assert_contains "$result" "Configuration Management" "Should show usage when no command provided"
 
   log_test "Command-based CLI: help system"

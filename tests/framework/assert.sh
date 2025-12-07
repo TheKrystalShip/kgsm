@@ -558,9 +558,7 @@ function assert_command_succeeds() {
     exit_code=$?
   fi
 
-  # Exit codes higher than 200 are used as success codes that represent events to be emitted
-  # Treat them as success
-  if [[ $exit_code -eq 0 || $exit_code -gt 200 ]]; then
+  if [[ $exit_code -eq 0 ]]; then
     print_assert_result "PASS" "$message: command '$command' succeeded" "$caller_info"
     return $ASSERT_SUCCESS
   else
@@ -711,7 +709,7 @@ function assert_instance_exists() {
   local instance_name="$1"
   local message="${2:-Instance should exist}"
 
-  assert_command_succeeds "$KGSM_ROOT/modules/instances.sh --find '$instance_name'" "$message"
+  assert_command_succeeds "$KGSM_ROOT/commands/instances.sh --find '$instance_name'" "$message"
 }
 
 # Assert that instance does not exist
@@ -719,7 +717,7 @@ function assert_instance_not_exists() {
   local instance_name="$1"
   local message="${2:-Instance should not exist}"
 
-  assert_command_fails "$KGSM_ROOT/modules/instances.sh --find '$instance_name'" "$message"
+  assert_command_fails "$KGSM_ROOT/commands/instances.sh --find '$instance_name'" "$message"
 }
 
 # Export functions so they can be used in test scripts

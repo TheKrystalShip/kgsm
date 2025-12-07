@@ -90,10 +90,11 @@ function _download() {
   local dest=$instance_temp_dir
 
   local download_url="https://download.veloren.net/latest/linux/x86_64/weekly"
+  local timeout="${instance_wget_timeout_seconds:-60}"
 
   # Download zip file in $dest
-  if ! wget -P "$dest" "$download_url"; then
-    __print_error "wget -P $dest $download_url"
+  if ! wget --timeout="$timeout" -P "$dest" "$download_url"; then
+    __print_error "wget --timeout=$timeout -P $dest $download_url"
     return 1
   fi
 

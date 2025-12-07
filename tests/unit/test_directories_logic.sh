@@ -5,7 +5,7 @@
 # =============================================================================
 #
 # This test provides comprehensive coverage of the pure logic functions in
-# lib/logic/directories.sh, testing all scenarios, error conditions, and
+# commands/handlers/directories.sh, testing all scenarios, error conditions, and
 # exit code behaviors.
 #
 # The logic layer contains pure business logic functions that:
@@ -35,7 +35,7 @@ source "$SCRIPT_DIR/../framework/common.sh"
 # =============================================================================
 
 readonly TEST_NAME="directories_logic"
-readonly LOGIC_LIBRARY="$KGSM_ROOT/lib/logic/directories.sh"
+readonly LOGIC_LIBRARY="$KGSM_ROOT/commands/handlers/directories.sh"
 readonly TEST_INSTANCE="logic-test-$(date +%s)"
 readonly TEST_WORKING_DIR="/tmp/kgsm-test-${TEST_INSTANCE}"
 readonly TEST_CONFIG_FILE="/tmp/test-${TEST_INSTANCE}.ini"
@@ -48,7 +48,7 @@ function setup_test() {
   log_test "Setting up directories logic test environment"
 
   # Use KGSM bootstrap to load all required libraries
-  local bootstrap_lib="$KGSM_ROOT/lib/bootstrap.sh"
+  local bootstrap_lib="$KGSM_ROOT/core/bootstrap.sh"
   if [[ -f "$bootstrap_lib" ]]; then
     # shellcheck disable=SC1090
     source "$bootstrap_lib" || {

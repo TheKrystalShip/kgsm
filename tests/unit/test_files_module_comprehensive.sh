@@ -39,7 +39,7 @@ source "$SCRIPT_DIR/../framework/common.sh"
 # =============================================================================
 
 readonly TEST_NAME="files_module_comprehensive"
-readonly FILES_MODULE="$KGSM_ROOT/modules/files.sh"
+readonly FILES_MODULE="$KGSM_ROOT/commands/files.sh"
 readonly TEST_INSTANCE="factorio-test-$(date +%s)"
 readonly TEST_BLUEPRINT="factorio.bp"
 
@@ -69,12 +69,12 @@ function setup_test() {
   assert_file_executable "$FILES_MODULE" "Files module should be executable"
 
   # Ensure required dependencies exist
-  assert_file_exists "$KGSM_ROOT/modules/files.management.sh" "files.management.sh submodule should exist"
-  assert_file_exists "$KGSM_ROOT/modules/files.config.sh" "files.config.sh submodule should exist"
-  assert_file_exists "$KGSM_ROOT/modules/files.systemd.sh" "files.systemd.sh submodule should exist"
-  assert_file_exists "$KGSM_ROOT/modules/files.ufw.sh" "files.ufw.sh submodule should exist"
-  assert_file_exists "$KGSM_ROOT/modules/files.symlink.sh" "files.symlink.sh submodule should exist"
-  assert_file_exists "$KGSM_ROOT/modules/files.upnp.sh" "files.upnp.sh submodule should exist"
+  assert_file_exists "$KGSM_ROOT/commands/files.management.sh" "files.management.sh submodule should exist"
+  assert_file_exists "$KGSM_ROOT/commands/files.config.sh" "files.config.sh submodule should exist"
+  assert_file_exists "$KGSM_ROOT/commands/files.systemd.sh" "files.systemd.sh submodule should exist"
+  assert_file_exists "$KGSM_ROOT/commands/files.ufw.sh" "files.ufw.sh submodule should exist"
+  assert_file_exists "$KGSM_ROOT/commands/files.symlink.sh" "files.symlink.sh submodule should exist"
+  assert_file_exists "$KGSM_ROOT/commands/files.upnp.sh" "files.upnp.sh submodule should exist"
 
   log_test "Test environment setup complete"
 }
@@ -213,11 +213,7 @@ function test_create_command_functionality() {
 
   # Test create subcommands individually
   assert_command_succeeds "$FILES_MODULE --instance '$test_instance' --create --manage" "files.sh --create --manage should work"
-
-  # --create --config will fail if the instance already has a config file created, since it will be symlinked to kgsm and the instance
-  # working dir, meaning it will exist in both places, so the files.sh module won't be able to copy it.
-  # For now, we skip this test
-  # assert_command_succeeds "$FILES_MODULE --instance '$test_instance' --create --config" "files.sh --create --config should work"
+  assert_command_succeeds "$FILES_MODULE --instance '$test_instance' --create --config" "files.sh --create --config should work"
 
   # Note: systemd, ufw, symlink, upnp tests depend on configuration and system capabilities
   # We test them but expect they might fail in test environment
@@ -392,8 +388,8 @@ function test_submodule_integration() {
   )
 
   for submodule in "${submodules[@]}"; do
-    assert_file_exists "$KGSM_ROOT/modules/$submodule" "Submodule $submodule should exist"
-    assert_file_executable "$KGSM_ROOT/modules/$submodule" "Submodule $submodule should be executable"
+    assert_file_exists "$KGSM_ROOT/commands/$submodule" "Submodule $submodule should exist"
+    assert_file_executable "$KGSM_ROOT/commands/$submodule" "Submodule $submodule should be executable"
   done
 
   log_test "Submodule integration verified"

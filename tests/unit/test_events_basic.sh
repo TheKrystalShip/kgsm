@@ -24,7 +24,7 @@ source "$SCRIPT_DIR/../framework/common.sh"
 # =============================================================================
 
 readonly TEST_NAME="events_basic"
-readonly EVENTS_MODULE="$KGSM_ROOT/modules/events.sh"
+readonly EVENTS_MODULE="$KGSM_ROOT/commands/events.sh"
 
 # =============================================================================
 # UTILITY FUNCTIONS

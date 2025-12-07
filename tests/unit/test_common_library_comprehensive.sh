@@ -2,7 +2,7 @@
 
 # KGSM Test Suite - Common Library Comprehensive Tests
 #
-# Tests the lib/common.sh library to ensure it properly sources all dependent
+# Tests the core/common.sh library to ensure it properly sources all dependent
 # libraries and makes their functions available.
 #
 # Author: The Krystal Ship Team
@@ -21,7 +21,7 @@ source "$SCRIPT_DIR/../framework/common.sh"
 # =============================================================================
 
 readonly TEST_NAME="Common Library Comprehensive Tests"
-readonly COMMON_LIBRARY="$KGSM_ROOT/lib/common.sh"
+readonly COMMON_LIBRARY="$KGSM_ROOT/core/common.sh"
 readonly LIB_DIR="$KGSM_ROOT/lib"
 
 # =============================================================================
@@ -65,6 +65,7 @@ function test_library_files_existence() {
     "logging.sh"
     "parser.sh"
     "validation.sh"
+    "system.sh"
     "loader.sh"
   )
 
@@ -77,15 +78,6 @@ function test_library_files_existence() {
       print_assert_result "FAIL" "Library file $lib should be a bash script: $lib does not contain bash shebang" "$(get_caller_info)"
       return $ASSERT_FAILURE
     fi
-  done
-
-  # Test logic libraries exist
-  local required_logic_libs=(
-    "logic/directories.sh"
-  )
-
-  for lib in "${required_logic_libs[@]}"; do
-    assert_file_exists "$LIB_DIR/$lib" "Logic library file $lib should exist"
   done
 }
 
@@ -185,12 +177,13 @@ function test_validation_library_functions() {
   assert_function_exists "validate_directory_writable" "Validation function validate_directory_writable should be available"
 }
 
-function test_filesystem_utility_functions() {
-  log_step "Testing filesystem utility functions are available"
+function test_system_library_functions() {
+  log_step "Testing system library functions are available"
 
-  # Test filesystem utility functions (from lib/logic/directories.sh)
-  assert_function_exists "__create_dir" "Filesystem utility __create_dir should be available"
-  assert_function_exists "__create_file" "Filesystem utility __create_file should be available"
+  # Test system functions (only those that actually exist)
+  assert_function_exists "__create_dir" "System function __create_dir should be available"
+  assert_function_exists "__create_file" "System function __create_file should be available"
+  assert_function_exists "__source" "System function __source should be available"
 }
 
 function test_loader_library_functions() {
@@ -198,15 +191,15 @@ function test_loader_library_functions() {
 
   # Test loader functions (only those that actually exist)
   assert_function_exists "__find_or_fail" "Loader function __find_or_fail should be available"
-  assert_function_exists "__find_default_native_blueprint" "Loader function __find_default_native_blueprint should be available"
+  assert_function_exists "__find_native_default_blueprint" "Loader function __find_native_default_blueprint should be available"
   assert_function_exists "__find_default_container_blueprint" "Loader function __find_default_container_blueprint should be available"
   assert_function_exists "__find_default_blueprint" "Loader function __find_default_blueprint should be available"
   assert_function_exists "__find_custom_native_blueprint" "Loader function __find_custom_native_blueprint should be available"
   assert_function_exists "__find_custom_container_blueprint" "Loader function __find_custom_container_blueprint should be available"
   assert_function_exists "__find_custom_blueprint" "Loader function __find_custom_blueprint should be available"
   assert_function_exists "__find_blueprint" "Loader function __find_blueprint should be available"
-  assert_function_exists "__find_library" "Loader function __find_library should be available"
-  assert_function_exists "__find_module" "Loader function __find_module should be available"
+  assert_function_exists "__find_core_module" "Loader function __find_core_module should be available"
+  assert_function_exists "__find_command" "Loader function __find_command should be available"
   assert_function_exists "__find_instance_config" "Loader function __find_instance_config should be available"
   assert_function_exists "__find_template" "Loader function __find_template should be available"
   assert_function_exists "__find_override" "Loader function __find_override should be available"
@@ -228,14 +221,6 @@ function test_common_library_reload_protection() {
   assert_equals "$original_loaded" "$KGSM_COMMON_LOADED" "KGSM_COMMON_LOADED should not change on reload"
 }
 
-function test_common_library_error_handling() {
-  log_step "Testing common library error handling"
-
-  assert_not_null "$EC_INVALID_ARG" "Error constant EC_INVALID_ARG should be available"
-  assert_not_null "$EC_FILE_NOT_FOUND" "Error constant EC_FILE_NOT_FOUND should be available"
-  assert_not_null "$EC_SUCCESS_INSTANCE_STARTED" "Event code EC_SUCCESS_INSTANCE_STARTED should be available"
-}
-
 function test_common_library_environment_variables() {
   log_step "Testing common library environment variables"
 
@@ -243,7 +228,7 @@ function test_common_library_environment_variables() {
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
   assert_not_null "$KGSM_COMMON_LOADED" "KGSM_COMMON_LOADED should be set"
   assert_not_null "$KGSM_LOADER_LOADED" "KGSM_LOADER_LOADED should be set"
-  assert_not_null "$KGSM_LOGIC_DIRECTORIES_LOADED" "KGSM_LOGIC_DIRECTORIES_LOADED should be set"
+  assert_not_null "$KGSM_SYSTEM_LOADED" "KGSM_SYSTEM_LOADED should be set"
   assert_not_null "$KGSM_ERRORS_LOADED" "KGSM_ERRORS_LOADED should be set"
   assert_not_null "$KGSM_CONFIG_LOADED" "KGSM_CONFIG_LOADED should be set"
   assert_not_null "$KGSM_LOGGING_LOADED" "KGSM_LOGGING_LOADED should be set"
@@ -253,7 +238,7 @@ function test_common_library_environment_variables() {
   # Test that all loaded flags are set to 1
   assert_equals "$KGSM_COMMON_LOADED" "1" "KGSM_COMMON_LOADED should be 1"
   assert_equals "$KGSM_LOADER_LOADED" "1" "KGSM_LOADER_LOADED should be 1"
-  assert_equals "$KGSM_LOGIC_DIRECTORIES_LOADED" "1" "KGSM_LOGIC_DIRECTORIES_LOADED should be 1"
+  assert_equals "$KGSM_SYSTEM_LOADED" "1" "KGSM_SYSTEM_LOADED should be 1"
   assert_equals "$KGSM_ERRORS_LOADED" "1" "KGSM_ERRORS_LOADED should be 1"
   assert_equals "$KGSM_CONFIG_LOADED" "1" "KGSM_CONFIG_LOADED should be 1"
   assert_equals "$KGSM_LOGGING_LOADED" "1" "KGSM_LOGGING_LOADED should be 1"
@@ -269,9 +254,8 @@ function test_common_library_function_availability() {
   assert_function_exists "__get_config_value" "Config function should be available"
   assert_function_exists "__print_info" "Logging function should be available"
   assert_function_exists "validate_blueprint" "Validation function should be available"
-  assert_function_exists "__create_dir" "Filesystem utility function should be available"
-  assert_function_exists "__create_file" "Filesystem utility function should be available"
-  assert_function_exists "__find_library" "Loader function should be available"
+  assert_function_exists "__create_dir" "System function should be available"
+  assert_function_exists "__find_core_module" "Loader function should be available"
 }
 
 # =============================================================================
@@ -296,12 +280,11 @@ function main() {
   test_logging_library_functions
   test_parser_library_functions
   test_validation_library_functions
-  test_filesystem_utility_functions
+  test_system_library_functions
   test_loader_library_functions
 
   # Behavioral consistency tests
   test_common_library_reload_protection
-  test_common_library_error_handling
   test_common_library_environment_variables
   test_common_library_function_availability
 

@@ -190,7 +190,11 @@ function run_kgsm() {
     log_test "KGSM output: $output"
   fi
 
-  return $exit_code
+  if [[ $exit_code -eq $expected_exit_code ]]; then
+    return $EC_SUCCESS
+  else
+    return $EC_FAILURE
+  fi
 }
 
 # Create test instance
@@ -202,13 +206,13 @@ function create_test_instance() {
   log_step "Creating test instance: $test_id using blueprint $blueprint"
 
   local instance_name
-  if instance_name=$("$KGSM_ROOT/modules/instances.sh" --create "$blueprint" --install-dir "$install_dir" --name "$test_id"); then
+  if instance_name=$("$KGSM_ROOT/commands/instances.sh" --create "$blueprint" --install-dir "$install_dir" --name "$test_id"); then
     log_test "Instance created successfully: $instance_name"
 
     # Create the complete directory structure for the instance
     # This follows the same pattern as the main kgsm.sh script
     log_test "Creating directory structure for instance: $instance_name"
-    if "$KGSM_ROOT/modules/directories.sh" create --instance "$instance_name" >/dev/null 2>&1; then
+    if "$KGSM_ROOT/commands/directories.sh" --instance "$instance_name" --create >/dev/null 2>&1; then
       log_test "Directory structure created successfully for: $instance_name"
     else
       log_test "Warning: Failed to create directory structure for: $instance_name (may be expected in test environment)"
@@ -230,10 +234,10 @@ function remove_test_instance() {
 
   # First remove the directory structure (if it exists)
   log_test "Removing directory structure for instance: $instance_name"
-  "$KGSM_ROOT/modules/directories.sh" --instance "$instance_name" --remove >/dev/null 2>&1 || true
+  "$KGSM_ROOT/commands/directories.sh" --instance "$instance_name" --remove >/dev/null 2>&1 || true
 
   # Then remove the instance configuration
-  if "$KGSM_ROOT/modules/instances.sh" --remove "$instance_name" >/dev/null 2>&1; then
+  if "$KGSM_ROOT/commands/instances.sh" --remove "$instance_name" >/dev/null 2>&1; then
     log_test "Instance removed successfully: $instance_name"
     return $EC_SUCCESS
   else
@@ -246,7 +250,7 @@ function remove_test_instance() {
 function instance_exists() {
   local instance_name="$1"
 
-  if "$KGSM_ROOT/modules/instances.sh" --find "$instance_name" >/dev/null 2>&1; then
+  if "$KGSM_ROOT/commands/instances.sh" --find "$instance_name" >/dev/null 2>&1; then
     return $EC_SUCCESS
   else
     return $EC_FAILURE
@@ -257,7 +261,7 @@ function instance_exists() {
 function get_instance_status() {
   local instance_name="$1"
 
-  "$KGSM_ROOT/modules/instances.sh" --status "$instance_name" 2>/dev/null || echo "unknown"
+  "$KGSM_ROOT/commands/instances.sh" --status "$instance_name" 2>/dev/null || echo "unknown"
 }
 
 # =============================================================================

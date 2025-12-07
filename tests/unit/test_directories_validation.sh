@@ -5,7 +5,7 @@
 # =============================================================================
 #
 # This test provides comprehensive coverage of the validation functions in
-# lib/validation.sh that are used by the directories module.
+# core/validation.sh that are used by the directories module.
 #
 # The validation functions tested:
 # - validate_instance_name: Validates instance name and returns config file path
@@ -32,7 +32,7 @@ source "$SCRIPT_DIR/../framework/common.sh"
 # =============================================================================
 
 readonly TEST_NAME="directories_validation"
-readonly VALIDATION_LIBRARY="$KGSM_ROOT/lib/validation.sh"
+readonly VALIDATION_LIBRARY="$KGSM_ROOT/core/validation.sh"
 readonly TEST_INSTANCE="validation-test-$(date +%s)"
 readonly TEST_WORKING_DIR="/tmp/kgsm-validation-test-${TEST_INSTANCE}"
 readonly TEST_CONFIG_FILE="/tmp/test-validation-${TEST_INSTANCE}.ini"
@@ -46,7 +46,7 @@ function setup_test() {
   log_test "Setting up directories validation test environment"
 
   # Use KGSM bootstrap to load all required libraries
-  local bootstrap_lib="$KGSM_ROOT/lib/bootstrap.sh"
+  local bootstrap_lib="$KGSM_ROOT/core/bootstrap.sh"
   if [[ -f "$bootstrap_lib" ]]; then
     # shellcheck disable=SC1090
     source "$bootstrap_lib" || {

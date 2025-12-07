@@ -34,8 +34,8 @@ source "$SCRIPT_DIR/../framework/common.sh"
 # =============================================================================
 
 readonly TEST_NAME="network_module_comprehensive"
-readonly NETWORK_MODULE="$KGSM_ROOT/modules/network.sh"
-readonly NETWORK_LOGIC="$KGSM_ROOT/lib/logic/network.sh"
+readonly NETWORK_MODULE="$KGSM_ROOT/commands/network.sh"
+readonly NETWORK_LOGIC="$KGSM_ROOT/commands/handlers/network.sh"
 
 # =============================================================================
 # UTILITY FUNCTIONS

@@ -6,7 +6,7 @@
 # Any changes made to this file will be overwritten if the file is regenerated.
 # KGSM will not regenerated this file on its own, but there is a command that
 # can be manually used to regenerate the file in case something breaks:
-# > $KGSM_ROOT/modules/files.sh --instance <instance> --create --manage
+# > $KGSM_ROOT/commands/files.sh --instance <instance> --create --manage
 
 debug=
 # shellcheck disable=SC2199
@@ -24,7 +24,7 @@ if [[ $@ =~ "--debug" ]]; then
 fi
 
 # Get the directory where this script is located
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 
 # Security function to validate configuration keys
 # Prevents code injection through malicious config files by ensuring
@@ -85,16 +85,13 @@ function __source_instance_config() {
       # Otherwise, add the "instance_" prefix
       export "instance_${key}=${value}"
     fi
-  done < "$config_file"
+  done <"$config_file"
 }
 
 # Source the instance configuration file
 INSTANCE_NAME="$(basename "$SCRIPT_DIR")"
 CONFIG_FILE="$SCRIPT_DIR/${INSTANCE_NAME}.config.ini"
 __source_instance_config "$CONFIG_FILE"
-
-# UPnP state tracking
-UPNP_STATE_FILE="$SCRIPT_DIR/.upnp_enabled"
 
 self=$(basename "$0")
 
@@ -200,6 +197,31 @@ if [[ $# -eq 0 ]]; then
   exit 1
 fi
 
+function _rotate_log_file() {
+  local log_file="$1"
+
+  # Do nothing if the log file doesn't exist or is empty
+  if [[ ! -s "$log_file" ]]; then
+    return
+  fi
+
+  # Create a timestamp for the new log file
+  local timestamp
+  timestamp=$(date +"%Y-%m-%dT%H:%M:%S")
+
+  # Construct the new filename
+  local rotated_log_file="${instance_logs_dir}/${instance_name}.${timestamp}.log"
+
+  if mv "$log_file" "$rotated_log_file"; then
+    __print_success "Rotated log file $log_file to $rotated_log_file"
+  else
+    __print_error "Failed to rotate log file $log_file to $rotated_log_file"
+    return 1
+  fi
+
+  return 0
+}
+
 function _enable_upnp() {
   local output
 
@@ -220,12 +242,16 @@ function _enable_upnp() {
   fi
 
   # Mark UPnP as enabled
-  touch "$UPNP_STATE_FILE"
+  touch "$instance_port_forwarding_state_file"
   __print_success "UPnP enabled"
 }
 
 function _disable_upnp() {
   local output
+
+  if ! _is_upnp_enabled; then
+    return 0
+  fi
 
   __print_info "Disabling UPnP..."
 
@@ -244,47 +270,23 @@ function _disable_upnp() {
   fi
 
   # Mark UPnP as disabled
-  rm -f "$UPNP_STATE_FILE"
+  rm -f "$instance_port_forwarding_state_file"
   __print_success "UPnP disabled"
 }
 
 # Helper function to check if UPnP is currently enabled
 function _is_upnp_enabled() {
-  [[ -f "$UPNP_STATE_FILE" ]]
-}
-
-# Manual UPnP disable that works regardless of state
-function _manual_disable_upnp() {
-  local output
-
-  __print_info "Manually disabling UPnP..."
-
-  # Check if UPnP ports array is set and not empty
-  # This prevents command failures when the array is unset or empty
-  if [[ -z "${instance_upnp_ports[*]:-}" ]]; then
-    __print_error "No UPnP ports configured (instance_upnp_ports is empty or unset)"
-    return 1
-  fi
-
-  if ! output=$(upnpc -f "${instance_upnp_ports[@]}" 2>&1); then
-    __print_error "Failed to disable UPnP ports"
-    __print_error "${output}"
-    return 1
-  fi
-
-  # Mark UPnP as disabled
-  rm -f "$UPNP_STATE_FILE"
-  __print_success "UPnP manually disabled"
+  [[ -f "$instance_port_forwarding_state_file" ]]
 }
 
 # Cleanup function for SIGINT, SIGTERM, and EXIT
 function _term_cleanup() {
   # Only disable UPnP if it was actually enabled AND the instance is not running
-  if [[ -f "$UPNP_STATE_FILE" ]] && [[ "${instance_enable_port_forwarding:-false}" == "true" ]]; then
-    # Check if instance is still running before disabling UPnP
-    if ! _is_active &>/dev/null; then
+  if [[ -f "$instance_port_forwarding_state_file" ]] &&
+    [[ "${instance_enable_port_forwarding:-false}" == "true" ]] &&
+    ! _is_active &>/dev/null; then
+
       _disable_upnp
-    fi
   fi
 }
 
@@ -297,6 +299,11 @@ trap '_term_cleanup' INT TERM EXIT
 function _start() {
   __print_info "Starting server in foreground..."
 
+  # Rotate the log file before starting
+  if ! _rotate_log_file "$instance_log_file"; then
+    __print_warning "Failed to rotate log file, continuing"
+  fi
+
   if [[ "$instance_enable_port_forwarding" == "true" ]]; then
     if ! _enable_upnp; then
       __print_warning "Failed to enable UPnP, continuing without port forwarding"
@@ -307,14 +314,27 @@ function _start() {
     _update
   fi
 
+  # Save the current shell PID to track the foreground process
+  echo "$$" >"$instance_pid_file"
+  __print_success "Instance $instance_name foreground PID saved to $instance_pid_file"
+
   # Use docker compose up to start the container with logs visible
   # Change to working directory first to ensure docker-compose.yml is found
   (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" up)
+
+  # Clean up PID file when container stops
+  [[ -f "$instance_pid_file" ]] && rm -f "$instance_pid_file"
 }
 
 # Start the server in the background
 function _start_background() {
   __print_info "Starting server in background..."
+
+  # Rotate the log file before starting
+  if ! _rotate_log_file "$instance_log_file"; then
+    __print_error "Failed to rotate latest log file. Aborting to prevent data loss."
+    return 1
+  fi
 
   if [[ "$instance_enable_port_forwarding" == "true" ]]; then
     if ! _enable_upnp; then
@@ -324,7 +344,23 @@ function _start_background() {
 
   # Use docker compose up -d to start the container in detached mode
   # Change to working directory first to ensure docker-compose.yml is found
-  (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" up -d)
+  if ! (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" up -d); then
+    __print_error "Failed to start container in background"
+    return 1
+  fi
+
+  # Get the container ID for tracking
+  local container_id
+  container_id=$(cd "$instance_working_dir" && docker compose -f "$instance_compose_file" ps -q 2>/dev/null | head -1)
+
+  if [[ -n "$container_id" ]]; then
+    # Save the container ID to PID file for tracking
+    echo "$container_id" >"$instance_pid_file"
+    __print_success "Instance $instance_name started with container ID $container_id, saved to $instance_pid_file"
+  else
+    __print_error "Failed to get container ID after starting"
+    return 1
+  fi
 
   __print_success "Server started in background"
 }
@@ -360,24 +396,112 @@ function _send_save_command() {
   return 0
 }
 
+# Get detailed container process information
+# This function provides container-specific process monitoring equivalent to native template
+function _get_container_process_info() {
+  local container_id="$1"
+  local process_info=""
+
+  if [[ -z "$container_id" ]]; then
+    return 1
+  fi
+
+  # Check if this is a container ID (longer than typical PID)
+  if [[ ${#container_id} -gt 10 ]]; then
+    # Get container process information
+    if ! docker ps --filter "id=$container_id" --format "table {{.ID}}\t{{.Status}}\t{{.Names}}" | grep -q "$container_id"; then
+      return 1
+    fi
+    # Get detailed container stats
+    process_info=$(docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.PIDs}}" "$container_id" 2>/dev/null)
+    echo "$process_info"
+    return 0
+  fi
+
+  # This looks like a numeric PID, get process info
+  if [[ ! "$container_id" =~ ^[0-9]+$ ]] || ! kill -0 "$container_id" 2>/dev/null; then
+    return 1
+  fi
+
+  process_info=$(ps -p "$container_id" -o pid,ppid,state,pcpu,pmem,cmd --no-headers 2>/dev/null)
+  echo "$process_info"
+  return 0
+}
+
+# Enhanced container monitoring function
+# Provides detailed container state and resource usage information
+function _monitor_container_state() {
+  local container_id="$1"
+
+  if [[ -z "$container_id" ]]; then
+    return 1
+  fi
+
+  # Check if this is a container ID
+  if [[ ${#container_id} -le 10 ]]; then
+    return 1
+  fi
+
+  # Get container state details
+  local container_state
+  container_state=$(docker inspect "$container_id" --format '{{.State.Status}}' 2>/dev/null)
+
+  if [[ -z "$container_state" ]]; then
+    return 1
+  fi
+
+  echo "Container State: $container_state"
+
+  # Get additional details if container is running
+  if [[ "$container_state" != "running" ]]; then
+    return 0
+  fi
+
+  local start_time
+  start_time=$(docker inspect "$container_id" --format '{{.State.StartedAt}}' 2>/dev/null)
+  echo "Started At: $start_time"
+
+  # Get resource usage
+  local resources
+  resources=$(docker stats --no-stream --format "CPU: {{.CPUPerc}}, Memory: {{.MemUsage}} ({{.MemPerc}}), PIDs: {{.PIDs}}" "$container_id" 2>/dev/null)
+  echo "Resources: $resources"
+
+  return 0
+}
+
 # Security function to validate and sanitize input commands
 # Prevents command injection attacks through user-provided input
 function __sanitize_input_command() {
   local command="$1"
 
-  # Check for dangerous characters that could be used for command injection
-  # Using individual checks to avoid regex complexity issues
-  if [[ "$command" == *";"* ]] || [[ "$command" == *"&"* ]] || [[ "$command" == *"|"* ]] || \
-     [[ "$command" == *"\`"* ]] || [[ "$command" == *"\$("* ]] || [[ "$command" == *")"* ]] || \
-     [[ "$command" == *"{"* ]] || [[ "$command" == *"}"* ]] || [[ "$command" == *"["* ]] || \
-     [[ "$command" == *"]"* ]] || [[ "$command" == *"\\"* ]]; then
-    echo "ERROR: Input command contains potentially dangerous characters"
-    echo "Rejected characters: ; & | \` \$( ) { } [ ] \\"
-    echo "Command: $command"
+  # Check for empty command
+  if [[ -z "$command" ]]; then
+    echo "ERROR: Empty command provided"
     return 1
   fi
 
-  return 0
+  # Check command length to prevent buffer overflow attempts
+  if [[ ${#command} -gt 1000 ]]; then
+    echo "ERROR: Command too long (${#command} characters, max 1000)"
+    echo "Command: ${command:0:100}..."
+    return 1
+  fi
+
+  # Check for dangerous characters that could be used for command injection
+  # Using individual checks to avoid regex complexity issues
+  if [[ "$command" != *";"* ]] && [[ "$command" != *"&"* ]] && [[ "$command" != *"|"* ]] &&
+    [[ "$command" != *"\`"* ]] && [[ "$command" != *"\$("* ]] && [[ "$command" != *")"* ]] &&
+    [[ "$command" != *"{"* ]] && [[ "$command" != *"}"* ]] && [[ "$command" != *"["* ]] &&
+    [[ "$command" != *"]"* ]] && [[ "$command" != *"\\"* ]] && [[ "$command" != *"<"* ]] &&
+    [[ "$command" != *">"* ]] && [[ "$command" != *"*"* ]] && [[ "$command" != *"?"* ]] &&
+    [[ "$command" != *"~"* ]] && [[ "$command" != *"\$"* ]] && [[ "$command" != *"!"* ]]; then
+    return 0
+  fi
+
+  echo "ERROR: Input command contains potentially dangerous characters"
+  echo "Rejected characters: ; & | \` \$( ) { } [ ] \\ < > * ? ~ \$ !"
+  echo "Command: $command"
+  return 1
 }
 
 function _send_input() {
@@ -416,16 +540,60 @@ function _send_input() {
   return 0
 }
 
+# This function checks if the server is active by checking the PID file
+# and verifying if the process with that PID is still running
+# For containers, we also verify the container is actually running
+# Fixed to prevent race conditions using atomic file operations
 function _is_active() {
-  # Check if the container is running using docker compose
-  # Use subshell to avoid polluting working directory and eliminate race condition
-  if (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" ps --services --filter "status=running" | grep -q .); then
-    __print_info "Active"
-    return 0
+  local server_pid
+
+  # Atomic read operation: attempt to read PID file content directly
+  # This eliminates the TOCTOU (Time of Check, Time of Use) vulnerability
+  # where the file could be modified between checking existence and reading
+  if ! server_pid=$(cat "$instance_pid_file" 2>/dev/null); then
+    # File doesn't exist, is unreadable, or read failed
+    __print_info "Inactive" && return 1
   fi
 
-  __print_info "Inactive"
-  return 1
+  # Check if PID file content is empty or contains only whitespace
+  if [[ -z "${server_pid// /}" ]]; then
+    __print_error "Instance PID file present but empty, removing"
+    # Safe removal: only remove if file still exists and is empty
+    if [[ -f "$instance_pid_file" ]] && [[ ! -s "$instance_pid_file" ]]; then
+      rm -f "$instance_pid_file"
+    fi
+    __print_info "Inactive" && return 1
+  fi
+
+  # For containers, the PID file may contain container ID instead of numeric PID
+  # Validate that PID is either numeric (for process PID) or alphanumeric (for container ID)
+  if [[ ! "$server_pid" =~ ^[a-zA-Z0-9]+$ ]]; then
+    __print_error "Instance PID file contains invalid PID/Container ID: '$server_pid', removing"
+    rm -f "$instance_pid_file"
+    __print_info "Inactive" && return 1
+  fi
+
+  # For containers, check if it's a container ID (longer than typical PID)
+  if [[ ${#server_pid} -gt 10 ]]; then
+    # This looks like a container ID, check if container is running
+    if ! docker ps --filter "id=$server_pid" --format "{{.ID}}" | grep -q "$server_pid"; then
+      # Container is not running anymore, remove stale PID file
+      __print_error "Instance PID file references non-existent container (ID: $server_pid), removing"
+      rm -f "$instance_pid_file"
+      __print_info "Inactive" && return 1
+    fi
+    __print_info "Active" && return 0
+  fi
+
+  # This looks like a numeric PID, check if process is running
+  if [[ ! "$server_pid" =~ ^[0-9]+$ ]] || ! kill -0 "$server_pid" 2>/dev/null; then
+    # Process is not running anymore, remove stale PID file
+    __print_error "Instance PID file references non-existent process (PID: $server_pid), removing"
+    rm -f "$instance_pid_file"
+    __print_info "Inactive" && return 1
+  fi
+
+  __print_info "Active" && return 0
 }
 
 function _print_logs() {
@@ -457,52 +625,114 @@ function _stop_server() {
     _send_save_command
   fi
 
-  if [[ "$instance_enable_port_forwarding" == "true" ]]; then
-    _disable_upnp
+  # For graceful shutdown, try to send stop command if available
+  if [[ "$no_graceful" != "true" ]]; then
+    if [[ -n "$instance_stop_command" ]]; then
+      __print_info "Sending graceful stop command to container..."
+      if ! _send_input "$instance_stop_command" 2>/dev/null; then
+        __print_warning "Failed to send graceful stop command, proceeding with normal shutdown"
+      else
+        # Wait a moment for graceful shutdown
+        sleep "${instance_stop_command_timeout_seconds:-5}"
+      fi
+    fi
   fi
 
   # Use docker compose down to stop the container
   # Run in the working directory where docker-compose.yml is located
-  (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" down)
+  if ! (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" down); then
+    __print_error "Failed to stop container using compose down"
+    return 1
+  fi
+
+  # Clean up PID file
+  [[ -f "$instance_pid_file" ]] && rm -f "$instance_pid_file"
+
+  # Disable UPnP if it was enabled
+  if [[ "$instance_enable_port_forwarding" == "true" ]]; then
+    _disable_upnp
+  fi
 
   __print_success "Instance $instance_name stopped"
   return 0
 }
 
+# Kill the container process and all its children
+# This function will also remove the PID file and clean up resources
 function _kill_container() {
+  local container_id
+  local output
+
   __print_info "Force killing container..."
 
-  if ! _is_active &>/dev/null; then
-    __print_warning "Instance $instance_name is not running"
-    return 0
-  fi
-
-  # Only disable UPnP if it was actually enabled AND the instance is not running
-  if [[ -f "$UPNP_STATE_FILE" ]] && [[ "${instance_enable_port_forwarding:-false}" == "true" ]]; then
-    # Check if instance is still running before disabling UPnP
-    if ! _is_active &>/dev/null; then
-      _disable_upnp
-    fi
-  fi
-
-  # Force kill the container using docker compose kill
-  # This sends SIGKILL to the container process
-  if ! (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" kill); then
-    __print_error "Failed to kill container"
+  # Atomic read of PID file to avoid TOCTOU vulnerability
+  if ! container_id=$(cat "$instance_pid_file" 2>/dev/null); then
+    __print_error "No PID file found for $instance_name."
+    __print_error "If this is unexpected, check running containers to ensure the instance is not running uncontrolled"
     return 1
   fi
 
-  # Clean up any remaining container resources
-  if ! (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" down --remove-orphans); then
-    __print_warning "Failed to clean up container resources"
+  # Validate that container_id is not empty
+  if [[ -z "${container_id// /}" ]]; then
+    __print_error "Invalid container ID in file: '$container_id'"
+    rm -f "$instance_pid_file"
+    return 1
   fi
 
-  # Now that the container is definitely stopped, disable UPnP if it was enabled
-  if [[ -f "$UPNP_STATE_FILE" ]] && [[ "${instance_enable_port_forwarding:-false}" == "true" ]]; then
+  # For container IDs, validate they are alphanumeric
+  if [[ ! "$container_id" =~ ^[a-zA-Z0-9]+$ ]]; then
+    __print_error "Invalid container ID in file: '$container_id'"
+    rm -f "$instance_pid_file"
+    return 1
+  fi
+
+  # Check if this is a container ID (longer than typical PID) and handle accordingly
+  if [[ ${#container_id} -gt 10 ]]; then
+    # This looks like a container ID, try to kill it directly
+    if ! docker ps --filter "id=$container_id" --format "{{.ID}}" | grep -q "$container_id"; then
+      __print_warning "Container ID $container_id not found in running containers"
+    else
+      # Kill the container directly
+      if ! output=$(docker kill "$container_id" 2>&1); then
+        __print_error "Failed to kill container ID $container_id"
+        __print_error "Output: ${output}"
+        # Try compose kill as fallback
+        if ! (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" kill 2>&1); then
+          __print_error "Compose kill also failed"
+          return 1
+        fi
+      else
+        __print_info "Killed container ID $container_id"
+      fi
+    fi
+  else
+    # This looks like a numeric PID, try to kill it as a process
+    if [[ ! "$container_id" =~ ^[0-9]+$ ]] || ! kill -0 "$container_id" 2>/dev/null; then
+      __print_warning "Process PID $container_id not found"
+    else
+      if ! output=$(kill -TERM "$container_id" 2>&1); then
+        __print_error "Failed to kill process PID $container_id"
+        __print_error "Output: ${output}"
+        return 1
+      fi
+      __print_info "Killed process PID $container_id"
+    fi
+  fi
+
+  # Clean up any remaining container resources using compose
+  if ! (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" down --remove-orphans 2>&1); then
+    __print_warning "Failed to clean up container resources, but continuing"
+  fi
+
+  # Clean up PID file
+  [[ -f "$instance_pid_file" ]] && rm -f "$instance_pid_file"
+
+  # Disable UPnP if it was enabled
+  if [[ -f "$instance_port_forwarding_state_file" ]] && [[ "${instance_enable_port_forwarding:-false}" == "true" ]]; then
     _disable_upnp
   fi
 
-  __print_success "Container force killed"
+  __print_success "Container and processes killed"
   return 0
 }
 
@@ -787,25 +1017,66 @@ function _get_status() {
   local recent_logs=""
 
   # Check if instance is active
-  if _is_active >/dev/null 2>&1; then
+  if ! _is_active >/dev/null 2>&1; then
+    is_active="false"
+  else
     is_active="true"
 
-    # Get container information if active
-    # For containers, we'll use container ID as PID and container status as process status
-    local container_info
-    container_info=$(cd "$instance_working_dir" && docker compose -f "$instance_compose_file" ps --format json 2>/dev/null | jq -r '.[0] | "\(.ID) \(.State) \(.CreatedAt)"' 2>/dev/null)
+    # Get process information if active (enhanced with container monitoring)
+    if [[ ! -f "$instance_pid_file" ]]; then
+      # No PID file available, skip process info
+      :
+    else
+      local container_id
+      container_id=$(cat "$instance_pid_file" 2>/dev/null)
 
-    if [[ -n "$container_info" ]]; then
-      # Extract container ID as PID equivalent
-      pid=$(echo "$container_info" | awk '{print $1}')
-      # Extract container state as process status equivalent
-      process_status=$(echo "$container_info" | awk '{print $2}')
-      # Extract container creation time as start time equivalent
-      start_time=$(echo "$container_info" | awk '{print $3, $4, $5, $6, $7, $8, $9}')
+      if [[ -z "$container_id" ]]; then
+        # Empty container ID, skip process info
+        :
+      elif [[ ${#container_id} -gt 10 ]]; then
+        # This looks like a container ID, get container information
+        if ! docker ps --filter "id=$container_id" --format "{{.ID}}" | grep -q "$container_id"; then
+          # Container not found, skip process info
+          :
+        else
+          # For JSON compatibility, we need a numeric PID - use a hash of container ID
+          # This ensures consistency while maintaining the numeric requirement
+          pid=$(echo "$container_id" | sha256sum | cut -c1-8)
+          pid=$((16#$pid)) # Convert hex to decimal for proper numeric PID
+
+          # Get container state and timing info using enhanced monitoring
+          local container_state_info
+          container_state_info=$(docker inspect "$container_id" --format '{{.State.Status}} {{.State.StartedAt}}' 2>/dev/null)
+          if [[ -n "$container_state_info" ]]; then
+            process_status=$(echo "$container_state_info" | awk '{print $1}')
+            start_time=$(echo "$container_state_info" | awk '{$1=""; print substr($0,2)}' | sed 's/T/ /' | sed 's/\..*//')
+
+            # Additional container state validation using monitoring functions
+            local state_details
+            state_details=$(_monitor_container_state "$container_id" 2>/dev/null)
+            if [[ -n "$state_details" ]] && [[ "$process_status" == "running" ]]; then
+              # Container is confirmed running with detailed monitoring
+              process_status="running"
+            fi
+          fi
+        fi
+      else
+        # This looks like a numeric PID, treat it as such
+        if [[ "$container_id" =~ ^[0-9]+$ ]] && kill -0 "$container_id" 2>/dev/null; then
+          pid="$container_id"
+          # Get process info similar to native template
+          local ps_output
+          ps_output=$(ps -p "$container_id" -o state,lstart --no-headers 2>/dev/null)
+          if [[ -n "$ps_output" ]]; then
+            process_status=$(echo "$ps_output" | awk '{print $1}' | tr -d ' ')
+            start_time=$(echo "$ps_output" | awk '{$1=""; print substr($0,2)}')
+          fi
+        fi
+      fi
     fi
   fi
 
-  # Get version information (optimized)
+  # Get version information (optimized with enhanced error handling)
   current_version=$(_get_installed_version 2>/dev/null || echo "Unknown")
 
   if [[ -n "$fast_mode" ]]; then
@@ -816,12 +1087,18 @@ function _get_status() {
     if [[ "$current_version" != "Unknown" ]]; then
       if _compare_versions >/dev/null 2>&1; then
         latest_version=$(_get_latest_version 2>/dev/null || echo "Unknown")
-        updates_available="true"
+        if [[ "$latest_version" != "$current_version" ]] && [[ "$latest_version" != "Unknown" ]]; then
+          updates_available="true"
+        else
+          updates_available="false"
+        fi
       else
         latest_version="$current_version"
+        updates_available="false"
       fi
     else
       latest_version="$current_version"
+      updates_available="false"
     fi
   fi
 
@@ -847,16 +1124,25 @@ function _get_status() {
     backup_json_array=$(printf '%s\n' $backup_list | jq -R . | jq -s .)
   fi
 
-  # Fast logs (minimal processing)
-  # For containers, we'll get recent logs from docker compose
-  if _is_active >/dev/null 2>&1; then
-    recent_logs=$(cd "$instance_working_dir" && docker compose -f "$instance_compose_file" logs --tail=3 2>/dev/null | jq -R -s . 2>/dev/null || echo '[]')
+  # Fast logs (minimal processing) - enhanced to match native template approach
+  if [[ -d "$instance_logs_dir" ]]; then
+    local latest_log
+    latest_log=$(ls -t "$instance_logs_dir" 2>/dev/null | head -1)
+    if [[ -n "$latest_log" ]]; then
+      recent_logs=$(tail -3 "$instance_logs_dir/$latest_log" 2>/dev/null | jq -R -s . 2>/dev/null || echo '[]')
+    else
+      recent_logs='[]'
+    fi
   else
-    recent_logs='[]'
+    # Fallback to docker compose logs if no log directory exists
+    if _is_active >/dev/null 2>&1; then
+      recent_logs=$(cd "$instance_working_dir" && docker compose -f "$instance_compose_file" logs --tail=3 2>/dev/null | jq -R -s . 2>/dev/null || echo '[]')
+    else
+      recent_logs='[]'
+    fi
   fi
 
   if [[ -n "$json_format" ]]; then
-    # Output JSON format - EXACTLY the same structure as native template
     jq -n \
       --arg instance_name "$instance_name" \
       --arg status "$is_active" \
@@ -878,7 +1164,7 @@ function _get_status() {
         instance_name: $instance_name,
         status: ($status == "true"),
         process: {
-          pid: (if $pid != "" then $pid else null end),
+          pid: (if $pid != "" then ($pid | tonumber) else null end),
           status: (if $process_status != "" then $process_status else null end),
           start_time: (if $start_time != "" then $start_time else null end)
         },
@@ -901,18 +1187,43 @@ function _get_status() {
         recent_logs: $recent_logs
       }'
   else
-    # Output human-readable format - EXACTLY the same structure as native template
+    # Output human-readable format
     echo "=== Instance Status: $instance_name ==="
     echo -n "Status: "
     if [[ "$is_active" == "true" ]]; then
       echo "✓ Active"
       if [[ -n "$pid" ]]; then
-        echo "Container ID: $pid"
+        # For human-readable output, show both PID and container info if available
+        if [[ -f "$instance_pid_file" ]]; then
+          local container_id_display
+          container_id_display=$(cat "$instance_pid_file" 2>/dev/null)
+          if [[ -n "$container_id_display" ]] && [[ ${#container_id_display} -gt 10 ]]; then
+            echo "Container ID: $container_id_display"
+            echo "Process ID: $pid"
+          else
+            echo "Process ID: $pid"
+          fi
+        else
+          echo "Process ID: $pid"
+        fi
         if [[ -n "$process_status" ]]; then
-          echo "Container Status: $process_status"
+          echo "Process Status: $process_status"
         fi
         if [[ -n "$start_time" ]]; then
           echo "Start Time: $start_time"
+        fi
+
+        # Show additional container resource info if available
+        if [[ -f "$instance_pid_file" ]]; then
+          local container_id_for_stats
+          container_id_for_stats=$(cat "$instance_pid_file" 2>/dev/null)
+          if [[ -n "$container_id_for_stats" ]] && [[ ${#container_id_for_stats} -gt 10 ]]; then
+            local resource_info
+            resource_info=$(_get_container_process_info "$container_id_for_stats" 2>/dev/null)
+            if [[ -n "$resource_info" ]]; then
+              echo "Resources: $resource_info"
+            fi
+          fi
         fi
       fi
     else
@@ -1102,7 +1413,7 @@ while [[ $# -gt 0 ]]; do
     exit $?
     ;;
   --disable-upnp)
-    _manual_disable_upnp
+    _disable_upnp
     exit $?
     ;;
   --version)
@@ -1119,7 +1430,7 @@ while [[ $# -gt 0 ]]; do
     --latest)
       _get_latest_version
       exit $?
-    ;;
+      ;;
     --save)
       shift
       if [[ -z "$1" ]]; then
@@ -1128,11 +1439,11 @@ while [[ $# -gt 0 ]]; do
       fi
       _save_version "$1"
       exit $?
-    ;;
+      ;;
     *)
       __print_error "Invalid argument $1"
       exit 1
-    ;;
+      ;;
     esac
     ;;
   --download)

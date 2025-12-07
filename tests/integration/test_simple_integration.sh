@@ -31,15 +31,15 @@ function test_core_modules_existence() {
   log_step "Testing core module existence"
 
   # Test blueprints module
-  local blueprints_module="$KGSM_ROOT/modules/blueprints.sh"
+  local blueprints_module="$KGSM_ROOT/commands/blueprints.sh"
   assert_file_exists "$blueprints_module" "blueprints.sh module should exist"
 
   # Test instances module
-  local instances_module="$KGSM_ROOT/modules/instances.sh"
+  local instances_module="$KGSM_ROOT/commands/instances.sh"
   assert_file_exists "$instances_module" "instances.sh module should exist"
 
   # Test lifecycle module
-  local lifecycle_module="$KGSM_ROOT/modules/lifecycle.sh"
+  local lifecycle_module="$KGSM_ROOT/commands/lifecycle.sh"
   assert_file_exists "$lifecycle_module" "lifecycle.sh module should exist"
 }
 
@@ -65,9 +65,9 @@ function test_module_help_integration() {
   log_step "Testing module help functionality integration"
 
   # All core modules should provide help
-  local blueprints_module="$KGSM_ROOT/modules/blueprints.sh"
-  local instances_module="$KGSM_ROOT/modules/instances.sh"
-  local lifecycle_module="$KGSM_ROOT/modules/lifecycle.sh"
+  local blueprints_module="$KGSM_ROOT/commands/blueprints.sh"
+  local instances_module="$KGSM_ROOT/commands/instances.sh"
+  local lifecycle_module="$KGSM_ROOT/commands/lifecycle.sh"
 
   assert_command_succeeds "$blueprints_module --help" "blueprints module help should work"
   assert_command_succeeds "$instances_module --help" "instances module help should work"
@@ -77,16 +77,16 @@ function test_module_help_integration() {
 function test_blueprints_instances_integration() {
   log_step "Testing blueprints and instances module integration"
 
-  local blueprints_module="$KGSM_ROOT/modules/blueprints.sh"
-  local instances_module="$KGSM_ROOT/modules/instances.sh"
+  local blueprints_module="$KGSM_ROOT/commands/blueprints.sh"
+  local instances_module="$KGSM_ROOT/commands/instances.sh"
 
   # Both modules should be able to list their content
-  assert_command_succeeds "$blueprints_module list" "blueprints list should work"
-  assert_command_succeeds "$instances_module list" "instances list should work"
+  assert_command_succeeds "$blueprints_module --list" "blueprints --list should work"
+  assert_command_succeeds "$instances_module --list" "instances --list should work"
 
   # Test JSON output consistency
-  assert_command_succeeds "$blueprints_module list --json" "blueprints list --json should work"
-  assert_command_succeeds "$instances_module list --json" "instances list --json should work"
+  assert_command_succeeds "$blueprints_module --list --json" "blueprints --list --json should work"
+  assert_command_succeeds "$instances_module --list --json" "instances --list --json should work"
 }
 
 function test_configuration_module_integration() {
@@ -130,8 +130,8 @@ function test_directory_structure_integration() {
 function test_error_handling_integration() {
   log_step "Testing error handling integration between modules"
 
-  local blueprints_module="$KGSM_ROOT/modules/blueprints.sh"
-  local instances_module="$KGSM_ROOT/modules/instances.sh"
+  local blueprints_module="$KGSM_ROOT/commands/blueprints.sh"
+  local instances_module="$KGSM_ROOT/commands/instances.sh"
 
   # All modules should reject invalid arguments consistently
   assert_command_fails "$blueprints_module --invalid-arg" "blueprints module should reject invalid arguments"
@@ -146,13 +146,13 @@ function test_output_format_consistency() {
     local blueprints_json instances_json
 
     # Get JSON output from both modules
-    if blueprints_json=$("$KGSM_ROOT/modules/blueprints.sh" list --json 2>/dev/null); then
+    if blueprints_json=$("$KGSM_ROOT/commands/blueprints.sh" --list --json 2>/dev/null); then
       if echo "$blueprints_json" | jq . >/dev/null 2>&1; then
         assert_true "true" "blueprints module should produce valid JSON"
       fi
     fi
 
-    if instances_json=$("$KGSM_ROOT/modules/instances.sh" list --json 2>/dev/null); then
+    if instances_json=$("$KGSM_ROOT/commands/instances.sh" --list --json 2>/dev/null); then
       if echo "$instances_json" | jq . >/dev/null 2>&1; then
         assert_true "true" "instances module should produce valid JSON"
       fi

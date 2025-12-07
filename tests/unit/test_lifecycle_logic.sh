@@ -3,7 +3,7 @@
 # KGSM Lifecycle Logic Unit Tests
 #
 # This test suite provides comprehensive unit testing for the pure logic functions
-# in lib/logic/lifecycle.sh. These tests focus on testing the business logic
+# in commands/handlers/lifecycle.sh. These tests focus on testing the business logic
 # in isolation without external dependencies.
 
 # =============================================================================
@@ -307,7 +307,7 @@ function test_lifecycle_logic_library_loading() {
   log_step "Testing lifecycle logic library loading"
 
   # Source the lifecycle logic library
-  local logic_lib="$KGSM_ROOT/lib/logic/lifecycle.sh"
+  local logic_lib="$KGSM_ROOT/commands/handlers/lifecycle.sh"
   assert_file_exists "$logic_lib" "Lifecycle logic library should exist"
 
   # Source the library (this should load all required dependencies)
@@ -1065,7 +1065,7 @@ function setup_test() {
   setup_mock_environment
 
   # Source required libraries
-  source "$KGSM_ROOT/lib/bootstrap.sh"
+  source "$KGSM_ROOT/core/bootstrap.sh"
 
   log_test "Test environment setup complete"
 }

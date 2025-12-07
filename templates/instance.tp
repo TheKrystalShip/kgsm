@@ -137,6 +137,9 @@ enable_firewall_management="${instance_enable_firewall_management:-false}"
 # Path to the firewall rule file
 firewall_rule_file="${instance_firewall_rule_file}"
 
+# Timeout in seconds for wget operations
+wget_timeout_seconds="${config_wget_timeout_seconds:-60}"
+
 #=============================================================================
 # SERVER CONTROL COMMANDS
 # Commands used to control the game server lifecycle

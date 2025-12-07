@@ -18,7 +18,7 @@
 # Test Coverage:
 # ✓ Module existence and permissions
 # ✓ Help functionality and usage display
-# ✓ All command combinations (create, remove)
+# ✓ All command combinations (--create, --remove)
 # ✓ Instance parameter validation
 # ✓ Error handling (missing args, invalid args, non-existent instances)
 # ✓ Directory creation and removal verification
@@ -39,7 +39,7 @@ source "$SCRIPT_DIR/../framework/common.sh"
 # =============================================================================
 
 readonly TEST_NAME="directories_module_comprehensive"
-readonly DIRECTORIES_MODULE="$KGSM_ROOT/modules/directories.sh"
+readonly DIRECTORIES_MODULE="$KGSM_ROOT/commands/directories.sh"
 readonly TEST_INSTANCE="factorio-test-$(date +%s)"
 readonly TEST_BLUEPRINT="factorio.bp"
 
@@ -108,9 +108,9 @@ function test_help_functionality() {
   help_output=$("$DIRECTORIES_MODULE" --help 2>&1)
 
   assert_contains "$help_output" "Directory Management for Krystal Game Server Manager" "Help should contain module description"
-  assert_contains "$help_output" "--instance" "Help should document '--instance' option"
-  assert_contains "$help_output" "create" "Help should document 'create' command"
-  assert_contains "$help_output" "remove" "Help should document 'remove' command"
+  assert_contains "$help_output" "--instance" "Help should document --instance option"
+  assert_contains "$help_output" "--create" "Help should document --create command"
+  assert_contains "$help_output" "--remove" "Help should document --remove command"
   assert_contains "$help_output" "Creates installation, data, logs, and backup directories" "Help should describe create functionality"
   assert_contains "$help_output" "Warning: This will delete all instance data" "Help should contain removal warning"
   assert_contains "$help_output" "Examples:" "Help should contain usage examples"
@@ -133,13 +133,13 @@ function test_missing_arguments() {
   assert_command_fails "$DIRECTORIES_MODULE -i" "directories.sh -i without value should fail"
 
   # Test missing instance for commands
-  assert_command_fails "$DIRECTORIES_MODULE create" "directories.sh create without --instance should fail"
-  assert_command_fails "$DIRECTORIES_MODULE remove" "directories.sh remove without --instance should fail"
+  assert_command_fails "$DIRECTORIES_MODULE --create" "directories.sh --create without --instance should fail"
+  assert_command_fails "$DIRECTORIES_MODULE --remove" "directories.sh --remove without --instance should fail"
 
   # Verify error messages are helpful
   local error_output
-  error_output=$("$DIRECTORIES_MODULE" create 2>&1 || true)
-  assert_contains "$error_output" "Missing required option" "Error message should indicate missing required option"
+  error_output=$("$DIRECTORIES_MODULE" --instance 2>&1 || true)
+  assert_contains "$error_output" "Missing argument" "Error message should indicate missing argument"
 
   log_test "Missing argument handling validated"
 }
@@ -163,14 +163,14 @@ function test_instance_validation() {
   log_step "Testing instance parameter validation"
 
   # Test with non-existent instance
-  assert_command_fails "$DIRECTORIES_MODULE --instance nonexistent-instance create" "directories.sh should fail with non-existent instance"
+  assert_command_fails "$DIRECTORIES_MODULE --instance nonexistent-instance --create" "directories.sh should fail with non-existent instance"
 
   # Test with empty instance name
-  assert_command_fails "$DIRECTORIES_MODULE --instance '' create" "directories.sh should fail with empty instance name"
+  assert_command_fails "$DIRECTORIES_MODULE --instance '' --create" "directories.sh should fail with empty instance name"
 
   # Verify error messages for non-existent instances
   local error_output
-  error_output=$("$DIRECTORIES_MODULE" create --instance "nonexistent-instance" 2>&1 || true)
+  error_output=$("$DIRECTORIES_MODULE" --instance "nonexistent-instance" --create 2>&1 || true)
   assert_contains "$error_output" "not found" "Error should indicate instance not found"
 
   log_test "Instance validation behavior confirmed"
@@ -181,7 +181,7 @@ function test_instance_validation() {
 # =============================================================================
 
 function test_create_command_functionality() {
-  log_step "Testing create command functionality"
+  log_step "Testing --create command functionality"
 
   # Create a test instance first
   local test_instance
@@ -193,7 +193,7 @@ function test_create_command_functionality() {
   fi
 
   # Test basic create command
-  assert_command_succeeds "$DIRECTORIES_MODULE create --instance '$test_instance'" "directories.sh create should work with valid instance"
+  assert_command_succeeds "$DIRECTORIES_MODULE --instance '$test_instance' --create" "directories.sh --create should work with valid instance"
 
   # Verify directories were created
   local instance_config="$KGSM_ROOT/instances/${test_instance}.ini"
@@ -226,7 +226,7 @@ function test_create_command_functionality() {
 }
 
 function test_remove_command_functionality() {
-  log_step "Testing remove command functionality"
+  log_step "Testing --remove command functionality"
 
   # Create a test instance first
   local test_instance
@@ -238,7 +238,7 @@ function test_remove_command_functionality() {
   fi
 
   # Create directories first
-  "$DIRECTORIES_MODULE" --instance "$test_instance" create >/dev/null 2>&1 || true
+  "$DIRECTORIES_MODULE" --instance "$test_instance" --create >/dev/null 2>&1 || true
 
   # Get working directory before removal
   local instance_config="$KGSM_ROOT/instances/${test_instance}.ini"
@@ -248,7 +248,7 @@ function test_remove_command_functionality() {
   fi
 
   # Test remove command
-  assert_command_succeeds "$DIRECTORIES_MODULE remove --instance '$test_instance'" "directories.sh remove should work with valid instance"
+  assert_command_succeeds "$DIRECTORIES_MODULE --instance '$test_instance' --remove" "directories.sh --remove should work with valid instance"
 
   # Verify directories were removed
   if [[ -n "$working_dir" && -d "$working_dir" ]]; then
@@ -280,7 +280,7 @@ function test_directory_creation_verification() {
   fi
 
   # Create directories
-  if "$DIRECTORIES_MODULE" --instance "$test_instance" create >/dev/null 2>&1; then
+  if "$DIRECTORIES_MODULE" --instance "$test_instance" --create >/dev/null 2>&1; then
     log_test "Directory creation command executed successfully"
 
     # Verify all expected directories exist
@@ -329,7 +329,7 @@ function test_directory_removal_verification() {
   fi
 
   # Create directories first
-  "$DIRECTORIES_MODULE" --instance "$test_instance" create >/dev/null 2>&1 || true
+  "$DIRECTORIES_MODULE" --instance "$test_instance" --create >/dev/null 2>&1 || true
 
   # Get working directory path
   local instance_config="$KGSM_ROOT/instances/${test_instance}.ini"
@@ -339,11 +339,11 @@ function test_directory_removal_verification() {
   fi
 
   # Remove directories
-  assert_command_succeeds "$DIRECTORIES_MODULE remove --instance '$test_instance'" "Directory removal should succeed"
+  assert_command_succeeds "$DIRECTORIES_MODULE --instance '$test_instance' --remove" "Directory removal should succeed"
 
   # Verify directories were removed
   if [[ -n "$working_dir" ]]; then
-    assert_dir_not_exists "$working_dir" "Working directory should be removed after remove command"
+    assert_dir_not_exists "$working_dir" "Working directory should be removed after --remove command"
   fi
 
   # Cleanup
@@ -369,11 +369,11 @@ function test_configuration_file_updates() {
   fi
 
   # Create directories
-  "$DIRECTORIES_MODULE" --instance "$test_instance" create >/dev/null 2>&1 || true
+  "$DIRECTORIES_MODULE" --instance "$test_instance" --create >/dev/null 2>&1 || true
 
   # Verify configuration file was updated
   local instance_config
-  instance_config="$("$KGSM_ROOT/modules/instances.sh" --find "$test_instance")"
+  instance_config="$("$KGSM_ROOT/commands/instances.sh" --find "$test_instance")"
 
   if [[ -f "$instance_config" ]]; then
     # Check for expected configuration keys
@@ -442,11 +442,11 @@ function test_permission_error_handling() {
   # We mainly test that the module handles permission-related scenarios gracefully
 
   # Test with non-existent instance (should fail gracefully)
-  assert_command_fails "$DIRECTORIES_MODULE --instance 'nonexistent' create" "Should handle non-existent instance gracefully"
+  assert_command_fails "$DIRECTORIES_MODULE --instance 'nonexistent' --create" "Should handle non-existent instance gracefully"
 
   # Test error message quality
   local error_output
-  error_output=$("$DIRECTORIES_MODULE" --instance "nonexistent" create 2>&1 || true)
+  error_output=$("$DIRECTORIES_MODULE" --instance "nonexistent" --create 2>&1 || true)
   assert_not_null "$error_output" "Should provide error output for failed operations"
 
   log_test "Permission error handling tested"
@@ -456,17 +456,17 @@ function test_edge_cases() {
   log_step "Testing edge cases and boundary conditions"
 
   # Test with very long instance names
-  assert_command_fails "$DIRECTORIES_MODULE --instance '$(printf 'a%.0s' {1..1000})' create" "Should handle very long instance names gracefully"
+  assert_command_fails "$DIRECTORIES_MODULE --instance '$(printf 'a%.0s' {1..1000})' --create" "Should handle very long instance names gracefully"
 
   # Test with special characters in instance names
-  assert_command_fails "$DIRECTORIES_MODULE --instance 'instance with spaces' create" "Should handle spaces in instance names"
-  assert_command_fails "$DIRECTORIES_MODULE --instance 'instance@#\$%' create" "Should handle special characters in instance names"
+  assert_command_fails "$DIRECTORIES_MODULE --instance 'instance with spaces' --create" "Should handle spaces in instance names"
+  assert_command_fails "$DIRECTORIES_MODULE --instance 'instance@#\$%' --create" "Should handle special characters in instance names"
 
   # Test with empty string arguments
-  assert_command_fails "$DIRECTORIES_MODULE --instance '' create" "Should reject empty instance names"
+  assert_command_fails "$DIRECTORIES_MODULE --instance '' --create" "Should reject empty instance names"
 
   # Test multiple conflicting arguments
-  assert_command_fails "$DIRECTORIES_MODULE --instance test create remove" "Should reject conflicting create/remove commands"
+  assert_command_fails "$DIRECTORIES_MODULE --instance test --create --remove" "Should reject conflicting create/remove commands"
 
   log_test "Edge cases handled appropriately"
 }
@@ -527,17 +527,17 @@ function test_all_command_combinations() {
   fi
 
   # Test create command
-  if "$DIRECTORIES_MODULE" --instance "$test_instance" create >/dev/null 2>&1; then
-    log_test "directories.sh create succeeded"
+  if "$DIRECTORIES_MODULE" --instance "$test_instance" --create >/dev/null 2>&1; then
+    log_test "directories.sh --create succeeded"
   else
-    log_test "directories.sh create failed"
+    log_test "directories.sh --create failed"
   fi
 
   # Test remove command
-  if "$DIRECTORIES_MODULE" --instance "$test_instance" remove >/dev/null 2>&1; then
-    log_test "directories.sh remove succeeded"
+  if "$DIRECTORIES_MODULE" --instance "$test_instance" --remove >/dev/null 2>&1; then
+    log_test "directories.sh --remove succeeded"
   else
-    log_test "directories.sh remove failed"
+    log_test "directories.sh --remove failed"
   fi
 
   # Cleanup

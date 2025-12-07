@@ -93,6 +93,17 @@
 # $instance_enable_command_shortcuts  Whether command shortcuts are enabled (true/false)
 # $instance_command_shortcut_file     Path to command shortcut file
 #
+# Global Configuration Variables:
+# $config_wget_timeout_seconds   Timeout for wget operations (default: 60)
+# $config_webhook_timeout_seconds  Timeout for webhook requests (default: 10)
+# $config_save_command_timeout_seconds  Timeout for save commands (default: 5)
+# $config_stop_command_timeout_seconds  Timeout for stop commands (default: 30)
+# $config_enable_logging         Whether logging is enabled (true/false)
+# $config_enable_systemd         Whether systemd is enabled globally (true/false)
+# $config_enable_firewall_management  Whether firewall management is enabled (true/false)
+# $config_enable_port_forwarding Whether port forwarding is enabled (true/false)
+# $config_enable_backup_compression  Whether backup compression is enabled (true/false)
+#
 ################################################################################
 ################################################################################
 
@@ -128,11 +139,12 @@
 #   # Example implementation for a server with version API
 #   local latest_version
 #   local api_url="https://api.example.com/game/latest-version"
+#   local timeout="${config_wget_timeout_seconds:-60}"
 #
 #   __print_info "Retrieving latest version from $api_url"
 #
-#   # Attempt to get version with a timeout
-#   latest_version=$(curl --connect-timeout 10 -m 30 -sSL "$api_url")
+#   # Attempt to get version with a timeout (using wget)
+#   latest_version=$(wget --timeout="$timeout" -qO - "$api_url")
 #
 #   # Validate response
 #   if [[ -z "$latest_version" ]]; then
@@ -311,6 +323,7 @@
 #   local version=$1
 #   local dest=${2:-$instance_temp_dir}
 #   local variant=$3
+#   local timeout="${config_wget_timeout_seconds:-60}"
 #
 #   __print_info "Downloading server files version $version to $dest"
 #
@@ -326,8 +339,8 @@
 #
 #   __print_info "Fetching from $download_url"
 #
-#   # Download with progress display and error handling
-#   if ! wget --progress=bar:force:noscroll -O "$output_file" "$download_url"; then
+#   # Download with progress display, timeout, and error handling
+#   if ! wget --timeout="$timeout" --progress=bar:force:noscroll -O "$output_file" "$download_url"; then
 #     __print_error "Download failed from $download_url"
 #     return 1
 #   fi

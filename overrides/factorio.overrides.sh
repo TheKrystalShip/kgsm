@@ -72,7 +72,8 @@
 # - 0: Success (echo "$new_version")
 # - 1: Error
 function _get_latest_version() {
-  wget -qO - 'https://factorio.com/api/latest-releases' |
+  local timeout="${instance_wget_timeout_seconds:-60}"
+  wget --timeout="$timeout" -qO - 'https://factorio.com/api/latest-releases' |
     jq .stable.headless |
     tr -d '"'
 }
@@ -91,10 +92,11 @@ function _download() {
   # Download new version in $dest
   local download_url="https://factorio.com/get-download/${version}/headless/linux64"
   local dest_file="$dest/factorio_headless.tar.xz"
+  local timeout="${instance_wget_timeout_seconds:-60}"
 
   # Download
-  if ! wget -qO "$dest_file" "$download_url"; then
-    __print_error "wget -qO $dest_file $download_url"
+  if ! wget --timeout="$timeout" -qO "$dest_file" "$download_url"; then
+    __print_error "wget --timeout=$timeout -qO $dest_file $download_url"
     return 1
   fi
 

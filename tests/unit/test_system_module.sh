@@ -37,8 +37,8 @@ source "$SCRIPT_DIR/../framework/common.sh"
 # =============================================================================
 
 readonly TEST_NAME="system_module_comprehensive"
-readonly SYSTEM_MODULE="$KGSM_ROOT/modules/system.sh"
-readonly SYSTEM_LOGIC="$KGSM_ROOT/lib/logic/system.sh"
+readonly SYSTEM_MODULE="$KGSM_ROOT/commands/system.sh"
+readonly SYSTEM_LOGIC="$KGSM_ROOT/commands/handlers/system.sh"
 
 # =============================================================================
 # UTILITY FUNCTIONS

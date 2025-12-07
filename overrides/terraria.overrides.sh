@@ -72,7 +72,8 @@
 # - 0: Success (echo "$new_version")
 # - 1: Error
 function _get_latest_version() {
-  wget -qO - 'https://terraria.org/api/get/dedicated-servers-names' |
+  local timeout="${instance_wget_timeout_seconds:-60}"
+  wget --timeout="$timeout" -qO - 'https://terraria.org/api/get/dedicated-servers-names' |
     jq .[0] |
     cut -d '-' -f3 |
     cut -d '.' -f1
@@ -95,10 +96,11 @@ function _download() {
 
   local download_url="https://terraria.org/api/download/pc-dedicated-server/terraria-server-${version}.zip"
   local dest_file="${dest}/terraria-server-${version}.zip"
+  local timeout="${instance_wget_timeout_seconds:-60}"
 
   # Download zip file in $dest
-  if ! wget -qO "$dest_file" "$download_url"; then
-    __print_error "wget -qO $dest_file $download_url"
+  if ! wget --timeout="$timeout" -qO "$dest_file" "$download_url"; then
+    __print_error "wget --timeout=$timeout -qO $dest_file $download_url"
     return 1
   fi
 

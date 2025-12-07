@@ -44,7 +44,7 @@ function test_kgsm_main_script() {
 function test_instances_module_existence() {
   log_step "Testing instances module existence"
 
-  local instances_module="$KGSM_ROOT/modules/instances.sh"
+  local instances_module="$KGSM_ROOT/commands/instances.sh"
   assert_file_exists "$instances_module" "instances.sh module should exist"
 
   # Check if file is executable
@@ -58,15 +58,15 @@ function test_instances_module_existence() {
 function test_instances_module_help() {
   log_step "Testing instances module help functionality"
 
-  local instances_module="$KGSM_ROOT/modules/instances.sh"
+  local instances_module="$KGSM_ROOT/commands/instances.sh"
   assert_command_succeeds "$instances_module --help" "instances.sh --help should work"
 }
 
 function test_instances_module_list() {
   log_step "Testing instances module list functionality"
 
-  local instances_module="$KGSM_ROOT/modules/instances.sh"
-  assert_command_succeeds "$instances_module list" "instances.sh list should work"
+  local instances_module="$KGSM_ROOT/commands/instances.sh"
+  assert_command_succeeds "$instances_module --list" "instances.sh --list should work"
 }
 
 function test_basic_directory_structure() {

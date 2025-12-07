@@ -12,7 +12,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/../framework/common.sh"
 
 readonly TEST_NAME="lifecycle_module"
-readonly LIFECYCLE_MODULE="$KGSM_ROOT/modules/lifecycle.sh"
+readonly LIFECYCLE_MODULE="$KGSM_ROOT/commands/lifecycle.sh"
 
 # =============================================================================
 # TEST FUNCTIONS
@@ -129,7 +129,7 @@ function test_lifecycle_standalone_support() {
   # This is especially important in test environments
 
   # Check if standalone lifecycle module exists
-  local standalone_module="$KGSM_ROOT/modules/lifecycle.standalone.sh"
+  local standalone_module="$KGSM_ROOT/commands/lifecycle.standalone.sh"
   if [[ -f "$standalone_module" ]]; then
     assert_file_exists "$standalone_module" "Standalone lifecycle module should exist"
     log_test "Standalone lifecycle module found"

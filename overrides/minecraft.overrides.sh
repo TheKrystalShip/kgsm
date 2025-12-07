@@ -72,7 +72,8 @@
 # - 0: Success (echo "$new_version")
 # - 1: Error
 function _get_latest_version() {
-  wget -qO - https://launchermeta.mojang.com/mc/game/version_manifest.json |
+  local timeout="${instance_wget_timeout_seconds:-60}"
+  wget --timeout="$timeout" -qO - https://launchermeta.mojang.com/mc/game/version_manifest.json |
     jq -r '{latest: .latest.release} | .[]' |
     tr -d '"'
 }
@@ -84,12 +85,13 @@ function _get_latest_version() {
 # - 0: Success
 # - 1: Error
 function _download() {
-  local version=$1
-  local dest=$instance_temp_dir
+  local version="$1"
+  local dest="$instance_temp_dir"
+  local timeout="${instance_wget_timeout_seconds:-60}"
 
   # shellcheck disable=SC2155
   local release_url="$(
-    wget -qO - https://launchermeta.mojang.com/mc/game/version_manifest.json |
+    wget --timeout="$timeout" -qO - https://launchermeta.mojang.com/mc/game/version_manifest.json |
       jq -r "{versions: .versions} | .[] | .[] | select(.id == \"$version\") | {url: .url} | .[]"
   )"
 
@@ -100,7 +102,7 @@ function _download() {
 
   # shellcheck disable=SC2155
   local release_server_jar_url="$(
-    wget -qO - "$release_url" |
+    wget --timeout="$timeout" -qO - "$release_url" |
       jq -r '{url: .downloads.server.url} | .[]'
   )"
 
@@ -112,7 +114,7 @@ function _download() {
   local local_release_jar="$dest/minecraft_server.$version.jar"
 
   if [ ! -f "$local_release_jar" ]; then
-    wget -qO "$local_release_jar" "$release_server_jar_url"
+    wget --timeout="$timeout" -qO "$local_release_jar" "$release_server_jar_url"
   fi
 
   return 0

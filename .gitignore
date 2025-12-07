@@ -23,6 +23,3 @@ logs/*
 tests/logs/*
 
 tests/test-results.txt
-
-# Dot folders
-\.*/*

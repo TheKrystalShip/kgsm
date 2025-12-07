@@ -39,7 +39,7 @@ function test_core_modules_existence() {
   local core_modules=("instances.sh" "blueprints.sh" "lifecycle.sh" "files.sh")
 
   for module in "${core_modules[@]}"; do
-    local module_path="$KGSM_ROOT/modules/$module"
+    local module_path="$KGSM_ROOT/commands/$module"
     assert_file_exists "$module_path" "Core module should exist: $module"
 
     # Check if module is executable
@@ -59,7 +59,7 @@ function test_include_modules_existence() {
   local include_modules=("common.sh" "config.sh" "errors.sh" "logging.sh")
 
   for module in "${include_modules[@]}"; do
-    local module_path="$KGSM_ROOT/lib/$module"
+    local module_path="$KGSM_ROOT/core/$module"
     assert_file_exists "$module_path" "Include module should exist: $module"
   done
 }
@@ -80,7 +80,7 @@ function test_module_help_functionality() {
   local testable_modules=("instances.sh" "blueprints.sh" "lifecycle.sh")
 
   for module in "${testable_modules[@]}"; do
-    local module_path="$KGSM_ROOT/modules/$module"
+    local module_path="$KGSM_ROOT/commands/$module"
     assert_command_succeeds "$module_path --help" "$module --help should work"
   done
 }
@@ -89,10 +89,10 @@ function test_module_dependencies() {
   log_step "Testing module dependencies"
 
   # Test that common dependencies are available
-  assert_file_exists "$KGSM_ROOT/lib/common.sh" "Common module should be available for dependencies"
-  assert_file_exists "$KGSM_ROOT/lib/config.sh" "Config module should be available for dependencies"
-  assert_file_exists "$KGSM_ROOT/lib/logging.sh" "Logging module should be available for dependencies"
-  assert_file_exists "$KGSM_ROOT/lib/errors.sh" "Errors module should be available for dependencies"
+  assert_file_exists "$KGSM_ROOT/core/common.sh" "Common module should be available for dependencies"
+  assert_file_exists "$KGSM_ROOT/core/config.sh" "Config module should be available for dependencies"
+  assert_file_exists "$KGSM_ROOT/core/logging.sh" "Logging module should be available for dependencies"
+  assert_file_exists "$KGSM_ROOT/core/errors.sh" "Errors module should be available for dependencies"
 }
 
 # =============================================================================

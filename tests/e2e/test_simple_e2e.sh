@@ -110,7 +110,7 @@ function test_core_modules_functionality() {
   local core_modules=("blueprints.sh" "instances.sh" "lifecycle.sh")
 
   for module in "${core_modules[@]}"; do
-    local module_path="$KGSM_ROOT/modules/$module"
+    local module_path="$KGSM_ROOT/commands/$module"
 
     if [[ -f "$module_path" ]]; then
       assert_command_succeeds "$module_path --help" "$module should respond to --help"
@@ -123,13 +123,13 @@ function test_core_modules_functionality() {
 function test_blueprints_listing() {
   log_step "Testing blueprints listing functionality"
 
-  local blueprints_module="$KGSM_ROOT/modules/blueprints.sh"
+  local blueprints_module="$KGSM_ROOT/commands/blueprints.sh"
 
   if [[ -f "$blueprints_module" ]]; then
-    assert_command_succeeds "$blueprints_module list" "blueprints list should work"
+    assert_command_succeeds "$blueprints_module --list" "blueprints --list should work"
 
     # Test JSON output if module supports it
-    if "$blueprints_module" list --json >/dev/null 2>&1; then
+    if "$blueprints_module" --list --json >/dev/null 2>&1; then
       log_test "blueprints module supports JSON output"
     else
       log_test "blueprints module may not support JSON output"
@@ -142,13 +142,13 @@ function test_blueprints_listing() {
 function test_instances_listing() {
   log_step "Testing instances listing functionality"
 
-  local instances_module="$KGSM_ROOT/modules/instances.sh"
+  local instances_module="$KGSM_ROOT/commands/instances.sh"
 
   if [[ -f "$instances_module" ]]; then
-    assert_command_succeeds "$instances_module list" "instances list should work"
+    assert_command_succeeds "$instances_module --list" "instances --list should work"
 
     # Test JSON output if module supports it
-    if "$instances_module" list --json >/dev/null 2>&1; then
+    if "$instances_module" --list --json >/dev/null 2>&1; then
       log_test "instances module supports JSON output"
     else
       log_test "instances module may not support JSON output"
