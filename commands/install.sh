@@ -116,8 +116,9 @@ function _cmd_install() {
 
   # Create instance configuration
   instance="$(instances.sh create "$blueprint" --install-dir "$install_dir" ${identifier:+--name $identifier})" || {
+    exit_code=$?
     __print_error "Failed to create instance configuration"
-    return $?
+    return $exit_code
   }
 
   local exit_code=$?
