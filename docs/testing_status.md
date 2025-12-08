@@ -38,7 +38,7 @@ These modules are fundamental to KGSM operation and should be tested first.
 | `blueprints.sh`  | ✅             | ✅           | ❌             | ❌                 | ❌         | 🔴 **HIGH** | Core functionality - blueprint management     |
 | `instances.sh`   | ✅             | ❌           | ❌             | ❌                 | ❌         | 🔴 **HIGH** | Core functionality - instance management      |
 | `lifecycle.sh`   | ✅             | ❌           | ❌             | ❌                 | ❌         | 🔴 **HIGH** | Core functionality - start/stop/restart       |
-| `directories.sh` | ✅             | ❌           | ❌             | ❌                 | ❌         | 🔴 **HIGH** | Core functionality - directory structure      |
+| `directories.sh` | ✅             | ✅           | ❌             | ❌                 | ❌         | 🔴 **HIGH** | Core functionality - directory structure      |
 | `config.sh`      | ✅ (uses core) | ❌           | ❌             | ❌                 | ❌         | 🔴 **HIGH** | Core functionality - configuration management |
 
 ### File Management Modules (Medium Priority)
@@ -97,15 +97,15 @@ These modules have specialized purposes or are utilities.
 
 - **Total Modules:** 25
 - **Modules with Handlers:** 16
-- **Modules Tested:** 1
-- **Modules Untested:** 24
+- **Modules Tested:** 2
+- **Modules Untested:** 23
 - **Manual Testing Only:** 1 (`interactive.sh`)
 
 ### Coverage by Test Type
 
 | Test Type         | Modules with Coverage | Percentage |
 | ----------------- | --------------------- | ---------- |
-| Logic Tests       | 1 / 16                | 6.25%      |
+| Logic Tests       | 2 / 16                | 12.5%      |
 | Command Tests     | 0 / 25                | 0%         |
 | Integration Tests | 0 / 25                | 0%         |
 | E2E Tests         | 0 / 25                | 0%         |
@@ -114,7 +114,7 @@ These modules have specialized purposes or are utilities.
 
 | Priority     | Total Modules | Tested | Untested |
 | ------------ | ------------- | ------ | -------- |
-| 🔴 **HIGH**   | 5             | 1      | 4        |
+| 🔴 **HIGH**   | 5             | 2      | 3        |
 | 🟡 **MEDIUM** | 13            | 0      | 13       |
 | 🟢 **LOW**    | 6             | 0      | 6        |
 | ⚪ **MANUAL** | 1             | 0      | 1        |
@@ -315,6 +315,11 @@ Both `blueprints.native.sh` and `blueprints.container.sh` need testing:
 ---
 
 ## Changelog
+
+### 2025-12-09
+- **[Update]** Directories logic tests completed (✅) - 26 tests covering `__create_dir`, `__create_file`, `__logic_create_directories`, `__logic_remove_directories`
+- **[Update]** Updated coverage statistics: 2/16 logic tests complete (12.5%)
+- **[Update]** Updated priority statistics: 2/5 HIGH priority modules tested
 
 ### 2025-12-08
 - **[Initial]** Created testing status tracker
