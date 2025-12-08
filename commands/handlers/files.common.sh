@@ -13,9 +13,6 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
-# shellcheck disable=SC1091
-source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../bootstrap.sh"
-
 # Load templates logic library for template expansion
 templates_library=$(__find_command_handler templates.sh)
 # shellcheck disable=SC1090

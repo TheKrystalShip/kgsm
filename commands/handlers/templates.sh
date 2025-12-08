@@ -15,9 +15,6 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
-# shellcheck disable=SC1091
-source "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")/../bootstrap.sh"
-
 # Find a template file by name
 # Args: $1 = template_name (with or without .tp extension)
 # Returns: 0 on success, EC_FILE_NOT_FOUND if template doesn't exist
