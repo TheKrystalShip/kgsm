@@ -535,13 +535,11 @@ function _cmd_create() {
         shift
         [[ -z "$1" ]] && __print_error "Missing argument for --install-dir" && return $EC_MISSING_ARG
         install_dir="$1"
-        shift
         ;;
       --name)
         shift
         [[ -z "$1" ]] && __print_error "Missing argument for --name" && return $EC_MISSING_ARG
         instance_name="$1"
-        shift
         ;;
       -*)
         __print_error "Invalid option for create command: $1"
