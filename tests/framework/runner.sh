@@ -156,7 +156,7 @@ function create_sandbox() {
 
   # Set permissions
   chmod +x "$sandbox_path/kgsm.sh"
-  find "$sandbox_path/modules" -name "*.sh" -exec chmod +x {} \;
+  find "$sandbox_path/commands" -name "*.sh" -exec chmod +x {} \;
 
   echo "$sandbox_path"
 }
@@ -308,11 +308,28 @@ function execute_test() {
   echo "Duration: ${duration}s" >>"$test_log"
   echo "Exit code: $exit_code" >>"$test_log"
 
+  # Parse assertion stats from test log
+  local assert_passed=0
+  local assert_failed=0
+  local assert_total=0
+  if [[ -f "$test_log" ]]; then
+    local stats_line
+    stats_line=$(grep "^KGSM_ASSERT_STATS:" "$test_log" 2>/dev/null | tail -1 || true)
+    if [[ -n "$stats_line" ]]; then
+      # Extract passed/failed/total from "KGSM_ASSERT_STATS: 133/0/133"
+      local stats_value
+      stats_value=$(echo "$stats_line" | sed 's/^KGSM_ASSERT_STATS: //')
+      assert_passed=$(echo "$stats_value" | cut -d'/' -f1)
+      assert_failed=$(echo "$stats_value" | cut -d'/' -f2)
+      assert_total=$(echo "$stats_value" | cut -d'/' -f3)
+    fi
+  fi
+
   # Update counters and report result
   case $exit_code in
   $EC_SUCCESS)
     TESTS_PASSED=$((TESTS_PASSED + 1))
-    log_message "SUCCESS" "✓ $test_name (${duration}s)"
+    log_message "SUCCESS" "✓ $test_name (${assert_passed}/${assert_failed}/${assert_total}) (${duration}s)"
     ;;
   $EC_SKIP)
     TESTS_SKIPPED=$((TESTS_SKIPPED + 1))
@@ -320,7 +337,7 @@ function execute_test() {
     ;;
   *)
     TESTS_FAILED=$((TESTS_FAILED + 1))
-    log_message "ERROR" "✗ $test_name (${duration}s) - Exit code: $exit_code"
+    log_message "ERROR" "✗ $test_name (${assert_passed}/${assert_failed}/${assert_total}) (${duration}s)"
     if [[ "$TEST_VERBOSE" == "true" ]]; then
       print_error "Last 10 lines of test log:"
       tail -10 "$test_log" | while IFS= read -r line; do
@@ -331,7 +348,7 @@ function execute_test() {
   esac
 
   # Record result
-  echo "$test_name,$test_type,$exit_code,$duration,$(date -Iseconds)" >>"$TEST_RESULTS_FILE"
+  echo "$test_name,$test_type,$exit_code,$duration,$(date -Iseconds),$assert_passed,$assert_failed,$assert_total" >>"$TEST_RESULTS_FILE"
 
   # Restore original KGSM_ROOT
   export KGSM_ROOT="$original_kgsm_root"
@@ -547,7 +564,7 @@ function main() {
   TEST_RESULTS_FILE="$TEST_LOG_DIR/results.csv"
 
   # Create results header
-  echo "test_name,test_type,exit_code,duration_seconds,timestamp" >"$TEST_RESULTS_FILE"
+  echo "test_name,test_type,exit_code,duration_seconds,timestamp,assertions_passed,assertions_failed,assertions_total" >"$TEST_RESULTS_FILE"
 
   print_color "$BOLD$CYAN" "KGSM Test Framework Runner"
   print_color "$GRAY" "Sandbox: $TEST_SANDBOX_ROOT"

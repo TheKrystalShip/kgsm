@@ -77,18 +77,18 @@ Each test runs with these key environment variables:
 
 ```bash
 # Unit test example - testing instances module directly
-"$INSTANCES_MODULE" --help
-"$INSTANCES_MODULE" --list
-"$INSTANCES_MODULE" --generate-id "factorio.bp"
+"$INSTANCES_MODULE" help
+"$INSTANCES_MODULE" list
+"$INSTANCES_MODULE" generate-id "factorio.bp"
 
 # Integration test example - testing module interaction
-BLUEPRINTS_JSON=$("$BLUEPRINTS_MODULE" --list --json)
-INSTANCES_JSON=$("$INSTANCES_MODULE" --list --json)
+BLUEPRINTS_JSON=$("$BLUEPRINTS_MODULE" list --json)
+INSTANCES_JSON=$("$INSTANCES_MODULE" list --json)
 
 # E2E test example - full workflow
-TEST_INSTANCE=$("$INSTANCES_MODULE" --create "factorio.bp" --name "test_server")
-"$INSTANCES_MODULE" --info "$TEST_INSTANCE"
-"$INSTANCES_MODULE" --remove "$TEST_INSTANCE"
+TEST_INSTANCE=$("$INSTANCES_MODULE" create "factorio.bp" --name "test_server")
+"$INSTANCES_MODULE" info "$TEST_INSTANCE"
+"$INSTANCES_MODULE" remove "$TEST_INSTANCE"
 ```
 
 ## 4. Logging & Debugging
@@ -194,7 +194,7 @@ When you run `./tests/run.sh --pattern simple unit`:
 ├── instances/           # Test instances directory
 ├── kgsm.sh             # Main KGSM script
 ├── logs/               # Test logs
-├── modules/            # All KGSM modules
+├── commands/            # All KGSM modules
 ├── overrides/          # Override scripts
 ├── templates/          # Template files
 └── tests/              # Test framework (copied but not used)
@@ -282,15 +282,15 @@ Tests can use the common utilities:
 # Test utilities are available:
 
 # Run KGSM commands
-run_kgsm "--help"
-run_kgsm "instances --list"
+run_kgsm "help"
+run_kgsm "instances list"
 
 # Create test instances
 create_test_instance "factorio.bp" "$(generate_test_id)"
 
 # Use assertions
 assert_file_exists "$KGSM_ROOT/config.ini"
-assert_command_succeeds "$INSTANCES_MODULE --help"
+assert_command_succeeds "$INSTANCES_MODULE help"
 
 # Wait for conditions
 wait_for_condition "test -f /some/file" 30 "file creation"

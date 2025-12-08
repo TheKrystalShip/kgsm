@@ -661,6 +661,11 @@ function print_assert_summary() {
   printf "${GREEN}Passed: %d${NC}\n" "$ASSERT_PASSED"
   printf "${RED}Failed: %d${NC}\n" "$ASSERT_FAILED"
 
+  # Write assertion stats marker to test log for runner to parse
+  if [[ -n "${KGSM_TEST_LOG:-}" ]]; then
+    echo "KGSM_ASSERT_STATS: ${ASSERT_PASSED}/${ASSERT_FAILED}/${ASSERT_COUNT}" >>"$KGSM_TEST_LOG" 2>/dev/null || true
+  fi
+
   if [[ $ASSERT_FAILED -gt 0 ]]; then
     printf "\n${RED}Test failed with %d assertion failures${NC}\n" "$ASSERT_FAILED"
     return $ASSERT_FAILURE
