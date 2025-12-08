@@ -74,7 +74,14 @@ function __logic_validate_blueprint() {
 
   # This checks existence, readability, and format
   validate_blueprint "$blueprint_name" > /dev/null 2>&1
-  return $?
+  exit_code=$?
+
+  # Convert file not found to blueprint not found for consistency
+  if [[ $exit_code -eq $EC_FILE_NOT_FOUND ]]; then
+    exit_code=$EC_BLUEPRINT_NOT_FOUND
+  fi
+
+  return $exit_code
 }
 
 export -f __logic_validate_blueprint
