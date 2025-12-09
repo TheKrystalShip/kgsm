@@ -157,6 +157,13 @@ tests/logs/2025-06-21_01-15-39/
 - KGSM-specific assertions (`assert_instance_exists`)
 - Colored output and detailed error reporting
 
+**`tests/framework/fixtures.sh`** - Test data fixtures
+- Mock instance config creation (`create_mock_instance_config`)
+- Mock override file generation (`create_mock_override_file`)
+- Mock management script creation (`create_mock_management_script`)
+- Mock blueprint generation (`create_mock_blueprint`)
+- Test resource cleanup utilities (`cleanup_mock_files`)
+
 ### Configuration Files
 
 **`tests/config/test.conf`** - Test configuration
@@ -294,9 +301,93 @@ assert_command_succeeds "$INSTANCES_MODULE help"
 
 # Wait for conditions
 wait_for_condition "test -f /some/file" 30 "file creation"
+
+# Create test fixtures
+## 10. Test Fixtures System
+
+### Purpose
+
+The fixtures system (`tests/framework/fixtures.sh`) provides reusable helpers for creating test data that closely resembles real KGSM configurations. This reduces code duplication and ensures consistency across tests.
+
+### Available Fixtures
+
+**Instance Configuration**
+```bash
+# Create a mock instance config file
+config_file=$(create_mock_instance_config "instance-name" "/path/to/blueprint.bp")
+# Creates: $KGSM_ROOT/instances/<blueprint_name>/<instance-name>.ini
 ```
 
-## 10. Benefits of This Approach
+**Override Files**
+```bash
+# Create mock override file with specified functions
+override_file=$(create_mock_override_file "factorio" "_get_latest_version" "_download" "_deploy")
+# Creates: $OVERRIDES_SOURCE_DIR/factorio.overrides.sh with valid bash functions
+```
+
+**Management Scripts**
+```bash
+## 12. Troubleshootingript with placeholder functions
+mgmt_script=$(create_mock_management_script "/path/to/manage.sh" "_get_latest_version" "_download")
+# Creates executable script with stub functions
+```
+
+**Blueprints**
+```bash
+# Create minimal blueprint file
+blueprint_file=$(create_mock_blueprint "mygame" "native")
+# Creates: $KGSM_ROOT/blueprints/native/custom/mygame.bp
+
+# Or for container blueprints
+blueprint_file=$(create_mock_blueprint "mygame" "container")
+# Creates: $KGSM_ROOT/blueprints/container/custom/mygame.docker-compose.yml
+```
+
+**Cleanup**
+```bash
+# Clean up multiple fixtures at once
+cleanup_mock_files "$config_file" "$override_file" "$mgmt_script" "$blueprint_file"
+
+# Also remove parent directories if needed
+rm -rf "$(dirname "$config_file")"
+```
+
+### Design Philosophy
+
+- **Real data over mocks**: Use actual blueprints (e.g., `factorio.bp`) when available
+- **Minimal but valid**: Generated fixtures contain only essential fields
+- **Self-contained**: Each fixture function returns the path to the created resource
+- **Explicit cleanup**: Tests are responsible for cleaning up fixtures they create
+
+### Best Practices
+
+1. **Use real blueprints when possible**
+   ```bash
+   # Prefer this
+   blueprint_file="$KGSM_ROOT/blueprints/native/default/factorio.bp"
+   
+   # Over this (unless testing edge cases)
+   blueprint_file=$(create_mock_blueprint "testgame" "native")
+   ```
+
+2. **Clean up in the same function that creates fixtures**
+   ```bash
+   function test_something() {
+     local config=$(create_mock_instance_config "test" "$blueprint")
+     
+     # ... test code ...
+     
+     cleanup_mock_files "$config"
+     rm -rf "$(dirname "$config")"
+   }
+   ```
+
+3. **Keep fixtures minimal**
+   - Only create what's needed for the specific test
+   - Use fixture functions instead of inline file creation
+   - Avoid complex setups when simple ones suffice
+
+## 11. Benefits of This Approach
 
 This testing framework design ensures:
 

@@ -61,6 +61,16 @@ function setup_test_environment() {
     exit $EC_ERROR
   fi
 
+  # Source fixtures framework
+  local fixtures_lib="$(dirname "${BASH_SOURCE[0]}")/fixtures.sh"
+  if [[ -f "$fixtures_lib" ]]; then
+    # shellcheck disable=SC1090
+    source "$fixtures_lib"
+  else
+    echo "ERROR: Could not find fixtures library: $fixtures_lib" >&2
+    exit $EC_ERROR
+  fi
+
   # Set up paths
   export KGSM_CONFIG_FILE="$KGSM_ROOT/config.ini"
   export KGSM_INSTANCES_DIR="$KGSM_ROOT/instances"
