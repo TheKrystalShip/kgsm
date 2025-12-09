@@ -13,16 +13,6 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
-# Load templates logic library for template expansion
-templates_library=$(__find_command_handler templates.sh)
-# shellcheck disable=SC1090
-source "$templates_library" || {
-  echo "ERROR: Failed to load templates logic library" >&2
-  exit "${EC_FAILED_SOURCE:-2}"
-}
-
-# Note: __logic_expand_template is now provided by templates.sh library
-
 # Inject override functions into a management file
 # Args: $1 = instance_name, $2 = instance_management_file
 # Returns: 0 on success, error code on failure
