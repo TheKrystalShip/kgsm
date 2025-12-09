@@ -303,10 +303,12 @@ function execute_test() {
   local duration=$((end_time - start_time))
 
   # Log test completion
-  echo "" >>"$test_log"
-  echo "Completed: $(date)" >>"$test_log"
-  echo "Duration: ${duration}s" >>"$test_log"
-  echo "Exit code: $exit_code" >>"$test_log"
+  {
+    echo ""
+    echo "Completed: $(date)"
+    echo "Duration: ${duration}s"
+    echo "Exit code: $exit_code"
+  } >> "$test_log"
 
   # Parse assertion stats from test log
   local assert_passed=0
@@ -329,7 +331,7 @@ function execute_test() {
   case $exit_code in
   $EC_SUCCESS)
     TESTS_PASSED=$((TESTS_PASSED + 1))
-    log_message "SUCCESS" "✓ $test_name (${assert_passed}/${assert_failed}/${assert_total}) (${duration}s)"
+    log_message "SUCCESS" "(P:${assert_passed}/F:${assert_failed}/T:${assert_total}) ✓ $test_name (${duration}s)"
     ;;
   $EC_SKIP)
     TESTS_SKIPPED=$((TESTS_SKIPPED + 1))
@@ -337,7 +339,7 @@ function execute_test() {
     ;;
   *)
     TESTS_FAILED=$((TESTS_FAILED + 1))
-    log_message "ERROR" "✗ $test_name (${assert_passed}/${assert_failed}/${assert_total}) (${duration}s)"
+    log_message "ERROR" "(P:${assert_passed}/F:${assert_failed}/T:${assert_total}) ✗ $test_name (${duration}s)"
     if [[ "$TEST_VERBOSE" == "true" ]]; then
       print_error "Last 10 lines of test log:"
       tail -10 "$test_log" | while IFS= read -r line; do
