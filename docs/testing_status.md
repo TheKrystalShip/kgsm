@@ -63,7 +63,7 @@ These modules integrate with system services and network features.
 | ------------------- | ----------- | ----------- | ------------- | ----------------- | --------- | ------------ | ------------------------------------ |
 | `network.sh`        | ✅           | ❌           | ❌             | ❌                 | ❌         | 🟡 **MEDIUM** | Network operations and port checking |
 | `system.sh`         | ✅           | ❌           | ❌             | ❌                 | ❌         | 🟡 **MEDIUM** | System information and operations    |
-| `events.sh`         | ✅           | ❌           | ❌             | ❌                 | ❌         | 🟡 **MEDIUM** | Event system orchestration           |
+| `events.sh`         | ✅           | ✅           | ❌             | ❌                 | ❌         | 🟡 **MEDIUM** | Event system orchestration           |
 | `events.socket.sh`  | ❌           | N/A         | ❌             | ❌                 | ❌         | 🟢 **LOW**    | Specialized - socket transport       |
 | `events.webhook.sh` | ❌           | N/A         | ❌             | ❌                 | ❌         | 🟢 **LOW**    | Specialized - webhook transport      |
 
@@ -97,15 +97,15 @@ These modules have specialized purposes or are utilities.
 
 - **Total Modules:** 25
 - **Modules with Handlers:** 16
-- **Modules Tested:** 2
-- **Modules Untested:** 23
+- **Modules Tested:** 3
+- **Modules Untested:** 22
 - **Manual Testing Only:** 1 (`interactive.sh`)
 
 ### Coverage by Test Type
 
 | Test Type         | Modules with Coverage | Percentage |
 | ----------------- | --------------------- | ---------- |
-| Logic Tests       | 2 / 16                | 12.5%      |
+| Logic Tests       | 3 / 16                | 18.75%     |
 | Command Tests     | 0 / 25                | 0%         |
 | Integration Tests | 0 / 25                | 0%         |
 | E2E Tests         | 0 / 25                | 0%         |
@@ -115,7 +115,7 @@ These modules have specialized purposes or are utilities.
 | Priority     | Total Modules | Tested | Untested |
 | ------------ | ------------- | ------ | -------- |
 | 🔴 **HIGH**   | 5             | 2      | 3        |
-| 🟡 **MEDIUM** | 13            | 0      | 13       |
+| 🟡 **MEDIUM** | 13            | 1      | 12       |
 | 🟢 **LOW**    | 6             | 0      | 6        |
 | ⚪ **MANUAL** | 1             | 0      | 1        |
 
@@ -317,6 +317,9 @@ Both `blueprints.native.sh` and `blueprints.container.sh` need testing:
 ## Changelog
 
 ### 2025-12-09
+- **[Update]** Events logic tests completed (✅) - 45 tests, 71 assertions covering `__logic_validate_event_type`, `__logic_validate_event_params`, `__logic_get_event_param_spec`, `__logic_event_name_to_type`
+- **[Update]** Updated coverage statistics: 3/16 logic tests complete (18.75%)
+- **[Update]** Updated priority statistics: 1/13 MEDIUM priority modules tested
 - **[Update]** Directories logic tests completed (✅) - 26 tests covering `__create_dir`, `__create_file`, `__logic_create_directories`, `__logic_remove_directories`
 - **[Update]** Updated coverage statistics: 2/16 logic tests complete (12.5%)
 - **[Update]** Updated priority statistics: 2/5 HIGH priority modules tested
