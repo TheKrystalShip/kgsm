@@ -48,7 +48,8 @@ These modules handle file operations and system integration.
 | Module                | Has Handler | Logic Tests | Command Tests | Integration Tests | E2E Tests | Priority     | Notes                                  |
 | --------------------- | ----------- | ----------- | ------------- | ----------------- | --------- | ------------ | -------------------------------------- |
 | `files.sh`            | ❌           | N/A         | ❌             | ❌                 | ❌         | 🟡 **MEDIUM** | Orchestrator - delegates to submodules |
-| `files.config.sh`     | ✅           | ❌           | ❌             | ❌                 | ❌         | 🟡 **MEDIUM** | Config file installation               |
+| `files.common.sh`     | ✅           | ✅           | N/A           | ❌                 | ❌         | 🟡 **MEDIUM** | Shared file management helpers         |
+| `files.config.sh`     | ✅           | ✅           | ❌             | ❌                 | ❌         | 🟡 **MEDIUM** | Config file installation               |
 | `files.management.sh` | ✅           | ❌           | ❌             | ❌                 | ❌         | 🟡 **MEDIUM** | Management script generation           |
 | `files.systemd.sh`    | ✅           | ❌           | ❌             | ❌                 | ❌         | 🟡 **MEDIUM** | Systemd service file operations        |
 | `files.symlink.sh`    | ✅           | ❌           | ❌             | ❌                 | ❌         | 🟡 **MEDIUM** | Symlink management                     |
@@ -95,27 +96,27 @@ These modules have specialized purposes or are utilities.
 
 ### Overall Statistics
 
-- **Total Modules:** 25
-- **Modules with Handlers:** 16
-- **Modules Tested:** 3
-- **Modules Untested:** 22
+- **Total Modules:** 26
+- **Modules with Handlers:** 17
+- **Modules Tested:** 6
+- **Modules Untested:** 20
 - **Manual Testing Only:** 1 (`interactive.sh`)
 
 ### Coverage by Test Type
 
 | Test Type         | Modules with Coverage | Percentage |
 | ----------------- | --------------------- | ---------- |
-| Logic Tests       | 3 / 16                | 18.75%     |
-| Command Tests     | 0 / 25                | 0%         |
-| Integration Tests | 0 / 25                | 0%         |
-| E2E Tests         | 0 / 25                | 0%         |
+| Logic Tests       | 6 / 17                | 35.29%     |
+| Command Tests     | 0 / 26                | 0%         |
+| Integration Tests | 0 / 26                | 0%         |
+| E2E Tests         | 0 / 26                | 0%         |
 
 ### Progress by Priority
 
 | Priority     | Total Modules | Tested | Untested |
 | ------------ | ------------- | ------ | -------- |
 | 🔴 **HIGH**   | 5             | 2      | 3        |
-| 🟡 **MEDIUM** | 13            | 1      | 12       |
+| 🟡 **MEDIUM** | 14            | 4      | 10       |
 | 🟢 **LOW**    | 6             | 0      | 6        |
 | ⚪ **MANUAL** | 1             | 0      | 1        |
 
@@ -315,6 +316,11 @@ Both `blueprints.native.sh` and `blueprints.container.sh` need testing:
 ---
 
 ## Changelog
+
+### 2025-12-10
+- **[Update]** Files.config logic tests completed (✅) - 23 tests, 73 assertions covering `__logic_install_standalone_config`, `__logic_uninstall_standalone_config` with comprehensive success/failure/edge case scenarios
+- **[Update]** Updated coverage statistics: 6/17 logic tests complete (35.29%)
+- **[Update]** Updated priority statistics: 4/14 MEDIUM priority modules tested
 
 ### 2025-12-09
 - **[Update]** Events logic tests completed (✅) - 45 tests, 71 assertions covering `__logic_validate_event_type`, `__logic_validate_event_params`, `__logic_get_event_param_spec`, `__logic_event_name_to_type`
