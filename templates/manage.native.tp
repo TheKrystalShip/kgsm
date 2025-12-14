@@ -8,6 +8,11 @@
 # can be manually used to regenerate the file in case something breaks:
 # > $KGSM_ROOT/commands/files.sh --instance <instance> --create --manage
 
+# Disabling SC2154 globally:
+# $instance_* variables are set dynamically from the config file
+# check "__source_instance_config"
+# shellcheck disable=SC2154
+
 debug=
 # shellcheck disable=SC2199
 if [[ $@ =~ "--debug" ]]; then
@@ -108,11 +113,10 @@ Usage:
 
 Options:
   -h, --help                Display this help message
-  --start                   Start the server in the current terminal
-  --start [--background]    Start the server in the background
-  --stop                    Stop the server
-  --stop [--no-save]        Do not save on shutdown
-  --stop [--no-graceful]    Kill the server process without sending it the
+  start [-d, --detached]    Start the server in the current terminal
+  stop                      Stop the server
+  stop [--no-save]          Do not save on shutdown
+  stop [--no-graceful]      Kill the server process without sending it the
                             stop command.
   --kill                    Kill the server process
   --save                    Save the current game state
@@ -149,9 +153,10 @@ Options:
                             stdout
 
 Examples:
-  $self --start --background
+  $self start --detached
+  $self attach
   $self --input '/save'
-  $self --stop
+  $self stop
   $self --logs --tail 50
   $self --logs --follow --tail 100
 "
@@ -288,90 +293,101 @@ function _is_upnp_enabled() {
   [[ -f "$instance_port_forwarding_state_file" ]]
 }
 
-# This function is called when the script is interrupted
-# It will disable UPnP if it was enabled and the instance is not running
-function _disable_upnp_on_exit() {
-  # We only disable UPnP if ALL of the following conditions are true:
-  # 1. A UPnP state file exists, indicating we enabled it at some point.
-  # 2. The instance is configured to use port forwarding.
-  # 3. The instance is confirmed to be NOT RUNNING.
-  if [[ -f "$instance_port_forwarding_state_file" ]] && \
-     [[ "${instance_enable_port_forwarding:-false}" == "true" ]] && \
-     ! _is_active &>/dev/null; then
+# Cleanup function to run on script exit, removing the PID file and disabling UPnP
+# This function is called on INT, TERM, and EXIT signals, don't call it directly
+# shellcheck disable=SC2329
+function _cleanup_on_exit() {
+  __print_warning "Caught exit signal, performing cleanup..."
 
-    # All conditions met, it's safe to disable UPnP.
-    _disable_upnp
+  # Clean up PID file if it exists (foreground mode)
+  if [[ -f "$instance_pid_file" ]]; then
+    __print_info "Removing instance PID file $instance_pid_file on exit"
+    rm -f "$instance_pid_file"
   fi
 
-  # Note: tail processes no longer need manual cleanup since they use --pid
-  # and automatically exit when the server process dies
-}
-
-trap _disable_upnp_on_exit INT TERM EXIT
-
-# Cleanup function for foreground start mode
-function _cleanup_foreground_start() {
-  # Clean up PID file
-  [[ -f "$instance_pid_file" ]] && rm -f "$instance_pid_file"
-
-  # Disable UPnP if enabled
-  if [[ "$instance_enable_port_forwarding" == "true" ]]; then
-    _disable_upnp
+  # Disable UPnP if ALL conditions are met:
+  # 1. Port forwarding is enabled
+  # 2. UPnP state file exists (was enabled at some point)
+  # 3. Instance is NOT running
+  if [[ "${instance_enable_port_forwarding:-false}" == "true" ]] && \
+      [[ -f "$instance_port_forwarding_state_file" ]] && \
+      ! _is_active &>/dev/null; then
+      __print_info "Disabling UPnP ports on exit"
+      _disable_upnp
   fi
 }
 
-# Start the server in the current terminal
+trap _cleanup_on_exit INT TERM
+
+# Start the server in detachable mode (fake foreground)
+# Server runs in background but terminal is attached to logs and input
 function _start() {
-  __print_info "Starting $self in the current terminal"
+  __print_info "Starting $instance_name in detachable mode"
 
-  if [[ "$instance_enable_port_forwarding" == "true" ]]; then
-    if ! _enable_upnp; then
-      __print_warning "Failed to enable UPnP, continuing without port forwarding"
-    fi
-  fi
-
-  if [[ "$instance_auto_update" == "true" ]]; then
-    if ! _update; then
-      __print_error "Failed to update $self, exiting"
-      return 1
-    fi
-  fi
-
-  cd "$instance_launch_dir" || {
-    __print_error "Failed to move into $instance_launch_dir, exiting"
+  # Start server in background mode first
+  if ! _start_background; then
     return 1
-  }
-
-  # Rotate the log file before starting
-  if ! _rotate_log_file "$instance_log_file"; then
-    __print_warning "Failed to rotate log file, continuing"
   fi
 
-  # Save the current shell PID
-  echo "$$" >"$instance_pid_file"
-  __print_success "Instance $instance_name PID saved to $instance_pid_file"
+  # Small delay to ensure server process is fully initialized
+  sleep 1
 
-  # Setup signal handlers for cleanup
-  trap '_cleanup_foreground_start' INT TERM EXIT
+  # Attach to the running instance
+  _attach_to_instance
+}
 
-  # Start the server with output going to both terminal and log file
-  # stdin remains connected to terminal for direct user interaction
-  # This ensures logs are always written regardless of start mode
-  # Safely expand variables within executable_arguments before execution
-  local expanded_args
-  expanded_args=$(echo "$instance_executable_arguments" | envsubst)
+# Attach to a running server instance
+# Provides interactive console with log output and command input
+function _attach_to_instance() {
+  if ! _is_active &>/dev/null; then
+    __print_error "Cannot attach: $instance_name is not running"
+    return 1
+  fi
 
-  # Don't use exec here, we want to keep the current shell running
-  # shellcheck disable=SC2086
-  $instance_executable_file $expanded_args > >(tee -a "$instance_log_file") 2>&1
+  __print_info "Attaching to $instance_name console"
+  __print_info "Type '.detach' to disconnect (server will continue running)"
+  __print_info "Press Ctrl+C to stop the server"
+
+  # Start log follower in background
+  # Using --pid=$$ ensures tail exits when this shell exits
+  _print_logs --follow -n 50 2>/dev/null &
+
+  # Trap Ctrl+C to stop server (expected behavior when attached)
+  trap '_stop_server && echo "" && return 0' INT
+
+  # Read loop with prompt
+  while IFS= read -r -e -p "[$instance_name]> " line; do
+    # Check if server is still running before processing input
+    if ! _is_active &>/dev/null; then
+      __print_info "$instance_name has stopped, returning to shell"
+      echo ""
+      return 0
+    fi
+
+    # Check for detach command
+    if [[ "$line" == ".detach" ]]; then
+      __print_info "Detaching from $instance_name (server continues running)"
+      __print_info "Use '${self} attach' to re-attach"
+      break
+    fi
+
+    # Skip empty input
+    [[ -z "$line" ]] && continue
+
+    # Send to socket
+    if [[ -p "$instance_socket_file" ]]; then
+      echo "$line" >"$instance_socket_file"
+    else
+      __print_error "Socket not available, server may have stopped"
+      break
+    fi
+  done
 }
 
 # Start the server in the background
 # This function will create a named pipe for communication with the server
 # and redirect logs to a file. Fixed to eliminate race condition in PID tracking
 function _start_background() {
-  __print_info "Starting $self in the background"
-
   # Rotate the latest log file
   if ! _rotate_log_file "$instance_log_file"; then
     __print_error "Failed to rotate latest log file. Aborting to prevent data loss."
@@ -633,19 +649,31 @@ function _is_active() {
 }
 
 function _print_logs() {
-  local follow=${1:-false}
-  local line_count=${2:-10}
+  local follow=false
+  local line_count=10
+
+  while [[ $# -gt 0 ]]; do
+    case $1 in
+    -f | --follow)
+      follow=true
+      ;;
+    -n | --tail | --lines)
+      shift
+      line_count="$1"
+      ;;
+    *)
+      shift
+      ;;
+    esac
+    shift
+  done
 
   if [[ ! -f "$instance_log_file" ]]; then
     __print_info "No log file found at '$instance_log_file'"
     return 0
   fi
 
-  if [[ "$follow" == "true" ]]; then
-    tail -n "$line_count" -F "$instance_log_file"
-  else
-    tail -n "$line_count" "$instance_log_file"
-  fi
+  tail --pid=$$ -n "$line_count" "$instance_log_file" ${follow:+-F}
 }
 
 function _update() {
@@ -876,6 +904,9 @@ function _list_backups() {
 }
 
 function _get_installed_version() {
+  # shellcheck disable=SC2154
+  # $instance_version_file is set dynamically from the config file
+  # check "__source_instance_config"
   cat "$instance_version_file" 2>/dev/null || echo "unknown"
 }
 
@@ -1263,14 +1294,14 @@ while [[ $# -gt 0 ]]; do
   -h | --help)
     usage && exit 0
     ;;
-  --start)
+  start)
     shift
     if [[ -z "$1" ]]; then
       _start
       exit $?
     fi
     case "$1" in
-    --background)
+    -d | --detached)
       _start_background
       exit $?
       ;;
@@ -1280,7 +1311,11 @@ while [[ $# -gt 0 ]]; do
       ;;
     esac
     ;;
-  --stop)
+  attach)
+    _attach_to_instance
+    exit $?
+    ;;
+  stop)
     shift
     # Initialize variables to prevent state pollution
     no_save=0
