@@ -152,6 +152,7 @@ function __logic_create_base_instance() {
   export instance_platform="${blueprint_platform:-linux}"
   export instance_level_name="${blueprint_level_name:-default}"
   export instance_steam_app_id="${blueprint_steam_app_id:-0}"
+  export instance_steamcmd_arguments="${blueprint_steamcmd_arguments:-}"
   export instance_is_steam_account_required="${blueprint_is_steam_account_required:-false}"
 
   export instance_save_command_timeout_seconds="${config_instance_save_command_timeout_seconds:-5}"

@@ -114,6 +114,9 @@ executable_arguments="${instance_executable_arguments}"
 # Steam App ID for SteamCMD downloads (0 if not applicable)
 steam_app_id="${instance_steam_app_id:-0}"
 
+# Additional arguments to pass to SteamCMD (if applicable)
+steamcmd_arguments="${instance_steamcmd_arguments:-}"
+
 # Whether a Steam account is required for downloading (true | false)
 is_steam_account_required="${instance_is_steam_account_required:-false}"
 

@@ -42,6 +42,12 @@ ports='27015:27016/tcp|27015:27016/udp'
 # Default: 0
 steam_app_id=1110390
 
+# (Optional) Additional steamcmd arguments
+# Values: Any valid steamcmd arguments, for example: "+beta <branch>".
+# Leave empty if not applicable.
+# Default: ""
+steamcmd_arguments=""
+
 # Only applicable if steam_app_id != 0
 # Values: false for anonymous, true for account required
 # Default: false

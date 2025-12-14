@@ -992,9 +992,9 @@ function _download() {
   # shellcheck disable=SC2086
   steamcmd \
     +@sSteamCmdForcePlatformType "${instance_platform:-linux}" \
-    +force_install_dir "$dest" \
-    +login $login_args \
-    +app_update "$app_id" \
+    +force_install_dir "${dest}" \
+    +login ${login_args} \
+    +app_update "${app_id}" ${instance_steamcmd_arguments:-} \
     validate \
     +quit
 
