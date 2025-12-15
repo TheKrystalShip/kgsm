@@ -40,18 +40,22 @@ if [[ -z "$KGSM_CONFIG_LOADED" ]]; then
 
   # Use grep to pre-filter config file, extracting only non-comment, non-whitespace lines containing '='
   # This significantly reduces debug trace noise while preserving parsing error visibility
-  while IFS= read -r line; do
+  # Use mapfile to read config lines into array directly to iterate over
+  mapfile -t config_lines < <(grep -E '^[^#[:space:]].*=' "$CONFIG_FILE")
+
+  # Parse each config line and export as global variable
+  for line in "${config_lines[@]}"; do
     # Parse key=value and set each config with a prefix globally and export it
     if [[ "$line" =~ ^([^=]+)=(.*)$ ]]; then
-      key="${BASH_REMATCH[1]}"
-      value="${BASH_REMATCH[2]}"
-      declare -g "config_${key}=${value}"
-      export "config_${key}"
+      declare -g -r "config_${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
+      export "config_${BASH_REMATCH[1]}"
     else
       # Warn about malformed config lines that passed grep but failed regex parsing
-      __print_warning "Skipping malformed config line: $line" >&2
+      __print_warning "Skipping malformed config line: $line"
     fi
-  done < <(grep -E '^[^#[:space:]].*=' "$CONFIG_FILE")
+  done
+
+  unset config_lines
 
   export KGSM_CONFIG_LOADED=1
 fi
