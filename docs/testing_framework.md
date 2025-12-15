@@ -95,15 +95,54 @@ TEST_INSTANCE=$("$INSTANCES_MODULE" create "factorio.bp" --name "test_server")
 
 ### Structured Logging System
 
+The testing framework uses a centralized logging module (`tests/framework/logging.sh`) that provides:
+
+- **Standardized Format**: `[TIMESTAMP] [LEVEL] [SOURCE] message`
+- **Log Levels**: DEBUG, INFO, WARN, ERROR with filtering support
+- **Dual Output**: Console (colored) and file (plain text)
+- **No Duplication**: Each event logged exactly once
+- **ANSI Stripping**: Clean, parseable log files
+- **Caller Tracking**: Preserves file:line in function() for debugging
+
+#### Log Organization
+
 - **Project-Based Logs**: `tests/logs/YYYY-MM-DD_HH-MM-SS/`
 - **Individual Test Logs**: Each test gets its own log file
 - **Runner Log**: Overall framework execution log
 - **CSV Results**: Machine-readable results for CI/CD integration
 
+#### Log Level Configuration
+
+Set the log level via environment variable:
+
+```bash
+# Set log level for test run (default: INFO)
+KGSM_TEST_LOG_LEVEL=DEBUG ./tests/run.sh unit
+
+# Or set in config file
+export KGSM_TEST_LOG_LEVEL=WARN
+
+# Available levels: DEBUG, INFO, WARN, ERROR
+```
+
+**Log Level Behavior:**
+- `DEBUG` - Shows all internal operations, fixture creation, detailed trace
+- `INFO` - Test steps, assertions, general progress (default)
+- `WARN` - Only warnings and errors
+- `ERROR` - Only critical errors
+
+#### Example Log Output
+
+```log
+[2025-12-15T10:30:45-05:00] [INFO] [test.sh:40 in test_feature()] [STEP] Testing feature foo
+[2025-12-15T10:30:45-05:00] [INFO] [test.sh:42 in test_feature()] PASS: Should work correctly
+```
+
 ### Debug Mode
 
 When `--debug` is used:
 - **Sandboxes are preserved** after test completion
+- **Log level set to DEBUG** showing all internal operations
 - **Detailed output** shows sandbox creation and cleanup
 - **Environment inspection** possible by examining preserved sandboxes
 - **Full command tracing** with `set -x`

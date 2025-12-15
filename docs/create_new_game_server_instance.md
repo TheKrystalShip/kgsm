@@ -19,7 +19,7 @@ There are three ways to create a new game server instance:
 This is the simplest way to create an instance:
 
 ```sh
-./kgsm.sh --create <blueprint> [--install-dir <directory>] [--name <name>]
+./kgsm.sh create <blueprint> [--install-dir <directory>] [--name <name>]
 ```
 
 ### Arguments
@@ -34,7 +34,7 @@ This is the simplest way to create an instance:
 ### Example
 
 ```sh
-./kgsm.sh --create factorio --install-dir /opt/servers --name factorio-space-age
+./kgsm.sh create factorio --install-dir /opt/servers --name factorio-space-age
 ```
 
 ---
@@ -62,7 +62,7 @@ For advanced users, each step can be executed manually. All modules are complete
 
 ### Step-by-Step Breakdown
 
-Here's how the command `./kgsm.sh --create factorio --install-dir /opt/test` translates into individual steps:
+Here's how the command `./kgsm.sh create factorio --install-dir /opt/test` translates into individual steps:
 
 ### 1. Choose a Blueprint File
 
@@ -82,7 +82,7 @@ Custom blueprints are prioritized over default ones, and native blueprints are p
 Run:
 
 ```sh
-instance_config=$(./modules/instances.sh --create factorio --install-dir /opt/test --name my-factorio-server)
+instance_config=$(./commands/instances.sh create factorio --install-dir /opt/test --name my-factorio-server)
 ```
 
 This generates a configuration file for the new instance. The `--name` parameter is optional - if not provided, KGSM will generate a unique identifier for the instance.
@@ -94,7 +94,7 @@ This generates a configuration file for the new instance. The `--name` parameter
 Run:
 
 ```sh
-./modules/directories.sh -i "$instance_config" --create
+./commands/directories.sh create "$instance_config"
 ```
 
 This sets up the required directory structure.
@@ -106,7 +106,7 @@ This sets up the required directory structure.
 Run:
 
 ```sh
-./modules/files.sh -i "$instance_config" --create
+./commands/files.sh create "$instance_config"
 ```
 
 This generates the `<instance-name>.manage.sh` file to manage the service. If applicable:
