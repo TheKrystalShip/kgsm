@@ -67,16 +67,11 @@ function print_assert_result() {
 
   if [[ "$result" == "PASS" ]]; then
     ((ASSERT_PASSED++))
-    echo "✓ PASS: $message"
   else
     ((ASSERT_FAILED++))
-    echo "✗ FAIL: $message"
   fi
 
-  # Log to test log if available
-  if [[ -n "${KGSM_TEST_LOG:-}" ]]; then
-    echo "[$result] $message [$caller_info]" >>"$KGSM_TEST_LOG" 2>/dev/null || true
-  fi
+  log_assertion "$result" "$message" "$caller_info"
 }
 
 # =============================================================================

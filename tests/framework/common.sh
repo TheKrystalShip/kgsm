@@ -7,6 +7,12 @@
 #
 # Common functions and utilities shared across all test files
 
+# Source centralized logging module
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [[ -f "$SCRIPT_DIR/logging.sh" ]]; then
+  source "$SCRIPT_DIR/logging.sh"
+fi
+
 # =============================================================================
 # CONSTANTS
 # =============================================================================
@@ -48,6 +54,16 @@ function setup_test_environment() {
 
   if [[ -z "${KGSM_TEST_SANDBOX:-}" ]]; then
     echo "ERROR: KGSM_TEST_SANDBOX not set" >&2
+    exit $EC_ERROR
+  fi
+
+  # Source logging lib
+  local logging_lib="$(dirname "${BASH_SOURCE[0]}")/logging.sh"
+  if [[ -f "$logging_lib" ]]; then
+    # shellcheck disable=SC1090
+    source "$logging_lib"
+  else
+    echo "ERROR: Could not find logging library: $logging_lib" >&2
     exit $EC_ERROR
   fi
 
@@ -95,32 +111,25 @@ function setup_test_environment() {
 # LOGGING UTILITIES
 # =============================================================================
 
-# Log test message
+# Log test message (internal, DEBUG level)
 function log_test() {
   local message="$1"
-  local timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
 
-  if [[ -n "${KGSM_TEST_LOG:-}" ]]; then
-    echo "[$timestamp] [TEST] $message" >>"$KGSM_TEST_LOG"
-  fi
-
-  if [[ "${KGSM_DEBUG:-false}" == "true" ]]; then
-    printf "${PURPLE}[DEBUG]${NC} %s\n" "$message" >&2
-  fi
+  log_debug "$message" 3
 }
 
-# Log test step
+# Log test step (INFO level with visual marker)
 function log_step() {
   local step_name="$1"
-  printf "${CYAN}[STEP]${NC} %s\n" "$step_name" >&2
-  log_test "STEP: $step_name"
+
+  log_test_step "$step_name"
 }
 
-# Log test info
+# Log test info (INFO level)
 function log_info() {
   local message="$1"
-  printf "${BLUE}[INFO]${NC} %s\n" "$message" >&2
-  log_test "INFO: $message"
+
+  __log "$LOG_LEVEL_INFO" "$LOG_LEVEL_NAME_INFO" "$BLUE" "$message" 3
 }
 
 # =============================================================================

@@ -22,6 +22,11 @@ readonly SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly TESTS_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 export KGSM_ROOT="$(cd "$TESTS_ROOT/.." && pwd)"
 
+# Source centralized logging module for runner
+if [[ -f "$SCRIPT_DIR/logging.sh" ]]; then
+  source "$SCRIPT_DIR/logging.sh"
+fi
+
 # Test configuration file
 readonly TEST_CONFIG="${TESTS_ROOT}/config/test.conf"
 
@@ -98,23 +103,32 @@ function print_debug() {
   fi
 }
 
-# Logging function
+# Logging function (runner-specific, writes to runner.log)
 function log_message() {
   local level="$1"
   shift
-  local timestamp="$(date '+%Y-%m-%d %H:%M:%S')"
+  local message="$*"
+  local timestamp
+  timestamp=$(date -Iseconds)
 
+  # Write to runner log in standardized format
   if [[ -n "$TEST_LOG_DIR" ]]; then
-    echo "[$timestamp] [$level] $*" >>"$TEST_LOG_DIR/runner.log"
+    echo "[$timestamp] [$level] [runner.sh] $message" >>"$TEST_LOG_DIR/runner.log"
   fi
 
+  # Console output
   case "$level" in
-  "INFO") print_info "$*" ;;
-  "SUCCESS") print_success "$*" ;;
-  "WARNING") print_warning "$*" ;;
-  "ERROR") print_error "$*" ;;
-  "DEBUG") print_debug "$*" ;;
+  "INFO") print_info "$message" ;;
+  "SUCCESS") print_success "$message" ;;
+  "WARNING") print_warning "$message" ;;
+  "ERROR") print_error "$message" ;;
+  "DEBUG") print_debug "$message" ;;
   esac
+}
+
+# Strip ANSI escape codes from text
+function strip_ansi() {
+  sed 's/\x1b\[[0-9;]*m//g'
 }
 
 # =============================================================================
@@ -139,6 +153,8 @@ function load_test_config() {
 function create_sandbox() {
   local sandbox_id="$1"
   local sandbox_path="$TEST_SANDBOX_ROOT/$sandbox_id"
+
+  log_message "DEBUG" "Creating sandbox: $sandbox_path"
 
   # Remove existing sandbox if it exists
   if [[ -d "$sandbox_path" ]]; then
@@ -283,20 +299,34 @@ function execute_test() {
   export KGSM_TEST_MODE="true"
   export KGSM_TEST_LOG="$test_log"
   export KGSM_TEST_SANDBOX="$sandbox_path"
+  export KGSM_LOG_CONSOLE_ENABLED="false"  # Disable console output during test execution
+
+  # Set log level from environment or default to INFO
+  export KGSM_TEST_LOG_LEVEL="${KGSM_TEST_LOG_LEVEL:-INFO}"
 
   if [[ "$TEST_DEBUG" == "true" ]]; then
     export KGSM_DEBUG="true"
+    export KGSM_TEST_LOG_LEVEL="DEBUG"
     set -x
   fi
 
   local start_time="$(date +%s)"
   local exit_code=0
 
-  # Execute the test
-  if bash "$test_file" >>"$test_log" 2>&1; then
+  # Execute the test and capture output
+  # Instead of redirecting everything, let the logging module handle file writes
+  # Capture stderr/stdout only for unexpected output (errors, debug info from code under test)
+  local captured_output
+  if captured_output=$(bash "$test_file" 2>&1); then
     exit_code=$EC_SUCCESS
   else
     exit_code=$?
+  fi
+
+  # If there was any captured output (from code under test, not framework), log it
+  if [[ -n "$captured_output" ]]; then
+    # Strip ANSI codes and append to test log
+    echo "$captured_output" | strip_ansi >> "$test_log"
   fi
 
   local end_time="$(date +%s)"

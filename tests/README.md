@@ -148,6 +148,9 @@ SKIP_LONG_DOWNLOAD_TESTS=true
 TEST_DEFAULT_TIMEOUT=300
 TEST_SERVER_STARTUP_TIMEOUT=120
 
+# Set log level (DEBUG|INFO|WARN|ERROR)
+export KGSM_TEST_LOG_LEVEL=INFO  # Default is INFO
+
 # Select test games
 TEST_GAMES="factorio necesse"
 ```
@@ -255,10 +258,13 @@ assert_instance_exists "instance_name" "message"
 ### Utility Functions
 
 ```bash
-# Logging
-log_test "message"          # Log test information
-log_step "step_name"        # Log test step
-log_info "message"          # Log general info
+# Logging (centralized logging system)
+log_debug "message"         # Log at DEBUG level (internal details)
+log_info "message"          # Log at INFO level (general info)
+log_warn "message"          # Log at WARN level (warnings)
+log_error "message"         # Log at ERROR level (errors)
+log_step "step_name"        # Log test step (INFO level with marker)
+log_test "message"          # Legacy: logs at DEBUG level
 
 # Test management
 skip_test "reason"          # Skip current test
@@ -290,8 +296,37 @@ Enable debug mode to preserve test environments:
 This will:
 - Preserve sandbox directories after test completion
 - Show debug output during execution
+- Set log level to DEBUG (shows all internal operations)
 - Enable verbose logging
 - Display sandbox paths for manual inspection
+
+### Log Format
+
+The testing framework uses a standardized log format across all logs:
+
+```
+[TIMESTAMP] [LEVEL] [SOURCE] message
+```
+
+**Example log entries:**
+```
+[2025-12-15T10:30:45-05:00] [INFO] [test_example.sh:42 in test_function()] Testing feature X
+[2025-12-15T10:30:45-05:00] [ERROR] [test_example.sh:45 in test_function()] FAIL: Expected value did not match
+[2025-12-15T10:30:46-05:00] [DEBUG] [fixtures.sh:62 in create_mock_config()] Created mock config: /tmp/test.ini
+```
+
+**Log Levels:**
+- `DEBUG` - Internal operations, fixture creation, detailed trace
+- `INFO` - Test steps, assertions, general progress
+- `WARN` - Non-critical issues, deprecated usage
+- `ERROR` - Test failures, critical errors
+
+**Benefits:**
+- No duplicate log entries (each event logged once)
+- No ANSI escape codes in log files (clean, parseable)
+- Caller information preserved (file:line in function())
+- Consistent timestamp format (ISO 8601 with timezone)
+- Easy to grep and filter by level
 
 ### Examining Test Logs
 

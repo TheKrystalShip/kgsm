@@ -52,7 +52,7 @@ type=native
 created=$(date '+%Y-%m-%d %H:%M:%S')
 EOF
 
-  log_test "Created mock instance config: $config_file"
+  log_debug "Created mock instance config: $config_file" 3
   echo "$config_file"
 }
 
@@ -103,7 +103,8 @@ EOF
   done
 
   chmod +x "$override_file"
-  log_test "Created mock override file: $override_file with functions: ${function_names[*]}"
+
+  log_debug "Created mock override file: $override_file with functions: ${function_names[*]}" 3
   echo "$override_file"
 }
 
@@ -155,7 +156,8 @@ EOF
   done
 
   chmod +x "$script_path"
-  log_test "Created mock management script: $script_path with functions: ${function_names[*]}"
+
+  log_debug "Created mock management script: $script_path with functions: ${function_names[*]}" 3
   echo "$script_path"
 }
 
@@ -212,7 +214,7 @@ EOF
 
   fi
 
-  log_test "Created mock blueprint: $blueprint_file"
+  log_debug "Created mock blueprint: $blueprint_file" 3
   echo "$blueprint_file"
 }
 
@@ -230,7 +232,7 @@ function cleanup_mock_files() {
   for path in "${paths[@]}"; do
     if [[ -e "$path" ]]; then
       rm -rf "$path"
-      log_test "Cleaned up mock file/directory: $path"
+      log_debug "Cleaned up mock file/directory: $path" 3
     fi
   done
 }
