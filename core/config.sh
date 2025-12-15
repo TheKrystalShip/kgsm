@@ -38,17 +38,20 @@ if [[ -z "$KGSM_CONFIG_LOADED" ]]; then
     fi
   fi
 
-  while IFS= read -r line || [ -n "$line" ]; do
-    # Ignore comment lines and empty lines
-    if [[ "$line" =~ ^#.*$ ]] || [[ -z "$line" ]]; then continue; fi
+  # Use grep to pre-filter config file, extracting only non-comment, non-whitespace lines containing '='
+  # This significantly reduces debug trace noise while preserving parsing error visibility
+  while IFS= read -r line; do
     # Parse key=value and set each config with a prefix globally and export it
     if [[ "$line" =~ ^([^=]+)=(.*)$ ]]; then
       key="${BASH_REMATCH[1]}"
       value="${BASH_REMATCH[2]}"
       declare -g "config_${key}=${value}"
       export "config_${key}"
+    else
+      # Warn about malformed config lines that passed grep but failed regex parsing
+      __print_warning "Skipping malformed config line: $line" >&2
     fi
-  done <"$CONFIG_FILE"
+  done < <(grep -E '^[^#[:space:]].*=' "$CONFIG_FILE")
 
   export KGSM_CONFIG_LOADED=1
 fi
@@ -77,7 +80,8 @@ function __merge_user_config_with_default() {
 
       if [[ -n "$varname" ]]; then
         # Check if the variable exists in user config
-        user_value=$(grep -m 1 "^$varname=" "$CONFIG_FILE")
+        # Use grep to extract matching key=value line from user config
+        user_value=$(grep -m 1 "^$varname=" "$CONFIG_FILE" 2>/dev/null)
 
         if [[ -n "$user_value" ]]; then
           # Output the commented block only if it's not already commented
@@ -108,7 +112,8 @@ function __merge_user_config_with_default() {
     varname=$(echo "$block" | grep -oP '^[^#=\n]+(?==)')
 
     if [[ -n "$varname" ]]; then
-      user_value=$(grep -m 1 "^$varname=" "$CONFIG_FILE")
+      # Use grep to extract matching key=value line from user config
+      user_value=$(grep -m 1 "^$varname=" "$CONFIG_FILE" 2>/dev/null)
 
       if [[ -n "$user_value" ]]; then
         echo "$block" | sed '/^#/! s/^/# /' >>"$MERGED_CONFIG_FILE"
@@ -261,8 +266,9 @@ function __get_config_value() {
   fi
 
   # Extract the value using grep and cut
+  # Use -f2- to preserve any '=' characters that may exist in the value (e.g., URLs with query params)
   local value
-  value=$(grep -m 1 "^$key=" "$target_file" | cut -d '=' -f2 | tr -d '"')
+  value=$(grep -m 1 "^$key=" "$target_file" | cut -d '=' -f2- | tr -d '"')
 
   # Check if the key was found
   if [[ -z "$value" ]]; then
