@@ -75,6 +75,11 @@ declare -g TESTS_FAILED=0
 declare -g TESTS_SKIPPED=0
 declare -g TESTS_ERRORS=0
 
+# Global assertion counters
+declare -g GLOBAL_ASSERTIONS_TOTAL=0
+declare -g GLOBAL_ASSERTIONS_PASSED=0
+declare -g GLOBAL_ASSERTIONS_FAILED=0
+
 # Test filters
 declare -ga TEST_TYPES=()
 declare -ga TEST_PATTERNS=()
@@ -354,6 +359,11 @@ function execute_test() {
       assert_passed=$(echo "$stats_value" | cut -d'/' -f1)
       assert_failed=$(echo "$stats_value" | cut -d'/' -f2)
       assert_total=$(echo "$stats_value" | cut -d'/' -f3)
+
+      # Accumulate global assertion counters
+      GLOBAL_ASSERTIONS_PASSED=$((GLOBAL_ASSERTIONS_PASSED + assert_passed))
+      GLOBAL_ASSERTIONS_FAILED=$((GLOBAL_ASSERTIONS_FAILED + assert_failed))
+      GLOBAL_ASSERTIONS_TOTAL=$((GLOBAL_ASSERTIONS_TOTAL + assert_total))
     fi
   fi
 
@@ -361,7 +371,7 @@ function execute_test() {
   case $exit_code in
   $EC_SUCCESS)
     TESTS_PASSED=$((TESTS_PASSED + 1))
-    log_message "SUCCESS" "(P:${assert_passed}/F:${assert_failed}/T:${assert_total}) ✓ $test_name (${duration}s)"
+    log_message "SUCCESS" "${assert_total} assertions ✓ $test_name (${duration}s)"
     ;;
   $EC_SKIP)
     TESTS_SKIPPED=$((TESTS_SKIPPED + 1))
@@ -369,7 +379,7 @@ function execute_test() {
     ;;
   *)
     TESTS_FAILED=$((TESTS_FAILED + 1))
-    log_message "ERROR" "(P:${assert_passed}/F:${assert_failed}/T:${assert_total}) ✗ $test_name (${duration}s)"
+    log_message "ERROR" "${assert_total} assertions (${assert_passed} passed, ${assert_failed} failed) ✗ $test_name (${duration}s)"
     if [[ "$TEST_VERBOSE" == "true" ]]; then
       print_error "Last 10 lines of test log:"
       tail -10 "$test_log" | while IFS= read -r line; do
@@ -432,10 +442,10 @@ function generate_summary() {
   print_color "$WHITE" "TEST SUMMARY"
   print_color "$WHITE" "$(printf '=%.0s' {1..60})"
 
-  printf "%-20s %s\n" "Total tests:" "$TESTS_TOTAL"
-  printf "${GREEN}%-20s %s${NC}\n" "Passed:" "$TESTS_PASSED"
-  printf "${RED}%-20s %s${NC}\n" "Failed:" "$TESTS_FAILED"
-  printf "${YELLOW}%-20s %s${NC}\n" "Skipped:" "$TESTS_SKIPPED"
+  printf "%-20s %s total (${GREEN}%s passed${NC}, ${RED}%s failed${NC}, ${YELLOW}%s skipped${NC})\n" \
+    "Tests:" "$TESTS_TOTAL" "$TESTS_PASSED" "$TESTS_FAILED" "$TESTS_SKIPPED"
+  printf "%-20s %s total (${GREEN}%s passed${NC}, ${RED}%s failed${NC})\n" \
+    "Assertions:" "$GLOBAL_ASSERTIONS_TOTAL" "$GLOBAL_ASSERTIONS_PASSED" "$GLOBAL_ASSERTIONS_FAILED"
   printf "%-20s %s\n" "Runtime:" "${total_runtime}s"
 
   if [[ -f "$TEST_RESULTS_FILE" ]]; then
