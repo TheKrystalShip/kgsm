@@ -87,20 +87,14 @@ function test_inject_overrides_success_single_function() {
   __logic_inject_overrides "$instance_name" "$mgmt_script"
   local exit_code=$?
 
-  assert_equals "$exit_code" "0" "Should return success"
+  assert_equals "$EC_OKAY" "$exit_code" "Should return success"
   assert_file_exists "$mgmt_script" "Management script should still exist"
 
   # Verify the function was injected (check for mock implementation)
-  if grep -q "Mock _get_latest_version implementation" "$mgmt_script"; then
-    log_test "Function successfully injected"
-  else
-    fail_test "Function was not injected correctly"
-  fi
+  assert_command_succeeds "grep -q 'Mock _get_latest_version implementation' '$mgmt_script'"
 
   # Verify placeholder was removed
-  if grep -q "Placeholder _get_latest_version" "$mgmt_script"; then
-    fail_test "Placeholder function was not replaced"
-  fi
+  assert_command_fails "grep -q 'Placeholder _get_latest_version' '$mgmt_script'"
 
   # Cleanup
   cleanup_mock_files "$instance_config" "$mgmt_script" "$override_file"
@@ -133,9 +127,7 @@ function test_inject_overrides_success_multiple_functions() {
   assert_file_contains "$mgmt_script" "Mock _deploy implementation" "Should contain _deploy"
 
   # Verify no placeholders remain
-  if grep -q "Placeholder" "$mgmt_script"; then
-    fail_test "Placeholder functions were not replaced"
-  fi
+  assert_command_fails "grep -q 'Placeholder _get_latest_version' '$mgmt_script'"
 
   cleanup_mock_files "$instance_config" "$mgmt_script" "$override_file"
   rm -rf "$(dirname "$instance_config")"
@@ -354,14 +346,10 @@ function test_inject_overrides_readonly_management_file() {
   if [[ "$exit_code" -eq 0 ]]; then
     log_test "Operation returned 0, checking if injection actually occurred"
     # Verify injection didn't actually happen
-    if grep -q "Mock _get_latest_version implementation" "$mgmt_script"; then
-      fail_test "Function was injected despite read-only directory"
-    else
-      log_test "Function was not injected as expected (sed failed silently)"
-    fi
+    assert_command_succeeds "grep -q 'Placeholder _get_latest_version' '$mgmt_script'" "Placeholder should remain since injection failed"
+    assert_command_fails "grep -q 'Mock _get_latest_version implementation' '$mgmt_script'" "Function should not be injected despite read-only directory"
   else
-    # Non-zero exit is also acceptable
-    log_test "Operation failed with exit code $exit_code as expected"
+    log_test "Function was not injected as expected (sed failed silently)"
   fi
 
   cleanup_mock_files "$instance_config" "$mgmt_script" "$override_file"
