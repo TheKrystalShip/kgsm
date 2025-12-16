@@ -26,6 +26,9 @@ ${UNDERLINE}Commands:${END}
   list                        List all configuration values
   reset                       Reset configuration to defaults
   validate                    Validate current configuration
+  merge                       Merge user config with updated defaults
+  rollback [generation]       Rollback config to previous backup
+  diff [generation]           Show differences from backup
   edit                        Open configuration file in editor
   help [command]              Show help information
 
@@ -41,6 +44,9 @@ ${UNDERLINE}Examples:${END}
   $self list --json
   $self reset
   $self validate
+  $self merge
+  $self rollback 0
+  $self diff 0
   $self edit
   $self help set
 
@@ -122,6 +128,53 @@ function show_usage_edit() {
 
   Examples:
     $self edit
+"
+}
+
+function show_usage_merge() {
+  echo -e "Usage: $self merge
+
+  Merge user configuration with updated defaults.
+
+  This command:
+    • Creates a numbered backup (.0)
+    • Runs any pending schema migrations
+    • Preserves user customizations
+    • Adds new keys from updated default config
+    • Comments out deprecated keys with warnings
+
+  Examples:
+    $self merge
+"
+}
+
+function show_usage_rollback() {
+  echo -e "Usage: $self rollback [generation]
+
+  Rollback configuration to a previous backup.
+
+  Arguments:
+    generation   Backup generation number (0-9, default: 0)
+                 0 = most recent, 9 = oldest
+
+  Examples:
+    $self rollback          # Rollback to most recent backup (.0)
+    $self rollback 0        # Same as above
+    $self rollback 2        # Rollback to third most recent (.2)
+"
+}
+
+function show_usage_diff() {
+  echo -e "Usage: $self diff [generation]
+
+  Show differences between current config and backup.
+
+  Arguments:
+    generation   Backup generation number (0-9, default: 0)
+
+  Examples:
+    $self diff              # Compare with most recent backup (.0)
+    $self diff 1            # Compare with second most recent (.1)
 "
 }
 
@@ -429,6 +482,131 @@ function _cmd_edit() {
   return $exit_code
 }
 
+function _cmd_merge() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_merge
+        return 0
+        ;;
+      *)
+        __print_error "Unknown option: $1"
+        show_usage_merge
+        return $EC_INVALID_ARG
+        ;;
+    esac
+  done
+
+  # Call merge function from core/config.sh
+  __merge_user_config_with_default
+  local exit_code=$?
+
+  case $exit_code in
+    $EC_SUCCESS_CONFIG_MERGED)
+      __print_success "Configuration merged successfully"
+      __print_info "Review $CONFIG_FILE for changes"
+      __print_info "Backup saved as ${CONFIG_FILE}.0"
+      ;;
+    $EC_FAILED_BACKUP)
+      __print_error "Failed to create backup"
+      ;;
+    $EC_MIGRATION_FAILED)
+      __print_error "Config migration failed"
+      ;;
+    *)
+      __print_error "Merge operation failed"
+      ;;
+  esac
+
+  return $exit_code
+}
+
+function _cmd_rollback() {
+  local generation="${1:-0}"
+
+  # Validate generation number
+  if ! [[ "$generation" =~ ^[0-9]$ ]]; then
+    __print_error "Invalid generation number: $generation"
+    __print_error "Must be 0-9"
+    show_usage_rollback
+    return $EC_INVALID_ARG
+  fi
+
+  local backup_file="${CONFIG_FILE}.${generation}"
+
+  # Check if backup exists
+  if [[ ! -f "$backup_file" ]]; then
+    __print_error "Backup not found: $backup_file"
+    __print_error "Available backups:"
+    for i in {0..9}; do
+      if [[ -f "${CONFIG_FILE}.${i}" ]]; then
+        __print_info "  .${i} - $(stat -c %y "${CONFIG_FILE}.${i}" 2>/dev/null | cut -d' ' -f1)"
+      fi
+    done
+    return $EC_FILE_NOT_FOUND
+  fi
+
+  # Save backup content to temp file BEFORE creating safety backup
+  # (which would rotate the backup files)
+  local temp_restore="${CONFIG_FILE}.restore.$$"
+  if ! cp "$backup_file" "$temp_restore"; then
+    __print_error "Failed to read backup file"
+    return $EC_GENERAL
+  fi
+
+  # Create backup of current config before rollback
+  if ! __create_config_backup; then
+    __print_error "Failed to create safety backup before rollback"
+    rm -f "$temp_restore"
+    return $EC_FAILED_BACKUP
+  fi
+
+  # Restore backup from temp file
+  if cp "$temp_restore" "$CONFIG_FILE"; then
+    rm -f "$temp_restore"
+    __print_success "Configuration rolled back to generation $generation"
+    __print_info "Previous config backed up as ${CONFIG_FILE}.0"
+    __print_info "Rolled back from: $backup_file"
+    return $EC_OKAY
+  else
+    __print_error "Failed to restore backup"
+    return $EC_GENERAL
+  fi
+}
+
+function _cmd_diff() {
+  local generation="${1:-0}"
+
+  # Validate generation number
+  if ! [[ "$generation" =~ ^[0-9]$ ]]; then
+    __print_error "Invalid generation number: $generation"
+    __print_error "Must be 0-9"
+    show_usage_diff
+    return $EC_INVALID_ARG
+  fi
+
+  local backup_file="${CONFIG_FILE}.${generation}"
+
+  # Check if backup exists
+  if [[ ! -f "$backup_file" ]]; then
+    __print_error "Backup not found: $backup_file"
+    return $EC_FILE_NOT_FOUND
+  fi
+
+  # Show diff
+  __print_info "Differences between current config and generation $generation:"
+  echo ""
+
+  if command -v diff &> /dev/null; then
+    diff -u --color=auto "$backup_file" "$CONFIG_FILE" || true
+  else
+    # Fallback if diff doesn't support --color
+    diff -u "$backup_file" "$CONFIG_FILE" || true
+  fi
+
+  return $EC_OKAY
+}
+
 function _cmd_help() {
   local command="$1"
 
@@ -452,6 +630,15 @@ function _cmd_help() {
       ;;
     validate)
       show_usage_validate
+      ;;
+    merge)
+      show_usage_merge
+      ;;
+    rollback)
+      show_usage_rollback
+      ;;
+    diff)
+      show_usage_diff
       ;;
     edit)
       show_usage_edit
@@ -513,6 +700,18 @@ case "$command" in
     ;;
   validate)
     _cmd_validate "$@"
+    exit $?
+    ;;
+  merge)
+    _cmd_merge "$@"
+    exit $?
+    ;;
+  rollback)
+    _cmd_rollback "$@"
+    exit $?
+    ;;
+  diff)
+    _cmd_diff "$@"
     exit $?
     ;;
   edit)

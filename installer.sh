@@ -540,6 +540,28 @@ function update_kgsm() {
 
   [[ $SILENT_MODE -eq 0 ]] && echo -e "${0##*/} ${COLOR_GREEN}SUCCESS${COLOR_END} KGSM updated to version $latest_version."
 
+  # Merge config with updated defaults after successful update
+  [[ $SILENT_MODE -eq 0 ]] && echo -e "${0##*/} ${COLOR_BLUE}INFO${COLOR_END} Merging configuration with updated defaults..."
+
+  # Source required modules for config merge
+  if [[ -f "${SELF_PATH}/core/bootstrap.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "${SELF_PATH}/core/bootstrap.sh"
+
+    # shellcheck disable=SC1091
+    source "${SELF_PATH}/core/config.sh"
+
+    # Perform merge
+    if __merge_user_config_with_default 2>/dev/null; then
+      [[ $SILENT_MODE -eq 0 ]] && echo -e "${0##*/} ${COLOR_GREEN}SUCCESS${COLOR_END} Configuration merged successfully."
+      [[ $SILENT_MODE -eq 0 ]] && echo -e "${0##*/} ${COLOR_BLUE}INFO${COLOR_END} Config backup saved as ${CONFIG_FILE}.0"
+    else
+      echo -e "${0##*/} ${COLOR_ORANGE}WARNING${COLOR_END} Config merge failed. Run './kgsm.sh config merge' manually." >&2
+    fi
+  else
+    echo -e "${0##*/} ${COLOR_ORANGE}WARNING${COLOR_END} Could not source config modules. Run './kgsm.sh config merge' manually." >&2
+  fi
+
   # Display changelog after update if not in silent mode
   if [[ $SILENT_MODE -eq 0 ]]; then
     local changelog

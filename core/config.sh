@@ -3,23 +3,6 @@
 # Disabling SC2086 globally
 # shellcheck disable=SC2086
 
-# Check for KGSM_ROOT
-if [[ -z "$KGSM_ROOT" ]]; then
-  # Absolute path to this script file
-  SELF_PATH="$(dirname "$(readlink -f "$0")")"
-  echo "$SELF_PATH"
-  while [[ "$SELF_PATH" != "/" ]]; do
-    [[ -f "$SELF_PATH/kgsm.sh" ]] && KGSM_ROOT="$SELF_PATH" && break
-    SELF_PATH="$(dirname "$SELF_PATH")"
-  done
-
-  if [[ -z "$KGSM_ROOT" ]]; then
-    echo "${0##*/} ERROR: Could not locate kgsm.sh. Ensure the directory structure is intact." && exit 1
-  fi
-
-  export KGSM_ROOT
-fi
-
 export CONFIG_FILE="$KGSM_ROOT/config.ini"
 export DEFAULT_CONFIG_FILE="$KGSM_ROOT/config.default.ini"
 export MERGED_CONFIG_FILE="$KGSM_ROOT/config.merged.ini"
@@ -39,16 +22,32 @@ if [[ -z "$KGSM_CONFIG_LOADED" ]]; then
   fi
 
   # Use grep to pre-filter config file, extracting only non-comment, non-whitespace lines containing '='
-  # This significantly reduces debug trace noise while preserving parsing error visibility
+  # This now includes support for INI sections while maintaining backward compatibility with flat format
+  # Section headers (e.g., [section]) are filtered out by excluding lines with '[' character
   # Use mapfile to read config lines into array directly to iterate over
-  mapfile -t config_lines < <(grep -E '^[^#[:space:]].*=' "$CONFIG_FILE")
+  mapfile -t config_lines < <(grep -E '^[^#[:space:]\[].*=' "$CONFIG_FILE")
 
   # Parse each config line and export as global variable
   for line in "${config_lines[@]}"; do
     # Parse key=value and set each config with a prefix globally and export it
     if [[ "$line" =~ ^([^=]+)=(.*)$ ]]; then
-      declare -g -r "config_${BASH_REMATCH[1]}=${BASH_REMATCH[2]}"
-      export "config_${BASH_REMATCH[1]}"
+      key="${BASH_REMATCH[1]}"
+      value="${BASH_REMATCH[2]}"
+
+      # Trim whitespace from key and value
+      key="${key#"${key%%[![:space:]]*}"}"
+      key="${key%"${key##*[![:space:]]}"}"
+      value="${value#"${value%%[![:space:]]*}"}"
+      value="${value%"${value##*[![:space:]]}"}"
+
+      # Remove quotes from value if present
+      value="${value#\"}"
+      value="${value%\"}"
+      value="${value#\'}"
+      value="${value%\'}"
+
+      declare -g -r "config_${key}=${value}"
+      export "config_${key}"
     else
       # Warn about malformed config lines that passed grep but failed regex parsing
       __print_warning "Skipping malformed config line: $line"
@@ -60,85 +59,256 @@ if [[ -z "$KGSM_CONFIG_LOADED" ]]; then
   export KGSM_CONFIG_LOADED=1
 fi
 
-function __merge_user_config_with_default() {
+# Create numbered backup of config file
+function __create_config_backup() {
+  local max_backups=10
 
-  backup_file="${CONFIG_FILE}.$(get_version).bak"
+  # Rotate existing backups (9 -> 10, 8 -> 9, ..., 0 -> 1)
+  for ((i=max_backups-1; i>=0; i--)); do
+    local current="${CONFIG_FILE}.${i}"
+    local next="${CONFIG_FILE}.$((i+1))"
 
-  __print_info "Updating ${CONFIG_FILE} ..."
-
-  # Back up existing config
-  cp "$CONFIG_FILE" "${backup_file}"
-
-  # Start with an empty merged file
-  touch "$MERGED_CONFIG_FILE"
-
-  # Temporary variables for holding block content
-  block=""
-  varname=""
-
-  # Read the default config line by line
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    if [[ -z "$line" ]]; then
-      # Process the block when we reach an empty line
-      varname=$(echo "$block" | grep -oP '^[^#=\n]+(?==)')
-
-      if [[ -n "$varname" ]]; then
-        # Check if the variable exists in user config
-        # Use grep to extract matching key=value line from user config
-        user_value=$(grep -m 1 "^$varname=" "$CONFIG_FILE" 2>/dev/null)
-
-        if [[ -n "$user_value" ]]; then
-          # Output the commented block only if it's not already commented
-          echo "$block" | sed '/^#/! s/^/# /' >>"$MERGED_CONFIG_FILE"
-          echo "$user_value" >>"$MERGED_CONFIG_FILE"
-        else
-          # Use the block as is
-          echo "$block" >>"$MERGED_CONFIG_FILE"
-        fi
+    if [[ -f "$current" ]]; then
+      if [[ $i -eq $((max_backups-1)) ]]; then
+        # Remove oldest backup
+        rm -f "$current"
       else
-        # No variable in the block, just copy it
-        echo "$block" >>"$MERGED_CONFIG_FILE"
+        # Rotate backup
+        mv "$current" "$next" 2>/dev/null || true
       fi
-
-      # Append a newline after processing each block
-      echo >>"$MERGED_CONFIG_FILE"
-
-      # Reset the block
-      block=""
-    else
-      # Accumulate lines into the block
-      block+="$line"$'\n'
     fi
-  done <"$DEFAULT_CONFIG_FILE"
+  done
 
-  # Handle the last block (if file does not end with a newline)
-  if [[ -n "$block" ]]; then
-    varname=$(echo "$block" | grep -oP '^[^#=\n]+(?==)')
-
-    if [[ -n "$varname" ]]; then
-      # Use grep to extract matching key=value line from user config
-      user_value=$(grep -m 1 "^$varname=" "$CONFIG_FILE" 2>/dev/null)
-
-      if [[ -n "$user_value" ]]; then
-        echo "$block" | sed '/^#/! s/^/# /' >>"$MERGED_CONFIG_FILE"
-        echo "$user_value" >>"$MERGED_CONFIG_FILE"
-      else
-        echo "$block" >>"$MERGED_CONFIG_FILE"
-      fi
-    else
-      echo "$block" >>"$MERGED_CONFIG_FILE"
-    fi
+  # Create new backup at .0
+  if ! cp "$CONFIG_FILE" "${CONFIG_FILE}.0" 2>/dev/null; then
+    __print_error "Failed to create config backup"
+    return $EC_FAILED_BACKUP
   fi
 
-  mv "$MERGED_CONFIG_FILE" "$CONFIG_FILE"
-
-  __print_success "Configuration update completed. Backup saved as ${backup_file}."
-
-  __print_info "Please check ${CONFIG_FILE} for modified/new options"
-
-  # Global error trap system removed - errors handled explicitly
+  return 0
 }
 
+export -f __create_config_backup
+
+# Run config migrations if schema version differs
+function __run_config_migrations() {
+  local from_version="$1"
+  local to_version="$2"
+
+  # If versions are the same, no migration needed
+  if [[ "$from_version" -eq "$to_version" ]]; then
+    return 0
+  fi
+
+  __print_info "Running config migrations from v${from_version} to v${to_version}..."
+
+  local migrations_dir="$KGSM_ROOT/migrations/config"
+
+  # Check if migrations directory exists
+  if [[ ! -d "$migrations_dir" ]]; then
+    __print_error "Migrations directory not found: $migrations_dir"
+    return $EC_MIGRATION_NOT_FOUND
+  fi
+
+  # Run migrations sequentially
+  for ((v=from_version; v<to_version; v++)); do
+    local next=$((v+1))
+
+    # Find migration script (pattern: *_v<from>_to_v<to>.sh)
+    local migration_script
+    migration_script=$(find "$migrations_dir" -type f -name "*_v${v}_to_v${next}*.sh" -print -quit 2>/dev/null)
+
+    if [[ -z "$migration_script" ]] || [[ ! -f "$migration_script" ]]; then
+      __print_error "Migration script not found for v${v} -> v${next}"
+      return $EC_MIGRATION_NOT_FOUND
+    fi
+
+    __print_info "Executing migration: $(basename "$migration_script")"
+
+    # Execute migration
+    if ! bash "$migration_script" "$CONFIG_FILE"; then
+      __print_error "Migration failed: $(basename "$migration_script")"
+      return $EC_MIGRATION_FAILED
+    fi
+  done
+
+  __print_success "All migrations completed successfully"
+  return 0
+}
+
+export -f __run_config_migrations
+
+# Parse config file and build associative array of key=value pairs
+function __parse_config_to_map() {
+  local config_file="$1"
+  local -n key_map=$2
+
+  # Read config file line by line
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    # Skip empty lines, comments, and section headers
+    [[ -z "$line" ]] && continue
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" =~ ^\[[^]]+\]$ ]] && continue
+
+    # Parse key=value
+    if [[ "$line" =~ ^([^=]+)=(.*)$ ]]; then
+      local key="${BASH_REMATCH[1]}"
+      local value="${BASH_REMATCH[2]}"
+
+      # Trim whitespace from key
+      key="${key#"${key%%[![:space:]]*}"}"
+      key="${key%"${key##*[![:space:]]}"}"
+
+      # Store in map (value can be empty)
+      key_map["$key"]="$value"
+    fi
+  done < "$config_file"
+}
+
+export -f __parse_config_to_map
+
+# Handle deprecated keys found in user config but not in default
+function __handle_deprecated_keys() {
+  local -n _user_map=$1
+  local -n _default_map=$2
+  local merged_file="$3"
+
+  local has_deprecated=0
+
+  # Find keys in user config not in default
+  for key in "${!_user_map[@]}"; do
+    # Skip schema version key
+    [[ "$key" == "config_schema_version" ]] && continue
+
+    if [[ -z "${_default_map[$key]}" ]]; then
+      # Key is deprecated - add warning section if first deprecated key
+      if [[ "$has_deprecated" -eq 0 ]]; then
+        cat >> "$merged_file" << 'EOF'
+
+
+# ============================================================================
+# DEPRECATED KEYS
+# ============================================================================
+# The following keys are no longer used by KGSM and have been preserved
+# here for reference. They will be ignored by KGSM.
+# ============================================================================
+
+EOF
+        has_deprecated=1
+      fi
+
+      # Comment out the deprecated key
+      echo "# DEPRECATED: ${key}=${_user_map[$key]}" >> "$merged_file"
+
+      __print_warning "Deprecated configuration key found: $key"
+    fi
+  done
+
+  if [[ "$has_deprecated" -eq 1 ]]; then
+    __print_info "Review commented-out deprecated keys in $CONFIG_FILE"
+  fi
+
+  return 0
+}
+
+export -f __handle_deprecated_keys
+
+# Main merge function - merges user config with default config
+function __merge_user_config_with_default() {
+  __print_info "Merging configuration..."
+
+  # 1. Create numbered backup
+  if ! __create_config_backup; then
+    __print_error "Failed to create backup"
+    return $EC_FAILED_BACKUP
+  fi
+
+  # 2. Check schema versions
+  local user_schema current_schema
+  user_schema=$(__get_config_value "$CONFIG_FILE" "config_schema_version" 2>/dev/null || echo "0")
+  current_schema=$(__get_config_value "$DEFAULT_CONFIG_FILE" "config_schema_version" 2>/dev/null || echo "1")
+
+  # Run migrations if needed
+  if [[ "$user_schema" -lt "$current_schema" ]]; then
+    if ! __run_config_migrations "$user_schema" "$current_schema"; then
+      __print_error "Config migration failed"
+      return $EC_MIGRATION_FAILED
+    fi
+    # Reload user config after migration
+    user_schema="$current_schema"
+  fi
+
+  # 3. Parse both configs into associative arrays
+  declare -A user_keys default_keys
+  __parse_config_to_map "$CONFIG_FILE" user_keys
+  __parse_config_to_map "$DEFAULT_CONFIG_FILE" default_keys
+
+  # 4. Build merged config by iterating through default config structure
+  local merged_file="${CONFIG_FILE}.merged.$$"
+  local current_section=""
+  local in_comment_block=0
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    # Handle section headers
+    if [[ "$line" =~ ^\[([^]]+)\]$ ]]; then
+      current_section="${BASH_REMATCH[1]}"
+      echo "$line" >> "$merged_file"
+      continue
+    fi
+
+    # Handle empty lines
+    if [[ -z "$line" ]]; then
+      echo "" >> "$merged_file"
+      continue
+    fi
+
+    # Handle comment lines (preserve documentation)
+    if [[ "$line" =~ ^[[:space:]]*# ]]; then
+      echo "$line" >> "$merged_file"
+      continue
+    fi
+
+    # Handle key=value lines
+    if [[ "$line" =~ ^([^=]+)= ]]; then
+      local key="${BASH_REMATCH[1]}"
+      key="${key#"${key%%[![:space:]]*}"}"
+      key="${key%"${key##*[![:space:]]}"}"
+
+      # Check if user has customized this key
+      if [[ -n "${user_keys[$key]+isset}" ]]; then
+        # Use user's value
+        echo "${key}=${user_keys[$key]}" >> "$merged_file"
+      else
+        # Use default value (new key)
+        echo "$line" >> "$merged_file"
+      fi
+    else
+      # Copy line as-is (shouldn't reach here normally)
+      echo "$line" >> "$merged_file"
+    fi
+  done < "$DEFAULT_CONFIG_FILE"
+
+  # 5. Handle deprecated keys
+  __handle_deprecated_keys user_keys default_keys "$merged_file"
+
+  # 6. Atomic replace
+  if ! mv "$merged_file" "$CONFIG_FILE"; then
+    __print_error "Failed to replace config file"
+    rm -f "$merged_file"
+    return $EC_GENERAL
+  fi
+
+  __print_success "Configuration merged successfully"
+  __print_info "Backup saved as: ${CONFIG_FILE}.0"
+  __print_info "Please review ${CONFIG_FILE} for any changes"
+
+  return $EC_SUCCESS_CONFIG_MERGED
+}
+
+export -f __create_config_backup
+export -f __run_config_migrations
+export -f __parse_config_to_map
+export -f __handle_deprecated_keys
 export -f __merge_user_config_with_default
 
 # Function to add or update a config key in an instance config file
