@@ -17,6 +17,7 @@ Read these sections in order to understand the core concepts of how KGSM operate
 
 ## Workflows
 
+- [Configuration Management](configuration_management.md) - Managing KGSM settings, migrations, and backups
 - [Creating a new game server instance](create_new_game_server_instance.md) - Step-by-step guide to set up a new server
 - [Managing game servers](managing_game_servers.md) - Day-to-day operations for running your servers
 

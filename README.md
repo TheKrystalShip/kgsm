@@ -133,15 +133,40 @@ For detailed information on KGSM's capabilities, check the [project documentatio
 Keep KGSM up-to-date with:
 
 ```sh
-./kgsm.sh --update
+./installer.sh --update
 ```
+
+Your configuration will be automatically merged with new defaults, preserving your customizations while adding new features. See the [Configuration Management Guide](docs/configuration_management.md) for details.
+
+### Configuration Management
+
+KGSM includes powerful configuration management:
+
+```sh
+# View all configuration options
+./kgsm.sh config list
+
+# Set a configuration value
+./kgsm.sh config set enable_logging=true
+
+# Merge config with updated defaults
+./kgsm.sh config merge
+
+# Rollback to previous configuration
+./kgsm.sh config rollback
+
+# View configuration changes
+./kgsm.sh config diff
+```
+
+Learn more in the [Configuration Management Guide](docs/configuration_management.md).
 
 ### Troubleshooting
 
 If you encounter issues, use the repair option:
 
 ```sh
-./kgsm.sh --update --force
+./installer.sh --update --force
 ```
 
 This reinstalls KGSM while preserving your custom settings and server instances.
