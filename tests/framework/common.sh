@@ -7,12 +7,6 @@
 #
 # Common functions and utilities shared across all test files
 
-# Source centralized logging module
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-if [[ -f "$SCRIPT_DIR/logging.sh" ]]; then
-  source "$SCRIPT_DIR/logging.sh"
-fi
-
 # =============================================================================
 # CONSTANTS
 # =============================================================================
