@@ -282,7 +282,6 @@ export -f __find_override
 # Usage: __source_blueprint <blueprint_file> [<prefix>] [--force-reload]
 function __source_blueprint() {
   local blueprint_file="$1"
-  local prefix="${2:-blueprint_}"
 
   if [[ -z "$blueprint_file" ]]; then
     __print_error "No blueprint file specified."
@@ -303,21 +302,7 @@ function __source_blueprint() {
     exit $EC_PERMISSION
   fi
 
-  # Prefix all the variables in the blueprint file with the specified prefix
-  while IFS='=' read -r key value || [ -n "$key" ]; do
-    # Skip comments and empty lines
-    [[ "$key" =~ ^#.*$ || -z "$key" ]] && continue
-    key="${key// /}" # Remove spaces
-    value="${value## }"
-    value="${value%% }"
-    # Remove possible quotes
-    value="${value%\"}"
-    value="${value#\"}"
-    value="${value%\'}"
-    value="${value#\'}"
-    declare -g "${prefix}${key}=${value}"
-    export "${prefix}${key}"
-  done < <(grep -v '^[[:space:]]*$' "$blueprint_absolute_path" | grep -v '^[[:space:]]*#')
+  __source_with_prefix "$blueprint_absolute_path" "blueprint_"
 }
 
 export -f __source_blueprint
@@ -325,7 +310,8 @@ export -f __source_blueprint
 # Source the instance config file for a specific instance.
 # This function expects the instance_name as the first argument.
 # Usage: __source_instance <instance_name> [--force-reload]
-# The instance ID can be either an absolute path or just the instance name.
+# The instance name can be either an absolute path to the instance config file
+# or just the instance name.
 function __source_instance() {
   local instance_name="$1"
 
@@ -334,16 +320,17 @@ function __source_instance() {
     exit $EC_INVALID_ARG
   fi
 
+  local instance_config_file
+
   # $instance_name can be either an absolute path, or simply the instance name.
   # If it's an absolute path, we extract the name from it.
   if [[ "$instance_name" == /* ]]; then
-    # If it's an absolute path, we just use the basename
-    instance_name=$(basename "$instance_name")
+    # If it's an absolute path, we just use it
+    instance_config_file="$instance_name"
+  else
+    # Otherwise, we find the instance config file
+    instance_config_file=$(__find_instance_config "$instance_name")
   fi
-
-  # Locate the instance config file
-  local instance_config_file
-  instance_config_file=$(__find_instance_config "$instance_name")
 
   if [[ -z "$instance_config_file" ]]; then
     __print_error "Instance config file for '$instance_name' not found."
@@ -351,32 +338,7 @@ function __source_instance() {
   fi
 
   # Source the instance config file and prefix all variables with "instance_" if needed
-  # This allows us to handle both formats (with and without the "instance_" prefix)
-  while IFS='=' read -r key value || [ -n "$key" ]; do
-    # Skip comments and empty lines
-    [[ "$key" =~ ^#.*$ || -z "$key" ]] && continue
-
-    # Remove leading/trailing whitespace
-    key="${key#"${key%%[![:space:]]*}"}"
-    key="${key%"${key##*[![:space:]]}"}"
-    value="${value#"${value%%[![:space:]]*}"}"
-    value="${value%"${value##*[![:space:]]}"}"
-
-    # Remove quotes from value
-    value="${value#\"}"
-    value="${value%\"}"
-    value="${value#\'}"
-    value="${value%\'}"
-
-    # Check if the key already starts with "instance_"
-    if [[ "$key" =~ ^instance_ ]]; then
-      # If it already has the prefix, set it in the current shell
-      declare -g "${key}=${value}" && export "${key?}"
-    else
-      # Otherwise, add the "instance_" prefix and set it in the current shell
-      declare -g "instance_${key}=${value}" && export "instance_${key}"
-    fi
-  done < <(grep -v '^[[:space:]]*$' "$instance_config_file" | grep -v '^[[:space:]]*#')
+  __source_with_prefix "$instance_config_file" "instance_"
 }
 
 export -f __source_instance
@@ -409,5 +371,52 @@ function __get_instance_config_value() {
 }
 
 export -f __get_instance_config_value
+
+function __source_with_prefix() {
+  local file_path="$1"
+  local prefix="${2:-}"
+
+  if [[ -z "$file_path" ]]; then
+    __print_error "No file path specified."
+    exit $EC_INVALID_ARG
+  fi
+
+  if [[ ! -f "$file_path" ]]; then
+    __print_error "File not found: $file_path"
+    exit $EC_FILE_NOT_FOUND
+  fi
+
+  mapfile -t key_value_pairs < <(grep -E '^[^#[:space:]\[].*=' "$file_path")
+
+  for line in "${key_value_pairs[@]}"; do
+    # Parse key=value and set each with a prefix globally and export it
+    if [[ "$line" =~ ^([^=]+)=(.*)$ ]]; then
+      key="${BASH_REMATCH[1]}"
+      value="${BASH_REMATCH[2]}"
+
+      # Trim whitespace from key and value
+      key="${key#"${key%%[![:space:]]*}"}"
+      key="${key%"${key##*[![:space:]]}"}"
+      value="${value#"${value%%[![:space:]]*}"}"
+      value="${value%"${value##*[![:space:]]}"}"
+
+      # Remove quotes from value if present
+      value="${value#\"}"
+      value="${value%\"}"
+      value="${value#\'}"
+      value="${value%\'}"
+
+      declare -g -r "${prefix}${key}=${value}"
+      export "${prefix}${key}"
+    else
+      # Warn about malformed lines that passed grep but failed regex parsing
+      __print_warning "Skipping malformed line: $line"
+    fi
+  done
+
+  unset key_value_pairs
+}
+
+export -f __source_with_prefix
 
 export KGSM_LOADER_LOADED=1

@@ -49,9 +49,7 @@ function __logic_create_container_compose_file() {
     return $EC_FILE_NOT_FOUND
   fi
 
-  # Source the instance config to make all variables available for template expansion
-  # shellcheck disable=SC1090
-  source <(__prefix_config "$instance_config_file" "instance") 2>/dev/null || return $EC_FAILED_SOURCE
+  __source_instance "$instance_config_file" || return $EC_FAILED_SOURCE
 
   local container_file="${instance_working_dir}/${instance_name}.docker-compose.yml"
 

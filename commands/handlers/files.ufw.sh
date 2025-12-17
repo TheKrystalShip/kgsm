@@ -61,7 +61,7 @@ function __logic_enable_ufw_integration() {
 
   # Source instance config to make variables available for template expansion
   # shellcheck disable=SC1090
-  source <(__prefix_config "$instance_config_file" "instance") 2>/dev/null || return $EC_FAILED_SOURCE
+  __source_instance "$instance_config_file" || return $EC_FAILED_SOURCE
 
   # Create UFW rule file from template
   if ! __logic_expand_template "ufw" "$temp_ufw_file"; then

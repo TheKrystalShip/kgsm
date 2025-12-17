@@ -48,6 +48,11 @@ function __logic_inject_overrides() {
     return $EC_INVALID_CONFIG
   fi
 
+  # If it's a container blueprint, overrides are not supported
+  if [[ "$blueprint_file" == *.docker-compose.yml ]]; then
+    return 0
+  fi
+
   # Get blueprint name from the blueprint file's 'name' field
   local blueprint_name
   blueprint_name=$(__get_config_value "$blueprint_file" "name" 2> /dev/null)
