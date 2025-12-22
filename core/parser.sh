@@ -50,7 +50,7 @@ function __parse_ufw_to_upnp_ports() {
     # Nothing mathes, definition might be wrongly formatted
     else
       __print_error "Invalid port definition: $range"
-      return $EC_GENERAL
+      return $EC_ERROR
     fi
   done
 

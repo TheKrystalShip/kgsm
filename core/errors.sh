@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 
-# Exit codes
-declare -g -r EC_OKAY=0
-export EC_OKAY
+if [[ -n "${KGSM_ERRORS_LOADED:-}" ]]; then
+  return 0
+fi
 
-declare -g -r EC_GENERAL=1
-export EC_GENERAL
+# Exit codes
+declare -g -r EC_SUCCESS=0
+export EC_SUCCESS
+
+declare -g -r EC_ERROR=1
+export EC_ERROR
 
 declare -g -r EC_KGSM_ROOT=2
 export EC_KGSM_ROOT
@@ -94,9 +98,6 @@ export EC_INVALID_INSTANCE
 declare -g -r EC_FAILED_MV=30
 export EC_FAILED_MV
 
-declare -g -r EC_ERROR=31
-export EC_ERROR
-
 declare -g -r EC_FAILED_TOUCH=32
 export EC_FAILED_TOUCH
 
@@ -108,9 +109,6 @@ export EC_MISSING_ARGS
 
 declare -g -r EC_SKIP=35
 export EC_SKIP
-
-declare -g -r EC_SUCCESS=36
-export EC_SUCCESS
 
 declare -g -r EC_EVENT_TYPE_INVALID=37
 export EC_EVENT_TYPE_INVALID
@@ -290,8 +288,8 @@ declare -g -r EC_SUCCESS_NETWORK_PORT_IN_USE=255
 export EC_SUCCESS_NETWORK_PORT_IN_USE
 
 declare -A EXIT_CODES=(
-   [$EC_OKAY]="No error"
-   [$EC_GENERAL]="General error"
+   [$EC_SUCCESS]="Operation successful"
+   [$EC_ERROR]="General error"
    [$EC_KGSM_ROOT]="KGSM_ROOT not set"
    [$EC_FAILED_CONFIG]="Failed to load config.ini file"
    [$EC_INVALID_CONFIG]="Invalid configuration"
@@ -326,7 +324,6 @@ declare -A EXIT_CODES=(
    [$EC_FAILURE]="Operation failed"
    [$EC_MISSING_ARGS]="Missing arguments"
    [$EC_SKIP]="Operation skipped"
-   [$EC_SUCCESS]="Operation successful"
    [$EC_EVENT_TYPE_INVALID]="Invalid event type"
    [$EC_EVENT_PARAMS_INVALID]="Invalid event parameters"
    [$EC_EVENT_TRANSPORT_FAILED]="Event transport failed"
@@ -338,4 +335,5 @@ declare -A EXIT_CODES=(
    [$EC_WATCHER_LOG_FILE_MISSING]="Log file not found for instance"
 )
 
-export KGSM_ERRORS_LOADED=1
+declare -g KGSM_ERRORS_LOADED=1
+export KGSM_ERRORS_LOADED

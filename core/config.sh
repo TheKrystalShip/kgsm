@@ -295,7 +295,7 @@ function __merge_user_config_with_default() {
   if ! mv "$merged_file" "$CONFIG_FILE"; then
     __print_error "Failed to replace config file"
     rm -f "$merged_file"
-    return $EC_GENERAL
+    return $EC_ERROR
   fi
 
   __print_success "Configuration merged successfully"
@@ -835,7 +835,7 @@ function __open_config_editor() {
   if [[ $editor_exit_code -eq 0 ]]; then
     return 0
   else
-    return $EC_GENERAL
+    return $EC_ERROR
   fi
 }
 
