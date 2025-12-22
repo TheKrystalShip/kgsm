@@ -22,4 +22,5 @@ logs/*
 # The test logs
 tests/logs/*
 
-tests/test-results.txt
+# Spec documents
+docs/specs/*.md
