@@ -229,19 +229,19 @@ export -f __find_template
 
 # Find the overrides file for a specific instance.
 function __find_override() {
-  local instance_name=$1
+  local _instance_name=$1
 
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     __print_error "No 'instance_name' specified."
     exit $EC_INVALID_ARG
   fi
 
   # Locate the instance config file
   local instance_config_file
-  instance_config_file=$(__find_instance_config "$instance_name")
+  instance_config_file=$(__find_instance_config "$_instance_name")
 
   if [[ -z "$instance_config_file" ]]; then
-    __print_error "Instance config file for '$instance_name' not found."
+    __print_error "Instance config file for '$_instance_name' not found."
     exit $EC_FILE_NOT_FOUND
   fi
 
@@ -250,7 +250,7 @@ function __find_override() {
   instance_blueprint_file=$(grep -E '^blueprint_file\s*=' "$instance_config_file" | cut -d'=' -f2 | tr -d '"')
 
   if [[ -z "$instance_blueprint_file" ]]; then
-    __print_error "No blueprint file specified for instance '$instance_name'."
+    __print_error "No blueprint file specified for instance '$_instance_name'."
     exit $EC_INVALID_ARG
   fi
 
@@ -312,32 +312,32 @@ function __source_blueprint() {
 export -f __source_blueprint
 
 # Source the instance config file for a specific instance.
-# This function expects the instance_name as the first argument.
-# Usage: __source_instance <instance_name> [--force-reload]
+# This function expects the _instance_name as the first argument.
+# Usage: __source_instance <instance_name>
 # The instance name can be either an absolute path to the instance config file
 # or just the instance name.
 function __source_instance() {
-  local instance_name="$1"
+  local _instance_name="$1"
 
-  if [[ -z "$instance_name" ]]; then
-    __print_error "No 'instance_name' specified."
+  if [[ -z "$_instance_name" ]]; then
+    __print_error "No '_instance_name' specified."
     exit $EC_INVALID_ARG
   fi
 
   local instance_config_file
 
-  # $instance_name can be either an absolute path, or simply the instance name.
+  # $_instance_name can be either an absolute path, or simply the instance name.
   # If it's an absolute path, we extract the name from it.
-  if [[ "$instance_name" == /* ]]; then
+  if [[ "$_instance_name" == /* ]]; then
     # If it's an absolute path, we just use it
-    instance_config_file="$instance_name"
+    instance_config_file="$_instance_name"
   else
     # Otherwise, we find the instance config file
-    instance_config_file=$(__find_instance_config "$instance_name")
+    instance_config_file=$(__find_instance_config "$_instance_name")
   fi
 
   if [[ -z "$instance_config_file" ]]; then
-    __print_error "Instance config file for '$instance_name' not found."
+    __print_error "Instance config file for '$_instance_name' not found."
     exit $EC_FILE_NOT_FOUND
   fi
 
@@ -350,20 +350,20 @@ export -f __source_instance
 # Get a single value from an instance config file without sourcing all variables
 # Usage: __get_instance_config_value <instance_name> <config_key>
 function __get_instance_config_value() {
-  local instance_name="$1"
+  local _instance_name="$1"
   local config_key="$2"
 
-  if [[ -z "$instance_name" || -z "$config_key" ]]; then
+  if [[ -z "$_instance_name" || -z "$config_key" ]]; then
     __print_error "Both instance_name and config_key must be specified."
     exit $EC_INVALID_ARG
   fi
 
   # Find the instance config file
   local instance_config_file
-  instance_config_file=$(__find_instance_config "$instance_name")
+  instance_config_file=$(__find_instance_config "$_instance_name")
 
   if [[ -z "$instance_config_file" ]]; then
-    __print_error "Instance config file for '$instance_name' not found."
+    __print_error "Instance config file for '$_instance_name' not found."
     exit $EC_FILE_NOT_FOUND
   fi
 
