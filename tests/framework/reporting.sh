@@ -522,6 +522,7 @@ function print_all_results_from_csv() {
   local test_types_found=()
 
   # Callback function to collect results by type
+  # shellcheck disable=SC2329
   function __collect_result() {
     local test_name="$1" test_type="$2" exit_code="$3" duration="$4"
     local timestamp="$5" a_passed="$6" a_failed="$7" a_total="$8"
@@ -790,6 +791,7 @@ function __read_stats_from_csv() {
   local -i assert_total=0 assert_passed=0 assert_failed=0
 
   # Callback function to process each CSV line
+  # shellcheck disable=SC2329
   function __count_stats() {
     local test_name="$1" test_type="$2" exit_code="$3" duration="$4"
     local timestamp="$5" a_passed="$6" a_failed="$7" a_total="$8"

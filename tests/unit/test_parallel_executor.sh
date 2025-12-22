@@ -67,8 +67,8 @@ function test_parallel_config_normalization() {
 
   # Should be a positive integer
   if [[ "$TEST_PARALLEL" =~ ^[0-9]+$ ]]; then
-    assert_true "[[ $TEST_PARALLEL -ge 1 ]]" "TEST_PARALLEL should be >= 1"
-    assert_true "[[ $TEST_PARALLEL -le 32 ]]" "TEST_PARALLEL should be <= 32"
+    assert_greater_than "$TEST_PARALLEL" 0 "TEST_PARALLEL should be greater than 0"
+    assert_less_than "$TEST_PARALLEL" 33 "TEST_PARALLEL should be less than or equal to 32"
   else
     fail_test "TEST_PARALLEL should be an integer, got: $TEST_PARALLEL"
   fi
@@ -107,8 +107,8 @@ function test_wait_for_job_slot_no_jobs() {
   end_time=$(date +%s)
   duration=$((end_time - start_time))
 
-  assert_equals "$exit_code" "0" "Should return success"
-  assert_true "[[ $duration -lt 2 ]]" "Should return quickly (< 2s)"
+  assert_equals "0" "$exit_code" "Should return success"
+  assert_less_than "$duration" 2 "Should return quickly (< 2s)"
 }
 
 function test_wait_for_job_slot_under_limit() {
@@ -137,8 +137,8 @@ function test_wait_for_job_slot_under_limit() {
   wait $job_pid 2>/dev/null || true
   TEST_PARALLEL="$original_parallel"
 
-  assert_equals "$exit_code" "0" "Should return success"
-  assert_true "[[ $duration -lt 2 ]]" "Should return quickly when under limit"
+  assert_equals "0" "$exit_code" "Should return success"
+  assert_less_than "$duration" 2 "Should return quickly when under limit"
 }
 
 # =============================================================================

@@ -186,7 +186,7 @@ function _run_tests() {
   echo -e "${BLUE}Validating test environment...${NC}"
   validate_test_environment
 
-  echo -e "${BLUE}Starting test execution...${NC}"
+  echo -e "${BLUE}Starting test execution...${NC}\n"
 
   # Execute the test runner with all arguments
   exec "$RUNNER_SCRIPT" "$@"
