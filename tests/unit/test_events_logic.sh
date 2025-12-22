@@ -20,14 +20,6 @@
 # TEST SETUP
 # =============================================================================
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Framework common functions
-source "$SCRIPT_DIR/../framework/common.sh"
-
-# KGSM bootstrapper
-source "$KGSM_ROOT/core/bootstrap.sh"
-
 # Test variables
 readonly TEST_NAME="events_logic"
 readonly HANDLER="$KGSM_ROOT/commands/handlers/events.sh"
@@ -37,7 +29,7 @@ readonly HANDLER="$KGSM_ROOT/commands/handlers/events.sh"
 # =============================================================================
 
 function setup_test() {
-  log_step "Setting up events logic tests"
+  log_test_step "Setting up events logic tests"
 
   # Verify test environment
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
@@ -55,7 +47,7 @@ function setup_test() {
   assert_equals "$KGSM_LOGIC_EVENTS_LOADED" "1" "Loaded guard should be 1"
 
   # Verify error codes are defined
-  assert_not_null "$EC_OKAY" "EC_OKAY should be defined"
+  assert_not_null "$EC_SUCCESS" "EC_SUCCESS should be defined"
   assert_not_null "$EC_EVENT_TYPE_INVALID" "EC_EVENT_TYPE_INVALID should be defined"
   assert_not_null "$EC_EVENT_PARAMS_INVALID" "EC_EVENT_PARAMS_INVALID should be defined"
 
@@ -75,7 +67,7 @@ function setup_test() {
   assert_not_null "${EVENT_CONFIGS[instance_removed]}" \
     "EVENT_CONFIGS should contain instance_removed"
 
-  log_test "Events handler environment validated"
+  log_test_step "Events handler environment validated"
 }
 
 # =============================================================================
@@ -83,27 +75,27 @@ function setup_test() {
 # =============================================================================
 
 function test_validate_event_type_valid_single_param() {
-  log_step "Testing __logic_validate_event_type with valid single-param event"
+  log_test_step "Testing __logic_validate_event_type with valid single-param event"
 
   __logic_validate_event_type "instance_ready"
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" \
-    "Should return EC_OKAY for valid event type 'instance_ready'"
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS for valid event type 'instance_ready'"
 }
 
 function test_validate_event_type_valid_multi_param() {
-  log_step "Testing __logic_validate_event_type with valid multi-param event"
+  log_test_step "Testing __logic_validate_event_type with valid multi-param event"
 
   __logic_validate_event_type "instance_version_updated"
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" \
-    "Should return EC_OKAY for valid event type 'instance_version_updated'"
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS for valid event type 'instance_version_updated'"
 }
 
 function test_validate_event_type_invalid_returns_error() {
-  log_step "Testing __logic_validate_event_type with non-existent event type"
+  log_test_step "Testing __logic_validate_event_type with non-existent event type"
 
   __logic_validate_event_type "invalid_event_type" 2>/dev/null
   local exit_code=$?
@@ -113,7 +105,7 @@ function test_validate_event_type_invalid_returns_error() {
 }
 
 function test_validate_event_type_empty_returns_error() {
-  log_step "Testing __logic_validate_event_type with empty parameter"
+  log_test_step "Testing __logic_validate_event_type with empty parameter"
 
   __logic_validate_event_type "" 2>/dev/null
   local exit_code=$?
@@ -123,7 +115,7 @@ function test_validate_event_type_empty_returns_error() {
 }
 
 function test_validate_event_type_all_27_constants() {
-  log_step "Testing __logic_validate_event_type with all 27 event constants"
+  log_test_step "Testing __logic_validate_event_type with all 27 event constants"
 
   local event_types=(
     "instance_created"
@@ -158,7 +150,7 @@ function test_validate_event_type_all_27_constants() {
   local failed_events=()
   for event_type in "${event_types[@]}"; do
     __logic_validate_event_type "$event_type"
-    if [[ $? -ne $EC_OKAY ]]; then
+    if [[ $? -ne $EC_SUCCESS ]]; then
       failed_events+=("$event_type")
     fi
   done
@@ -168,7 +160,7 @@ function test_validate_event_type_all_27_constants() {
 }
 
 function test_validate_event_type_case_sensitive() {
-  log_step "Testing __logic_validate_event_type is case-sensitive"
+  log_test_step "Testing __logic_validate_event_type is case-sensitive"
 
   __logic_validate_event_type "INSTANCE_CREATED" 2>/dev/null
   local exit_code=$?
@@ -178,7 +170,7 @@ function test_validate_event_type_case_sensitive() {
 }
 
 function test_validate_event_type_partial_match_fails() {
-  log_step "Testing __logic_validate_event_type rejects partial matches"
+  log_test_step "Testing __logic_validate_event_type rejects partial matches"
 
   __logic_validate_event_type "instance_creat" 2>/dev/null
   local exit_code=$?
@@ -188,7 +180,7 @@ function test_validate_event_type_partial_match_fails() {
 }
 
 function test_validate_event_type_special_chars_fail() {
-  log_step "Testing __logic_validate_event_type rejects special characters"
+  log_test_step "Testing __logic_validate_event_type rejects special characters"
 
   __logic_validate_event_type "instance@created" 2>/dev/null
   local exit_code=$?
@@ -202,37 +194,37 @@ function test_validate_event_type_special_chars_fail() {
 # =============================================================================
 
 function test_validate_params_single_param_valid() {
-  log_step "Testing __logic_validate_event_params with valid single parameter"
+  log_test_step "Testing __logic_validate_event_params with valid single parameter"
 
   __logic_validate_event_params "instance_ready" "test_instance"
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" \
-    "Should return EC_OKAY for instance_ready with 1 valid parameter"
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS for instance_ready with 1 valid parameter"
 }
 
 function test_validate_params_two_param_valid() {
-  log_step "Testing __logic_validate_event_params with valid two parameters"
+  log_test_step "Testing __logic_validate_event_params with valid two parameters"
 
   __logic_validate_event_params "instance_created" "test_instance" "factorio"
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" \
-    "Should return EC_OKAY for instance_created with 2 valid parameters"
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS for instance_created with 2 valid parameters"
 }
 
 function test_validate_params_three_param_valid() {
-  log_step "Testing __logic_validate_event_params with valid three parameters"
+  log_test_step "Testing __logic_validate_event_params with valid three parameters"
 
   __logic_validate_event_params "instance_version_updated" "test_instance" "1.0.0" "2.0.0"
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" \
-    "Should return EC_OKAY for instance_version_updated with 3 valid parameters"
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS for instance_version_updated with 3 valid parameters"
 }
 
 function test_validate_params_invalid_event_type() {
-  log_step "Testing __logic_validate_event_params with invalid event type"
+  log_test_step "Testing __logic_validate_event_params with invalid event type"
 
   __logic_validate_event_params "invalid_event" "param1" 2>/dev/null
   local exit_code=$?
@@ -242,7 +234,7 @@ function test_validate_params_invalid_event_type() {
 }
 
 function test_validate_params_missing_all_params() {
-  log_step "Testing __logic_validate_event_params with no parameters"
+  log_test_step "Testing __logic_validate_event_params with no parameters"
 
   __logic_validate_event_params "instance_ready" 2>/dev/null
   local exit_code=$?
@@ -252,7 +244,7 @@ function test_validate_params_missing_all_params() {
 }
 
 function test_validate_params_missing_one_param() {
-  log_step "Testing __logic_validate_event_params with insufficient parameters"
+  log_test_step "Testing __logic_validate_event_params with insufficient parameters"
 
   __logic_validate_event_params "instance_created" "test_instance" 2>/dev/null
   local exit_code=$?
@@ -262,7 +254,7 @@ function test_validate_params_missing_one_param() {
 }
 
 function test_validate_params_empty_first_param() {
-  log_step "Testing __logic_validate_event_params with empty first parameter"
+  log_test_step "Testing __logic_validate_event_params with empty first parameter"
 
   __logic_validate_event_params "instance_ready" "" 2>/dev/null
   local exit_code=$?
@@ -272,7 +264,7 @@ function test_validate_params_empty_first_param() {
 }
 
 function test_validate_params_empty_middle_param() {
-  log_step "Testing __logic_validate_event_params with empty middle parameter"
+  log_test_step "Testing __logic_validate_event_params with empty middle parameter"
 
   __logic_validate_event_params "instance_version_updated" "test_instance" "" "2.0.0" 2>/dev/null
   local exit_code=$?
@@ -282,43 +274,43 @@ function test_validate_params_empty_middle_param() {
 }
 
 function test_validate_params_extra_params_allowed() {
-  log_step "Testing __logic_validate_event_params allows extra parameters"
+  log_test_step "Testing __logic_validate_event_params allows extra parameters"
 
   __logic_validate_event_params "instance_ready" "test_instance" "extra1" "extra2"
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" \
-    "Should return EC_OKAY when extra parameters provided (only minimum validated)"
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS when extra parameters provided (only minimum validated)"
 }
 
 function test_validate_params_lifecycle_manager_param() {
-  log_step "Testing __logic_validate_event_params with lifecycle_manager parameter"
+  log_test_step "Testing __logic_validate_event_params with lifecycle_manager parameter"
 
   __logic_validate_event_params "instance_started" "test_instance" "systemd"
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" \
-    "Should return EC_OKAY for instance_started with instance and lifecycle_manager params"
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS for instance_started with instance and lifecycle_manager params"
 }
 
 function test_validate_params_backup_source_version() {
-  log_step "Testing __logic_validate_event_params with backup event (3 params)"
+  log_test_step "Testing __logic_validate_event_params with backup event (3 params)"
 
   __logic_validate_event_params "instance_backup_created" "test_instance" "/path/to/source" "1.2.3"
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" \
-    "Should return EC_OKAY for instance_backup_created with 3 parameters"
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS for instance_backup_created with 3 parameters"
 }
 
 function test_validate_params_special_chars_in_values() {
-  log_step "Testing __logic_validate_event_params with special characters in parameter values"
+  log_test_step "Testing __logic_validate_event_params with special characters in parameter values"
 
   __logic_validate_event_params "instance_created" "test-instance_123" "factorio-modded"
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" \
-    "Should return EC_OKAY when parameters contain dashes/underscores"
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS when parameters contain dashes/underscores"
 }
 
 # =============================================================================
@@ -326,56 +318,56 @@ function test_validate_params_special_chars_in_values() {
 # =============================================================================
 
 function test_get_param_spec_single_param_event() {
-  log_step "Testing __logic_get_event_param_spec for single parameter event"
+  log_test_step "Testing __logic_get_event_param_spec for single parameter event"
 
   local spec
   spec=$(__logic_get_event_param_spec "instance_ready")
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" \
-    "Should return EC_OKAY for valid event type"
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS for valid event type"
   assert_equals "$spec" "instance" \
     "Should return 'instance' spec for instance_ready event"
 }
 
 function test_get_param_spec_two_param_event() {
-  log_step "Testing __logic_get_event_param_spec for two parameter event"
+  log_test_step "Testing __logic_get_event_param_spec for two parameter event"
 
   local spec
   spec=$(__logic_get_event_param_spec "instance_created")
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" \
-    "Should return EC_OKAY for valid event type"
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS for valid event type"
   assert_equals "$spec" "instance blueprint" \
     "Should return 'instance blueprint' spec for instance_created event"
 }
 
 function test_get_param_spec_three_param_event() {
-  log_step "Testing __logic_get_event_param_spec for three parameter event"
+  log_test_step "Testing __logic_get_event_param_spec for three parameter event"
 
   local spec
   spec=$(__logic_get_event_param_spec "instance_version_updated")
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" \
-    "Should return EC_OKAY for valid event type"
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS for valid event type"
   assert_equals "$spec" "instance old_version new_version" \
     "Should return 'instance old_version new_version' spec for instance_version_updated event"
 }
 
 function test_get_param_spec_returns_ec_okay() {
-  log_step "Testing __logic_get_event_param_spec returns EC_OKAY on success"
+  log_test_step "Testing __logic_get_event_param_spec returns EC_SUCCESS on success"
 
   __logic_get_event_param_spec "instance_ready" >/dev/null
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" \
-    "Should return EC_OKAY exit code on successful spec retrieval"
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS exit code on successful spec retrieval"
 }
 
 function test_get_param_spec_invalid_event_type() {
-  log_step "Testing __logic_get_event_param_spec with invalid event type"
+  log_test_step "Testing __logic_get_event_param_spec with invalid event type"
 
   __logic_get_event_param_spec "invalid_event" 2>/dev/null
   local exit_code=$?
@@ -385,7 +377,7 @@ function test_get_param_spec_invalid_event_type() {
 }
 
 function test_get_param_spec_empty_param() {
-  log_step "Testing __logic_get_event_param_spec with empty parameter"
+  log_test_step "Testing __logic_get_event_param_spec with empty parameter"
 
   __logic_get_event_param_spec "" 2>/dev/null
   local exit_code=$?
@@ -395,7 +387,7 @@ function test_get_param_spec_empty_param() {
 }
 
 function test_get_param_spec_lifecycle_events() {
-  log_step "Testing __logic_get_event_param_spec for lifecycle events"
+  log_test_step "Testing __logic_get_event_param_spec for lifecycle events"
 
   local spec_started
   spec_started=$(__logic_get_event_param_spec "instance_started")
@@ -409,7 +401,7 @@ function test_get_param_spec_lifecycle_events() {
 }
 
 function test_get_param_spec_backup_events() {
-  log_step "Testing __logic_get_event_param_spec for backup events"
+  log_test_step "Testing __logic_get_event_param_spec for backup events"
 
   local spec_created
   spec_created=$(__logic_get_event_param_spec "instance_backup_created")
@@ -423,7 +415,7 @@ function test_get_param_spec_backup_events() {
 }
 
 function test_get_param_spec_output_format_space_separated() {
-  log_step "Testing __logic_get_event_param_spec output format"
+  log_test_step "Testing __logic_get_event_param_spec output format"
 
   local spec
   spec=$(__logic_get_event_param_spec "instance_version_updated")
@@ -440,7 +432,7 @@ function test_get_param_spec_output_format_space_separated() {
 }
 
 function test_get_param_spec_all_27_events() {
-  log_step "Testing __logic_get_event_param_spec for all 27 events"
+  log_test_step "Testing __logic_get_event_param_spec for all 27 events"
 
   local event_types=(
     "instance_created"
@@ -478,7 +470,7 @@ function test_get_param_spec_all_27_events() {
     spec=$(__logic_get_event_param_spec "$event_type")
     local exit_code=$?
 
-    if [[ $exit_code -ne $EC_OKAY ]] || [[ -z "$spec" ]]; then
+    if [[ $exit_code -ne $EC_SUCCESS ]] || [[ -z "$spec" ]]; then
       failed_events+=("$event_type")
     fi
   done
@@ -492,43 +484,43 @@ function test_get_param_spec_all_27_events() {
 # =============================================================================
 
 function test_event_name_to_type_simple_conversion() {
-  log_step "Testing __logic_event_name_to_type with simple dash-to-underscore conversion"
+  log_test_step "Testing __logic_event_name_to_type with simple dash-to-underscore conversion"
 
   local result
   result=$(__logic_event_name_to_type "instance-created")
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" \
-    "Should return EC_OKAY for valid dash-separated event name"
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS for valid dash-separated event name"
   assert_equals "$result" "instance_created" \
     "Should convert 'instance-created' to 'instance_created'"
 }
 
 function test_event_name_to_type_multi_dash() {
-  log_step "Testing __logic_event_name_to_type with multiple dashes"
+  log_test_step "Testing __logic_event_name_to_type with multiple dashes"
 
   local result
   result=$(__logic_event_name_to_type "instance-version-updated")
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" \
-    "Should return EC_OKAY for multi-dash event name"
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS for multi-dash event name"
   assert_equals "$result" "instance_version_updated" \
     "Should convert 'instance-version-updated' to 'instance_version_updated'"
 }
 
 function test_event_name_to_type_returns_ec_okay() {
-  log_step "Testing __logic_event_name_to_type returns EC_OKAY on success"
+  log_test_step "Testing __logic_event_name_to_type returns EC_SUCCESS on success"
 
   __logic_event_name_to_type "instance-ready" >/dev/null
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" \
-    "Should return EC_OKAY exit code for valid conversion"
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS exit code for valid conversion"
 }
 
 function test_event_name_to_type_invalid_dash_name() {
-  log_step "Testing __logic_event_name_to_type with invalid event name"
+  log_test_step "Testing __logic_event_name_to_type with invalid event name"
 
   __logic_event_name_to_type "invalid-event-name" 2>/dev/null
   local exit_code=$?
@@ -538,7 +530,7 @@ function test_event_name_to_type_invalid_dash_name() {
 }
 
 function test_event_name_to_type_empty_param() {
-  log_step "Testing __logic_event_name_to_type with empty parameter"
+  log_test_step "Testing __logic_event_name_to_type with empty parameter"
 
   __logic_event_name_to_type "" 2>/dev/null
   local exit_code=$?
@@ -548,20 +540,20 @@ function test_event_name_to_type_empty_param() {
 }
 
 function test_event_name_to_type_already_underscore() {
-  log_step "Testing __logic_event_name_to_type with already underscore-separated input"
+  log_test_step "Testing __logic_event_name_to_type with already underscore-separated input"
 
   local result
   result=$(__logic_event_name_to_type "instance_created")
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" \
-    "Should return EC_OKAY for underscore-separated input if it exists"
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS for underscore-separated input if it exists"
   assert_equals "$result" "instance_created" \
     "Should return 'instance_created' unchanged"
 }
 
 function test_event_name_to_type_validates_converted_exists() {
-  log_step "Testing __logic_event_name_to_type validates converted type exists"
+  log_test_step "Testing __logic_event_name_to_type validates converted type exists"
 
   __logic_event_name_to_type "instance-nonexistent" 2>/dev/null
   local exit_code=$?
@@ -571,7 +563,7 @@ function test_event_name_to_type_validates_converted_exists() {
 }
 
 function test_event_name_to_type_all_27_events() {
-  log_step "Testing __logic_event_name_to_type for all 27 events with dash conversion"
+  log_test_step "Testing __logic_event_name_to_type for all 27 events with dash conversion"
 
   local dash_events=(
     "instance-created:instance_created"
@@ -612,7 +604,7 @@ function test_event_name_to_type_all_27_events() {
     result=$(__logic_event_name_to_type "$dash_name")
     local exit_code=$?
 
-    if [[ $exit_code -ne $EC_OKAY ]] || [[ "$result" != "$expected_result" ]]; then
+    if [[ $exit_code -ne $EC_SUCCESS ]] || [[ "$result" != "$expected_result" ]]; then
       failed_conversions+=("$dash_name->$result (expected $expected_result)")
     fi
   done
@@ -622,7 +614,7 @@ function test_event_name_to_type_all_27_events() {
 }
 
 function test_event_name_to_type_mixed_dash_underscore() {
-  log_step "Testing __logic_event_name_to_type with mixed dashes and underscores"
+  log_test_step "Testing __logic_event_name_to_type with mixed dashes and underscores"
 
   local result
   result=$(__logic_event_name_to_type "instance-version_updated" 2>/dev/null)
@@ -630,14 +622,14 @@ function test_event_name_to_type_mixed_dash_underscore() {
 
   # This should convert dashes to underscores, resulting in instance_version_updated
   # which is a valid event type
-  assert_equals "$exit_code" "$EC_OKAY" \
+  assert_equals "$exit_code" "$EC_SUCCESS" \
     "Should handle mixed dash/underscore input by converting dashes"
   assert_equals "$result" "instance_version_updated" \
     "Should convert 'instance-version_updated' to 'instance_version_updated'"
 }
 
 function test_event_name_to_type_no_output_on_failure() {
-  log_step "Testing __logic_event_name_to_type produces no output on failure"
+  log_test_step "Testing __logic_event_name_to_type produces no output on failure"
 
   local output
   output=$(__logic_event_name_to_type "invalid-event" 2>/dev/null)
@@ -647,7 +639,7 @@ function test_event_name_to_type_no_output_on_failure() {
 }
 
 function test_event_name_to_type_partial_match_after_conversion() {
-  log_step "Testing __logic_event_name_to_type rejects partial matches after conversion"
+  log_test_step "Testing __logic_event_name_to_type rejects partial matches after conversion"
 
   __logic_event_name_to_type "instance-creat" 2>/dev/null
   local exit_code=$?
@@ -661,7 +653,7 @@ function test_event_name_to_type_partial_match_after_conversion() {
 # =============================================================================
 
 function test_edge_case_very_long_parameter_values() {
-  log_step "Testing validation with very long parameter values"
+  log_test_step "Testing validation with very long parameter values"
 
   local long_value
   long_value=$(printf 'a%.0s' {1..500})  # 500 character string
@@ -669,23 +661,23 @@ function test_edge_case_very_long_parameter_values() {
   __logic_validate_event_params "instance_created" "$long_value" "blueprint_name"
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" \
-    "Should return EC_OKAY even with 500+ character parameter values"
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS even with 500+ character parameter values"
 }
 
 function test_edge_case_special_characters_in_params() {
-  log_step "Testing validation with special characters in parameter values"
+  log_test_step "Testing validation with special characters in parameter values"
 
   # Test with paths, spaces in quotes would be separate args, so test path-like strings
   __logic_validate_event_params "instance_backup_created" "test-inst_123" "/path/to/source.tar.gz" "v1.2.3-beta"
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" \
-    "Should return EC_OKAY with special characters like dashes, underscores, slashes, dots"
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS with special characters like dashes, underscores, slashes, dots"
 }
 
 function test_edge_case_all_events_have_configs() {
-  log_step "Testing that all EVENT_* constants have EVENT_CONFIGS entries"
+  log_test_step "Testing that all EVENT_* constants have EVENT_CONFIGS entries"
 
   # Get all EVENT_* constant names (exported variables)
   local all_event_constants=()
@@ -711,7 +703,7 @@ function test_edge_case_all_events_have_configs() {
 }
 
 function test_edge_case_event_count_matches_configs() {
-  log_step "Testing EVENT_CONFIGS count matches expected 27 events"
+  log_test_step "Testing EVENT_CONFIGS count matches expected 27 events"
 
   local config_count="${#EVENT_CONFIGS[@]}"
 
@@ -724,13 +716,13 @@ function test_edge_case_event_count_matches_configs() {
 # =============================================================================
 
 function main() {
-  log_test "Starting events logic handler tests"
+  log_test_step "Starting events logic handler tests"
 
   # Initialize test environment
   setup_test
 
   # __logic_validate_event_type() tests
-  log_test "Testing __logic_validate_event_type()"
+  log_test_step "Testing __logic_validate_event_type()"
   test_validate_event_type_valid_single_param
   test_validate_event_type_valid_multi_param
   test_validate_event_type_invalid_returns_error
@@ -741,7 +733,7 @@ function main() {
   test_validate_event_type_special_chars_fail
 
   # __logic_validate_event_params() tests
-  log_test "Testing __logic_validate_event_params()"
+  log_test_step "Testing __logic_validate_event_params()"
   test_validate_params_single_param_valid
   test_validate_params_two_param_valid
   test_validate_params_three_param_valid
@@ -756,7 +748,7 @@ function main() {
   test_validate_params_special_chars_in_values
 
   # __logic_get_event_param_spec() tests
-  log_test "Testing __logic_get_event_param_spec()"
+  log_test_step "Testing __logic_get_event_param_spec()"
   test_get_param_spec_single_param_event
   test_get_param_spec_two_param_event
   test_get_param_spec_three_param_event
@@ -769,7 +761,7 @@ function main() {
   test_get_param_spec_all_27_events
 
   # __logic_event_name_to_type() tests
-  log_test "Testing __logic_event_name_to_type()"
+  log_test_step "Testing __logic_event_name_to_type()"
   test_event_name_to_type_simple_conversion
   test_event_name_to_type_multi_dash
   test_event_name_to_type_returns_ec_okay
@@ -783,13 +775,13 @@ function main() {
   test_event_name_to_type_partial_match_after_conversion
 
   # Edge case tests
-  log_test "Testing edge cases"
+  log_test_step "Testing edge cases"
   test_edge_case_very_long_parameter_values
   test_edge_case_special_characters_in_params
   test_edge_case_all_events_have_configs
   test_edge_case_event_count_matches_configs
 
-  log_test "Events logic handler tests completed"
+  log_test_step "Events logic handler tests completed"
 
   # Print summary and determine exit code
   if print_assert_summary "$TEST_NAME"; then

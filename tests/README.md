@@ -1,230 +1,123 @@
 # KGSM Test Framework
 
-A comprehensive, robust testing framework for the Krystal Game Server Manager (KGSM) designed to ensure reliability, maintainability, and quality of the codebase.
-
-## Overview
-
-This testing framework provides three levels of testing:
-
-- **Unit Tests**: Fast tests that verify individual functions and modules in isolation
-- **Integration Tests**: Medium-speed tests that verify interactions between modules
-- **End-to-End Tests**: Comprehensive tests that verify complete workflows with real game servers
-
-## Key Features
-
-### 🔒 **Sandboxed Environments**
-- Each test runs in a completely isolated copy of KGSM
-- No test can interfere with another or with your main KGSM installation
-- Automatic cleanup after test completion (unless debugging)
-
-### 🎯 **Real Code Testing**
-- No mocking or stubbing - tests use actual KGSM code
-- Tests with real game servers (Factorio, Necesse, V Rising)
-- Authentic testing conditions for maximum confidence
-
-### 📊 **Comprehensive Reporting**
-- Colored console output for easy reading
-- Detailed test logs with timestamps (saved in `tests/logs/`)
-- CSV results file for analysis
-- Pass/fail/skip counters with summary
-
-### ⚙️ **Flexible Configuration**
-- Easy test skipping via configuration
-- Pattern-based test filtering
-- Debug mode for troubleshooting
-- Configurable timeouts and behavior
-
-### 🚀 **Performance Optimized**
-- Parallel test execution support
-- Minimal dependencies
-- Fast unit tests for rapid feedback
-- Longer E2E tests for thorough validation
+Modular, sandboxed testing framework for KGSM. Follows **bootstrap → loader → common → specialized modules** pattern.
 
 ## Quick Start
 
-### Prerequisites
-
-**Required:**
-- Bash 4.0+
-- Standard Unix utilities: `grep`, `find`, `mktemp`, `date`, `tar`, `sed`, `coreutils`
-
-**Optional (enables additional tests):**
-- `jq` - JSON processing (for enhanced output formatting)
-- `steamcmd` - Steam game server downloads
-- `docker` - Container-based game servers
-- `wget` - Network operations
-- `unzip` - Archive extraction
-
-### Running Tests
-
 ```bash
-# Run all tests
-./tests/run.sh
-
-# Run only unit tests (fast)
-./tests/run.sh unit
-
-# Run with debug mode (preserves test environments)
-./tests/run.sh --debug
-
-# Run tests matching a pattern
-./tests/run.sh --pattern "instance"
-
-# List available tests
-./tests/run.sh --list
-
-# Get help
-./tests/run.sh --help
+./tests/run.sh                    # All tests
+./tests/run.sh unit               # Unit tests only (fast)
+./tests/run.sh --pattern "config" # Filter by name
+./tests/run.sh --parallel 4       # 4 concurrent tests
+./tests/run.sh --debug            # Preserve sandboxes
 ```
 
-## Test Types
+## Configuration (`tests/config.test.ini`)
 
-### Unit Tests (`tests/unit/`)
-
-Fast tests that verify individual components:
-
-- **Module Testing**: Each KGSM module is tested in isolation
-- **Function Testing**: Individual functions are validated
-- **Input Validation**: Argument parsing and error handling
-- **Configuration**: Config file parsing and validation
-
-Example:
-```bash
-# Run only unit tests
-./tests/run.sh unit
-
-# Run specific unit test
-./tests/run.sh --pattern "instances_module"
-```
-
-### Integration Tests (`tests/integration/`)
-
-Medium-speed tests that verify module interactions:
-
-- **Blueprint Loading**: Integration between blueprint and instance modules
-- **Configuration Management**: Config consistency across modules
-- **File Operations**: Directory and file management integration
-- **Error Propagation**: How errors flow between components
-
-Example:
-```bash
-# Run integration tests
-./tests/run.sh integration
-
-# Run blueprint-related integration tests
-./tests/run.sh --pattern "blueprint"
-```
-
-### End-to-End Tests (`tests/e2e/`)
-
-Comprehensive tests with real game servers:
-
-- **Server Lifecycle**: Complete install → start → operate → stop → remove
-- **Game Server Tests**: Factorio, Necesse, V Rising server testing
-- **Backup/Restore**: Full backup and restoration workflows
-- **Update Management**: Server update processes
-
-Example:
-```bash
-# Run E2E tests (requires network and time)
-./tests/run.sh e2e
-
-# Run only Factorio E2E tests
-./tests/run.sh --pattern "factorio"
-```
-
-## Configuration
-
-### Test Configuration (`tests/config/test.conf`)
-
-Customize test behavior by editing the configuration file:
-
-```bash
-# Skip individual tests
-SKIP_FACTORIO_TESTS=true
-SKIP_LONG_DOWNLOAD_TESTS=true
-
-# Configure timeouts
-TEST_DEFAULT_TIMEOUT=300
-TEST_SERVER_STARTUP_TIMEOUT=120
-
-# Set log level (DEBUG|INFO|WARN|ERROR)
-export KGSM_TEST_LOG_LEVEL=INFO  # Default is INFO
-
-# Select test games
-TEST_GAMES="factorio necesse"
-```
-
-### Skipping Tests
-
-Skip specific tests by setting environment variables:
-
-```bash
-# Skip by test name
-export SKIP_INSTANCE_CREATION=true
-
-# Skip by category
-export SKIP_STEAMCMD_TESTS=true
-export SKIP_DOCKER_TESTS=true
-export SKIP_NETWORK_TESTS=true
+```ini
+TEST_PARALLEL=8                   # Parallel count (1=sequential)
+TEST_DEFAULT_TIMEOUT=300          # Test timeout (seconds)
+SKIP_NETWORK_TESTS=false          # Skip network tests
+SKIP_STEAMCMD_TESTS=false         # Skip SteamCMD tests
+SKIP_<TEST_NAME>=false            # Skip specific test
 ```
 
 ## Framework Architecture
 
-### Core Components
+### Modules
+
+| Module           | Purpose                                    | Key Functions                       |
+| ---------------- | ------------------------------------------ | ----------------------------------- |
+| **bootstrap.sh** | Init TEST_ROOT, KGSM_ROOT                  | Auto-sources common.sh              |
+| **loader.sh**    | Constants (paths, colors, exit codes)      | 40+ exports                         |
+| **common.sh**    | Module orchestrator                        | __load_module()                     |
+| **config.sh**    | Load config.test.ini                       | load_test_config()                  |
+| **sandbox.sh**   | Isolated KGSM copies                       | create_sandbox(), cleanup_sandbox() |
+| **discovery.sh** | Find/filter tests                          | discover_tests(), should_run_test() |
+| **execution.sh** | Sequential/parallel delegation             | execute_tests()                     |
+| **reporting.sh** | Results and summaries                      | generate_summary()                  |
+| **logging.sh**   | Structured logging (DEBUG/INFO/WARN/ERROR) | log_debug/info/warn/error()         |
+| **assert.sh**    | 50+ assertion functions                    | assert_equals(), assert_true()      |
+| **fixtures.sh**  | Mock test data                             | create_mock_* ()                    |
+| **runner.sh**    | Main orchestrator                          | Coordinate all phases               |
+
+### Loading Order
 
 ```
-tests/
-├── framework/          # Test framework core
-│   ├── runner.sh      # Main test orchestrator
-│   ├── assert.sh      # Assertion library
-│   └── common.sh      # Shared utilities
-├── config/            # Test configuration
-│   └── test.conf      # Main config file
-├── unit/              # Unit tests
-├── integration/       # Integration tests
-├── e2e/               # End-to-end tests
-├── run.sh            # Main entry point
-└── README.md         # This documentation
+bootstrap.sh → loader.sh → common.sh → [
+    logging.sh, config.sh, reporting.sh,
+    discovery.sh, sandbox.sh, execution.sh,
+    assert.sh, fixtures.sh
+]
 ```
 
-### Writing Tests
+**Principles**: Single responsibility, downward dependencies only, load guards, no peer dependencies.
 
-Create a new test file:
+### Execution Contexts
+
+**Host Context** (framework):
+```bash
+KGSM_ROOT=/home/user/kgsm
+TEST_ROOT=/home/user/kgsm/tests
+```
+
+**Sandbox Context** (test):
+```bash
+KGSM_ROOT=/tmp/kgsm-test-sandboxes/unit_test_12345/  # Isolated copy
+TEST_ROOT=/home/user/kgsm/tests                       # Unchanged
+KGSM_TEST_SANDBOX=/tmp/kgsm-test-sandboxes/unit_test_12345/
+KGSM_TEST_MODE=true
+```
+
+Framework unsets KGSM module load flags before context switch, forcing reload with sandbox paths.
+
+## Writing Tests
+
+### Test File Structure
 
 ```bash
 #!/usr/bin/env bash
 
-# Source the test framework
+# Source framework (loads all modules)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../framework/common.sh"
+source "$SCRIPT_DIR/../framework/bootstrap.sh"
 
-readonly TEST_NAME="my_new_test"
+readonly TEST_NAME="my_test"
 
+# Setup (runs once)
 setup_test() {
-    log_step "Setting up my test"
-    # Test setup code here
+  log_test_step "Setting up"
+  # Create test data
 }
 
+# Test functions (Arrange-Act-Assert pattern)
 test_something() {
-    log_step "Testing something important"
-
-    # Use assertions
-    assert_equals "expected" "actual" "Values should match"
-    assert_file_exists "/path/to/file" "File should exist"
-    assert_command_succeeds "some_command" "Command should work"
-
-    log_test "Test completed"
+  log_test_step "Testing something"
+  
+  local expected="value"
+  local actual=$(function_under_test)
+  
+  assert_equals "$expected" "$actual" "Should match"
+  assert_not_empty "$actual" "Should not be empty"
 }
 
+# Cleanup (optional)
+cleanup_test() {
+  log_test_step "Cleaning up"
+  # Kill processes, delete external resources
+  # Sandbox cleanup is automatic
+}
+
+# Main
 main() {
     setup_test
     test_something
-
+    cleanup_test
+    
     if print_assert_summary "$TEST_NAME"; then
-        pass_test "All tests passed"
+        pass_test "All assertions passed"
     else
-        fail_test "Some tests failed"
+        fail_test "Some assertions failed"
     fi
 }
 
@@ -234,223 +127,164 @@ main "$@"
 ### Available Assertions
 
 ```bash
-# Basic assertions
-assert_equals "expected" "actual" "message"
-assert_not_equals "unexpected" "actual" "message"
-assert_true "$condition" "message"
-assert_false "$condition" "message"
-assert_null "$value" "message"
-assert_not_null "$value" "message"
+# Basic
+assert_equals, assert_not_equals, assert_true, assert_false, assert_null, assert_not_null
 
-# File system assertions
-assert_file_exists "/path/to/file" "message"
-assert_dir_exists "/path/to/dir" "message"
+# Files
+assert_file_exists, assert_dir_exists, assert_file_contains
 
-# Command assertions
-assert_command_succeeds "command" "message"
-assert_command_fails "command" "message"
+# Commands
+assert_command_succeeds, assert_command_fails
 
-# KGSM-specific assertions
-assert_kgsm_succeeds "args" "message"
-assert_instance_exists "instance_name" "message"
+# Strings
+assert_string_contains, assert_string_matches, assert_empty, assert_not_empty
+
+# Arrays
+assert_array_contains, assert_array_length
 ```
 
 ### Utility Functions
 
 ```bash
-# Logging (centralized logging system)
-log_debug "message"         # Log at DEBUG level (internal details)
-log_info "message"          # Log at INFO level (general info)
-log_warn "message"          # Log at WARN level (warnings)
-log_error "message"         # Log at ERROR level (errors)
-log_step "step_name"        # Log test step (INFO level with marker)
-log_test "message"          # Legacy: logs at DEBUG level
+# Logging
+log_debug/info/warn/error "message"
+log_test_step "step_name"
 
-# Test management
-skip_test "reason"          # Skip current test
-pass_test "message"         # Mark test as passed
-fail_test "message"         # Mark test as failed
+# Test control
+skip_test "reason"
+pass_test "message"
+fail_test "message"
 
-# KGSM operations
-run_kgsm "args"            # Run KGSM command
-create_test_instance "blueprint" "id"
-remove_test_instance "name"
-instance_exists "name"
-
-# Waiting utilities
-wait_for_condition "condition" timeout interval
-wait_for_file "/path" timeout
-wait_for_port "host" port timeout
+# Fixtures
+create_mock_config()
+create_mock_blueprint "name"
+create_mock_instance "name" "blueprint"
 ```
 
-## Debugging Tests
+## Debugging
 
 ### Debug Mode
-
-Enable debug mode to preserve test environments:
 
 ```bash
 ./tests/run.sh --debug unit
 ```
 
-This will:
-- Preserve sandbox directories after test completion
-- Show debug output during execution
-- Set log level to DEBUG (shows all internal operations)
-- Enable verbose logging
-- Display sandbox paths for manual inspection
+**Provides:**
+- Preserved sandboxes (not deleted)
+- Verbose output (all log levels)
+- Module load status
+- Execution trace (file:line:function)
 
-### Log Format
-
-The testing framework uses a standardized log format across all logs:
-
-```
-[TIMESTAMP] [LEVEL] [SOURCE] message
-```
-
-**Example log entries:**
-```
-[2025-12-15T10:30:45-05:00] [INFO] [test_example.sh:42 in test_function()] Testing feature X
-[2025-12-15T10:30:45-05:00] [ERROR] [test_example.sh:45 in test_function()] FAIL: Expected value did not match
-[2025-12-15T10:30:46-05:00] [DEBUG] [fixtures.sh:62 in create_mock_config()] Created mock config: /tmp/test.ini
-```
-
-**Log Levels:**
-- `DEBUG` - Internal operations, fixture creation, detailed trace
-- `INFO` - Test steps, assertions, general progress
-- `WARN` - Non-critical issues, deprecated usage
-- `ERROR` - Test failures, critical errors
-
-**Benefits:**
-- No duplicate log entries (each event logged once)
-- No ANSI escape codes in log files (clean, parseable)
-- Caller information preserved (file:line in function())
-- Consistent timestamp format (ISO 8601 with timezone)
-- Easy to grep and filter by level
-
-### Examining Test Logs
-
-Test logs are saved to timestamped directories in the project:
+### Logs
 
 ```bash
-# Logs are automatically saved to tests/logs/
-./tests/run.sh
-
-# Example log locations (YYYY-MM-DD_HH-MM-SS format)
-tests/logs/2025-06-21_01-15-39/runner.log          # Main runner log
-tests/logs/2025-06-21_01-15-39/test_name.log       # Individual test log
-tests/logs/2025-06-21_01-15-39/results.csv         # Results summary
-
-# Clean up old logs (keeps last 10)
-./tests/run.sh --clean-logs
+# Logs in tests/logs/YYYY-MM-DD_HH-MM-SS/
+cat tests/logs/2025-12-22_14-30-45/test_config.log
+grep ERROR tests/logs/2025-12-22_14-30-45/*.log
 ```
 
-### Manual Testing
+**Log format:** `[TIMESTAMP] [LEVEL] [SOURCE:LINE in function()] message`
 
-Inspect preserved sandbox environments:
+**Levels:** DEBUG (TEST_DEBUG=true only), INFO (default), WARN, ERROR
+
+### Sandbox Inspection
 
 ```bash
-# Run with debug mode
 ./tests/run.sh --debug --pattern "my_test"
+# Sandbox path shown in output:
+# /tmp/kgsm-test-sandboxes/unit_my_test_1734890445_1234
 
-# Sandbox location will be shown in output
-# Example: /tmp/kgsm-test-sandbox-XXXXXX/unit_my_test_12345
-
-# Navigate to sandbox
-cd /tmp/kgsm-test-sandbox-XXXXXX/unit_my_test_12345
-
-# Examine the isolated KGSM environment
+cd /tmp/kgsm-test-sandboxes/unit_my_test_1734890445_1234
 ls -la
-./kgsm.sh --help
+./kgsm.sh blueprints --list
+```
+
+### Common Issues
+
+```bash
+# Check dependencies
+./tests/run.sh --help
+
+# Framework module loading
+./tests/run.sh --debug --pattern "simple" 2>&1 | grep "loaded"
+
+# Verify sandbox paths
+# Add to test: log_debug "KGSM_ROOT: $KGSM_ROOT"
+# Should show sandbox path during execution
+
+# Run sequentially for debugging
+TEST_PARALLEL=1 ./tests/run.sh unit
+
+# Skip unavailable dependencies
+echo "SKIP_STEAMCMD_TESTS=true" >> tests/config.test.ini
 ```
 
 ## Best Practices
 
 ### Test Design
 
-1. **Keep tests focused**: Each test should verify one specific behavior
-2. **Use descriptive names**: Test names should clearly indicate what they verify
-3. **Include setup/teardown**: Properly initialize and clean up test environments
-4. **Handle dependencies**: Check for required tools and skip gracefully if unavailable
-5. **Test error conditions**: Verify that failures are handled correctly
+1. **Keep focused**: One test = one behavior
+2. **Descriptive names**: `test_instance_creation_fails_with_invalid_blueprint()`
+3. **Test failure paths**: Use `assert_command_fails` for expected failures
+4. **Meaningful messages**: `assert_equals "8080" "$port" "Port should match blueprint"`
 
 ### Performance
 
-1. **Start with unit tests**: Fast feedback loop for development
-2. **Use integration tests selectively**: Focus on critical interactions
-3. **Reserve E2E for workflows**: Test complete user scenarios
-4. **Skip expensive tests in CI**: Use configuration to control test execution
+1. **Unit tests first**: Fast feedback (<10s total)
+2. **Parallel execution**: `TEST_PARALLEL=8` or `--parallel 8`
+3. **Skip expensive tests**: Set `SKIP_LONG_DOWNLOAD_TESTS=true` in CI
 
 ### Reliability
 
-1. **Avoid timing dependencies**: Use proper wait conditions instead of fixed sleeps
-2. **Clean up resources**: Ensure tests don't leave artifacts behind
-3. **Handle network failures**: Make network-dependent tests resilient
-4. **Test in isolation**: Don't depend on other tests or shared state
+1. **No fixed sleeps**: Use `wait_for_file`, `wait_for_port` instead
+2. **Clean up resources**: Kill processes, close connections
+3. **Retry network ops**: Handle transient failures
+4. **Test isolation**: Each test independent, no execution order dependency
 
-## Troubleshooting
+## Architecture Principles
 
-### Common Issues
-
-**Tests fail to start:**
-```bash
-# Check dependencies
-./tests/run.sh --help
-
-# Verify framework files
-ls -la tests/framework/
-```
-
-**SteamCMD tests fail:**
-```bash
-# Check SteamCMD installation
-which steamcmd
-steamcmd +quit
-
-# Skip SteamCMD tests if unavailable
-export SKIP_STEAMCMD_TESTS=true
-```
-
-**Timeout issues:**
-```bash
-# Increase timeouts in config
-# Edit tests/config/test.conf
-TEST_DEFAULT_TIMEOUT=600
-TEST_SERVER_STARTUP_TIMEOUT=180
-```
-
-**Permission errors:**
-```bash
-# Ensure scripts are executable
-chmod +x tests/run.sh
-chmod +x tests/framework/*.sh
-```
-
-### Getting Help
-
-1. **Check test logs**: Look in the temporary log directories
-2. **Use debug mode**: Run with `--debug` to preserve environments
-3. **Enable verbose output**: Use `--verbose` for detailed information
-4. **Review configuration**: Check `tests/config/test.conf` for relevant settings
+1. **Separation of Concerns**: Each module has one job
+2. **Dependency Management**: Downward only, no circular, explicit
+3. **Context Isolation**: Host vs sandbox contexts clearly separated
+4. **Configuration Over Code**: Behavior controlled via config file
+5. **Fail-Safe Design**: Graceful error handling, no resource leaks
 
 ## Contributing
 
-### Adding New Tests
+### Adding Tests
 
-1. Choose the appropriate test type (unit/integration/e2e)
-2. Create a new file following the naming convention: `test_feature_name.sh`
-3. Use the test template and assertion framework
-4. Add configuration options if needed
-5. Test your test with debug mode
-6. Update documentation if adding new features
+1. Choose type: unit (<1s), integration (<60s), e2e (minutes)
+2. Create file: `tests/unit/test_feature.sh`
+3. Copy template: `cp tests/templates/test.template.sh tests/unit/test_feature.sh`
+4. Follow structure (see Writing Tests section)
+5. Test with debug: `./tests/run.sh --debug --pattern "feature"`
 
-### Improving the Framework
+### Improving Framework
 
-1. Follow bash best practices and SOLID principles
-2. Maintain backward compatibility when possible
-3. Add comprehensive error handling
-4. Include detailed logging
-5. Write tests for framework components
-6. Update documentation for any changes
+1. Follow bash best practices (shellcheck-compliant)
+2. Maintain backward compatibility
+3. Add error handling
+4. Use appropriate log levels
+5. Write tests for framework changes
+6. Update documentation
 
-The KGSM test framework is designed to grow with the project while maintaining reliability and ease of use. Happy testing!
+### Code Review Checklist
+
+- [ ] All existing tests pass
+- [ ] New tests for new functionality
+- [ ] Shellcheck passes
+- [ ] Load guards for new modules
+- [ ] Functions exported if used in subshells
+- [ ] Error handling comprehensive
+- [ ] Documentation updated
+
+## Resources
+
+- **Testing Specification**: `docs/testing_specification.md` (required reading)
+- **Architecture Spec**: `docs/testing_framework_refactoring_specification.md`
+- **Test Template**: `tests/templates/test.template.sh`
+- **Example Tests**: `tests/unit/test_config_merge_logic.sh`
+
+---
+
+The modular architecture ensures framework improvements don't break existing tests. New test types can be added without modifying core framework code.

@@ -11,6 +11,14 @@
 # - Test statistics tracking
 # - Colored output support
 
+# Disabling shellcheck SC2086 for exit and return codes to allow variable usage
+# shellcheck disable=SC2086
+# shellcheck disable=SC2155
+
+if [[ -n "${TEST_ASSERT_LOADED:-}" ]]; then
+  return 0
+fi
+
 # =============================================================================
 # CONSTANTS
 # =============================================================================
@@ -57,6 +65,8 @@ function get_caller_info() {
   echo "$(basename "$file"):$line in $func()"
 }
 
+export -f get_caller_info
+
 # Print assertion result
 function print_assert_result() {
   local result="$1"
@@ -73,6 +83,8 @@ function print_assert_result() {
 
   log_assertion "$result" "$message" "$caller_info"
 }
+
+export -f print_assert_result
 
 # =============================================================================
 # BASIC ASSERTIONS
@@ -94,6 +106,8 @@ function assert_equals() {
   fi
 }
 
+export -f assert_equals
+
 # Assert that two values are not equal
 function assert_not_equals() {
   local not_expected="$1"
@@ -110,6 +124,8 @@ function assert_not_equals() {
   fi
 }
 
+export -f assert_not_equals
+
 # Assert that a condition is true
 function assert_true() {
   local condition="$1"
@@ -124,6 +140,8 @@ function assert_true() {
     return $ASSERT_FAILURE
   fi
 }
+
+export -f assert_true
 
 # Assert that a condition is false
 function assert_false() {
@@ -140,6 +158,8 @@ function assert_false() {
   fi
 }
 
+export -f assert_false
+
 # Assert that a value is null or empty
 function assert_null() {
   local value="$1"
@@ -155,6 +175,8 @@ function assert_null() {
   fi
 }
 
+export -f assert_null
+
 # Assert that a value is not null or empty
 function assert_not_null() {
   local value="$1"
@@ -169,6 +191,8 @@ function assert_not_null() {
     return $ASSERT_FAILURE
   fi
 }
+
+export -f assert_not_null
 
 # =============================================================================
 # STRING ASSERTIONS
@@ -190,6 +214,8 @@ function assert_contains() {
   fi
 }
 
+export -f assert_contains
+
 # Assert that a string does not contain a substring
 function assert_not_contains() {
   local haystack="$1"
@@ -205,6 +231,8 @@ function assert_not_contains() {
     return $ASSERT_FAILURE
   fi
 }
+
+export -f assert_not_contains
 
 # Assert that a string matches a regex pattern
 function assert_matches() {
@@ -222,6 +250,8 @@ function assert_matches() {
   fi
 }
 
+export -f assert_matches
+
 # Assert that a string starts with a prefix
 function assert_starts_with() {
   local string="$1"
@@ -238,6 +268,8 @@ function assert_starts_with() {
   fi
 }
 
+export -f assert_starts_with
+
 # Assert that a string ends with a suffix
 function assert_ends_with() {
   local string="$1"
@@ -253,6 +285,8 @@ function assert_ends_with() {
     return $ASSERT_FAILURE
   fi
 }
+
+export -f assert_ends_with
 
 # =============================================================================
 # EXACT MATCH ASSERTIONS
@@ -274,6 +308,8 @@ function assert_contains_line() {
   fi
 }
 
+export -f assert_contains_line
+
 # Assert that a multi-line string does not contain an exact line match
 function assert_not_contains_line() {
   local haystack="$1"
@@ -289,6 +325,8 @@ function assert_not_contains_line() {
     return $ASSERT_SUCCESS
   fi
 }
+
+export -f assert_not_contains_line
 
 # Assert that a list (newline-separated) contains a specific item exactly
 function assert_list_contains() {
@@ -306,6 +344,8 @@ function assert_list_contains() {
   fi
 }
 
+export -f assert_list_contains
+
 # Assert that a list (newline-separated) does not contain a specific item exactly
 function assert_list_not_contains() {
   local list_output="$1"
@@ -321,6 +361,8 @@ function assert_list_not_contains() {
     return $ASSERT_SUCCESS
   fi
 }
+
+export -f assert_list_not_contains
 
 # =============================================================================
 # NUMERIC ASSERTIONS
@@ -342,6 +384,8 @@ function assert_numeric_equals() {
   fi
 }
 
+export -f assert_numeric_equals
+
 # Assert that first number is greater than second
 function assert_greater_than() {
   local actual="$1"
@@ -358,6 +402,8 @@ function assert_greater_than() {
   fi
 }
 
+export -f assert_greater_than
+
 # Assert that first number is less than second
 function assert_less_than() {
   local actual="$1"
@@ -373,6 +419,8 @@ function assert_less_than() {
     return $ASSERT_FAILURE
   fi
 }
+
+export -f assert_less_than
 
 # =============================================================================
 # FILE SYSTEM ASSERTIONS
@@ -393,6 +441,8 @@ function assert_file_exists() {
   fi
 }
 
+export -f assert_file_exists
+
 # Assert that a file does not exist
 function assert_file_not_exists() {
   local file_path="$1"
@@ -407,6 +457,8 @@ function assert_file_not_exists() {
     return $ASSERT_FAILURE
   fi
 }
+
+export -f assert_file_not_exists
 
 # Assert that a directory exists
 function assert_dir_exists() {
@@ -423,6 +475,8 @@ function assert_dir_exists() {
   fi
 }
 
+export -f assert_dir_exists
+
 # Assert that a directory does not exist
 function assert_dir_not_exists() {
   local dir_path="$1"
@@ -438,6 +492,8 @@ function assert_dir_not_exists() {
   fi
 }
 
+export -f assert_dir_not_exists
+
 # Assert that a file is executable
 function assert_file_executable() {
   local file_path="$1"
@@ -452,6 +508,8 @@ function assert_file_executable() {
     return $ASSERT_FAILURE
   fi
 }
+
+export -f assert_file_executable
 
 # Assert that a file contains specific content
 function assert_file_contains() {
@@ -474,6 +532,8 @@ function assert_file_contains() {
   fi
 }
 
+export -f assert_file_contains
+
 # Assert that a socket file exists
 function assert_socket_exists() {
   local socket_path="$1"
@@ -488,6 +548,8 @@ function assert_socket_exists() {
     return $ASSERT_FAILURE
   fi
 }
+
+export -f assert_socket_exists
 
 # Assert that a socket file does not exist
 function assert_socket_not_exists() {
@@ -504,6 +566,8 @@ function assert_socket_not_exists() {
   fi
 }
 
+export -f assert_socket_not_exists
+
 # Assert that a command is available in PATH
 function assert_command_available() {
   local command_name="$1"
@@ -519,6 +583,8 @@ function assert_command_available() {
   fi
 }
 
+export -f assert_command_available
+
 # Assert that a command is not available in PATH
 function assert_command_not_available() {
   local command_name="$1"
@@ -533,6 +599,8 @@ function assert_command_not_available() {
     return $ASSERT_FAILURE
   fi
 }
+
+export -f assert_command_not_available
 
 # =============================================================================
 # COMMAND EXECUTION ASSERTIONS
@@ -565,6 +633,8 @@ function assert_command_succeeds() {
   fi
 }
 
+export -f assert_command_succeeds
+
 # Assert that a command fails (non-zero exit code)
 function assert_command_fails() {
   local command="$1"
@@ -588,6 +658,8 @@ function assert_command_fails() {
     return $ASSERT_FAILURE
   fi
 }
+
+export -f assert_command_fails
 
 # Assert that a command produces specific output
 function assert_command_output() {
@@ -616,6 +688,8 @@ function assert_command_output() {
   fi
 }
 
+export -f assert_command_output
+
 # Assert that a function exists in the current shell
 function assert_function_exists() {
   local function_name="$1"
@@ -631,6 +705,8 @@ function assert_function_exists() {
   fi
 }
 
+export -f assert_function_exists
+
 # =============================================================================
 # TEST STATISTICS AND REPORTING
 # =============================================================================
@@ -640,35 +716,54 @@ function get_assert_stats() {
   echo "Assertions: $ASSERT_COUNT, Passed: $ASSERT_PASSED, Failed: $ASSERT_FAILED"
 }
 
-# Reset assertion counters
+export -f get_assert_stats
+
+# Reset assertion counters (should be called at start of each test)
 function reset_assert_stats() {
   ASSERT_COUNT=0
   ASSERT_PASSED=0
   ASSERT_FAILED=0
+
+  # Also reset in case they were exported from parent shell
+  declare -gi ASSERT_COUNT=0
+  declare -gi ASSERT_PASSED=0
+  declare -gi ASSERT_FAILED=0
 }
+
+export -f reset_assert_stats
 
 # Print assertion summary
 function print_assert_summary() {
   local test_name="${1:-Test}"
 
+  # Make copies of global counters
+  local assert_count=$ASSERT_COUNT
+  local assert_passed=$ASSERT_PASSED
+  local assert_failed=$ASSERT_FAILED
+
+  # Reset counters for next test
+  reset_assert_stats
+
   printf "\n${BOLD}=== %s Assertion Summary ===${NC}\n" "$test_name"
-  printf "Total assertions: %d\n" "$ASSERT_COUNT"
-  printf "${GREEN}Passed: %d${NC}\n" "$ASSERT_PASSED"
-  printf "${RED}Failed: %d${NC}\n" "$ASSERT_FAILED"
+  printf "Total assertions: %d\n" "${assert_count:-0}"
+  printf "${GREEN}Passed: %d${NC}\n" "${assert_passed:-0}"
+  printf "${RED}Failed: %d${NC}\n" "${assert_failed:-0}"
 
   # Write assertion stats marker to test log for runner to parse
   if [[ -n "${KGSM_TEST_LOG:-}" ]]; then
-    echo "KGSM_ASSERT_STATS: ${ASSERT_PASSED}/${ASSERT_FAILED}/${ASSERT_COUNT}" >>"$KGSM_TEST_LOG" 2>/dev/null || true
+    echo "KGSM_ASSERT_STATS: ${assert_passed}/${assert_failed}/${assert_count}" >>"$KGSM_TEST_LOG" 2>/dev/null || true
   fi
 
-  if [[ $ASSERT_FAILED -gt 0 ]]; then
-    printf "\n${RED}Test failed with %d assertion failures${NC}\n" "$ASSERT_FAILED"
-    return $ASSERT_FAILURE
+  if [[ $assert_failed -gt 0 ]]; then
+    printf "\n${RED}Test failed with %d assertion failures${NC}\n" "$assert_failed"
+    return 1 # ASSERT_FAILURE
   else
     printf "\n${GREEN}All assertions passed${NC}\n"
-    return $ASSERT_SUCCESS
+    return 0 # ASSERT_SUCCESS
   fi
 }
+
+export -f print_assert_summary
 
 # Skip current test with message
 function skip_test() {
@@ -684,6 +779,8 @@ function skip_test() {
   exit 77 # Special exit code for skipped tests
 }
 
+export -f skip_test
+
 # =============================================================================
 # HELPER FUNCTIONS FOR KGSM-SPECIFIC TESTING
 # =============================================================================
@@ -696,6 +793,8 @@ function assert_kgsm_succeeds() {
   assert_command_succeeds "$KGSM_ROOT/kgsm.sh $kgsm_args" "$message"
 }
 
+export -f assert_kgsm_succeeds
+
 # Assert that KGSM command fails
 function assert_kgsm_fails() {
   local kgsm_args="$1"
@@ -703,6 +802,8 @@ function assert_kgsm_fails() {
 
   assert_command_fails "$KGSM_ROOT/kgsm.sh $kgsm_args" "$message"
 }
+
+export -f assert_kgsm_fails
 
 # Assert that instance exists
 function assert_instance_exists() {
@@ -712,6 +813,8 @@ function assert_instance_exists() {
   assert_command_succeeds "$KGSM_ROOT/commands/instances.sh --find '$instance_name'" "$message"
 }
 
+export -f assert_instance_exists
+
 # Assert that instance does not exist
 function assert_instance_not_exists() {
   local instance_name="$1"
@@ -720,18 +823,10 @@ function assert_instance_not_exists() {
   assert_command_fails "$KGSM_ROOT/commands/instances.sh --find '$instance_name'" "$message"
 }
 
-# Export functions so they can be used in test scripts
-if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
-  # Script is being sourced, export functions
-  export -f assert_equals assert_not_equals assert_true assert_false
-  export -f assert_null assert_not_null assert_contains assert_not_contains
-  export -f assert_matches assert_starts_with assert_ends_with
-  export -f assert_contains_line assert_not_contains_line assert_list_contains assert_list_not_contains
-  export -f assert_numeric_equals assert_greater_than assert_less_than
-  export -f assert_file_exists assert_file_not_exists assert_dir_exists assert_dir_not_exists
-  export -f assert_file_executable assert_file_contains assert_socket_exists assert_socket_not_exists
-  export -f assert_command_succeeds assert_command_fails assert_command_output
-  export -f assert_function_exists assert_command_available assert_command_not_available
-  export -f get_assert_stats reset_assert_stats print_assert_summary skip_test
-  export -f assert_kgsm_succeeds assert_kgsm_fails assert_instance_exists assert_instance_not_exists
-fi
+export -f assert_instance_not_exists
+
+# Reset global assertion counters on module load
+reset_assert_stats 2>/dev/null || true
+
+declare -g TEST_ASSERT_LOADED=1
+export TEST_ASSERT_LOADED

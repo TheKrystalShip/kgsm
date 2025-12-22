@@ -8,14 +8,6 @@
 # TEST SETUP
 # =============================================================================
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Framework common functions
-source "$SCRIPT_DIR/../framework/common.sh"
-
-# KGSM bootstrapper
-source "$KGSM_ROOT/core/bootstrap.sh"
-
 # Test variables
 readonly TEST_NAME="config_commands"
 
@@ -24,12 +16,12 @@ readonly TEST_NAME="config_commands"
 # =============================================================================
 
 function setup_test() {
-  log_step "Setting up config commands integration tests"
+  log_test_step "Setting up config commands integration tests"
 
   # Verify config command exists
   assert_file_exists "$KGSM_ROOT/commands/config.sh" "config command should exist"
 
-  log_test "Config commands test environment validated"
+  log_test_step "Config commands test environment validated"
 }
 
 # =============================================================================
@@ -37,7 +29,7 @@ function setup_test() {
 # =============================================================================
 
 function test_config_merge_command() {
-  log_step "Testing ./kgsm.sh config merge command"
+  log_test_step "Testing ./kgsm.sh config merge command"
 
   # Create test user config that's already at schema v1 (to avoid migration)
   cat > "$CONFIG_FILE" << 'EOF'
@@ -81,7 +73,7 @@ EOF
 # =============================================================================
 
 function test_config_rollback_command() {
-  log_step "Testing ./kgsm.sh config rollback command"
+  log_test_step "Testing ./kgsm.sh config rollback command"
 
   # Create initial config
   cat > "$CONFIG_FILE" << 'EOF'
@@ -119,7 +111,7 @@ EOF
 # =============================================================================
 
 function test_config_rollback_invalid_generation() {
-  log_step "Testing config rollback with invalid generation"
+  log_test_step "Testing config rollback with invalid generation"
 
   # Try to rollback to non-existent backup
   local output
@@ -138,7 +130,7 @@ function test_config_rollback_invalid_generation() {
 # =============================================================================
 
 function test_config_diff_command() {
-  log_step "Testing ./kgsm.sh config diff command"
+  log_test_step "Testing ./kgsm.sh config diff command"
 
   # Create backup with different content
   cat > "${CONFIG_FILE}.0" << 'EOF'
@@ -171,7 +163,7 @@ EOF
 # =============================================================================
 
 function test_config_diff_missing_backup() {
-  log_step "Testing config diff with missing backup"
+  log_test_step "Testing config diff with missing backup"
 
   # Remove any backups
   rm -f "${CONFIG_FILE}".{0..9}
@@ -190,7 +182,7 @@ function test_config_diff_missing_backup() {
 # =============================================================================
 
 function test_config_validate_command() {
-  log_step "Testing ./kgsm.sh config validate command"
+  log_test_step "Testing ./kgsm.sh config validate command"
 
   # Create valid config
   cp "$DEFAULT_CONFIG_FILE" "$CONFIG_FILE"
@@ -209,7 +201,7 @@ function test_config_validate_command() {
 # =============================================================================
 
 function test_config_help_commands() {
-  log_step "Testing config help for new commands"
+  log_test_step "Testing config help for new commands"
 
   # Test merge help
   local merge_help
@@ -232,7 +224,7 @@ function test_config_help_commands() {
 # =============================================================================
 
 function main() {
-  log_test "Starting config commands integration tests"
+  log_test_step "Starting config commands integration tests"
 
   # Setup
   setup_test

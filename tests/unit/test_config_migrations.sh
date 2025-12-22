@@ -8,14 +8,6 @@
 # TEST SETUP
 # =============================================================================
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Framework common functions
-source "$SCRIPT_DIR/../framework/common.sh"
-
-# KGSM bootstrapper
-source "$KGSM_ROOT/core/bootstrap.sh"
-
 # Test variables
 readonly TEST_NAME="config_migrations"
 readonly MIGRATION_DIR="$KGSM_ROOT/migrations/config"
@@ -25,7 +17,7 @@ readonly MIGRATION_DIR="$KGSM_ROOT/migrations/config"
 # =============================================================================
 
 function setup_test() {
-  log_step "Setting up config migration tests"
+  log_test_step "Setting up config migration tests"
 
   # Verify environment
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
@@ -35,7 +27,7 @@ function setup_test() {
   assert_file_exists "$MIGRATION_DIR/001_v0_to_v1_flat_to_sectioned.sh" "Migration 001 should exist"
   assert_file_executable "$MIGRATION_DIR/001_v0_to_v1_flat_to_sectioned.sh" "Migration 001 should be executable"
 
-  log_test "Config migration test environment validated"
+  log_test_step "Config migration test environment validated"
 }
 
 # =============================================================================
@@ -43,7 +35,7 @@ function setup_test() {
 # =============================================================================
 
 function test_migration_001_minimal_config() {
-  log_step "Testing migration 001 with minimal config"
+  log_test_step "Testing migration 001 with minimal config"
 
   # Create minimal flat config (v0)
   local test_config="${KGSM_TEST_SANDBOX}/test_config_minimal.ini"
@@ -87,7 +79,7 @@ EOF
 # =============================================================================
 
 function test_migration_001_full_config() {
-  log_step "Testing migration 001 with full config"
+  log_test_step "Testing migration 001 with full config"
 
   # Create full flat config (v0) with all keys
   local test_config="${KGSM_TEST_SANDBOX}/test_config_full.ini"
@@ -157,7 +149,7 @@ EOF
 # =============================================================================
 
 function test_migration_001_idempotent() {
-  log_step "Testing migration 001 idempotency"
+  log_test_step "Testing migration 001 idempotency"
 
   # Create flat config
   local test_config="${KGSM_TEST_SANDBOX}/test_config_idempotent.ini"
@@ -195,7 +187,7 @@ EOF
 # =============================================================================
 
 function test_migration_001_missing_keys_get_defaults() {
-  log_step "Testing migration 001 adds defaults for missing keys"
+  log_test_step "Testing migration 001 adds defaults for missing keys"
 
   # Create config with only a few keys (missing most)
   local test_config="${KGSM_TEST_SANDBOX}/test_config_sparse.ini"
@@ -232,7 +224,7 @@ EOF
 # =============================================================================
 
 function test_migration_001_empty_values() {
-  log_step "Testing migration 001 handles empty values"
+  log_test_step "Testing migration 001 handles empty values"
 
   # Create config with empty values (which is valid)
   local test_config="${KGSM_TEST_SANDBOX}/test_config_empty.ini"
@@ -259,7 +251,7 @@ EOF
 # =============================================================================
 
 function test_migration_001_file_not_found() {
-  log_step "Testing migration 001 error handling for missing file"
+  log_test_step "Testing migration 001 error handling for missing file"
 
   local nonexistent_file="${KGSM_TEST_SANDBOX}/nonexistent.ini"
 
@@ -275,7 +267,7 @@ function test_migration_001_file_not_found() {
 # =============================================================================
 
 function test_migration_001_no_file_provided() {
-  log_step "Testing migration 001 error handling without file argument"
+  log_test_step "Testing migration 001 error handling without file argument"
 
   # Run migration without file argument
   bash "$MIGRATION_DIR/001_v0_to_v1_flat_to_sectioned.sh" 2>/dev/null
@@ -289,7 +281,7 @@ function test_migration_001_no_file_provided() {
 # =============================================================================
 
 function test_migration_001_creates_backup() {
-  log_step "Testing migration 001 creates backup file"
+  log_test_step "Testing migration 001 creates backup file"
 
   local test_config="${KGSM_TEST_SANDBOX}/test_config_backup.ini"
   cat > "$test_config" << 'EOF'
@@ -317,7 +309,7 @@ EOF
 # =============================================================================
 
 function main() {
-  log_test "Starting config migration tests"
+  log_test_step "Starting config migration tests"
 
   # Setup
   setup_test

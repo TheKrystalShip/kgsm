@@ -16,31 +16,23 @@
 # CONSTANTS
 # =============================================================================
 
+if [[ -n "${TEST_LOGGING_LOADED:-}" ]]; then
+  return 0
+fi
+
 # Log levels (numeric values for comparison)
-readonly LOG_LEVEL_DEBUG=0
-readonly LOG_LEVEL_INFO=1
-readonly LOG_LEVEL_WARN=2
-readonly LOG_LEVEL_ERROR=3
+[[ -z "${LOG_LEVEL_DEBUG:-}" ]] && declare -g LOG_LEVEL_DEBUG=0
+[[ -z "${LOG_LEVEL_INFO:-}" ]] && declare -g LOG_LEVEL_INFO=1
+[[ -z "${LOG_LEVEL_WARN:-}" ]] && declare -g LOG_LEVEL_WARN=2
+[[ -z "${LOG_LEVEL_ERROR:-}" ]] && declare -g LOG_LEVEL_ERROR=3
+[[ -z "${LOG_LEVEL_SUCCESS:-}" ]] && declare -g LOG_LEVEL_SUCCESS=4
 
 # Log level names
-readonly LOG_LEVEL_NAME_DEBUG="DEBUG"
-readonly LOG_LEVEL_NAME_INFO="INFO"
-readonly LOG_LEVEL_NAME_WARN="WARN"
-readonly LOG_LEVEL_NAME_ERROR="ERROR"
-
-# Color codes for console output (only set if not already defined)
-if [[ -z "${KGSM_LOG_RED:-}" ]]; then
-  KGSM_LOG_RED='\033[0;31m'
-  KGSM_LOG_GREEN='\033[0;32m'
-  KGSM_LOG_YELLOW='\033[1;33m'
-  KGSM_LOG_BLUE='\033[0;34m'
-  KGSM_LOG_PURPLE='\033[0;35m'
-  KGSM_LOG_CYAN='\033[0;36m'
-  KGSM_LOG_WHITE='\033[1;37m'
-  KGSM_LOG_GRAY='\033[0;37m'
-  KGSM_LOG_NC='\033[0m'
-  KGSM_LOG_BOLD='\033[1m'
-fi
+[[ -z "${LOG_LEVEL_NAME_DEBUG:-}" ]] && declare -g LOG_LEVEL_NAME_DEBUG="DEBUG"
+[[ -z "${LOG_LEVEL_NAME_INFO:-}" ]] && declare -g LOG_LEVEL_NAME_INFO="INFO"
+[[ -z "${LOG_LEVEL_NAME_WARN:-}" ]] && declare -g LOG_LEVEL_NAME_WARN="WARN"
+[[ -z "${LOG_LEVEL_NAME_ERROR:-}" ]] && declare -g LOG_LEVEL_NAME_ERROR="ERROR"
+[[ -z "${LOG_LEVEL_NAME_SUCCESS:-}" ]] && declare -g LOG_LEVEL_NAME_SUCCESS="SUCCESS"
 
 # Use existing color codes if available
 : "${RED:=\033[0;31m}"
@@ -64,6 +56,7 @@ case "${KGSM_TEST_LOG_LEVEL:-INFO}" in
   INFO)  KGSM_LOG_LEVEL=$LOG_LEVEL_INFO ;;
   WARN)  KGSM_LOG_LEVEL=$LOG_LEVEL_WARN ;;
   ERROR) KGSM_LOG_LEVEL=$LOG_LEVEL_ERROR ;;
+  SUCCESS) KGSM_LOG_LEVEL=$LOG_LEVEL_SUCCESS ;;
   *)     KGSM_LOG_LEVEL=$LOG_LEVEL_INFO ;;
 esac
 
@@ -76,6 +69,8 @@ function __log_get_timestamp() {
   date -Iseconds
 }
 
+export -f __log_get_timestamp
+
 # Get caller information for source tracking
 # Args: $1 = stack frame offset (default: 3)
 function __log_get_caller() {
@@ -87,12 +82,16 @@ function __log_get_caller() {
   echo "$(basename "$file"):$line in $func()"
 }
 
+export -f __log_get_caller
+
 # Strip ANSI escape codes from text
 # Args: $1 = text to strip
 function __log_strip_ansi() {
   local text="$1"
   echo "$text" | sed 's/\x1b\[[0-9;]*m//g'
 }
+
+export -f __log_strip_ansi
 
 # Write log entry to file (plain text, no colors)
 # Args: $1 = timestamp, $2 = level, $3 = source, $4 = message
@@ -112,6 +111,8 @@ function __log_write_to_file() {
   fi
 }
 
+export -f __log_write_to_file
+
 # Write log entry to console (colored, to stderr)
 # Args: $1 = level, $2 = color, $3 = message
 function __log_write_to_console() {
@@ -125,6 +126,8 @@ function __log_write_to_console() {
     printf "${color}[%s]${NC} %s\n" "$level" "$message" >&2
   fi
 }
+
+export -f __log_write_to_console
 
 # Main logging function
 # Args: $1 = level_num, $2 = level_name, $3 = color, $4 = message, $5 = caller_frame_offset
@@ -153,6 +156,8 @@ function __log() {
   __log_write_to_console "$level_name" "$color" "$message"
 }
 
+export -f __log
+
 # =============================================================================
 # PUBLIC API - Log Level Functions
 # =============================================================================
@@ -165,6 +170,8 @@ function log_debug() {
   __log $LOG_LEVEL_DEBUG "$LOG_LEVEL_NAME_DEBUG" "$PURPLE" "$message" "$frame"
 }
 
+export -f log_debug
+
 # Log info message
 # Args: $1 = message, $2 = caller_frame_offset (optional)
 function log_info() {
@@ -173,13 +180,17 @@ function log_info() {
   __log $LOG_LEVEL_INFO "$LOG_LEVEL_NAME_INFO" "$BLUE" "$message" "$frame"
 }
 
+export -f log_info
+
 # Log warning message
 # Args: $1 = message, $2 = caller_frame_offset (optional)
-function log_warn() {
+function log_warning() {
   local message="$1"
   local frame="${2:-3}"
   __log $LOG_LEVEL_WARN "$LOG_LEVEL_NAME_WARN" "$YELLOW" "$message" "$frame"
 }
+
+export -f log_warning
 
 # Log error message
 # Args: $1 = message, $2 = caller_frame_offset (optional)
@@ -188,6 +199,16 @@ function log_error() {
   local frame="${2:-3}"
   __log $LOG_LEVEL_ERROR "$LOG_LEVEL_NAME_ERROR" "$RED" "$message" "$frame"
 }
+
+export -f log_error
+
+function log_success() {
+  local message="$1"
+  local frame="${2:-3}"
+  __log $LOG_LEVEL_SUCCESS "$LOG_LEVEL_NAME_SUCCESS" "$GREEN" "$message" "$frame"
+}
+
+export -f log_success
 
 # =============================================================================
 # SPECIALIZED LOGGING FUNCTIONS
@@ -200,6 +221,8 @@ function log_test_step() {
   __log $LOG_LEVEL_INFO "$LOG_LEVEL_NAME_INFO" "$CYAN" "[STEP] $step" 3
 }
 
+export -f log_test_step
+
 # Log assertion result
 # Args: $1 = result (PASS|FAIL), $2 = message, $3 = caller_info
 function log_assertion() {
@@ -211,7 +234,7 @@ function log_assertion() {
   timestamp=$(__log_get_timestamp)
 
   if [[ "$result" == "PASS" ]]; then
-    local level="$LOG_LEVEL_NAME_INFO"
+    local level="$LOG_LEVEL_NAME_SUCCESS"
     local color="$GREEN"
     local symbol="✓"
   else
@@ -229,6 +252,8 @@ function log_assertion() {
   fi
 }
 
+export -f log_assertion
+
 # Log raw output from code under test (stderr/stdout capture)
 # Args: $1 = output text
 function log_captured_output() {
@@ -241,6 +266,8 @@ function log_captured_output() {
     echo "$clean_output" >> "$KGSM_TEST_LOG"
   fi
 }
+
+export -f log_captured_output
 
 # =============================================================================
 # UTILITY FUNCTIONS
@@ -256,8 +283,9 @@ function log_set_level() {
     INFO)  KGSM_LOG_LEVEL=$LOG_LEVEL_INFO ;;
     WARN)  KGSM_LOG_LEVEL=$LOG_LEVEL_WARN ;;
     ERROR) KGSM_LOG_LEVEL=$LOG_LEVEL_ERROR ;;
+    SUCCESS) KGSM_LOG_LEVEL=$LOG_LEVEL_SUCCESS ;;
     *)
-      log_warn "Invalid log level: $level_name, keeping current level"
+      log_warning "Invalid log level: $level_name, keeping current level"
       return 1
       ;;
   esac
@@ -265,16 +293,21 @@ function log_set_level() {
   return 0
 }
 
+export -f log_set_level
+
 # Get current log level name
 function log_get_level() {
   case $KGSM_LOG_LEVEL in
-    $LOG_LEVEL_DEBUG) echo "DEBUG" ;;
-    $LOG_LEVEL_INFO)  echo "INFO" ;;
-    $LOG_LEVEL_WARN)  echo "WARN" ;;
-    $LOG_LEVEL_ERROR) echo "ERROR" ;;
+    $LOG_LEVEL_DEBUG) echo "$LOG_LEVEL_NAME_DEBUG" ;;
+    $LOG_LEVEL_INFO)  echo "$LOG_LEVEL_NAME_INFO" ;;
+    $LOG_LEVEL_WARN)  echo "$LOG_LEVEL_NAME_WARN" ;;
+    $LOG_LEVEL_ERROR) echo "$LOG_LEVEL_NAME_ERROR" ;;
+    $LOG_LEVEL_SUCCESS) echo "$LOG_LEVEL_NAME_SUCCESS" ;;
     *) echo "UNKNOWN" ;;
   esac
 }
+
+export -f log_get_level
 
 # Flush log buffer (noop since we flush on every write)
 function log_flush() {
@@ -283,29 +316,11 @@ function log_flush() {
   return 0
 }
 
+export -f log_flush
+
 # =============================================================================
 # INITIALIZATION
 # =============================================================================
 
-# Export functions for use in test scripts
-if [[ "${BASH_SOURCE[0]}" != "${0}" ]]; then
-  export -f __log_get_timestamp
-  export -f __log_get_caller
-  export -f __log_strip_ansi
-  export -f __log_write_to_file
-  export -f __log_write_to_console
-  export -f __log
-  export -f log_debug
-  export -f log_info
-  export -f log_warn
-  export -f log_error
-  export -f log_test_step
-  export -f log_assertion
-  export -f log_captured_output
-  export -f log_set_level
-  export -f log_get_level
-  export -f log_flush
-fi
-
-# Mark module as loaded
-export KGSM_TEST_LOGGING_LOADED=1
+declare -g TEST_LOGGING_LOADED=1
+export TEST_LOGGING_LOADED

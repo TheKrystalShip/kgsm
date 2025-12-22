@@ -9,14 +9,6 @@
 # TEST SETUP
 # =============================================================================
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Framework common functions
-source "$SCRIPT_DIR/../framework/common.sh"
-
-# KGSM bootstrapper
-source "$KGSM_ROOT/core/bootstrap.sh"
-
 # Test variables
 readonly TEST_NAME="directories_logic"
 readonly HANDLER="$KGSM_ROOT/commands/handlers/directories.sh"
@@ -26,7 +18,7 @@ readonly HANDLER="$KGSM_ROOT/commands/handlers/directories.sh"
 # =============================================================================
 
 function setup_test() {
-  log_step "Setting up directory logic tests"
+  log_test_step "Setting up directory logic tests"
 
   # Verify environment
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
@@ -36,7 +28,7 @@ function setup_test() {
   source "$HANDLER"
 
   # Verify required error codes are defined
-  assert_not_null "$EC_OKAY" "EC_OKAY should be defined"
+  assert_not_null "$EC_SUCCESS" "EC_SUCCESS should be defined"
   assert_not_null "$EC_INVALID_ARG" "EC_INVALID_ARG should be defined"
   assert_not_null "$EC_INVALID_CONFIG" "EC_INVALID_CONFIG should be defined"
   assert_not_null "$EC_FAILED_MKDIR" "EC_FAILED_MKDIR should be defined"
@@ -56,7 +48,7 @@ function setup_test() {
   # Verify module loaded guard
   assert_not_null "$KGSM_LOGIC_DIRECTORIES_LOADED" "Module should be loaded"
 
-  log_test "Directory logic test environment validated"
+  log_test_step "Directory logic test environment validated"
 }
 
 # =============================================================================
@@ -64,14 +56,14 @@ function setup_test() {
 # =============================================================================
 
 function test_create_dir_with_default_permissions() {
-  log_step "Testing __create_dir with default permissions"
+  log_test_step "Testing __create_dir with default permissions"
 
   local test_dir="$KGSM_TEST_SANDBOX/test_dir_default_$$"
 
   __create_dir "$test_dir"
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" "Should return EC_OKAY"
+  assert_equals "$exit_code" "$EC_SUCCESS" "Should return EC_SUCCESS"
   assert_dir_exists "$test_dir" "Directory should be created"
 
   # Check permissions (755)
@@ -84,14 +76,14 @@ function test_create_dir_with_default_permissions() {
 }
 
 function test_create_dir_with_custom_permissions() {
-  log_step "Testing __create_dir with custom permissions"
+  log_test_step "Testing __create_dir with custom permissions"
 
   local test_dir="$KGSM_TEST_SANDBOX/test_dir_custom_$$"
 
   __create_dir "$test_dir" "700"
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" "Should return EC_OKAY"
+  assert_equals "$exit_code" "$EC_SUCCESS" "Should return EC_SUCCESS"
   assert_dir_exists "$test_dir" "Directory should be created"
 
   # Check permissions (700)
@@ -104,17 +96,17 @@ function test_create_dir_with_custom_permissions() {
 }
 
 function test_create_dir_idempotent() {
-  log_step "Testing __create_dir idempotency"
+  log_test_step "Testing __create_dir idempotency"
 
   local test_dir="$KGSM_TEST_SANDBOX/test_dir_idempotent_$$"
 
   # Create first time
   __create_dir "$test_dir"
-  assert_equals "$?" "$EC_OKAY" "First call should succeed"
+  assert_equals "$?" "$EC_SUCCESS" "First call should succeed"
 
   # Create second time (should also succeed)
   __create_dir "$test_dir"
-  assert_equals "$?" "$EC_OKAY" "Second call should succeed (idempotent)"
+  assert_equals "$?" "$EC_SUCCESS" "Second call should succeed (idempotent)"
 
   assert_dir_exists "$test_dir" "Directory should still exist"
 
@@ -123,7 +115,7 @@ function test_create_dir_idempotent() {
 }
 
 function test_create_dir_empty_parameter() {
-  log_step "Testing __create_dir with empty parameter"
+  log_test_step "Testing __create_dir with empty parameter"
 
   __create_dir "" 2>/dev/null
   local exit_code=$?
@@ -132,7 +124,7 @@ function test_create_dir_empty_parameter() {
 }
 
 function test_create_dir_permission_denied() {
-  log_step "Testing __create_dir with unwritable parent directory"
+  log_test_step "Testing __create_dir with unwritable parent directory"
 
   local test_parent="$KGSM_TEST_SANDBOX/test_parent_$$"
   local test_dir="$test_parent/subdir"
@@ -159,14 +151,14 @@ function test_create_dir_permission_denied() {
 # =============================================================================
 
 function test_create_file_with_default_permissions() {
-  log_step "Testing __create_file with default permissions"
+  log_test_step "Testing __create_file with default permissions"
 
   local test_file="$KGSM_TEST_SANDBOX/test_file_default_$$"
 
   __create_file "$test_file"
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" "Should return EC_OKAY"
+  assert_equals "$exit_code" "$EC_SUCCESS" "Should return EC_SUCCESS"
   assert_file_exists "$test_file" "File should be created"
 
   # Check permissions (644)
@@ -179,14 +171,14 @@ function test_create_file_with_default_permissions() {
 }
 
 function test_create_file_with_custom_permissions() {
-  log_step "Testing __create_file with custom permissions"
+  log_test_step "Testing __create_file with custom permissions"
 
   local test_file="$KGSM_TEST_SANDBOX/test_file_custom_$$"
 
   __create_file "$test_file" "600"
   local exit_code=$?
 
-  assert_equals "$exit_code" "$EC_OKAY" "Should return EC_OKAY"
+  assert_equals "$exit_code" "$EC_SUCCESS" "Should return EC_SUCCESS"
   assert_file_exists "$test_file" "File should be created"
 
   # Check permissions (600)
@@ -199,17 +191,17 @@ function test_create_file_with_custom_permissions() {
 }
 
 function test_create_file_idempotent() {
-  log_step "Testing __create_file idempotency"
+  log_test_step "Testing __create_file idempotency"
 
   local test_file="$KGSM_TEST_SANDBOX/test_file_idempotent_$$"
 
   # Create first time
   __create_file "$test_file"
-  assert_equals "$?" "$EC_OKAY" "First call should succeed"
+  assert_equals "$?" "$EC_SUCCESS" "First call should succeed"
 
   # Create second time (should also succeed)
   __create_file "$test_file"
-  assert_equals "$?" "$EC_OKAY" "Second call should succeed (idempotent)"
+  assert_equals "$?" "$EC_SUCCESS" "Second call should succeed (idempotent)"
 
   assert_file_exists "$test_file" "File should still exist"
 
@@ -218,7 +210,7 @@ function test_create_file_idempotent() {
 }
 
 function test_create_file_empty_parameter() {
-  log_step "Testing __create_file with empty parameter"
+  log_test_step "Testing __create_file with empty parameter"
 
   __create_file "" 2>/dev/null
   local exit_code=$?
@@ -227,7 +219,7 @@ function test_create_file_empty_parameter() {
 }
 
 function test_create_file_permission_denied() {
-  log_step "Testing __create_file with unwritable parent directory"
+  log_test_step "Testing __create_file with unwritable parent directory"
 
   local test_parent="$KGSM_TEST_SANDBOX/test_parent_file_$$"
   local test_file="$test_parent/testfile"
@@ -254,7 +246,7 @@ function test_create_file_permission_denied() {
 # =============================================================================
 
 function test_create_directories_success() {
-  log_step "Testing __logic_create_directories with valid parameters"
+  log_test_step "Testing __logic_create_directories with valid parameters"
 
   local instance_name="test-instance-$$"
   local working_dir="$KGSM_TEST_SANDBOX/test_instance_$$"
@@ -290,7 +282,7 @@ function test_create_directories_success() {
 }
 
 function test_create_directories_idempotent() {
-  log_step "Testing __logic_create_directories idempotency"
+  log_test_step "Testing __logic_create_directories idempotency"
 
   local instance_name="test-instance-idempotent-$$"
   local working_dir="$KGSM_TEST_SANDBOX/test_instance_idempotent_$$"
@@ -316,7 +308,7 @@ function test_create_directories_idempotent() {
 }
 
 function test_create_directories_missing_instance_name() {
-  log_step "Testing __logic_create_directories with missing instance_name"
+  log_test_step "Testing __logic_create_directories with missing instance_name"
 
   local config_file="$KGSM_TEST_SANDBOX/test_config_missing_$$.ini"
   local working_dir="$KGSM_TEST_SANDBOX/test_working_missing_$$"
@@ -333,7 +325,7 @@ function test_create_directories_missing_instance_name() {
 }
 
 function test_create_directories_missing_config_file() {
-  log_step "Testing __logic_create_directories with missing config_file"
+  log_test_step "Testing __logic_create_directories with missing config_file"
 
   local instance_name="test-instance-$$"
   local working_dir="$KGSM_TEST_SANDBOX/test_working_$$"
@@ -345,7 +337,7 @@ function test_create_directories_missing_config_file() {
 }
 
 function test_create_directories_missing_working_dir() {
-  log_step "Testing __logic_create_directories with missing working_dir"
+  log_test_step "Testing __logic_create_directories with missing working_dir"
 
   local instance_name="test-instance-$$"
   local config_file="$KGSM_TEST_SANDBOX/test_config_$$.ini"
@@ -362,7 +354,7 @@ function test_create_directories_missing_working_dir() {
 }
 
 function test_create_directories_relative_path() {
-  log_step "Testing __logic_create_directories with relative path"
+  log_test_step "Testing __logic_create_directories with relative path"
 
   local instance_name="test-instance-$$"
   local config_file="$KGSM_TEST_SANDBOX/test_config_relative_$$.ini"
@@ -380,7 +372,7 @@ function test_create_directories_relative_path() {
 }
 
 function test_create_directories_nonexistent_config() {
-  log_step "Testing __logic_create_directories with non-existent config file"
+  log_test_step "Testing __logic_create_directories with non-existent config file"
 
   local instance_name="test-instance-$$"
   local config_file="$KGSM_TEST_SANDBOX/nonexistent_config_$$.ini"
@@ -399,7 +391,7 @@ function test_create_directories_nonexistent_config() {
 }
 
 function test_create_directories_unwritable_config() {
-  log_step "Testing __logic_create_directories with unwritable config file"
+  log_test_step "Testing __logic_create_directories with unwritable config file"
 
   local instance_name="test-instance-$$"
   local config_file="$KGSM_TEST_SANDBOX/test_config_readonly_$$.ini"
@@ -423,7 +415,7 @@ function test_create_directories_unwritable_config() {
 }
 
 function test_create_directories_unwritable_parent() {
-  log_step "Testing __logic_create_directories with unwritable parent directory"
+  log_test_step "Testing __logic_create_directories with unwritable parent directory"
 
   local instance_name="test-instance-$$"
   local config_file="$KGSM_TEST_SANDBOX/test_config_unwritable_$$.ini"
@@ -454,7 +446,7 @@ function test_create_directories_unwritable_parent() {
 # =============================================================================
 
 function test_remove_directories_success() {
-  log_step "Testing __logic_remove_directories with valid parameters"
+  log_test_step "Testing __logic_remove_directories with valid parameters"
 
   local instance_name="test-instance-$$"
   local working_dir="$KGSM_TEST_SANDBOX/test_instance_remove_$$"
@@ -472,7 +464,7 @@ function test_remove_directories_success() {
 }
 
 function test_remove_directories_with_nested_content() {
-  log_step "Testing __logic_remove_directories with nested content"
+  log_test_step "Testing __logic_remove_directories with nested content"
 
   local instance_name="test-instance-nested-$$"
   local working_dir="$KGSM_TEST_SANDBOX/test_instance_nested_$$"
@@ -491,7 +483,7 @@ function test_remove_directories_with_nested_content() {
 }
 
 function test_remove_directories_missing_instance_name() {
-  log_step "Testing __logic_remove_directories with missing instance_name"
+  log_test_step "Testing __logic_remove_directories with missing instance_name"
 
   local working_dir="$KGSM_TEST_SANDBOX/test_working_$$"
 
@@ -502,7 +494,7 @@ function test_remove_directories_missing_instance_name() {
 }
 
 function test_remove_directories_missing_working_dir() {
-  log_step "Testing __logic_remove_directories with missing working_dir"
+  log_test_step "Testing __logic_remove_directories with missing working_dir"
 
   local instance_name="test-instance-$$"
 
@@ -513,7 +505,7 @@ function test_remove_directories_missing_working_dir() {
 }
 
 function test_remove_directories_relative_path() {
-  log_step "Testing __logic_remove_directories with relative path"
+  log_test_step "Testing __logic_remove_directories with relative path"
 
   local instance_name="test-instance-$$"
   local working_dir="relative/path"
@@ -526,7 +518,7 @@ function test_remove_directories_relative_path() {
 }
 
 function test_remove_directories_nonexistent_directory() {
-  log_step "Testing __logic_remove_directories with non-existent directory"
+  log_test_step "Testing __logic_remove_directories with non-existent directory"
 
   local instance_name="test-instance-$$"
   local working_dir="$KGSM_TEST_SANDBOX/nonexistent_dir_$$"
@@ -543,7 +535,7 @@ function test_remove_directories_nonexistent_directory() {
 # restrictive permissions, as long as the user has the necessary permissions on
 # the parent directory.
 function test_remove_directories_permission_denied() {
-  log_step "Testing __logic_remove_directories with protected directory"
+  log_test_step "Testing __logic_remove_directories with protected directory"
 
   local instance_name="test-instance-$$"
   local working_dir="$KGSM_TEST_SANDBOX/test_protected_$$"
@@ -571,19 +563,19 @@ function test_remove_directories_permission_denied() {
 # =============================================================================
 
 function main() {
-  log_test "Starting directory logic tests"
+  log_test_step "Starting directory logic tests"
 
   setup_test
 
   # Utility function tests (run first to establish foundational correctness)
-  log_test "Running __create_dir() tests"
+  log_test_step "Running __create_dir() tests"
   test_create_dir_with_default_permissions
   test_create_dir_with_custom_permissions
   test_create_dir_idempotent
   test_create_dir_empty_parameter
   test_create_dir_permission_denied
 
-  log_test "Running __create_file() tests"
+  log_test_step "Running __create_file() tests"
   test_create_file_with_default_permissions
   test_create_file_with_custom_permissions
   test_create_file_idempotent
@@ -591,7 +583,7 @@ function main() {
   test_create_file_permission_denied
 
   # Logic function tests
-  log_test "Running __logic_create_directories() tests"
+  log_test_step "Running __logic_create_directories() tests"
   test_create_directories_success
   test_create_directories_idempotent
   test_create_directories_missing_instance_name
@@ -602,7 +594,7 @@ function main() {
   test_create_directories_unwritable_config
   test_create_directories_unwritable_parent
 
-  log_test "Running __logic_remove_directories() tests"
+  log_test_step "Running __logic_remove_directories() tests"
   test_remove_directories_success
   test_remove_directories_with_nested_content
   test_remove_directories_missing_instance_name
@@ -611,7 +603,7 @@ function main() {
   test_remove_directories_nonexistent_directory
   # test_remove_directories_permission_denied
 
-  log_test "All directory logic tests completed"
+  log_test_step "All directory logic tests completed"
 
   if print_assert_summary "$TEST_NAME"; then
     pass_test "All directory logic tests passed"

@@ -9,6 +9,10 @@
 # This module provides functions to create mock configs, blueprints,
 # override files, and management scripts for testing purposes.
 
+if [[ -n "${TEST_FIXTURES_LOADED:-}" ]]; then
+  return 0
+fi
+
 # =============================================================================
 # INSTANCE CONFIG FIXTURES
 # =============================================================================
@@ -240,4 +244,5 @@ function cleanup_mock_files() {
 export -f cleanup_mock_files
 
 # Mark module as loaded
-export KGSM_TEST_FIXTURES_LOADED=1
+declare -g TEST_FIXTURES_LOADED=1
+export TEST_FIXTURES_LOADED

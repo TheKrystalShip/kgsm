@@ -31,20 +31,21 @@ readonly BOLD='\033[1m'
 # UTILITY FUNCTIONS
 # =============================================================================
 
-print_banner() {
-    echo -e "${CYAN}${BOLD}"
-    echo "============================================================"
-    echo "  KGSM Test Framework"
+function print_banner() {
+    echo -e "${CYAN}${BOLD}============================================================"
+    echo "  KGSM Testing Framework"
     echo "============================================================"
     echo -e "${NC}"
 }
 
-print_usage() {
+self="$(basename "$0")"
+
+function print_usage() {
     echo -e "
 ${BOLD}KGSM Test Framework${NC}
 
 ${BOLD}USAGE:${NC}
-    $(basename "$0") [OPTIONS] [TEST_TYPES...]
+    ${self} [OPTIONS] [TEST_TYPES...]
 
 ${BOLD}OPTIONS:${NC}
     -h, --help          Show this help message
@@ -66,11 +67,11 @@ ${BOLD}TEST TYPES:${NC}
     all                 Run all test types (default)
 
 ${BOLD}EXAMPLES:${NC}
-    $(basename "$0")                           # Run all tests
-    $(basename "$0") unit                      # Run only unit tests
-    $(basename "$0") --debug e2e               # Run e2e tests with debug
-    $(basename "$0") --pattern "instance"     # Run tests matching "instance"
-    $(basename "$0") --verbose --exclude "long"  # Verbose mode, exclude long tests
+    ${self}                           # Run all tests
+    ${self} unit                      # Run only unit tests
+    ${self} --debug e2e               # Run e2e tests with debug
+    ${self} --pattern \"instance\"     # Run tests matching \"instance\"
+    ${self} --verbose --exclude \"long\"  # Verbose mode, exclude long tests
 
 ${BOLD}CONFIGURATION:${NC}
     Test behavior can be customized by editing:
@@ -96,174 +97,125 @@ For more information, see: ${SCRIPT_DIR}/README.md
 "
 }
 
-check_dependencies() {
-    local missing_deps=()
+function check_dependencies() {
+  local missing_deps=()
 
-    # Check for runner script
-    if [[ ! -f "$RUNNER_SCRIPT" ]]; then
-        echo -e "${RED}ERROR: Test runner not found: $RUNNER_SCRIPT${NC}" >&2
-        exit 1
+  # Check for runner script
+  if [[ ! -f "$RUNNER_SCRIPT" ]]; then
+    echo -e "${RED}ERROR: Test runner not found: $RUNNER_SCRIPT${NC}" >&2
+    exit 1
+  fi
+
+  # Check for required commands
+  local required_commands=("bash" "grep" "find" "mktemp" "date")
+
+  for cmd in "${required_commands[@]}"; do
+    if ! command -v "$cmd" > /dev/null 2>&1; then
+      missing_deps+=("$cmd")
     fi
+  done
 
-    # Check for required commands
-    local required_commands=("bash" "grep" "find" "mktemp" "date")
+  # Check optional but recommended commands
+  local optional_commands=("jq" "steamcmd" "docker")
+  local missing_optional=()
 
-    for cmd in "${required_commands[@]}"; do
-        if ! command -v "$cmd" >/dev/null 2>&1; then
-            missing_deps+=("$cmd")
-        fi
-    done
-
-    # Check optional but recommended commands
-    local optional_commands=("jq" "steamcmd" "docker")
-    local missing_optional=()
-
-    for cmd in "${optional_commands[@]}"; do
-        if ! command -v "$cmd" >/dev/null 2>&1; then
-            missing_optional+=("$cmd")
-        fi
-    done
-
-    # Report missing dependencies
-    if [[ ${#missing_deps[@]} -gt 0 ]]; then
-        echo -e "${RED}ERROR: Missing required dependencies:${NC}" >&2
-        printf "${RED}  - %s${NC}\n" "${missing_deps[@]}" >&2
-        echo -e "${RED}Please install these commands before running tests.${NC}" >&2
-        exit 1
+  for cmd in "${optional_commands[@]}"; do
+    if ! command -v "$cmd" > /dev/null 2>&1; then
+      missing_optional+=("$cmd")
     fi
+  done
 
-    if [[ ${#missing_optional[@]} -gt 0 ]]; then
-        echo -e "${YELLOW}WARNING: Missing optional dependencies:${NC}" >&2
-        printf "${YELLOW}  - %s${NC}\n" "${missing_optional[@]}" >&2
-        echo -e "${YELLOW}Some tests may be skipped without these dependencies.${NC}" >&2
-        echo ""
-    fi
-}
+  # Report missing dependencies
+  if [[ ${#missing_deps[@]} -gt 0 ]]; then
+    echo -e "${RED}ERROR: Missing required dependencies:${NC}" >&2
+    printf "${RED}  - %s${NC}\n" "${missing_deps[@]}" >&2
+    echo -e "${RED}Please install these commands before running tests.${NC}" >&2
+    exit 1
+  fi
 
-list_available_tests() {
-    echo -e "${BOLD}Available Tests:${NC}\n"
-
-    for test_type in "unit" "integration" "e2e"; do
-        local test_dir="$SCRIPT_DIR/$test_type"
-
-        if [[ -d "$test_dir" ]]; then
-            echo -e "${CYAN}${BOLD}$test_type tests:${NC}"
-
-            local test_files
-            mapfile -t test_files < <(find "$test_dir" -name "test_*.sh" -type f | sort)
-
-            if [[ ${#test_files[@]} -eq 0 ]]; then
-                echo "  (no tests found)"
-            else
-                for test_file in "${test_files[@]}"; do
-                    local test_name
-                    test_name="$(basename "$test_file" .sh)"
-                    test_name="${test_name#test_}"
-
-                    # Check if test would be skipped
-                    local skip_var="SKIP_${test_name^^}"
-                    local skip_status=""
-
-                    # Source config to check skip status
-                    local test_config="$SCRIPT_DIR/config/test.conf"
-                    if [[ -f "$test_config" ]]; then
-                        # shellcheck disable=SC1090
-                        source "$test_config" 2>/dev/null || true
-                        if [[ "${!skip_var:-false}" == "true" ]]; then
-                            skip_status=" ${YELLOW}(SKIPPED)${NC}"
-                        fi
-                    fi
-
-                    echo -e "  - $test_name$skip_status"
-                done
-            fi
-            echo ""
-        fi
-    done
-
-    echo -e "${GRAY}Use --pattern or --exclude to filter tests${NC}"
-    echo -e "${GRAY}Configure test.conf to skip specific tests${NC}"
-}
-
-validate_test_environment() {
-    # Check that we're in the right directory structure
-    if [[ ! -f "$SCRIPT_DIR/../kgsm.sh" ]]; then
-        echo -e "${RED}ERROR: KGSM directory not found.${NC}" >&2
-        echo -e "${RED}Tests must be run from within the KGSM project directory.${NC}" >&2
-        exit 1
-    fi
-
-    # Check that essential test framework files exist
-    local essential_files=(
-        "$FRAMEWORK_DIR/runner.sh"
-        "$FRAMEWORK_DIR/common.sh"
-        "$FRAMEWORK_DIR/assert.sh"
-    )
-
-    for file in "${essential_files[@]}"; do
-        if [[ ! -f "$file" ]]; then
-            echo -e "${RED}ERROR: Essential test file missing: $file${NC}" >&2
-            exit 1
-        fi
-    done
-
-    # Make sure runner is executable
-    chmod +x "$RUNNER_SCRIPT"
-}
-
-# =============================================================================
-# MAIN EXECUTION
-# =============================================================================
-
-function main() {
-    # Parse special options first
-    local show_help=false
-    local list_tests=false
-    local config_file=""
-
-    for arg in "$@"; do
-        case "$arg" in
-            -h|--help)
-                show_help=true
-                ;;
-            -l|--list)
-                list_tests=true
-                ;;
-            -c|--config)
-                # This will be handled by the runner
-                ;;
-        esac
-    done
-
-    # Show help if requested
-    if [[ "$show_help" == "true" ]]; then
-        print_banner
-        print_usage
-        exit 0
-    fi
-
-    # List tests if requested
-    if [[ "$list_tests" == "true" ]]; then
-        print_banner
-        list_available_tests
-        exit 0
-    fi
-
-    # Normal execution
-    print_banner
-
-    echo -e "${BLUE}Checking dependencies...${NC}"
-    check_dependencies
-
-    echo -e "${BLUE}Validating test environment...${NC}"
-    validate_test_environment
-
-    echo -e "${BLUE}Starting test execution...${NC}"
+  if [[ ${#missing_optional[@]} -gt 0 ]]; then
+    echo -e "${YELLOW}WARNING: Missing optional dependencies:${NC}" >&2
+    printf "${YELLOW}  - %s${NC}\n" "${missing_optional[@]}" >&2
+    echo -e "${YELLOW}Some tests may be skipped without these dependencies.${NC}" >&2
     echo ""
-
-    # Execute the test runner with all arguments
-    exec "$RUNNER_SCRIPT" "$@"
+  fi
 }
 
-# Run main function
-main "$@"
+function validate_test_environment() {
+  # Check that we're in the right directory structure
+  if [[ ! -f "$SCRIPT_DIR/../kgsm.sh" ]]; then
+    echo -e "${RED}ERROR: KGSM directory not found.${NC}" >&2
+    echo -e "${RED}Tests must be run from within the KGSM project directory.${NC}" >&2
+    exit 1
+  fi
+
+  # Check that essential test framework files exist
+  local essential_files=(
+    "$FRAMEWORK_DIR/bootstrap.sh"
+    "$FRAMEWORK_DIR/sandbox.sh"
+    "$FRAMEWORK_DIR/execution.sh"
+    "$FRAMEWORK_DIR/execution.sequential.sh"
+    "$FRAMEWORK_DIR/execution.parallel.sh"
+    "$FRAMEWORK_DIR/discovery.sh"
+    "$FRAMEWORK_DIR/reporting.sh"
+    "$FRAMEWORK_DIR/runner.sh"
+    "$FRAMEWORK_DIR/common.sh"
+    "$FRAMEWORK_DIR/assert.sh"
+  )
+
+  for file in "${essential_files[@]}"; do
+    if [[ ! -f "$file" ]]; then
+      echo -e "${RED}ERROR: Essential test file missing: $file${NC}" >&2
+      exit 1
+    fi
+  done
+
+  # Make sure runner is executable
+  chmod +x "$RUNNER_SCRIPT"
+}
+
+export -f validate_test_environment
+
+function _run_tests() {
+  # Normal execution
+  print_banner
+
+  echo -e "${BLUE}Checking dependencies...${NC}"
+  check_dependencies
+
+  echo -e "${BLUE}Validating test environment...${NC}"
+  validate_test_environment
+
+  echo -e "${BLUE}Starting test execution...${NC}"
+
+  # Execute the test runner with all arguments
+  exec "$RUNNER_SCRIPT" "$@"
+}
+
+export -f _run_tests
+
+# Parse command
+command="${1:-}"
+
+case "$command" in
+  "")
+    _run_tests "$@"
+    ;;
+  -h | --help | help)
+    print_banner
+    print_usage
+    ;;
+  -l | --list)
+    # Delegate to runner.sh which uses discovery.sh list_tests()
+    print_banner
+    exec "$RUNNER_SCRIPT" --list "$@"
+    ;;
+  -c | --config)
+    exec "$RUNNER_SCRIPT" "$@"
+    ;;
+  *)
+    _run_tests "$@"
+    ;;
+esac
+
+exit $?

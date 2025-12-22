@@ -10,14 +10,6 @@
 # TEST SETUP
 # =============================================================================
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Framework common functions
-source "$SCRIPT_DIR/../framework/common.sh"
-
-# KGSM bootstrapper
-source "$KGSM_ROOT/core/bootstrap.sh"
-
 # Test variables
 readonly TEST_NAME="files_common_logic"
 readonly HANDLER="$KGSM_ROOT/commands/handlers/files.common.sh"
@@ -27,7 +19,7 @@ readonly HANDLER="$KGSM_ROOT/commands/handlers/files.common.sh"
 # =============================================================================
 
 function setup_test() {
-  log_step "Setting up files.common logic tests"
+  log_test_step "Setting up files.common logic tests"
 
   # Verify environment
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
@@ -57,7 +49,7 @@ function setup_test() {
   # Verify real factorio overrides exist
   assert_file_exists "$KGSM_ROOT/overrides/factorio.overrides.sh" "Factorio overrides should exist"
 
-  log_test "Files.common logic test environment validated"
+  log_test_step "Files.common logic test environment validated"
 }
 
 # =============================================================================
@@ -65,7 +57,7 @@ function setup_test() {
 # =============================================================================
 
 function test_inject_overrides_success_single_function() {
-  log_step "Testing __logic_inject_overrides with single function"
+  log_test_step "Testing __logic_inject_overrides with single function"
 
   # Use real factorio blueprint
   local blueprint_file="$KGSM_ROOT/blueprints/native/default/factorio.bp"
@@ -87,7 +79,7 @@ function test_inject_overrides_success_single_function() {
   __logic_inject_overrides "$instance_name" "$mgmt_script"
   local exit_code=$?
 
-  assert_equals "$EC_OKAY" "$exit_code" "Should return success"
+  assert_equals "$EC_SUCCESS" "$exit_code" "Should return success"
   assert_file_exists "$mgmt_script" "Management script should still exist"
 
   # Verify the function was injected (check for mock implementation)
@@ -102,7 +94,7 @@ function test_inject_overrides_success_single_function() {
 }
 
 function test_inject_overrides_success_multiple_functions() {
-  log_step "Testing __logic_inject_overrides with multiple functions"
+  log_test_step "Testing __logic_inject_overrides with multiple functions"
 
   local blueprint_file="$KGSM_ROOT/blueprints/native/default/factorio.bp"
   local instance_name="test-factorio-multi-$$"
@@ -134,7 +126,7 @@ function test_inject_overrides_success_multiple_functions() {
 }
 
 function test_inject_overrides_no_override_file() {
-  log_step "Testing __logic_inject_overrides with non-existent override file (valid case)"
+  log_test_step "Testing __logic_inject_overrides with non-existent override file (valid case)"
 
   # Create a mock blueprint with a name that has no override file
   local blueprint_file
@@ -163,7 +155,7 @@ function test_inject_overrides_no_override_file() {
 }
 
 function test_inject_overrides_empty_instance_name() {
-  log_step "Testing __logic_inject_overrides with empty instance_name"
+  log_test_step "Testing __logic_inject_overrides with empty instance_name"
 
   local mgmt_script="$KGSM_TEST_SANDBOX/manage_empty_$$.sh"
   touch "$mgmt_script"
@@ -177,7 +169,7 @@ function test_inject_overrides_empty_instance_name() {
 }
 
 function test_inject_overrides_empty_management_file() {
-  log_step "Testing __logic_inject_overrides with empty management_file"
+  log_test_step "Testing __logic_inject_overrides with empty management_file"
 
   __logic_inject_overrides "test-instance-$$" "" 2>/dev/null
   local exit_code=$?
@@ -186,7 +178,7 @@ function test_inject_overrides_empty_management_file() {
 }
 
 function test_inject_overrides_management_file_not_found() {
-  log_step "Testing __logic_inject_overrides with non-existent management file"
+  log_test_step "Testing __logic_inject_overrides with non-existent management file"
 
   local mgmt_script="$KGSM_TEST_SANDBOX/nonexistent_$$.sh"
 
@@ -197,7 +189,7 @@ function test_inject_overrides_management_file_not_found() {
 }
 
 function test_inject_overrides_instance_config_not_found() {
-  log_step "Testing __logic_inject_overrides with non-existent instance config"
+  log_test_step "Testing __logic_inject_overrides with non-existent instance config"
 
   local mgmt_script="$KGSM_TEST_SANDBOX/manage_noconfig_$$.sh"
   touch "$mgmt_script"
@@ -212,7 +204,7 @@ function test_inject_overrides_instance_config_not_found() {
 }
 
 function test_inject_overrides_blueprint_file_missing_from_config() {
-  log_step "Testing __logic_inject_overrides with blueprint_file missing from config"
+  log_test_step "Testing __logic_inject_overrides with blueprint_file missing from config"
 
   local instance_name="test-nobpfile-$$"
   local instance_dir="$KGSM_ROOT/instances/testgame"
@@ -239,7 +231,7 @@ EOF
 }
 
 function test_inject_overrides_blueprint_name_missing() {
-  log_step "Testing __logic_inject_overrides with blueprint name field missing"
+  log_test_step "Testing __logic_inject_overrides with blueprint name field missing"
 
   local instance_name="test-noname-$$"
   local blueprint_file="$KGSM_ROOT/blueprints/native/custom/noname-$$.bp"
@@ -276,7 +268,7 @@ EOF
 }
 
 function test_inject_overrides_malformed_override_file() {
-  log_step "Testing __logic_inject_overrides with malformed override file"
+  log_test_step "Testing __logic_inject_overrides with malformed override file"
 
   local blueprint_file="$KGSM_ROOT/blueprints/native/default/factorio.bp"
   local instance_name="test-malformed-$$"
@@ -314,7 +306,7 @@ EOF
 }
 
 function test_inject_overrides_readonly_management_file() {
-  log_step "Testing __logic_inject_overrides with read-only management file"
+  log_test_step "Testing __logic_inject_overrides with read-only management file"
 
   local blueprint_file="$KGSM_ROOT/blueprints/native/default/factorio.bp"
   local instance_name="test-readonly-$$"
@@ -344,12 +336,12 @@ function test_inject_overrides_readonly_management_file() {
   # However, the exact behavior may vary, so we accept either permission error
   # or the operation silently failing (exit code 0 but no changes)
   if [[ "$exit_code" -eq 0 ]]; then
-    log_test "Operation returned 0, checking if injection actually occurred"
+    log_test_step "Operation returned 0, checking if injection actually occurred"
     # Verify injection didn't actually happen
     assert_command_succeeds "grep -q 'Placeholder _get_latest_version' '$mgmt_script'" "Placeholder should remain since injection failed"
     assert_command_fails "grep -q 'Mock _get_latest_version implementation' '$mgmt_script'" "Function should not be injected despite read-only directory"
   else
-    log_test "Function was not injected as expected (sed failed silently)"
+    log_test_step "Function was not injected as expected (sed failed silently)"
   fi
 
   cleanup_mock_files "$instance_config" "$mgmt_script" "$override_file"
@@ -357,7 +349,7 @@ function test_inject_overrides_readonly_management_file() {
 }
 
 function test_inject_overrides_idempotency() {
-  log_step "Testing __logic_inject_overrides idempotency (inject twice)"
+  log_test_step "Testing __logic_inject_overrides idempotency (inject twice)"
 
   local blueprint_file="$KGSM_ROOT/blueprints/native/default/factorio.bp"
   local instance_name="test-idempotent-$$"
@@ -399,7 +391,7 @@ function test_inject_overrides_idempotency() {
 # =============================================================================
 
 function test_set_file_ownership_success() {
-  log_step "Testing __logic_set_file_ownership with valid file"
+  log_test_step "Testing __logic_set_file_ownership with valid file"
 
   local test_file="$KGSM_TEST_SANDBOX/test_ownership_$$.txt"
   touch "$test_file"
@@ -418,7 +410,7 @@ function test_set_file_ownership_success() {
 }
 
 function test_set_file_ownership_empty_path() {
-  log_step "Testing __logic_set_file_ownership with empty file_path"
+  log_test_step "Testing __logic_set_file_ownership with empty file_path"
 
   __logic_set_file_ownership "" 2>/dev/null
   local exit_code=$?
@@ -427,7 +419,7 @@ function test_set_file_ownership_empty_path() {
 }
 
 function test_set_file_ownership_file_not_found() {
-  log_step "Testing __logic_set_file_ownership with non-existent file"
+  log_test_step "Testing __logic_set_file_ownership with non-existent file"
 
   local test_file="$KGSM_TEST_SANDBOX/nonexistent_$$.txt"
 
@@ -438,7 +430,7 @@ function test_set_file_ownership_file_not_found() {
 }
 
 function test_set_file_ownership_symlink() {
-  log_step "Testing __logic_set_file_ownership with symlink"
+  log_test_step "Testing __logic_set_file_ownership with symlink"
 
   local real_file="$KGSM_TEST_SANDBOX/real_file_$$.txt"
   local symlink="$KGSM_TEST_SANDBOX/symlink_$$.txt"
@@ -460,7 +452,7 @@ function test_set_file_ownership_symlink() {
 }
 
 function test_set_file_ownership_permission_denied() {
-  log_step "Testing __logic_set_file_ownership with permission denied"
+  log_test_step "Testing __logic_set_file_ownership with permission denied"
 
   # Create a directory with restricted permissions
   local test_dir="$KGSM_TEST_SANDBOX/restricted_dir_$$"
@@ -490,7 +482,7 @@ function test_set_file_ownership_permission_denied() {
 }
 
 function test_set_file_ownership_regular_user_context() {
-  log_step "Testing __logic_set_file_ownership in regular user context"
+  log_test_step "Testing __logic_set_file_ownership in regular user context"
 
   local test_file="$KGSM_TEST_SANDBOX/test_user_context_$$.txt"
   touch "$test_file"
@@ -520,7 +512,7 @@ function test_set_file_ownership_regular_user_context() {
 # =============================================================================
 
 function main() {
-  log_test "Starting files.common logic tests"
+  log_test_step "Starting files.common logic tests"
 
   # Setup
   setup_test
@@ -549,10 +541,10 @@ function main() {
 
   # Print summary and exit
   if print_assert_summary "$TEST_NAME"; then
-    log_test "All tests passed"
+    log_test_step "All tests passed"
     exit 0
   else
-    log_test "Some tests failed"
+    log_test_step "Some tests failed"
     exit 1
   fi
 }

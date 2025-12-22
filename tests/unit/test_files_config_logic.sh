@@ -13,14 +13,6 @@
 # TEST SETUP
 # =============================================================================
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Framework common functions
-source "$SCRIPT_DIR/../framework/common.sh"
-
-# KGSM bootstrapper
-source "$KGSM_ROOT/core/bootstrap.sh"
-
 # Test variables
 readonly TEST_NAME="files_config_logic"
 readonly HANDLER="$KGSM_ROOT/commands/handlers/files.config.sh"
@@ -84,7 +76,7 @@ function assert_symlink_points_to() {
 # =============================================================================
 
 function setup_test() {
-  log_step "Setting up files.config logic tests"
+  log_test_step "Setting up files.config logic tests"
 
   # Verify environment
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
@@ -115,7 +107,7 @@ function setup_test() {
   # Verify files.common.sh is loaded (dependency)
   assert_not_null "$KGSM_LOGIC_FILES_COMMON_LOADED" "files.common module should be loaded"
 
-  log_test "Files.config logic test environment validated"
+  log_test_step "Files.config logic test environment validated"
 }
 
 # =============================================================================
@@ -123,7 +115,7 @@ function setup_test() {
 # =============================================================================
 
 function test_install_success() {
-  log_step "Testing __logic_install_standalone_config with valid config"
+  log_test_step "Testing __logic_install_standalone_config with valid config"
 
   local instance_name="test-install-$$"
   local working_dir="$KGSM_TEST_SANDBOX/instances/${instance_name}"
@@ -165,7 +157,7 @@ function test_install_success() {
 }
 
 function test_install_idempotent() {
-  log_step "Testing __logic_install_standalone_config idempotency"
+  log_test_step "Testing __logic_install_standalone_config idempotency"
 
   local instance_name="test-idempotent-$$"
   local working_dir="$KGSM_TEST_SANDBOX/instances/${instance_name}"
@@ -205,7 +197,7 @@ function test_install_idempotent() {
 }
 
 function test_install_replaces_regular_file() {
-  log_step "Testing __logic_install_standalone_config replaces regular file"
+  log_test_step "Testing __logic_install_standalone_config replaces regular file"
 
   local instance_name="test-replace-file-$$"
   local working_dir="$KGSM_TEST_SANDBOX/instances/${instance_name}"
@@ -243,7 +235,7 @@ function test_install_replaces_regular_file() {
 }
 
 function test_install_replaces_existing_symlink() {
-  log_step "Testing __logic_install_standalone_config replaces existing symlink"
+  log_test_step "Testing __logic_install_standalone_config replaces existing symlink"
 
   local instance_name="test-replace-symlink-$$"
   local working_dir="$KGSM_TEST_SANDBOX/instances/${instance_name}"
@@ -296,7 +288,7 @@ EOF
 # =============================================================================
 
 function test_install_empty_parameter() {
-  log_step "Testing __logic_install_standalone_config with empty parameter"
+  log_test_step "Testing __logic_install_standalone_config with empty parameter"
 
   # Execute with empty parameter
   __logic_install_standalone_config "" 2>/dev/null
@@ -307,7 +299,7 @@ function test_install_empty_parameter() {
 }
 
 function test_install_file_not_found() {
-  log_step "Testing __logic_install_standalone_config with non-existent file"
+  log_test_step "Testing __logic_install_standalone_config with non-existent file"
 
   local non_existent="/tmp/non_existent_file_$$.ini"
 
@@ -320,7 +312,7 @@ function test_install_file_not_found() {
 }
 
 function test_install_missing_working_dir() {
-  log_step "Testing __logic_install_standalone_config with missing working_dir field"
+  log_test_step "Testing __logic_install_standalone_config with missing working_dir field"
 
   local instance_name="test-no-workdir-$$"
   local config_dir="$KGSM_TEST_SANDBOX/configs"
@@ -347,7 +339,7 @@ EOF
 }
 
 function test_install_empty_working_dir() {
-  log_step "Testing __logic_install_standalone_config with empty working_dir value"
+  log_test_step "Testing __logic_install_standalone_config with empty working_dir value"
 
   local instance_name="test-empty-workdir-$$"
   local config_dir="$KGSM_TEST_SANDBOX/configs"
@@ -379,7 +371,7 @@ EOF
 # =============================================================================
 
 function test_install_copy_fails() {
-  log_step "Testing __logic_install_standalone_config when copy fails (read-only working_dir)"
+  log_test_step "Testing __logic_install_standalone_config when copy fails (read-only working_dir)"
 
   local instance_name="test-readonly-workdir-$$"
   local working_dir="$KGSM_TEST_SANDBOX/instances/${instance_name}"
@@ -404,7 +396,7 @@ function test_install_copy_fails() {
 }
 
 function test_install_remove_existing_fails() {
-  log_step "Testing __logic_install_standalone_config when removing existing file fails"
+  log_test_step "Testing __logic_install_standalone_config when removing existing file fails"
 
   local instance_name="test-readonly-file-$$"
   local working_dir="$KGSM_TEST_SANDBOX/instances/${instance_name}"
@@ -435,7 +427,7 @@ function test_install_remove_existing_fails() {
 }
 
 function test_install_symlink_fails() {
-  log_step "Testing __logic_install_standalone_config when symlink creation fails"
+  log_test_step "Testing __logic_install_standalone_config when symlink creation fails"
 
   local instance_name="test-readonly-dir-$$"
   local working_dir="$KGSM_TEST_SANDBOX/instances/${instance_name}"
@@ -470,7 +462,7 @@ function test_install_symlink_fails() {
 # =============================================================================
 
 function test_uninstall_success() {
-  log_step "Testing __logic_uninstall_standalone_config with valid symlink setup"
+  log_test_step "Testing __logic_uninstall_standalone_config with valid symlink setup"
 
   local instance_name="test-uninstall-$$"
   local working_dir="$KGSM_TEST_SANDBOX/instances/${instance_name}"
@@ -506,7 +498,7 @@ function test_uninstall_success() {
 }
 
 function test_uninstall_idempotent() {
-  log_step "Testing __logic_uninstall_standalone_config idempotency"
+  log_test_step "Testing __logic_uninstall_standalone_config idempotency"
 
   local instance_name="test-uninstall-twice-$$"
   local working_dir="$KGSM_TEST_SANDBOX/instances/${instance_name}"
@@ -535,7 +527,7 @@ function test_uninstall_idempotent() {
 }
 
 function test_uninstall_symlink_only() {
-  log_step "Testing __logic_uninstall_standalone_config with symlink but no standalone config"
+  log_test_step "Testing __logic_uninstall_standalone_config with symlink but no standalone config"
 
   local instance_name="test-symlink-only-$$"
   local working_dir="$KGSM_TEST_SANDBOX/instances/${instance_name}"
@@ -571,7 +563,7 @@ function test_uninstall_symlink_only() {
 }
 
 function test_uninstall_standalone_only() {
-  log_step "Testing __logic_uninstall_standalone_config with standalone config but no symlink"
+  log_test_step "Testing __logic_uninstall_standalone_config with standalone config but no symlink"
 
   local instance_name="test-standalone-only-$$"
   local working_dir="$KGSM_TEST_SANDBOX/instances/${instance_name}"
@@ -620,7 +612,7 @@ function test_uninstall_standalone_only() {
 }
 
 function test_uninstall_regular_file() {
-  log_step "Testing __logic_uninstall_standalone_config with regular file instead of symlink"
+  log_test_step "Testing __logic_uninstall_standalone_config with regular file instead of symlink"
 
   local instance_name="test-regular-file-$$"
   local working_dir="$KGSM_TEST_SANDBOX/instances/${instance_name}"
@@ -655,7 +647,7 @@ function test_uninstall_regular_file() {
 }
 
 function test_uninstall_broken_symlink() {
-  log_step "Testing __logic_uninstall_standalone_config with broken symlink"
+  log_test_step "Testing __logic_uninstall_standalone_config with broken symlink"
 
   local instance_name="test-broken-symlink-$$"
   local working_dir="$KGSM_TEST_SANDBOX/instances/${instance_name}"
@@ -696,7 +688,7 @@ function test_uninstall_broken_symlink() {
 # =============================================================================
 
 function test_uninstall_empty_parameter() {
-  log_step "Testing __logic_uninstall_standalone_config with empty parameter"
+  log_test_step "Testing __logic_uninstall_standalone_config with empty parameter"
 
   # Execute with empty parameter
   __logic_uninstall_standalone_config "" 2>/dev/null
@@ -711,7 +703,7 @@ function test_uninstall_empty_parameter() {
 # =============================================================================
 
 function test_uninstall_symlink_removal_fails() {
-  log_step "Testing __logic_uninstall_standalone_config when symlink removal fails"
+  log_test_step "Testing __logic_uninstall_standalone_config when symlink removal fails"
 
   local instance_name="test-uninstall-readonly-dir-$$"
   local working_dir="$KGSM_TEST_SANDBOX/instances/${instance_name}"
@@ -741,7 +733,7 @@ function test_uninstall_symlink_removal_fails() {
 }
 
 function test_uninstall_standalone_removal_fails() {
-  log_step "Testing __logic_uninstall_standalone_config when standalone config removal fails"
+  log_test_step "Testing __logic_uninstall_standalone_config when standalone config removal fails"
 
   local instance_name="test-uninstall-readonly-workdir-$$"
   local working_dir="$KGSM_TEST_SANDBOX/instances/${instance_name}"
@@ -779,7 +771,7 @@ function test_uninstall_standalone_removal_fails() {
 # =============================================================================
 
 function test_install_with_spaces_in_path() {
-  log_step "Testing __logic_install_standalone_config with spaces in path"
+  log_test_step "Testing __logic_install_standalone_config with spaces in path"
 
   local instance_name="test-spaces-$$"
   local working_dir="$KGSM_TEST_SANDBOX/instances with spaces/${instance_name}"
@@ -802,7 +794,7 @@ function test_install_with_spaces_in_path() {
 }
 
 function test_install_with_special_chars_in_name() {
-  log_step "Testing __logic_install_standalone_config with special characters in name"
+  log_test_step "Testing __logic_install_standalone_config with special characters in name"
 
   local instance_name="test-special_chars.v1-$$"
   local working_dir="$KGSM_TEST_SANDBOX/instances/${instance_name}"
@@ -825,7 +817,7 @@ function test_install_with_special_chars_in_name() {
 }
 
 function test_install_working_dir_equals_config_dir() {
-  log_step "Testing __logic_install_standalone_config when working_dir equals config directory"
+  log_test_step "Testing __logic_install_standalone_config when working_dir equals config directory"
 
   local instance_name="test-same-dir-$$"
   local config_dir="$KGSM_TEST_SANDBOX/configs"
@@ -866,7 +858,7 @@ EOF
 # =============================================================================
 
 function main() {
-  log_test "Starting files.config logic tests"
+  log_test_step "Starting files.config logic tests"
 
   setup_test
 

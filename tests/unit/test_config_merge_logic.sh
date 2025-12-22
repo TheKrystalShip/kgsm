@@ -8,14 +8,6 @@
 # TEST SETUP
 # =============================================================================
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-
-# Framework common functions
-source "$SCRIPT_DIR/../framework/common.sh"
-
-# KGSM bootstrapper
-source "$KGSM_ROOT/core/bootstrap.sh"
-
 # Test variables
 readonly TEST_NAME="config_merge_logic"
 
@@ -24,9 +16,10 @@ readonly TEST_NAME="config_merge_logic"
 # =============================================================================
 
 function setup_test() {
-  log_step "Setting up config merge logic tests"
+  log_test_step "Setting up config merge logic tests"
 
   # Verify environment
+  assert_not_null "$KGSM_TEST_SANDBOX" "KGSM_TEST_SANDBOX should be set"
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
   assert_file_exists "$KGSM_ROOT/core/config.sh" "config.sh should exist"
 
@@ -45,7 +38,7 @@ function setup_test() {
   assert_function_exists "__handle_deprecated_keys" "handle_deprecated_keys should be exported"
   assert_function_exists "__merge_user_config_with_default" "merge_user_config_with_default should be exported"
 
-  log_test "Config merge logic test environment validated"
+  log_test_step "Config merge logic test environment validated"
 }
 
 # =============================================================================
@@ -53,7 +46,7 @@ function setup_test() {
 # =============================================================================
 
 function test_create_config_backup() {
-  log_step "Testing __create_config_backup creates numbered backup"
+  log_test_step "Testing __create_config_backup creates numbered backup"
 
   # Create test config
   local test_config="${KGSM_TEST_SANDBOX}/test_backup.ini"
@@ -87,7 +80,7 @@ function test_create_config_backup() {
 # =============================================================================
 
 function test_create_config_backup_rotation() {
-  log_step "Testing __create_config_backup rotates old backups"
+  log_test_step "Testing __create_config_backup rotates old backups"
 
   # Create test config
   local test_config="${KGSM_TEST_SANDBOX}/test_rotation.ini"
@@ -128,7 +121,7 @@ function test_create_config_backup_rotation() {
 # =============================================================================
 
 function test_parse_config_to_map() {
-  log_step "Testing __parse_config_to_map parses config correctly"
+  log_test_step "Testing __parse_config_to_map parses config correctly"
 
   # Create test config with sections
   local test_config="${KGSM_TEST_SANDBOX}/test_parse.ini"
@@ -162,7 +155,7 @@ EOF
 # =============================================================================
 
 function test_parse_config_to_map_empty_values() {
-  log_step "Testing __parse_config_to_map handles empty values"
+  log_test_step "Testing __parse_config_to_map handles empty values"
 
   # Create config with empty values
   local test_config="${KGSM_TEST_SANDBOX}/test_empty.ini"
@@ -197,7 +190,7 @@ EOF
 # =============================================================================
 
 function test_merge_user_config_with_default() {
-  log_step "Testing __merge_user_config_with_default full merge"
+  log_test_step "Testing __merge_user_config_with_default full merge"
 
   # Create test user config
   local test_user_config="${KGSM_TEST_SANDBOX}/user.ini"
@@ -263,7 +256,7 @@ EOF
 # =============================================================================
 
 function test_merge_handles_deprecated_keys() {
-  log_step "Testing __merge_user_config_with_default handles deprecated keys"
+  log_test_step "Testing __merge_user_config_with_default handles deprecated keys"
 
   # Create user config with old key
   local test_user_config="${KGSM_TEST_SANDBOX}/user_old.ini"
@@ -315,7 +308,7 @@ EOF
 # =============================================================================
 
 function main() {
-  log_test "Starting config merge logic tests"
+  log_test_step "Starting config merge logic tests"
 
   # Setup
   setup_test
