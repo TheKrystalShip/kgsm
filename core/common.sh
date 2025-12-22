@@ -4,12 +4,9 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
-# Module loader
-if [[ -z "$KGSM_LOADER_LOADED" ]]; then
-  # Provides nice wrappers for locating and loading other modules and files
-  include_loader="$KGSM_ROOT/core/loader.sh"
-  if [[ ! -f "$include_loader" ]]; then
-    echo "${0##*/} ERROR: Failed to locate loader.sh" >&2
+if [[ -n "${KGSM_COMMON_LOADED:-}" ]]; then
+  return 0
+fi
     echo "${0##*/} ERROR: File structure might be compromised" >&2
     exit 1
   fi
@@ -94,4 +91,5 @@ if [[ -z "$KGSM_VALIDATION_LOADED" ]]; then
 fi
 
 # Export this to check before loading this file again
-export KGSM_COMMON_LOADED=1
+declare -g KGSM_COMMON_LOADED=1
+export KGSM_COMMON_LOADED

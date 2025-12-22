@@ -8,6 +8,10 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
+if [[ -n "${KGSM_SYSTEM_LOADED:-}" ]]; then
+  return 0
+fi
+
 function __create_dir() {
   local dir="$1"
   local permissions="${2:-755}" # Default to 755 if no permissions are specified
@@ -96,4 +100,5 @@ function __create_file() {
 
 export -f __create_file
 
-export KGSM_SYSTEM_LOADED=1
+declare -g KGSM_SYSTEM_LOADED=1
+export KGSM_SYSTEM_LOADED

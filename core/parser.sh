@@ -4,6 +4,10 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
+if [[ -n "${KGSM_PARSER_LOADED:-}" ]]; then
+  return 0
+fi
+
 function __parse_ufw_to_upnp_ports() {
   local ufw_ports=$1
   local grouped_ports=()
@@ -118,4 +122,5 @@ function __extract_blueprint_name() {
 
 export -f __extract_blueprint_name
 
-export KGSM_PARSER_LOADED=1
+declare -g KGSM_PARSER_LOADED=1
+export KGSM_PARSER_LOADED

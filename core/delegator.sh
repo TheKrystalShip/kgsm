@@ -3,6 +3,10 @@
 # This library provides shortcuts to modules for easier access within other scripts.
 # Each function is a simple wrapper that delegates to the actual module file.
 
+if [[ -n "${KGSM_DELEGATOR_LOADED:-}" ]]; then
+  return 0
+fi
+
 # This function generates delegator functions dynamically for each module found
 # in the modules directory.
 # Each generated function will have the same name as the module file

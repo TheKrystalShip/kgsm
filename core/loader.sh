@@ -4,6 +4,10 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
+if [[ -n "${KGSM_LOADER_LOADED:-}" ]]; then
+  return 0
+fi
+
 # Blueprints (*.bp) are stored here
 export BLUEPRINTS_SOURCE_DIR=$KGSM_ROOT/blueprints
 
@@ -419,4 +423,5 @@ function __source_with_prefix() {
 
 export -f __source_with_prefix
 
-export KGSM_LOADER_LOADED=1
+declare -g KGSM_LOADER_LOADED=1
+export KGSM_LOADER_LOADED

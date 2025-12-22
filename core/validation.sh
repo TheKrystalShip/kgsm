@@ -15,6 +15,10 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
+if [[ -n "${KGSM_VALIDATION_LOADED:-}" ]]; then
+  return 0
+fi
+
 # =============================================================================
 # VALIDATION CONSTANTS
 # =============================================================================
@@ -420,10 +424,6 @@ export -f print_validation_summary
 # MODULE INITIALIZATION
 # =============================================================================
 
-# Export validation constants for use in other modules
-export EC_INVALID_ARG
-export EC_INVALID_ARG
-export EC_INVALID_ARG
-
 # Mark module as loaded
-export KGSM_VALIDATION_LOADED=1
+declare -g KGSM_VALIDATION_LOADED=1
+export KGSM_VALIDATION_LOADED

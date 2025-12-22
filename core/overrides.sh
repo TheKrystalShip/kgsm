@@ -3,6 +3,10 @@
 # Disabling SC2086 globally
 # shellcheck disable=SC2086
 
+if [[ -n "${KGSM_OVERRIDES_LOADED:-}" ]]; then
+  return 0
+fi
+
 # Params
 if [ $# -eq 0 ]; then
   echo "${0##*/} ERROR: Sourcing error, blueprint name not specified" >&2 && exit $EC_MISSING_ARGS
@@ -43,4 +47,5 @@ if [[ -n "$instance_overrides_file" ]] && [[ -f "$instance_overrides_file" ]]; t
   source "$instance_overrides_file" || exit $EC_FAILED_SOURCE
 fi
 
-export KGSM_OVERRIDES_LOADED=1
+declare -g KGSM_OVERRIDES_LOADED=1
+export KGSM_OVERRIDES_LOADED

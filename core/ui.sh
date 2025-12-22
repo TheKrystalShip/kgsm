@@ -17,7 +17,6 @@
 if [[ -n "${KGSM_UI_LOADED:-}" ]]; then
   return 0
 fi
-export KGSM_UI_LOADED=true
 
 # =============================================================================
 # COLOR CONSTANTS
@@ -433,3 +432,6 @@ export -f __ui_select_from_list
 # 6. Use existing color constants where applicable
 #
 # =============================================================================
+
+declare -g KGSM_UI_LOADED=1
+export KGSM_UI_LOADED

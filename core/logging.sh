@@ -3,6 +3,10 @@
 # Disabling SC2086 globally
 # shellcheck disable=SC2086
 
+if [[ -n "${KGSM_LOGGING_LOADED:-}" ]]; then
+  return 0
+fi
+
 ## Colored output
 # Check if stdout is tty
 if test -t 1; then
@@ -332,4 +336,5 @@ function __print_info_file_only() {
 
 export -f __print_info_file_only
 
-export KGSM_LOGGING_LOADED=1
+declare -g KGSM_LOGGING_LOADED=1
+export KGSM_LOGGING_LOADED

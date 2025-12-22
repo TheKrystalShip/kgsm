@@ -11,6 +11,10 @@
 #
 # The dispatcher maps success-event exit codes (200+) to specific event emissions.
 
+if [[ -n "${KGSM_EVENTS_LIBRARY_LOADED:-}" ]]; then
+  return 0
+fi
+
 # Disabling SC2086 globally:
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
@@ -117,4 +121,5 @@ function __dispatch_event_from_exit_code() {
 export -f __dispatch_event_from_exit_code
 
 # Mark module as loaded
-export KGSM_EVENTS_LIBRARY_LOADED=1
+declare -g KGSM_EVENTS_LIBRARY_LOADED=1
+export KGSM_EVENTS_LIBRARY_LOADED
