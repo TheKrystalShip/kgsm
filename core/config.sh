@@ -46,7 +46,7 @@ if [[ -z "$KGSM_CONFIG_LOADED" ]]; then
       value="${value#\'}"
       value="${value%\'}"
 
-      declare -g -r "config_${key}=${value}"
+      declare -g "config_${key}=${value}"
       export "config_${key}"
     else
       # Warn about malformed config lines that passed grep but failed regex parsing
