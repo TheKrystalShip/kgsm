@@ -10,9 +10,13 @@
 # Pure logic functions for watcher strategy determination and orchestration.
 # No user-facing I/O - returns only exit codes.
 
+if [[ -n "${KGSM_LOGIC_WATCHERS_LOADED:-}" ]]; then
+  return 0
+fi
+
 # Determine the appropriate watcher strategy for an instance
 # Args: $1 = instance_config_file (path to instance .ini file)
-# Returns: Echoes "logs" or "ports", returns EC_OKAY on success
+# Returns: Echoes "logs" or "ports", returns EC_SUCCESS on success
 #          Returns EC_WATCHER_NO_STRATEGY if no strategy configured
 function __logic_determine_strategy() {
   local instance_config_file="$1"
@@ -35,13 +39,13 @@ function __logic_determine_strategy() {
   # Strategy 1: Log Pattern Matching (preferred)
   if [[ -n "$ready_pattern" ]]; then
     echo "logs"
-    return $EC_OKAY
+    return $EC_SUCCESS
   fi
 
   # Strategy 2: Port Monitoring (fallback)
   if [[ -n "$all_ports" ]]; then
     echo "ports"
-    return $EC_OKAY
+    return $EC_SUCCESS
   fi
 
   # No strategy available
@@ -51,4 +55,5 @@ function __logic_determine_strategy() {
 export -f __logic_determine_strategy
 
 # Mark module as loaded
-export KGSM_LOGIC_WATCHERS_LOADED=1
+declare -g KGSM_LOGIC_WATCHERS_LOADED=1
+export KGSM_LOGIC_WATCHERS_LOADED

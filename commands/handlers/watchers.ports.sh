@@ -10,9 +10,13 @@
 # Pure logic functions for port monitoring readiness detection.
 # No user-facing I/O - returns only exit codes.
 
+if [[ -n "${KGSM_LOGIC_WATCHERS_PORTS_LOADED:-}" ]]; then
+  return 0
+fi
+
 # Extract the first port from UFW-style port format
 # Args: $1 = ufw_ports (UFW-style port definitions, pipe-separated)
-# Returns: Echoes the first port number, returns EC_OKAY on success
+# Returns: Echoes the first port number, returns EC_SUCCESS on success
 #          Returns EC_INVALID_ARG on invalid format
 function __logic_extract_first_port() {
   local ufw_ports="$1"
@@ -34,11 +38,11 @@ function __logic_extract_first_port() {
   if [[ "$first_def" =~ ^([0-9]+):([0-9]+)(/[a-z]+)?$ ]]; then
     # Port range - return start port
     echo "${BASH_REMATCH[1]}"
-    return $EC_OKAY
+    return $EC_SUCCESS
   elif [[ "$first_def" =~ ^([0-9]+)(/[a-z]+)?$ ]]; then
     # Single port - return the port
     echo "${BASH_REMATCH[1]}"
-    return $EC_OKAY
+    return $EC_SUCCESS
   else
     return $EC_INVALID_ARG
   fi
@@ -55,7 +59,7 @@ export -f __logic_extract_first_port
 #       $6 = check_interval (interval between checks in seconds)
 # Returns: EC_SUCCESS_INSTANCE_READY on port active
 #          EC_WATCHER_TIMEOUT on timeout
-#          EC_GENERAL if server process stopped
+#          EC_ERROR if server process stopped
 #          Other error codes on failure
 function __logic_execute_port_watch() {
   local instance="$1"
@@ -109,7 +113,7 @@ function __logic_execute_port_watch() {
       return $EC_WATCHER_TIMEOUT
     elif [[ $exit_code -eq 1 ]]; then
       __print_info_file_only "$watcher_log_file" "Server process for '$instance' stopped. Aborting port watch."
-      return $EC_GENERAL
+      return $EC_ERROR
     else
       __print_error_file_only "$watcher_log_file" "Port watch for '$instance' failed with exit code $exit_code"
       return $exit_code
@@ -121,7 +125,7 @@ export -f __logic_execute_port_watch
 
 # Test port monitoring configuration
 # Args: $1 = instance_config_file (path to instance .ini file)
-# Returns: Echoes "port_count|active_count", returns EC_OKAY
+# Returns: Echoes "port_count|active_count", returns EC_SUCCESS
 #          Returns error codes on failure
 function __logic_test_port_status() {
   local instance_config_file="$1"
@@ -169,7 +173,7 @@ function __logic_test_port_status() {
   done
 
   echo "${port_count}|${active_count}"
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 export -f __logic_test_port_status
@@ -177,7 +181,7 @@ export -f __logic_test_port_status
 # Get port watcher status data
 # Args: $1 = instance_config_file (path to instance .ini file)
 # Returns: Echoes status data in format: ports|first_port|port_count|active_count
-#          Returns EC_OKAY on success, error codes on failure
+#          Returns EC_SUCCESS on success, error codes on failure
 function __logic_get_port_status_data() {
   local instance_config_file="$1"
 
@@ -209,10 +213,11 @@ function __logic_get_port_status_data() {
   fi
 
   echo "${all_ports}|${first_port}|${port_count}|${active_count}"
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 export -f __logic_get_port_status_data
 
 # Mark module as loaded
-export KGSM_LOGIC_WATCHERS_PORTS_LOADED=1
+declare -g KGSM_LOGIC_WATCHERS_PORTS_LOADED=1
+export KGSM_LOGIC_WATCHERS_PORTS_LOADED

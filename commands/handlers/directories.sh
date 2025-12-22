@@ -15,6 +15,10 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
+if [[ -n "${KGSM_LOGIC_DIRECTORIES_LOADED:-}" ]]; then
+  return 0
+fi
+
 # Success event exit codes are now centralized in core/errors.sh
 # They are automatically available through the bootstrap process
 
@@ -27,7 +31,7 @@
 #   $1 - Directory path
 #   $2 - Permissions (optional, defaults to 755)
 # Returns:
-#   EC_OKAY - Directory created or already exists
+#   EC_SUCCESS - Directory created or already exists
 #   EC_INVALID_ARG - No directory specified
 #   EC_FAILED_MKDIR - Failed to create directory
 #   EC_PERMISSION - Failed to set permissions
@@ -41,7 +45,7 @@ function __create_dir() {
 
   # If directory already exists, there's nothing to do
   if [[ -d "$dir" ]]; then
-    return $EC_OKAY
+    return $EC_SUCCESS
   fi
 
   # Create the directory with appropriate permissions
@@ -54,7 +58,7 @@ function __create_dir() {
     return $EC_PERMISSION
   }
 
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 export -f __create_dir
@@ -64,7 +68,7 @@ export -f __create_dir
 #   $1 - File path
 #   $2 - Permissions (optional, defaults to 644)
 # Returns:
-#   EC_OKAY - File created or already exists
+#   EC_SUCCESS - File created or already exists
 #   EC_INVALID_ARG - No file specified
 #   EC_FAILED_TOUCH - Failed to create file
 #   EC_PERMISSION - Failed to set permissions
@@ -78,7 +82,7 @@ function __create_file() {
 
   # If file already exists, there's nothing to do
   if [[ -f "$file" ]]; then
-    return $EC_OKAY
+    return $EC_SUCCESS
   fi
 
   # Create the file with appropriate permissions
@@ -91,7 +95,7 @@ function __create_file() {
     return $EC_PERMISSION
   }
 
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 export -f __create_file
@@ -101,15 +105,15 @@ export -f __create_file
 # =============================================================================
 
 # Creates directory structure for an instance
-# Args: $1 = instance_name, $2 = instance_config_file, $3 = instance_working_dir
+# Args: $1 = _instance_name, $2 = instance_config_file, $3 = instance_working_dir
 # Returns: EC_SUCCESS_DIRECTORIES_CREATED on success (triggers directories-created event), error codes on failure
 function __logic_create_directories() {
-  local instance_name="$1"
+  local _instance_name="$1"
   local instance_config_file="$2"
   local instance_working_dir="$3"
 
   # Validate required parameters
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     return $EC_INVALID_ARG
   fi
 
@@ -161,11 +165,11 @@ export -f __logic_create_directories
 # Args: $1 = instance_working_dir
 # Returns: EC_SUCCESS_DIRECTORIES_REMOVED on success (triggers directories-removed event), error codes on failure
 function __logic_remove_directories() {
-  local instance_name="$1"
+  local _instance_name="$1"
   local instance_working_dir="$2"
 
   # Validate required parameters
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     return $EC_INVALID_ARG
   fi
 
@@ -190,4 +194,5 @@ function __logic_remove_directories() {
 export -f __logic_remove_directories
 
 # Mark module as loaded
-export KGSM_LOGIC_DIRECTORIES_LOADED=1
+declare -g KGSM_LOGIC_DIRECTORIES_LOADED=1
+export KGSM_LOGIC_DIRECTORIES_LOADED

@@ -18,6 +18,10 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
+if [[ -n "${KGSM_LOGIC_NETWORK_LOADED:-}" ]]; then
+  return 0
+fi
+
 # =============================================================================
 # PORT MANAGEMENT
 # =============================================================================
@@ -175,8 +179,8 @@ function __logic_find_port_conflicts() {
   for instance_config in "$instances_dir"/*/*.ini; do
     [[ ! -f "$instance_config" ]] && continue
 
-    local instance_name
-    instance_name=$(basename "$(dirname "$instance_config")")
+    local _instance_name
+    _instance_name=$(basename "$(dirname "$instance_config")")
 
     # Extract ports from config
     local ports
@@ -206,9 +210,9 @@ function __logic_find_port_conflicts() {
       # Check if port is already mapped to another instance
       if [[ -n "${port_map[$key]}" ]]; then
         conflicts_found=true
-        echo "conflict:$port/$protocol:${port_map[$key]}:$instance_name"
+        echo "conflict:$port/$protocol:${port_map[$key]}:$_instance_name"
       else
-        port_map[$key]="$instance_name"
+        port_map[$key]="$_instance_name"
       fi
 
       # Also check if port is in use by non-KGSM process
@@ -217,9 +221,9 @@ function __logic_find_port_conflicts() {
       if [[ "$status" == in_use:* ]]; then
         local process_info="${status#in_use:}"
         # Check if it's not a known KGSM instance process
-        if [[ "$process_info" != *"$instance_name"* ]]; then
+        if [[ "$process_info" != *"$_instance_name"* ]]; then
           conflicts_found=true
-          echo "external_conflict:$port/$protocol:$instance_name:$process_info"
+          echo "external_conflict:$port/$protocol:$_instance_name:$process_info"
         fi
       fi
     done
@@ -239,7 +243,7 @@ export -f __logic_find_port_conflicts
 #   $1 - Port number
 #   $2 - Protocol (tcp/udp, optional, defaults to "tcp")
 # Returns:
-#   EC_OKAY - Process killed successfully
+#   EC_SUCCESS - Process killed successfully
 #   EC_NOT_FOUND - No process using port
 #   EC_INVALID_ARG - Invalid arguments
 #   EC_PERMISSION - Insufficient permissions
@@ -323,7 +327,7 @@ function __logic_kill_port_process() {
     fi
   fi
 
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 export -f __logic_kill_port_process
@@ -419,8 +423,8 @@ function __logic_test_all_instance_ports() {
   for instance_config in "$instances_dir"/*/*.ini; do
     [[ ! -f "$instance_config" ]] && continue
 
-    local instance_name
-    instance_name=$(basename "$(dirname "$instance_config")")
+    local _instance_name
+    _instance_name=$(basename "$(dirname "$instance_config")")
 
     # Extract ports
     local ports
@@ -447,7 +451,7 @@ function __logic_test_all_instance_ports() {
       tests_run=true
       local result
       result=$(__logic_test_port_accessibility "$port" "$protocol" 2>/dev/null)
-      echo "test:$instance_name:$port/$protocol:$result"
+      echo "test:$_instance_name:$port/$protocol:$result"
     done
   done
 
@@ -468,7 +472,7 @@ export -f __logic_test_all_instance_ports
 # Returns:
 #   EC_SUCCESS_NETWORK_PORT_CHECKED - IP retrieved successfully (echoes IP)
 #   EC_MISSING_DEPENDENCY - Required tool not available
-#   EC_GENERAL - Failed to retrieve IP
+#   EC_ERROR - Failed to retrieve IP
 function __logic_get_external_ip() {
   # Try curl first (preferred)
   if command -v curl >/dev/null 2>&1; then
@@ -496,7 +500,7 @@ function __logic_get_external_ip() {
     return $EC_MISSING_DEPENDENCY
   fi
 
-  return $EC_GENERAL
+  return $EC_ERROR
 }
 
 export -f __logic_get_external_ip
@@ -505,7 +509,7 @@ export -f __logic_get_external_ip
 # Returns:
 #   EC_SUCCESS_NETWORK_PORT_CHECKED - IP(s) retrieved successfully (echoes IPs)
 #   EC_MISSING_DEPENDENCY - Required tool not available
-#   EC_GENERAL - Failed to retrieve IP
+#   EC_ERROR - Failed to retrieve IP
 function __logic_get_local_ip() {
   # Check if hostname command exists
   if ! command -v hostname >/dev/null 2>&1; then
@@ -529,7 +533,7 @@ function __logic_get_local_ip() {
     return $EC_SUCCESS_NETWORK_PORT_CHECKED
   fi
 
-  return $EC_GENERAL
+  return $EC_ERROR
 }
 
 export -f __logic_get_local_ip
@@ -582,4 +586,5 @@ export -f __logic_get_dns_info
 # MODULE LOADED FLAG
 # =============================================================================
 
-export KGSM_LOGIC_NETWORK_LOADED=1
+declare -g KGSM_LOGIC_NETWORK_LOADED=1
+export KGSM_LOGIC_NETWORK_LOADED

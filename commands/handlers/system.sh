@@ -18,6 +18,10 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
+if [[ -n "${KGSM_LOGIC_SYSTEM_LOADED:-}" ]]; then
+  return 0
+fi
+
 # =============================================================================
 # SYSTEM POWER MANAGEMENT
 # =============================================================================
@@ -68,7 +72,7 @@ export -f __logic_schedule_shutdown
 
 # Cancel a scheduled shutdown
 # Returns:
-#   EC_OKAY - Shutdown cancelled successfully
+#   EC_SUCCESS - Shutdown cancelled successfully
 #   EC_PERMISSION - Insufficient permissions
 #   EC_MISSING_DEPENDENCY - shutdown command not available
 function __logic_cancel_shutdown() {
@@ -82,7 +86,7 @@ function __logic_cancel_shutdown() {
     return $EC_PERMISSION
   fi
 
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 export -f __logic_cancel_shutdown
@@ -159,20 +163,20 @@ function __logic_get_uptime() {
     return $EC_SUCCESS_SYSTEM_INFO_RETRIEVED
   fi
 
-  return $EC_GENERAL
+  return $EC_ERROR
 }
 
 export -f __logic_get_uptime
 
 # Check if system reboot is required
 # Returns:
-#   EC_OKAY - Reboot required status checked (echoes "true" or "false")
-#   EC_GENERAL - Could not determine reboot status
+#   EC_SUCCESS - Reboot required status checked (echoes "true" or "false")
+#   EC_ERROR - Could not determine reboot status
 function __logic_check_reboot_required() {
   # Check for /var/run/reboot-required (Debian/Ubuntu)
   if [[ -f /var/run/reboot-required ]]; then
     echo "true"
-    return $EC_OKAY
+    return $EC_SUCCESS
   fi
 
   # Check for other indicators
@@ -180,16 +184,16 @@ function __logic_check_reboot_required() {
   if command -v needs-restarting >/dev/null 2>&1; then
     if needs-restarting -r >/dev/null 2>&1; then
       echo "false"
-      return $EC_OKAY
+      return $EC_SUCCESS
     else
       echo "true"
-      return $EC_OKAY
+      return $EC_SUCCESS
     fi
   fi
 
   # No indicators found - assume no reboot required
   echo "false"
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 export -f __logic_check_reboot_required
@@ -197,7 +201,7 @@ export -f __logic_check_reboot_required
 # Get system load averages
 # Returns:
 #   EC_SUCCESS_SYSTEM_INFO_RETRIEVED - Load retrieved successfully (echoes load averages)
-#   EC_GENERAL - Failed to retrieve load
+#   EC_ERROR - Failed to retrieve load
 function __logic_get_load_average() {
   # Check if uptime command exists (most reliable)
   if command -v uptime >/dev/null 2>&1; then
@@ -219,7 +223,7 @@ function __logic_get_load_average() {
     fi
   fi
 
-  return $EC_GENERAL
+  return $EC_ERROR
 }
 
 export -f __logic_get_load_average
@@ -243,7 +247,7 @@ function __logic_get_memory_info() {
     return $EC_SUCCESS_SYSTEM_INFO_RETRIEVED
   fi
 
-  return $EC_GENERAL
+  return $EC_ERROR
 }
 
 export -f __logic_get_memory_info
@@ -267,7 +271,7 @@ function __logic_get_disk_usage() {
     return $EC_SUCCESS_SYSTEM_INFO_RETRIEVED
   fi
 
-  return $EC_GENERAL
+  return $EC_ERROR
 }
 
 export -f __logic_get_disk_usage
@@ -276,4 +280,5 @@ export -f __logic_get_disk_usage
 # MODULE LOADED FLAG
 # =============================================================================
 
-export KGSM_LOGIC_SYSTEM_LOADED=1
+declare -g KGSM_LOGIC_SYSTEM_LOADED=1
+export KGSM_LOGIC_SYSTEM_LOADED

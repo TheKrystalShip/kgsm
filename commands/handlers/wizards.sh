@@ -19,7 +19,6 @@
 if [[ -n "${KGSM_LOGIC_WIZARDS_LOADED:-}" ]]; then
   return 0
 fi
-export KGSM_LOGIC_WIZARDS_LOADED=true
 
 # =============================================================================
 # BLUEPRINT RETRIEVAL
@@ -74,7 +73,7 @@ source "$instances_logic" || {
 #   $1 - blueprint_name
 #   $2 - install_directory
 #   $3 - version (optional, empty for latest)
-#   $4 - instance_name (optional, empty for default)
+#   $4 - _instance_name (optional, empty for default)
 #
 # Returns:
 #   0 on success
@@ -86,7 +85,7 @@ function __logic_wizard_install() {
   local blueprint_name="$1"
   local install_dir="$2"
   local version="$3"
-  local instance_name="$4"
+  local _instance_name="$4"
 
   # Validate required parameters
   if [[ -z "$blueprint_name" ]]; then
@@ -104,7 +103,7 @@ function __logic_wizard_install() {
   # Build command arguments
   local install_args=("$install_logic" "$blueprint_name" --install-dir "$install_dir")
   [[ -n "$version" ]] && install_args+=(--version "$version")
-  [[ -n "$instance_name" ]] && install_args+=(--name "$instance_name")
+  [[ -n "$_instance_name" ]] && install_args+=(--name "$_instance_name")
 
   # Execute installation
   "${install_args[@]}" >/dev/null 2>&1
@@ -119,7 +118,7 @@ export -f __logic_wizard_install
 # Build modification options based on instance configuration
 #
 # Args:
-#   $1 - instance_name
+#   $1 - _instance_name
 #
 # Output:
 #   Prints modification options to stdout in format:
@@ -136,15 +135,15 @@ export -f __logic_wizard_install
 #   # Enable systemd service|--add systemd
 #   # Disable firewall rules|--remove ufw
 function __logic_get_modify_options() {
-  local instance_name="$1"
+  local _instance_name="$1"
 
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     return $EC_MISSING_ARG
   fi
 
   # Validate instance exists and load configuration
   local instance_config_file
-  instance_config_file=$(validate_instance_name "$instance_name" 2>/dev/null)
+  instance_config_file=$(validate_instance_name "$_instance_name" 2>/dev/null)
   local exit_code=$?
   if [[ $exit_code -ne 0 ]]; then
     return $exit_code
@@ -186,7 +185,7 @@ export -f __logic_get_modify_options
 # Execute instance modification
 #
 # Args:
-#   $1 - instance_name
+#   $1 - _instance_name
 #   $2 - modification_command (e.g., "--add systemd", "--remove ufw")
 #
 # Returns:
@@ -196,10 +195,10 @@ export -f __logic_get_modify_options
 # Example:
 #   __logic_wizard_modify "factorio-01" "--add systemd"
 function __logic_wizard_modify() {
-  local instance_name="$1"
+  local _instance_name="$1"
   local modification_command="$2"
 
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     return $EC_MISSING_ARG
   fi
 
@@ -213,7 +212,7 @@ function __logic_wizard_modify() {
 
   # Execute modification
   # shellcheck disable=SC2086
-  "$instances_module" "$instance_name" --modify $modification_command >/dev/null 2>&1
+  "$instances_module" "$_instance_name" --modify $modification_command >/dev/null 2>&1
   return $?
 }
 export -f __logic_wizard_modify
@@ -225,7 +224,7 @@ export -f __logic_wizard_modify
 # Start an instance
 #
 # Args:
-#   $1 - instance_name
+#   $1 - _instance_name
 #
 # Returns:
 #   Exit code from lifecycle operation
@@ -233,9 +232,9 @@ export -f __logic_wizard_modify
 # Example:
 #   __logic_wizard_start_instance "factorio-01"
 function __logic_wizard_start_instance() {
-  local instance_name="$1"
+  local _instance_name="$1"
 
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     return $EC_MISSING_ARG
   fi
 
@@ -245,7 +244,7 @@ function __logic_wizard_start_instance() {
   # shellcheck disable=SC1090
   source "$lifecycle_logic" || return $EC_FAILED_SOURCE
 
-  __logic_instance_start "$instance_name"
+  __logic_instance_start "$_instance_name"
   return $?
 }
 export -f __logic_wizard_start_instance
@@ -253,7 +252,7 @@ export -f __logic_wizard_start_instance
 # Stop an instance
 #
 # Args:
-#   $1 - instance_name
+#   $1 - _instance_name
 #
 # Returns:
 #   Exit code from lifecycle operation
@@ -261,9 +260,9 @@ export -f __logic_wizard_start_instance
 # Example:
 #   __logic_wizard_stop_instance "factorio-01"
 function __logic_wizard_stop_instance() {
-  local instance_name="$1"
+  local _instance_name="$1"
 
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     return $EC_MISSING_ARG
   fi
 
@@ -273,7 +272,7 @@ function __logic_wizard_stop_instance() {
   # shellcheck disable=SC1090
   source "$lifecycle_logic" || return $EC_FAILED_SOURCE
 
-  __logic_instance_stop "$instance_name"
+  __logic_instance_stop "$_instance_name"
   return $?
 }
 export -f __logic_wizard_stop_instance
@@ -281,7 +280,7 @@ export -f __logic_wizard_stop_instance
 # Restart an instance
 #
 # Args:
-#   $1 - instance_name
+#   $1 - _instance_name
 #
 # Returns:
 #   Exit code from lifecycle operation
@@ -289,9 +288,9 @@ export -f __logic_wizard_stop_instance
 # Example:
 #   __logic_wizard_restart_instance "factorio-01"
 function __logic_wizard_restart_instance() {
-  local instance_name="$1"
+  local _instance_name="$1"
 
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     return $EC_MISSING_ARG
   fi
 
@@ -301,7 +300,7 @@ function __logic_wizard_restart_instance() {
   # shellcheck disable=SC1090
   source "$lifecycle_logic" || return $EC_FAILED_SOURCE
 
-  __logic_instance_restart "$instance_name"
+  __logic_instance_restart "$_instance_name"
   return $?
 }
 export -f __logic_wizard_restart_instance
@@ -309,7 +308,7 @@ export -f __logic_wizard_restart_instance
 # Get instance status
 #
 # Args:
-#   $1 - instance_name
+#   $1 - _instance_name
 #   $2 - json_format (optional, "true" for JSON output)
 #   $3 - fast_mode (optional, "true" to skip update check)
 #
@@ -319,11 +318,11 @@ export -f __logic_wizard_restart_instance
 # Example:
 #   __logic_wizard_instance_status "factorio-01" "" "true"
 function __logic_wizard_instance_status() {
-  local instance_name="$1"
+  local _instance_name="$1"
   local json_format="$2"
   local fast_mode="$3"
 
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     return $EC_MISSING_ARG
   fi
 
@@ -333,7 +332,7 @@ function __logic_wizard_instance_status() {
   # shellcheck disable=SC1090
   source "$lifecycle_logic" || return $EC_FAILED_SOURCE
 
-  __logic_instance_status "$instance_name" "$json_format" "$fast_mode"
+  __logic_instance_status "$_instance_name" "$json_format" "$fast_mode"
   return $?
 }
 export -f __logic_wizard_instance_status
@@ -341,7 +340,7 @@ export -f __logic_wizard_instance_status
 # Get instance logs
 #
 # Args:
-#   $1 - instance_name
+#   $1 - _instance_name
 #   $2 - follow_flag ("true" to follow logs)
 #   $3 - line_count (number of lines to show)
 #
@@ -351,11 +350,11 @@ export -f __logic_wizard_instance_status
 # Example:
 #   __logic_wizard_instance_logs "factorio-01" "false" "50"
 function __logic_wizard_instance_logs() {
-  local instance_name="$1"
+  local _instance_name="$1"
   local follow_flag="$2"
   local line_count="$3"
 
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     return $EC_MISSING_ARG
   fi
 
@@ -365,7 +364,7 @@ function __logic_wizard_instance_logs() {
   # shellcheck disable=SC1090
   source "$lifecycle_logic" || return $EC_FAILED_SOURCE
 
-  __logic_instance_logs "$instance_name" "$follow_flag" "$line_count"
+  __logic_instance_logs "$_instance_name" "$follow_flag" "$line_count"
   return $?
 }
 export -f __logic_wizard_instance_logs
@@ -377,7 +376,7 @@ export -f __logic_wizard_instance_logs
 # Get list of backups for an instance
 #
 # Args:
-#   $1 - instance_name
+#   $1 - _instance_name
 #
 # Output:
 #   Prints backup names to stdout (one per line)
@@ -389,15 +388,15 @@ export -f __logic_wizard_instance_logs
 # Example:
 #   mapfile -t backups < <(__logic_get_instance_backups "factorio-01")
 function __logic_get_instance_backups() {
-  local instance_name="$1"
+  local _instance_name="$1"
 
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     return $EC_MISSING_ARG
   fi
 
   # Validate instance and get configuration
   local instance_config_file
-  instance_config_file=$(validate_instance_name "$instance_name" 2>/dev/null)
+  instance_config_file=$(validate_instance_name "$_instance_name" 2>/dev/null)
   local exit_code=$?
   if [[ $exit_code -ne 0 ]]; then
     return $exit_code
@@ -420,7 +419,7 @@ export -f __logic_get_instance_backups
 # Restore backup for an instance
 #
 # Args:
-#   $1 - instance_name
+#   $1 - _instance_name
 #   $2 - backup_name
 #
 # Returns:
@@ -430,10 +429,10 @@ export -f __logic_get_instance_backups
 # Example:
 #   __logic_wizard_restore_backup "factorio-01" "backup-2025-01-15.tar.gz"
 function __logic_wizard_restore_backup() {
-  local instance_name="$1"
+  local _instance_name="$1"
   local backup_name="$2"
 
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     return $EC_MISSING_ARG
   fi
 
@@ -446,7 +445,7 @@ function __logic_wizard_restore_backup() {
   instances_module=$(__find_command instances.sh) || return $EC_FAILED_SOURCE
 
   # Execute restore
-  "$instances_module" "$instance_name" --restore-backup "$backup_name" >/dev/null 2>&1
+  "$instances_module" "$_instance_name" --restore-backup "$backup_name" >/dev/null 2>&1
   return $?
 }
 export -f __logic_wizard_restore_backup
@@ -454,7 +453,7 @@ export -f __logic_wizard_restore_backup
 # Create backup for an instance
 #
 # Args:
-#   $1 - instance_name
+#   $1 - _instance_name
 #
 # Returns:
 #   0 on success
@@ -463,9 +462,9 @@ export -f __logic_wizard_restore_backup
 # Example:
 #   __logic_wizard_create_backup "factorio-01"
 function __logic_wizard_create_backup() {
-  local instance_name="$1"
+  local _instance_name="$1"
 
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     return $EC_MISSING_ARG
   fi
 
@@ -474,7 +473,7 @@ function __logic_wizard_create_backup() {
   instances_module=$(__find_command instances.sh) || return $EC_FAILED_SOURCE
 
   # Execute backup creation
-  "$instances_module" "$instance_name" --create-backup >/dev/null 2>&1
+  "$instances_module" "$_instance_name" --create-backup >/dev/null 2>&1
   return $?
 }
 export -f __logic_wizard_create_backup
@@ -482,7 +481,7 @@ export -f __logic_wizard_create_backup
 # Check for instance updates
 #
 # Args:
-#   $1 - instance_name
+#   $1 - _instance_name
 #
 # Returns:
 #   0 on success
@@ -491,9 +490,9 @@ export -f __logic_wizard_create_backup
 # Example:
 #   __logic_wizard_check_update "factorio-01"
 function __logic_wizard_check_update() {
-  local instance_name="$1"
+  local _instance_name="$1"
 
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     return $EC_MISSING_ARG
   fi
 
@@ -502,7 +501,7 @@ function __logic_wizard_check_update() {
   instances_module=$(__find_command instances.sh) || return $EC_FAILED_SOURCE
 
   # Execute update check
-  "$instances_module" "$instance_name" --check-update >/dev/null 2>&1
+  "$instances_module" "$_instance_name" --check-update >/dev/null 2>&1
   return $?
 }
 export -f __logic_wizard_check_update
@@ -510,7 +509,7 @@ export -f __logic_wizard_check_update
 # Update an instance
 #
 # Args:
-#   $1 - instance_name
+#   $1 - _instance_name
 #
 # Returns:
 #   0 on success
@@ -519,9 +518,9 @@ export -f __logic_wizard_check_update
 # Example:
 #   __logic_wizard_update_instance "factorio-01"
 function __logic_wizard_update_instance() {
-  local instance_name="$1"
+  local _instance_name="$1"
 
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     return $EC_MISSING_ARG
   fi
 
@@ -530,7 +529,7 @@ function __logic_wizard_update_instance() {
   instances_module=$(__find_command instances.sh) || return $EC_FAILED_SOURCE
 
   # Execute update
-  "$instances_module" "$instance_name" --update >/dev/null 2>&1
+  "$instances_module" "$_instance_name" --update >/dev/null 2>&1
   return $?
 }
 export -f __logic_wizard_update_instance
@@ -538,7 +537,7 @@ export -f __logic_wizard_update_instance
 # Uninstall an instance
 #
 # Args:
-#   $1 - instance_name
+#   $1 - _instance_name
 #
 # Returns:
 #   0 on success
@@ -547,9 +546,9 @@ export -f __logic_wizard_update_instance
 # Example:
 #   __logic_wizard_uninstall_instance "factorio-01"
 function __logic_wizard_uninstall_instance() {
-  local instance_name="$1"
+  local _instance_name="$1"
 
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     return $EC_MISSING_ARG
   fi
 
@@ -558,7 +557,7 @@ function __logic_wizard_uninstall_instance() {
   uninstall_module=$(__find_command uninstall.sh) || return $EC_FAILED_SOURCE
 
   # Execute uninstall
-  "$uninstall_module" "$instance_name" >/dev/null 2>&1
+  "$uninstall_module" "$_instance_name" >/dev/null 2>&1
   return $?
 }
 export -f __logic_wizard_uninstall_instance
@@ -611,3 +610,6 @@ function __logic_get_system_overview() {
   return 0
 }
 export -f __logic_get_system_overview
+
+declare -g KGSM_LOGIC_WIZARDS_LOADED=1
+export KGSM_LOGIC_WIZARDS_LOADED

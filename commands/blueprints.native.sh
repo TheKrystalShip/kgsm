@@ -133,7 +133,7 @@ ${UNDERLINE}Examples:${END}
 
 if [[ $# -eq 0 ]]; then
   show_usage
-  exit $EC_GENERAL
+  exit $EC_ERROR
 fi
 
 function _list_custom_native_blueprints() {
@@ -521,7 +521,7 @@ shift 2> /dev/null || true
 case "$command" in
   "")
     show_usage
-    exit $EC_GENERAL
+    exit $EC_ERROR
     ;;
   -h | --help | help)
     _cmd_help "$@"

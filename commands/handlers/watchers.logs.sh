@@ -10,6 +10,10 @@
 # Pure logic functions for log pattern matching readiness detection.
 # No user-facing I/O - returns only exit codes.
 
+if [[ -n "${KGSM_LOGIC_WATCHERS_LOGS_LOADED:-}" ]]; then
+  return 0
+fi
+
 # Execute log pattern watching
 # Args: $1 = instance (instance name with .ini)
 #       $2 = server_pid (PID of server process)
@@ -19,7 +23,7 @@
 #       $6 = watcher_log_file (path to watcher log file)
 # Returns: EC_SUCCESS_INSTANCE_READY on pattern match
 #          EC_WATCHER_TIMEOUT on timeout
-#          EC_GENERAL if server process stopped
+#          EC_ERROR if server process stopped
 #          Other error codes on failure
 function __logic_execute_log_watch() {
   local instance="$1"
@@ -45,7 +49,7 @@ function __logic_execute_log_watch() {
       return $EC_WATCHER_TIMEOUT
     elif [[ $exit_code -eq 1 ]]; then
       __print_info_file_only "$watcher_log_file" "Server process for '$instance' stopped. Aborting log watch."
-      return $EC_GENERAL
+      return $EC_ERROR
     else
       __print_error_file_only "$watcher_log_file" "Log watch for '$instance' failed with exit code $exit_code"
       return $exit_code
@@ -57,7 +61,7 @@ export -f __logic_execute_log_watch
 
 # Test log pattern matching configuration
 # Args: $1 = instance_config_file (path to instance .ini file)
-# Returns: EC_OKAY if pattern found in current log
+# Returns: EC_SUCCESS if pattern found in current log
 #          EC_WATCHER_PATTERN_NOT_FOUND if not found
 #          EC_WATCHER_LOG_FILE_MISSING if log file doesn't exist
 #          Other error codes on failure
@@ -87,7 +91,7 @@ function __logic_test_log_pattern() {
 
   # Check if pattern exists in current log
   if grep -q "$ready_pattern" "$instance_log_file" 2>/dev/null; then
-    return $EC_OKAY
+    return $EC_SUCCESS
   else
     return $EC_WATCHER_PATTERN_NOT_FOUND
   fi
@@ -98,7 +102,7 @@ export -f __logic_test_log_pattern
 # Get log watcher status data
 # Args: $1 = instance_config_file (path to instance .ini file)
 # Returns: Echoes status data in format: pattern|log_file|log_exists|pattern_found
-#          Returns EC_OKAY on success, error codes on failure
+#          Returns EC_SUCCESS on success, error codes on failure
 function __logic_get_log_status_data() {
   local instance_config_file="$1"
 
@@ -127,10 +131,11 @@ function __logic_get_log_status_data() {
   fi
 
   echo "${ready_pattern}|${log_file}|${log_exists}|${pattern_found}"
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 export -f __logic_get_log_status_data
 
 # Mark module as loaded
-export KGSM_LOGIC_WATCHERS_LOGS_LOADED=1
+declare -g KGSM_LOGIC_WATCHERS_LOGS_LOADED=1
+export KGSM_LOGIC_WATCHERS_LOGS_LOADED

@@ -2338,22 +2338,21 @@ function _cmd_help() {
 # MAIN COMMAND ROUTING
 # =============================================================================
 
-if [[ $# -eq 0 ]]; then
-  show_usage
-  exit $EC_GENERAL
-fi
-
 command="$1"
 shift
 
 case "$command" in
+  "")
+    show_usage
+    exit $EC_ERROR
+    ;;
   launch)
     _cmd_launch
     ;;
   wizard)
     _cmd_wizard "$@"
     ;;
-  help | -h | --help | help)
+  -h | --help | help)
     _cmd_help "$@"
     ;;
   *)

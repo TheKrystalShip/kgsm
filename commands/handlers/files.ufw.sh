@@ -14,9 +14,13 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
+if [[ -n "${KGSM_LOGIC_FILES_UFW_LOADED}" ]]; then
+  return 0
+fi
+
 # Load common file logic functions
 if [[ -z "${KGSM_LOGIC_FILES_COMMON_LOADED}" ]]; then
-  # shellcheck disable=SC1091
+  # shellcheck disable=SC1090
   source "$(__find_command_handler files.common.sh)" || return $EC_FAILED_SOURCE
 fi
 
@@ -36,10 +40,10 @@ function __logic_enable_ufw_integration() {
   fi
 
   # Get required variables from instance config
-  local instance_name
-  instance_name=$(__get_config_value "$instance_config_file" "name" 2>/dev/null)
+  local _instance_name
+  _instance_name=$(__get_config_value "$instance_config_file" "name" 2>/dev/null)
 
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     return $EC_INVALID_CONFIG
   fi
 
@@ -51,12 +55,12 @@ function __logic_enable_ufw_integration() {
     return $EC_INVALID_CONFIG
   fi
 
-  local instance_firewall_rule_file="${config_firewall_rules_dir}/kgsm-${instance_name}"
-  local temp_ufw_file="/tmp/kgsm-${instance_name}"
+  local instance_firewall_rule_file="${config_firewall_rules_dir}/kgsm-${_instance_name}"
+  local temp_ufw_file="/tmp/kgsm-${_instance_name}"
 
   # If firewall rule file already exists, return error
   if [[ -f "$instance_firewall_rule_file" ]]; then
-    return $EC_GENERAL
+    return $EC_ERROR
   fi
 
   # Source instance config to make variables available for template expansion
@@ -85,7 +89,7 @@ function __logic_enable_ufw_integration() {
   fi
 
   # Enable firewall rule
-  if ! $SUDO ufw allow "$instance_name" &>/dev/null; then
+  if ! $SUDO ufw allow "$_instance_name" &>/dev/null; then
     $SUDO rm -f "$instance_firewall_rule_file" 2>/dev/null
     return $EC_UFW
   fi
@@ -120,11 +124,11 @@ function __logic_disable_ufw_integration() {
   fi
 
   # Get firewall rule file path from instance config
-  local instance_name instance_firewall_rule_file
-  instance_name=$(__get_config_value "$instance_config_file" "name" 2>/dev/null)
+  local _instance_name instance_firewall_rule_file
+  _instance_name=$(__get_config_value "$instance_config_file" "name" 2>/dev/null)
   instance_firewall_rule_file=$(__get_config_value "$instance_config_file" "firewall_rule_file" 2>/dev/null)
 
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     return $EC_INVALID_CONFIG
   fi
 
@@ -138,7 +142,7 @@ function __logic_disable_ufw_integration() {
   [[ "$EUID" -ne 0 ]] && SUDO="sudo -E"
 
   # Remove UFW rule (may not exist, ignore errors)
-  $SUDO ufw delete allow "$instance_name" &>/dev/null || true
+  $SUDO ufw delete allow "$_instance_name" &>/dev/null || true
 
   # Delete firewall rule file if it exists
   if [[ -f "$instance_firewall_rule_file" ]]; then
@@ -162,4 +166,5 @@ function __logic_disable_ufw_integration() {
 export -f __logic_disable_ufw_integration
 
 # Mark module as loaded
-export KGSM_LOGIC_FILES_UFW_LOADED=1
+declare -g KGSM_LOGIC_FILES_UFW_LOADED=1
+export KGSM_LOGIC_FILES_UFW_LOADED

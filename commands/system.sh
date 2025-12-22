@@ -339,7 +339,7 @@ function _cmd_cancel() {
   local exit_code=$?
 
   case $exit_code in
-    $EC_OKAY)
+    $EC_SUCCESS)
       __print_success "Scheduled shutdown/restart cancelled"
       ;;
     $EC_PERMISSION)
@@ -556,7 +556,7 @@ function _cmd_reboot_required() {
   local exit_code=$?
 
   case $exit_code in
-    $EC_OKAY)
+    $EC_SUCCESS)
       if [[ "$reboot_required" == "true" ]]; then
         __print_warning "System reboot is required"
         return 0
@@ -833,7 +833,7 @@ shift 2> /dev/null || true
 case "$command" in
   "")
     show_usage
-    exit $EC_GENERAL
+    exit $EC_ERROR
     ;;
   -h | --help | help)
     _cmd_help "$@"

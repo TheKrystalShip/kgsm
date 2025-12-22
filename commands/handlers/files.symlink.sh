@@ -14,6 +14,10 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
+if [[ -n "${KGSM_LOGIC_FILES_SYMLINK_LOADED:-}" ]]; then
+  return 0
+fi
+
 # Load common file logic functions
 if [[ -z "${KGSM_LOGIC_FILES_COMMON_LOADED}" ]]; then
   # shellcheck disable=SC1091
@@ -36,15 +40,15 @@ function __logic_enable_symlink_integration() {
   fi
 
   # Get required variables from instance config
-  local instance_name instance_management_file
-  instance_name=$(__get_config_value "$instance_config_file" "name" 2>/dev/null)
-  instance_management_file=$(__get_config_value "$instance_config_file" "management_file" 2>/dev/null)
+  local _instance_name _instance_management_file
+  _instance_name=$(__get_config_value "$instance_config_file" "name" 2>/dev/null)
+  _instance_management_file=$(__get_config_value "$instance_config_file" "management_file" 2>/dev/null)
 
-  if [[ -z "$instance_name" ]] || [[ -z "$instance_management_file" ]]; then
+  if [[ -z "$_instance_name" ]] || [[ -z "$_instance_management_file" ]]; then
     return $EC_INVALID_CONFIG
   fi
 
-  if [[ ! -f "$instance_management_file" ]]; then
+  if [[ ! -f "$_instance_management_file" ]]; then
     return $EC_FILE_NOT_FOUND
   fi
 
@@ -61,7 +65,7 @@ function __logic_enable_symlink_integration() {
     return $EC_FILE_NOT_FOUND
   fi
 
-  local symlink_path="${config_command_shortcuts_directory}/${instance_name}"
+  local symlink_path="${config_command_shortcuts_directory}/${_instance_name}"
 
   # If symlink already exists, remove it first
   if [[ -L "$symlink_path" ]]; then
@@ -79,7 +83,7 @@ function __logic_enable_symlink_integration() {
   [[ "$EUID" -ne 0 ]] && SUDO="sudo -E"
 
   # Create the symlink
-  if ! $SUDO ln -s "$instance_management_file" "$symlink_path" 2>/dev/null; then
+  if ! $SUDO ln -s "$_instance_management_file" "$symlink_path" 2>/dev/null; then
     return $EC_FAILED_LN
   fi
 
@@ -147,4 +151,5 @@ function __logic_disable_symlink_integration() {
 export -f __logic_disable_symlink_integration
 
 # Mark module as loaded
-export KGSM_LOGIC_FILES_SYMLINK_LOADED=1
+declare -g KGSM_LOGIC_FILES_SYMLINK_LOADED=1
+export KGSM_LOGIC_FILES_SYMLINK_LOADED

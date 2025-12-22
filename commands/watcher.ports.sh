@@ -237,7 +237,7 @@ function _cmd_watch() {
   first_port=$(__logic_extract_first_port "$all_ports")
   local extract_result=$?
 
-  if [[ $extract_result -ne $EC_OKAY || -z "$first_port" ]]; then
+  if [[ $extract_result -ne $EC_SUCCESS || -z "$first_port" ]]; then
     __print_error_file_only "$watcher_log_file" "Failed to extract first port from configuration: '$all_ports'"
     return $EC_INVALID_ARG
   fi
@@ -265,7 +265,7 @@ function _cmd_watch() {
 
   if [[ -z "$server_pid" ]]; then
     __print_error_file_only "$watcher_log_file" "Server PID is empty"
-    return $EC_GENERAL
+    return $EC_ERROR
   fi
 
   __print_info_file_only "$watcher_log_file" "Server PID: $server_pid"
@@ -287,7 +287,7 @@ function _cmd_watch() {
     $EC_WATCHER_TIMEOUT)
       return $exit_code
       ;;
-    $EC_GENERAL)
+    $EC_ERROR)
       return $exit_code
       ;;
     *)
@@ -348,7 +348,7 @@ function _cmd_test() {
   local exit_code=$?
 
   case $exit_code in
-    $EC_OKAY)
+    $EC_SUCCESS)
       # Parse status data
       IFS='|' read -r port_count active_count <<< "$status_data"
 
@@ -442,7 +442,7 @@ function _cmd_status() {
   status_data=$(__logic_get_port_status_data "$instance_config_file")
   local exit_code=$?
 
-  if [[ $exit_code -ne $EC_OKAY ]]; then
+  if [[ $exit_code -ne $EC_SUCCESS ]]; then
     __print_error "Failed to retrieve port watcher status"
     return $exit_code
   fi
@@ -550,7 +550,7 @@ shift 2> /dev/null || true
 case "$command" in
   "")
     show_usage
-    exit $EC_GENERAL
+    exit $EC_ERROR
     ;;
   -h | --help | help)
     _cmd_help "$@"

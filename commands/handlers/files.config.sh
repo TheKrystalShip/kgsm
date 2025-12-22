@@ -14,40 +14,44 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
+if [[ -n "${KGSM_LOGIC_FILES_CONFIG_LOADED}" ]]; then
+  return 0
+fi
+
 # Load common file logic functions
 if [[ -z "${KGSM_LOGIC_FILES_COMMON_LOADED}" ]]; then
-  # shellcheck disable=SC1091
+  # shellcheck disable=SC1090
   source "$(__find_command_handler files.common.sh)" || return $EC_FAILED_SOURCE
 fi
 
 # Install standalone instance configuration
-# Args: $1 = instance_config_file
+# Args: $1 = _instance_config_file
 # Returns: EC_SUCCESS_CONFIG_INSTALLED on success, error code on failure
 function __logic_install_standalone_config() {
-  local instance_config_file="$1"
+  local _instance_config_file="$1"
 
   # Validate input
-  if [[ -z "$instance_config_file" ]]; then
+  if [[ -z "$_instance_config_file" ]]; then
     return $EC_INVALID_ARG
   fi
 
-  if [[ ! -f "$instance_config_file" ]]; then
+  if [[ ! -f "$_instance_config_file" ]]; then
     return $EC_FILE_NOT_FOUND
   fi
 
   # Get required variables from instance config
-  local instance_name instance_working_dir
-  instance_name=$(basename "$instance_config_file" .ini)
-  instance_working_dir=$(__get_config_value "$instance_config_file" "working_dir" 2> /dev/null)
+  local _instance_name _instance_working_dir
+  _instance_name=$(basename "$_instance_config_file" .ini)
+  _instance_working_dir=$(__get_config_value "$_instance_config_file" "working_dir" 2> /dev/null)
 
-  if [[ -z "$instance_working_dir" ]]; then
+  if [[ -z "$_instance_working_dir" ]]; then
     return $EC_INVALID_CONFIG
   fi
 
-  local instance_config_standalone="${instance_working_dir}/${instance_name}.config.ini"
+  local instance_config_standalone="${_instance_working_dir}/${_instance_name}.config.ini"
 
   # Copy the config file to the instance working directory (becomes source of truth)
-  if ! cp -f "$instance_config_file" "$instance_config_standalone" 2> /dev/null; then
+  if ! cp -f "$_instance_config_file" "$instance_config_standalone" 2> /dev/null; then
     return $EC_FAILED_CP
   fi
 
@@ -57,14 +61,14 @@ function __logic_install_standalone_config() {
   fi
 
   # Remove existing KGSM symlink/file if it exists
-  if [[ -e "$instance_config_file" || -L "$instance_config_file" ]]; then
-    if ! rm -f "$instance_config_file" 2> /dev/null; then
+  if [[ -e "$_instance_config_file" || -L "$_instance_config_file" ]]; then
+    if ! rm -f "$_instance_config_file" 2> /dev/null; then
       return $EC_FAILED_RM
     fi
   fi
 
   # Create symlink from KGSM pointing to the standalone config
-  if ! ln -s "$instance_config_standalone" "$instance_config_file" 2> /dev/null; then
+  if ! ln -s "$instance_config_standalone" "$_instance_config_file" 2> /dev/null; then
     return $EC_FAILED_LN
   fi
 
@@ -74,36 +78,36 @@ function __logic_install_standalone_config() {
 export -f __logic_install_standalone_config
 
 # Uninstall standalone instance configuration
-# Args: $1 = instance_config_file
+# Args: $1 = _instance_config_file
 # Returns: EC_SUCCESS_CONFIG_UNINSTALLED on success, error code on failure
 function __logic_uninstall_standalone_config() {
-  local instance_config_file="$1"
+  local _instance_config_file="$1"
 
   # Validate input
-  if [[ -z "$instance_config_file" ]]; then
+  if [[ -z "$_instance_config_file" ]]; then
     return $EC_INVALID_ARG
   fi
 
   # Get instance name and working directory
-  local instance_name instance_working_dir
-  instance_name=$(basename "$instance_config_file" .ini)
+  local _instance_name _instance_working_dir
+  _instance_name=$(basename "$_instance_config_file" .ini)
 
   # We need to get working_dir before removing the config
   # Try to read it if the symlink still exists
-  if [[ -e "$instance_config_file" ]]; then
-    instance_working_dir=$(__get_config_value "$instance_config_file" "working_dir" 2> /dev/null)
+  if [[ -e "$_instance_config_file" ]]; then
+    _instance_working_dir=$(__get_config_value "$_instance_config_file" "working_dir" 2> /dev/null)
   fi
 
-  local instance_config_standalone="${instance_working_dir}/${instance_name}.config.ini"
+  local instance_config_standalone="${_instance_working_dir}/${_instance_name}.config.ini"
 
   # Remove KGSM symlink if it exists
-  if [[ -L "$instance_config_file" ]]; then
-    if ! rm -f "$instance_config_file" 2> /dev/null; then
+  if [[ -L "$_instance_config_file" ]]; then
+    if ! rm -f "$_instance_config_file" 2> /dev/null; then
       return $EC_FAILED_RM
     fi
-  elif [[ -e "$instance_config_file" ]]; then
+  elif [[ -e "$_instance_config_file" ]]; then
     # If it's a regular file instead of symlink, still try to remove it
-    if ! rm -f "$instance_config_file" 2> /dev/null; then
+    if ! rm -f "$_instance_config_file" 2> /dev/null; then
       return $EC_FAILED_RM
     fi
   fi
@@ -121,4 +125,5 @@ function __logic_uninstall_standalone_config() {
 export -f __logic_uninstall_standalone_config
 
 # Mark module as loaded
-export KGSM_LOGIC_FILES_CONFIG_LOADED=1
+declare -g KGSM_LOGIC_FILES_CONFIG_LOADED=1
+export KGSM_LOGIC_FILES_CONFIG_LOADED

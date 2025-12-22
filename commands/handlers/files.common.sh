@@ -13,29 +13,33 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
+if [[ -n "${KGSM_LOGIC_FILES_COMMON_LOADED:-}" ]]; then
+  return 0
+fi
+
 # Inject override functions into a management file
-# Args: $1 = instance_name, $2 = instance_management_file
+# Args: $1 = _instance_name, $2 = _instance_management_file
 # Returns: 0 on success, error code on failure
 function __logic_inject_overrides() {
-  local instance_name="$1"
-  local instance_management_file="$2"
+  local _instance_name="$1"
+  local _instance_management_file="$2"
 
   # Validate input
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     return $EC_INVALID_ARG
   fi
 
-  if [[ -z "$instance_management_file" ]]; then
+  if [[ -z "$_instance_management_file" ]]; then
     return $EC_INVALID_ARG
   fi
 
-  if [[ ! -f "$instance_management_file" ]]; then
+  if [[ ! -f "$_instance_management_file" ]]; then
     return $EC_FILE_NOT_FOUND
   fi
 
   # Get blueprint name from instance config
   local instance_config_file
-  instance_config_file=$(__find_instance_config "$instance_name" 2> /dev/null)
+  instance_config_file=$(__find_instance_config "$_instance_name" 2> /dev/null)
 
   if [[ ! -f "$instance_config_file" ]]; then
     return $EC_INVALID_INSTANCE
@@ -95,7 +99,7 @@ function __logic_inject_overrides() {
     sed -i \
       -e "/^function ${fn}[[:space:]]*(/ r ${tmp}" \
       -e "/^function ${fn}[[:space:]]*(/,/^}/ d" \
-      "${instance_management_file}"
+      "${_instance_management_file}"
 
     # shellcheck disable=SC2181
     if [[ $? -ne 0 ]]; then
@@ -141,4 +145,5 @@ function __logic_set_file_ownership() {
 export -f __logic_set_file_ownership
 
 # Mark module as loaded
-export KGSM_LOGIC_FILES_COMMON_LOADED=1
+declare -g KGSM_LOGIC_FILES_COMMON_LOADED=1
+export KGSM_LOGIC_FILES_COMMON_LOADED

@@ -206,7 +206,7 @@ export -f __socket_emit_event
 function _cmd_enable() {
   if [[ "$1" == "--help" ]]; then
     usage_enable
-    return $EC_OKAY
+    return $EC_SUCCESS
   fi
 
   __print_info "Enabling Unix Domain Socket event transport..."
@@ -257,7 +257,7 @@ function _cmd_enable() {
 function _cmd_disable() {
   if [[ "$1" == "--help" ]]; then
     usage_disable
-    return $EC_OKAY
+    return $EC_SUCCESS
   fi
 
   __print_info "Disabling Unix Domain Socket event transport..."
@@ -299,7 +299,7 @@ function _cmd_disable() {
 function _cmd_test() {
   if [[ "$1" == "--help" ]]; then
     usage_test
-    return $EC_OKAY
+    return $EC_SUCCESS
   fi
 
   __print_info "Testing Unix Domain Socket event transport..."
@@ -450,7 +450,7 @@ function _cmd_test() {
 function _cmd_status() {
   if [[ "$1" == "--help" ]]; then
     usage_status
-    return $EC_OKAY
+    return $EC_SUCCESS
   fi
 
   local BOLD="\e[1m"
@@ -523,7 +523,7 @@ function _cmd_status() {
     echo "    Sockets will be created when first event is emitted"
   fi
 
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 # Handle emit command (called by commands/events.sh)
@@ -539,7 +539,7 @@ function _cmd_help() {
 
   if [[ -z "$command" ]]; then
     show_usage
-    return $EC_OKAY
+    return $EC_SUCCESS
   fi
 
   case "$command" in
@@ -562,13 +562,13 @@ function _cmd_help() {
       ;;
   esac
 
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 # Main entry point
 if [[ $# -eq 0 ]]; then
   show_usage
-  exit $EC_GENERAL
+  exit $EC_ERROR
 fi
 
 # Parse global options
@@ -597,7 +597,7 @@ shift 2> /dev/null || true
 case "$command" in
   "")
     show_usage
-    exit $EC_GENERAL
+    exit $EC_ERROR
     ;;
   enable)
     _cmd_enable "$@"

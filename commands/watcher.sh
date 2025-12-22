@@ -228,7 +228,7 @@ function _cmd_start() {
   strategy=$(__logic_determine_strategy "$instance_config_file")
   local result=$?
 
-  if [[ $result -ne $EC_OKAY ]]; then
+  if [[ $result -ne $EC_SUCCESS ]]; then
     __print_error "No readiness detection strategy configured for '$instance_name'"
     __print_error "Configure either 'startup_success_regex' or 'ports'"
     return $EC_WATCHER_NO_STRATEGY
@@ -256,7 +256,7 @@ function _cmd_start() {
       ;;
     *)
       __print_error "Unknown strategy: $strategy"
-      return $EC_GENERAL
+      return $EC_ERROR
       ;;
   esac
 
@@ -307,7 +307,7 @@ function _cmd_test() {
   strategy=$(__logic_determine_strategy "$instance_config_file")
   local result=$?
 
-  if [[ $result -ne $EC_OKAY ]]; then
+  if [[ $result -ne $EC_SUCCESS ]]; then
     __print_error "No readiness detection strategy configured for '$instance_name'"
     __print_error "Configure either 'startup_success_regex' or 'ports'"
     return $EC_WATCHER_NO_STRATEGY
@@ -323,7 +323,7 @@ function _cmd_test() {
       ;;
     *)
       __print_error "Unknown strategy: $strategy"
-      return $EC_GENERAL
+      return $EC_ERROR
       ;;
   esac
 
@@ -387,7 +387,7 @@ function _cmd_status() {
   strategy=$(__logic_determine_strategy "$instance_config_file" 2> /dev/null)
   local result=$?
 
-  if [[ $result -eq $EC_OKAY ]]; then
+  if [[ $result -eq $EC_SUCCESS ]]; then
     echo -e "  Selected strategy: ${GREEN}$strategy${END}"
   else
     echo -e "  Selected strategy: ${RED}None configured${END}"
@@ -426,7 +426,7 @@ function _cmd_status() {
   echo ""
 
   # Show detailed status for the selected strategy
-  if [[ $result -eq $EC_OKAY ]]; then
+  if [[ $result -eq $EC_SUCCESS ]]; then
     echo -e "${BOLD}Selected Strategy Details:${END}"
     case "$strategy" in
       logs)
@@ -487,7 +487,7 @@ shift 2> /dev/null || true
 case "$command" in
   "")
     show_usage
-    exit $EC_GENERAL
+    exit $EC_ERROR
     ;;
   -h | --help | help)
     _cmd_help "$@"

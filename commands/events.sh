@@ -210,7 +210,7 @@ function _cmd_status() {
   echo ""
   events.webhook.sh status
 
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 # Test event transports
@@ -226,7 +226,7 @@ function _cmd_test() {
   case "$transport" in
     -h | --help | help)
       usage_test
-      return $EC_OKAY
+      return $EC_SUCCESS
       ;;
     all)
       # shellcheck disable=SC2154
@@ -261,7 +261,7 @@ function _cmd_test() {
       if [[ "$socket_enabled" != "true" && "$webhook_enabled" != "true" ]]; then
         __print_error "No event transports are enabled"
         __print_info "Enable transports with: ${self} socket enable OR ${self} webhook enable"
-        return $EC_GENERAL
+        return $EC_ERROR
       fi
 
       if [[ $overall_result -eq 0 ]]; then
@@ -374,12 +374,12 @@ function _build_event_payload() {
   fi
 
   echo "$payload"
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 # Delegate event payload to all enabled transports
 # Args: $1 = payload (JSON string)
-# Returns: EC_OKAY on success, EC_EVENT_TRANSPORT_FAILED if all fail
+# Returns: EC_SUCCESS on success, EC_EVENT_TRANSPORT_FAILED if all fail
 function _delegate_to_transports() {
   local payload="$1"
   local any_success=false
@@ -404,7 +404,7 @@ function _delegate_to_transports() {
     return $EC_EVENT_TRANSPORT_FAILED
   fi
 
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 # Emit event
@@ -421,7 +421,7 @@ function _cmd_emit() {
 
   if [[ "$event_name" == "-h" || "$event_name" == "--help" || "$event_name" == "help" ]]; then
     usage_emit
-    return $EC_OKAY
+    return $EC_SUCCESS
   fi
 
   # Convert dash-separated name to underscore type
@@ -454,7 +454,7 @@ function _cmd_emit() {
     return $EC_EVENT_TRANSPORT_FAILED
   fi
 
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 # Help command
@@ -463,7 +463,7 @@ function _cmd_help() {
 
   if [[ -z "$command" ]]; then
     show_usage
-    return $EC_OKAY
+    return $EC_SUCCESS
   fi
 
   case "$command" in
@@ -489,7 +489,7 @@ function _cmd_help() {
       ;;
   esac
 
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 # Parse command
@@ -500,7 +500,7 @@ shift 2> /dev/null || true
 case "$command" in
   "")
     show_usage
-    exit $EC_GENERAL
+    exit $EC_ERROR
     ;;
   -h | --help | help)
     _cmd_help "$@"

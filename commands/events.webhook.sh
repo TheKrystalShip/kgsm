@@ -296,7 +296,7 @@ export -f __webhook_emit_event
 function _cmd_enable() {
   if [[ "$1" == "--help" ]]; then
     usage_enable
-    return $EC_OKAY
+    return $EC_SUCCESS
   fi
 
   __print_info "Enabling HTTP webhook event transport..."
@@ -344,7 +344,7 @@ function _cmd_enable() {
 function _cmd_disable() {
   if [[ "$1" == "--help" ]]; then
     usage_disable
-    return $EC_OKAY
+    return $EC_SUCCESS
   fi
 
   __print_info "Disabling HTTP webhook event transport..."
@@ -363,7 +363,7 @@ function _cmd_disable() {
 function _cmd_configure() {
   if [[ "$1" == "--help" ]]; then
     usage_configure
-    return $EC_OKAY
+    return $EC_SUCCESS
   fi
 
   echo "Webhook Configuration Wizard"
@@ -430,14 +430,14 @@ function _cmd_configure() {
   __print_info "Use '${self} enable' to activate webhook transport"
   __print_info "Use '${self} test' to verify your configuration"
 
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 # Test webhook functionality
 function _cmd_test() {
   if [[ "$1" == "--help" ]]; then
     usage_test
-    return $EC_OKAY
+    return $EC_SUCCESS
   fi
 
   export WEBHOOK_TEST_MODE=1
@@ -522,7 +522,7 @@ function _cmd_test() {
 function _cmd_status() {
   if [[ "$1" == "--help" ]]; then
     usage_status
-    return $EC_OKAY
+    return $EC_SUCCESS
   fi
 
   local BOLD="\e[1m"
@@ -605,7 +605,7 @@ function _cmd_status() {
     echo "  Cannot test connectivity (missing URLs or wget)"
   fi
 
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 # Handle emit command (called by commands/events.sh)
@@ -621,7 +621,7 @@ function _cmd_help() {
 
   if [[ -z "$command" ]]; then
     show_usage
-    return $EC_OKAY
+    return $EC_SUCCESS
   fi
 
   case "$command" in
@@ -647,13 +647,13 @@ function _cmd_help() {
       ;;
   esac
 
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 # Main entry point
 if [[ $# -eq 0 ]]; then
   show_usage
-  exit $EC_GENERAL
+  exit $EC_ERROR
 fi
 
 # Parse global options
@@ -682,7 +682,7 @@ shift 2> /dev/null || true
 case "$command" in
   "")
     show_usage
-    exit $EC_GENERAL
+    exit $EC_ERROR
     ;;
   enable)
     _cmd_enable "$@"

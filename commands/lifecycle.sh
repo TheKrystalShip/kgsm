@@ -238,7 +238,7 @@ function _cmd_start() {
       # Start watcher if available
       watcher.sh start "$instance_name" --detach > /dev/null 2>&1 || true
 
-      return $EC_OKAY
+      return $EC_SUCCESS
       ;;
     *)
       __print_error "Failed to start instance $instance_name"
@@ -288,7 +288,7 @@ function _cmd_stop() {
     $EC_SUCCESS_INSTANCE_STOPPED)
       __print_success "Instance $instance_name stopped successfully"
       __dispatch_event_from_exit_code "$exit_code" "$instance_name" "${instance_lifecycle_manager:-standalone}"
-      return $EC_OKAY
+      return $EC_SUCCESS
       ;;
     *)
       __print_error "Failed to stop instance $instance_name"
@@ -432,7 +432,7 @@ function _cmd_is_active() {
     return 0
   elif [[ $exit_code -eq 1 ]]; then
     __print_info "Instance $instance_name is inactive"
-    return $EC_GENERAL
+    return $EC_ERROR
   else
     __print_error "Failed to check status for instance $instance_name"
     return $exit_code
@@ -486,33 +486,33 @@ function _cmd_logs() {
 function _cmd_help() {
   if [[ -z "$1" ]]; then
     show_usage
-    return $EC_OKAY
+    return $EC_SUCCESS
   fi
 
   case "$1" in
     start)
       show_usage_start
-      return $EC_OKAY
+      return $EC_SUCCESS
       ;;
     stop)
       show_usage_stop
-      return $EC_OKAY
+      return $EC_SUCCESS
       ;;
     restart)
       show_usage_restart
-      return $EC_OKAY
+      return $EC_SUCCESS
       ;;
     status)
       show_usage_status
-      return $EC_OKAY
+      return $EC_SUCCESS
       ;;
     is-active)
       show_usage_is_active
-      return $EC_OKAY
+      return $EC_SUCCESS
       ;;
     logs)
       show_usage_logs
-      return $EC_OKAY
+      return $EC_SUCCESS
       ;;
     *)
       __print_error "Unknown command: $1"
@@ -529,7 +529,7 @@ shift 2> /dev/null || true
 case "$command" in
   "")
     show_usage
-    exit $EC_GENERAL
+    exit $EC_ERROR
     ;;
   -h | --help | help)
     _cmd_help "$@"

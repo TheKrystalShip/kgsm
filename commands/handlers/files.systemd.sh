@@ -14,9 +14,13 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
+if [[ -n "${KGSM_LOGIC_FILES_SYSTEMD_LOADED}" ]]; then
+  return 0
+fi
+
 # Load common file logic functions
 if [[ -z "${KGSM_LOGIC_FILES_COMMON_LOADED}" ]]; then
-  # shellcheck disable=SC1091
+  # shellcheck disable=SC1090
   source "$(__find_command_handler files.common.sh)" || return $EC_FAILED_SOURCE
 fi
 
@@ -36,13 +40,13 @@ function __logic_enable_systemd_integration() {
   fi
 
   # Get required variables from instance config
-  local instance_name instance_launch_dir instance_executable_file instance_working_dir
-  instance_name=$(__get_config_value "$instance_config_file" "name" 2>/dev/null)
-  instance_launch_dir=$(__get_config_value "$instance_config_file" "launch_dir" 2>/dev/null)
-  instance_executable_file=$(__get_config_value "$instance_config_file" "executable_file" 2>/dev/null)
-  instance_working_dir=$(__get_config_value "$instance_config_file" "working_dir" 2>/dev/null)
+  local _instance_name _instance_launch_dir _instance_executable_file _instance_working_dir
+  _instance_name=$(__get_config_value "$instance_config_file" "name" 2>/dev/null)
+  _instance_launch_dir=$(__get_config_value "$instance_config_file" "launch_dir" 2>/dev/null)
+  _instance_executable_file=$(__get_config_value "$instance_config_file" "executable_file" 2>/dev/null)
+  _instance_working_dir=$(__get_config_value "$instance_config_file" "working_dir" 2>/dev/null)
 
-  if [[ -z "$instance_name" ]] || [[ -z "$instance_launch_dir" ]] || [[ -z "$instance_executable_file" ]] || [[ -z "$instance_working_dir" ]]; then
+  if [[ -z "$_instance_name" ]] || [[ -z "$_instance_launch_dir" ]] || [[ -z "$_instance_executable_file" ]] || [[ -z "$_instance_working_dir" ]]; then
     return $EC_INVALID_CONFIG
   fi
 
@@ -54,14 +58,14 @@ function __logic_enable_systemd_integration() {
     return $EC_INVALID_CONFIG
   fi
 
-  local instance_systemd_service_file="${config_systemd_files_dir}/${instance_name}.service"
-  local instance_systemd_socket_file="${config_systemd_files_dir}/${instance_name}.socket"
-  local temp_service_file="/tmp/${instance_name}.service"
-  local temp_socket_file="/tmp/${instance_name}.socket"
+  local instance_systemd_service_file="${config_systemd_files_dir}/${_instance_name}.service"
+  local instance_systemd_socket_file="${config_systemd_files_dir}/${_instance_name}.socket"
+  local temp_service_file="/tmp/${_instance_name}.service"
+  local temp_socket_file="/tmp/${_instance_name}.socket"
 
   # Export variables required by templates
-  local instance_bin_absolute_path="${instance_launch_dir}/${instance_executable_file}"
-  export instance_name instance_bin_absolute_path instance_working_dir
+  local instance_bin_absolute_path="${_instance_launch_dir}/${_instance_executable_file}"
+  export _instance_name instance_bin_absolute_path _instance_working_dir
 
   # Create service file from template
   if ! __logic_expand_template "service" "$temp_service_file"; then
@@ -134,12 +138,12 @@ function __logic_disable_systemd_integration() {
   fi
 
   # Get systemd file paths from instance config
-  local instance_name instance_systemd_service_file instance_systemd_socket_file
-  instance_name=$(__get_config_value "$instance_config_file" "name" 2>/dev/null)
+  local _instance_name instance_systemd_service_file instance_systemd_socket_file
+  _instance_name=$(__get_config_value "$instance_config_file" "name" 2>/dev/null)
   instance_systemd_service_file=$(__get_config_value "$instance_config_file" "systemd_service_file" 2>/dev/null)
   instance_systemd_socket_file=$(__get_config_value "$instance_config_file" "systemd_socket_file" 2>/dev/null)
 
-  if [[ -z "$instance_name" ]]; then
+  if [[ -z "$_instance_name" ]]; then
     return $EC_INVALID_CONFIG
   fi
 
@@ -153,14 +157,14 @@ function __logic_disable_systemd_integration() {
   [[ "$EUID" -ne 0 ]] && SUDO="sudo -E"
 
   # Stop and disable service if active
-  if systemctl is-active "$instance_name" &>/dev/null; then
-    if ! $SUDO systemctl stop "$instance_name" 2>/dev/null; then
+  if systemctl is-active "$_instance_name" &>/dev/null; then
+    if ! $SUDO systemctl stop "$_instance_name" 2>/dev/null; then
       return $EC_SYSTEMD
     fi
   fi
 
-  if systemctl is-enabled "$instance_name" &>/dev/null; then
-    if ! $SUDO systemctl disable "$instance_name" 2>/dev/null; then
+  if systemctl is-enabled "$_instance_name" &>/dev/null; then
+    if ! $SUDO systemctl disable "$_instance_name" 2>/dev/null; then
       return $EC_SYSTEMD
     fi
   fi
@@ -207,4 +211,5 @@ function __logic_disable_systemd_integration() {
 export -f __logic_disable_systemd_integration
 
 # Mark module as loaded
-export KGSM_LOGIC_FILES_SYSTEMD_LOADED=1
+declare -g KGSM_LOGIC_FILES_SYSTEMD_LOADED=1
+export KGSM_LOGIC_FILES_SYSTEMD_LOADED

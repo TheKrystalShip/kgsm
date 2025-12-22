@@ -14,6 +14,10 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
+if [[ -n "${KGSM_LOGIC_INSTANCES_LOADED}" ]]; then
+  return 0
+fi
+
 # Generate a unique instance name for a blueprint
 # Args: $1 = blueprint_name
 # Returns: Echoes unique instance name, returns 0 on success
@@ -32,13 +36,13 @@ function __logic_generate_unique_instance_name() {
   fi
 
   # Generate unique name with random suffix
-  local instance_name
+  local _instance_name
   while :; do
-    instance_name=$(tr -dc 0-9 </dev/urandom | head -c "${config_instance_suffix_length:-2}")
-    instance_name="${blueprint_name}-${instance_name}"
+    _instance_name=$(tr -dc 0-9 </dev/urandom | head -c "${config_instance_suffix_length:-2}")
+    _instance_name="${blueprint_name}-${_instance_name}"
 
-    if [[ ! -f "$INSTANCES_SOURCE_DIR/$blueprint_name/${instance_name}.ini" ]]; then
-      echo "$instance_name"
+    if [[ ! -f "$INSTANCES_SOURCE_DIR/$blueprint_name/${_instance_name}.ini" ]]; then
+      echo "$_instance_name"
       return 0
     fi
   done
@@ -47,22 +51,22 @@ function __logic_generate_unique_instance_name() {
 export -f __logic_generate_unique_instance_name
 
 # Check if an instance config file exists
-# Args: $1 = instance_name, $2 = blueprint_name
+# Args: $1 = _instance_name, $2 = blueprint_name
 # Returns: 0 if exists, 1 if not
 function __logic_instance_config_exists() {
-  local instance_name="$1"
+  local _instance_name="$1"
   local blueprint_name="$2"
 
-  if [[ -z "$instance_name" || -z "$blueprint_name" ]]; then
+  if [[ -z "$_instance_name" || -z "$blueprint_name" ]]; then
     return $EC_INVALID_ARG
   fi
 
   # Append .ini if not present
-  if [[ ! "$instance_name" =~ \.ini$ ]]; then
-    instance_name="${instance_name}.ini"
+  if [[ ! "$_instance_name" =~ \.ini$ ]]; then
+    _instance_name="${_instance_name}.ini"
   fi
 
-  local instance_config_file="${INSTANCES_SOURCE_DIR}/${blueprint_name}/${instance_name}.ini"
+  local instance_config_file="${INSTANCES_SOURCE_DIR}/${blueprint_name}/${_instance_name}.ini"
 
   [[ -f "$instance_config_file" ]] && return 0 || return 1
 }
@@ -70,13 +74,13 @@ function __logic_instance_config_exists() {
 export -f __logic_instance_config_exists
 
 # Create an instance config file
-# Args: $1 = instance_name, $2 = blueprint_name
+# Args: $1 = _instance_name, $2 = blueprint_name
 # Returns: Echoes config file path, returns 0 on success or error code
 function __logic_create_instance_config_file() {
-  local instance_name="$1"
+  local _instance_name="$1"
   local blueprint_name="$2"
 
-  if [[ -z "$instance_name" || -z "$blueprint_name" ]]; then
+  if [[ -z "$_instance_name" || -z "$blueprint_name" ]]; then
     return $EC_INVALID_ARG
   fi
 
@@ -87,7 +91,7 @@ function __logic_create_instance_config_file() {
   fi
 
   # Create instance config file
-  local instance_config_file="${instance_dir_path}/${instance_name}.ini"
+  local instance_config_file="${instance_dir_path}/${_instance_name}.ini"
   if ! __create_file "$instance_config_file" >/dev/null 2>&1; then
     return $EC_FAILED_CREATE_FILE
   fi
@@ -99,15 +103,15 @@ function __logic_create_instance_config_file() {
 export -f __logic_create_instance_config_file
 
 # Create base instance configuration
-# Args: $1 = instance_config_file, $2 = instance_name, $3 = blueprint_abs_path, $4 = install_dir
+# Args: $1 = instance_config_file, $2 = _instance_name, $3 = blueprint_abs_path, $4 = install_dir
 # Returns: 0 on success, error code on failure
 function __logic_create_base_instance() {
   local instance_config_file="$1"
-  local instance_name="$2"
+  local _instance_name="$2"
   local blueprint_abs_path="$3"
   local install_dir="$4"
 
-  if [[ -z "$instance_config_file" || -z "$instance_name" || -z "$blueprint_abs_path" || -z "$install_dir" ]]; then
+  if [[ -z "$instance_config_file" || -z "$_instance_name" || -z "$blueprint_abs_path" || -z "$install_dir" ]]; then
     return $EC_INVALID_ARG
   fi
 
@@ -119,22 +123,22 @@ function __logic_create_base_instance() {
   fi
 
   # Set instance variables
-  export instance_name=$instance_name
+  export _instance_name=$_instance_name
   export instance_blueprint_file=$blueprint_abs_path
-  export instance_working_dir="${install_dir}/${instance_name}"
+  export instance_working_dir="${install_dir}/${_instance_name}"
 
   # shellcheck disable=SC2155
   export instance_install_datetime="$(date +"%Y-%m-%dT%H:%M:%S")"
-  export instance_version_file="${instance_working_dir}/.${instance_name}.version"
+  export instance_version_file="${instance_working_dir}/.${_instance_name}.version"
   export instance_lifecycle_manager="standalone"
-  export instance_manage_file="${instance_working_dir}/${instance_name}.manage.sh"
+  export instance_manage_file="${instance_working_dir}/${_instance_name}.manage.sh"
   export instance_auto_update_before_start="${config_instance_auto_update_before_start:-false}"
 
   # Process management files
-  export instance_pid_file="${instance_working_dir}/.${instance_name}.pid"
-  export instance_socket_file="${instance_working_dir}/.${instance_name}.sock"
-  export instance_log_file="${instance_working_dir}/${instance_name}.log"
-  export instance_port_forwarding_state_file="${instance_working_dir}/.${instance_name}.upnp_enabled"
+  export instance_pid_file="${instance_working_dir}/.${_instance_name}.pid"
+  export instance_socket_file="${instance_working_dir}/.${_instance_name}.sock"
+  export instance_log_file="${instance_working_dir}/${_instance_name}.log"
+  export instance_port_forwarding_state_file="${instance_working_dir}/.${_instance_name}.upnp_enabled"
 
   export instance_startup_success_regex="${blueprint_startup_success_regex:-}"
 
@@ -198,7 +202,7 @@ function __logic_create_base_instance() {
 
     # Container instance
     instance_runtime="container"
-    instance_compose_file="${instance_working_dir}/${instance_name}.docker-compose.yml"
+    instance_compose_file="${instance_working_dir}/${_instance_name}.docker-compose.yml"
 
     local blueprint_parsed_ports
     if ! blueprint_parsed_ports=$(__parse_docker_compose_to_ufw_ports "$blueprint_abs_path"); then
@@ -243,7 +247,7 @@ export -f __logic_create_base_instance
 
 # Create a complete instance
 # Args: $1 = blueprint, $2 = install_dir, $3 = identifier (optional)
-# Returns: Echoes instance_name on success (EC_SUCCESS_INSTANCE_CREATED), error code on failure
+# Returns: Echoes _instance_name on success (EC_SUCCESS_INSTANCE_CREATED), error code on failure
 function __logic_create_instance() {
   local blueprint=$1
   local install_dir=$2
@@ -275,37 +279,37 @@ function __logic_create_instance() {
   blueprint_name="$(__extract_blueprint_name "$blueprint_abs_path")"
 
   # Generate or validate instance name
-  local instance_name
+  local _instance_name
   if [[ -z "$identifier" ]]; then
-    instance_name="$(__logic_generate_unique_instance_name "$blueprint_name")"
+    _instance_name="$(__logic_generate_unique_instance_name "$blueprint_name")"
   else
-    instance_name="$identifier"
+    _instance_name="$identifier"
     # Check if instance already exists
-    if __logic_instance_config_exists "$instance_name" "$blueprint_name"; then
+    if __logic_instance_config_exists "$_instance_name" "$blueprint_name"; then
       return $EC_INVALID_INSTANCE
     fi
   fi
 
   # Create instance config file
   local instance_config_file
-  if ! instance_config_file="$(__logic_create_instance_config_file "$instance_name" "$blueprint_name")"; then
+  if ! instance_config_file="$(__logic_create_instance_config_file "$_instance_name" "$blueprint_name")"; then
     return $?
   fi
 
   # Create base instance configuration
-  if ! __logic_create_base_instance "$instance_config_file" "$instance_name" "$blueprint_abs_path" "$install_dir"; then
+  if ! __logic_create_base_instance "$instance_config_file" "$_instance_name" "$blueprint_abs_path" "$install_dir"; then
     return $?
   fi
 
   # Success - echo instance name for caller
-  echo "$instance_name"
+  echo "$_instance_name"
   return $EC_SUCCESS_INSTANCE_CREATED
 }
 
 export -f __logic_create_instance
 
 # Remove an instance configuration
-# Args: $1 = instance_name
+# Args: $1 = _instance_name
 # Returns: EC_SUCCESS_INSTANCE_REMOVED on success, error code on failure
 function __logic_remove_instance() {
   local instance=$1
@@ -391,4 +395,5 @@ function __logic_get_instance_paths() {
 export -f __logic_get_instance_paths
 
 # Mark module as loaded
-export KGSM_LOGIC_INSTANCES_LOADED=1
+declare -g KGSM_LOGIC_INSTANCES_LOADED=1
+export KGSM_LOGIC_INSTANCES_LOADED

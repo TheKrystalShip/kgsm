@@ -466,7 +466,7 @@ function _cmd_edit() {
   local exit_code=$?
 
   case $exit_code in
-    $EC_OKAY)
+    $EC_SUCCESS)
       # Nothing to do
       return 0
       ;;
@@ -551,7 +551,7 @@ function _cmd_rollback() {
   local temp_restore="${CONFIG_FILE}.restore.$$"
   if ! cp "$backup_file" "$temp_restore"; then
     __print_error "Failed to read backup file"
-    return $EC_GENERAL
+    return $EC_ERROR
   fi
 
   # Create backup of current config before rollback
@@ -567,10 +567,10 @@ function _cmd_rollback() {
     __print_success "Configuration rolled back to generation $generation"
     __print_info "Previous config backed up as ${CONFIG_FILE}.0"
     __print_info "Rolled back from: $backup_file"
-    return $EC_OKAY
+    return $EC_SUCCESS
   else
     __print_error "Failed to restore backup"
-    return $EC_GENERAL
+    return $EC_ERROR
   fi
 }
 
@@ -604,7 +604,7 @@ function _cmd_diff() {
     diff -u "$backup_file" "$CONFIG_FILE" || true
   fi
 
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 function _cmd_help() {
@@ -676,7 +676,7 @@ fi
 case "$command" in
   "")
     show_usage
-    exit $EC_GENERAL
+    exit $EC_ERROR
     ;;
   -h | --help | help)
     _cmd_help "$@"

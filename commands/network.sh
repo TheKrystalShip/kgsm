@@ -421,7 +421,7 @@ function _cmd_ports_kill() {
   local exit_code=$?
 
   case $exit_code in
-    $EC_OKAY)
+    $EC_SUCCESS)
       __print_success "Process using port $port/$protocol has been terminated"
       ;;
     $EC_NOT_FOUND)
@@ -660,7 +660,7 @@ function _cmd_ip() {
       ;;
     *)
       __print_warning "Failed to retrieve external IP address"
-      overall_exit_code=$EC_GENERAL
+      overall_exit_code=$EC_ERROR
       ;;
   esac
 
@@ -687,7 +687,7 @@ function _cmd_ip() {
     *)
       __print_warning "Failed to retrieve local IP addresses"
       if [[ $overall_exit_code -eq 0 ]]; then
-        overall_exit_code=$EC_GENERAL
+        overall_exit_code=$EC_ERROR
       fi
       ;;
   esac
@@ -788,7 +788,7 @@ shift 2> /dev/null || true
 case "$command" in
   "")
     show_usage
-    exit $EC_GENERAL
+    exit $EC_ERROR
     ;;
   -h | --help | help)
     _cmd_help "$@"

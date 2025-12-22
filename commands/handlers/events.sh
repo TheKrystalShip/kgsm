@@ -130,7 +130,7 @@ declare -g -A EVENT_CONFIGS=(
 
 # Validates that an event type is supported
 # Args: $1 = event_type (e.g., "instance_created")
-# Returns: EC_OKAY if valid, EC_EVENT_TYPE_INVALID if not
+# Returns: EC_SUCCESS if valid, EC_EVENT_TYPE_INVALID if not
 function __logic_validate_event_type() {
   local event_type="$1"
 
@@ -143,14 +143,14 @@ function __logic_validate_event_type() {
     return $EC_EVENT_TYPE_INVALID
   fi
 
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 export -f __logic_validate_event_type
 
 # Validates event parameters match the required specification
 # Args: $1 = event_type, $2... = parameters
-# Returns: EC_OKAY if valid, EC_EVENT_PARAMS_INVALID if not
+# Returns: EC_SUCCESS if valid, EC_EVENT_PARAMS_INVALID if not
 function __logic_validate_event_params() {
   local event_type="$1"
   shift
@@ -177,14 +177,14 @@ function __logic_validate_event_params() {
     fi
   done
 
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 export -f __logic_validate_event_params
 
 # Returns the parameter specification for an event type
 # Args: $1 = event_type
-# Returns: EC_OKAY and echoes param spec (space-separated), or EC_EVENT_TYPE_INVALID
+# Returns: EC_SUCCESS and echoes param spec (space-separated), or EC_EVENT_TYPE_INVALID
 function __logic_get_event_param_spec() {
   local event_type="$1"
 
@@ -194,14 +194,14 @@ function __logic_get_event_param_spec() {
   fi
 
   echo "${EVENT_CONFIGS[$event_type]}"
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 export -f __logic_get_event_param_spec
 
 # Converts dash-separated event name to underscore constant
 # Args: $1 = event_name (e.g., "instance-created")
-# Returns: EC_OKAY and echoes constant name (e.g., "instance_created"), or EC_EVENT_TYPE_INVALID
+# Returns: EC_SUCCESS and echoes constant name (e.g., "instance_created"), or EC_EVENT_TYPE_INVALID
 function __logic_event_name_to_type() {
   local event_name="$1"
 
@@ -218,10 +218,11 @@ function __logic_event_name_to_type() {
   fi
 
   echo "$event_type"
-  return $EC_OKAY
+  return $EC_SUCCESS
 }
 
 export -f __logic_event_name_to_type
 
 # Mark module as loaded
-export KGSM_LOGIC_EVENTS_LOADED=1
+declare -g KGSM_LOGIC_EVENTS_LOADED=1
+export KGSM_LOGIC_EVENTS_LOADED

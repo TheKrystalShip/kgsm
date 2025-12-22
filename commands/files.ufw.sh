@@ -163,7 +163,7 @@ function _cmd_enable() {
       __print_error "Invalid instance configuration - missing required fields"
       return $exit_code
       ;;
-    $EC_GENERAL)
+    $EC_ERROR)
       __print_error "Firewall rule file already exists"
       return $exit_code
       ;;
@@ -296,7 +296,7 @@ shift 2> /dev/null || true
 case "$command" in
   "")
     show_usage
-    exit $EC_GENERAL
+    exit $EC_ERROR
     ;;
   -h | --help | help)
     _cmd_help "$@"
