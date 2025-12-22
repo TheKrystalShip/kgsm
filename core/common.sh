@@ -7,88 +7,53 @@
 if [[ -n "${KGSM_COMMON_LOADED:-}" ]]; then
   return 0
 fi
+
+function __load_core_module() {
+  local module_name="$1"
+  local module_file="$KGSM_ROOT/core/${module_name}"
+
+  if [[ ! -f "$module_file" ]]; then
+    echo "${0##*/} ERROR: Failed to locate ${module_name}" >&2
     echo "${0##*/} ERROR: File structure might be compromised" >&2
     exit 1
   fi
 
   # shellcheck disable=SC1090
-  source "$include_loader" || {
-    echo -e "ERROR: Failed to load loader.sh core module" >&2
+  source "$module_file" || {
+    echo -e "ERROR: Failed to load ${module_name} core module" >&2
     exit 1
   }
-fi
+}
+
+# Module loader
+__load_core_module "loader.sh"
 
 # Error codes and definitions
-if [[ -z "$KGSM_ERRORS_LOADED" ]]; then
-  # shellcheck disable=SC1090
-  source "$CORE_SOURCE_DIR/errors.sh" || {
-    echo -e "ERROR: Failed to load errors.sh core module" >&2
-    exit 1
-  }
-fi
+__load_core_module "errors.sh"
 
 # From this point forward, we can use the error codes defined in errors.sh
-if [[ -z "$KGSM_DELEGATOR_LOADED" ]]; then
-  # shellcheck disable=SC1090
-  source "$CORE_SOURCE_DIR/delegator.sh" || {
-    echo -e "ERROR: Failed to load delegator.sh core module" >&2
-    exit $EC_FAILED_SOURCE
-  }
-fi
+__load_core_module "delegator.sh"
 
 # Events
-if [[ -z "$KGSM_EVENTS_LIBRARY_LOADED" ]]; then
-  # shellcheck disable=SC1090
-  source "$CORE_SOURCE_DIR/events.sh" || {
-    echo -e "ERROR: Failed to load events.sh core module" >&2
-    exit $EC_FAILED_SOURCE
-  }
-fi
+__load_core_module "events.sh"
 
 # System
-if [[ -z "$KGSM_SYSTEM_LOADED" ]]; then
-  # shellcheck disable=SC1090
-  source "$CORE_SOURCE_DIR/system.sh" || {
-    echo -e "ERROR: Failed to load system.sh core module" >&2
-    exit $EC_FAILED_SOURCE
-  }
-fi
+__load_core_module "system.sh"
 
 # User config.ini
-if [[ -z "$KGSM_CONFIG_LOADED" ]]; then
-  # shellcheck disable=SC1090
-  source "$CORE_SOURCE_DIR/config.sh" || {
-    echo -e "ERROR: Failed to load config.sh core module" >&2
-    exit $EC_FAILED_SOURCE
-  }
-fi
+__load_core_module "config.sh"
 
 # File logging
-if [[ -z "$KGSM_LOGGING_LOADED" ]]; then
-  # shellcheck disable=SC1090
-  source "$CORE_SOURCE_DIR/logging.sh" || {
-    echo -e "ERROR: Failed to load logging.sh core module" >&2
-    exit $EC_FAILED_SOURCE
-  }
-fi
+__load_core_module "logging.sh"
 
 # Parser
-if [[ -z "$KGSM_PARSER_LOADED" ]]; then
-  # shellcheck disable=SC1090
-  source "$CORE_SOURCE_DIR/parser.sh" || {
-    echo -e "ERROR: Failed to load parser.sh core module" >&2
-    exit $EC_FAILED_SOURCE
-  }
-fi
+__load_core_module "parser.sh"
 
 # Validation
-if [[ -z "$KGSM_VALIDATION_LOADED" ]]; then
-  # shellcheck disable=SC1090
-  source "$CORE_SOURCE_DIR/validation.sh" || {
-    echo -e "ERROR: Failed to load validation.sh core module" >&2
-    exit $EC_FAILED_SOURCE
-  }
-fi
+__load_core_module "validation.sh"
+
+# Cleanup
+unset -f __load_core_module
 
 # Export this to check before loading this file again
 declare -g KGSM_COMMON_LOADED=1
