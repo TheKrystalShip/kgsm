@@ -199,11 +199,9 @@ function _cmd_watch() {
     return $EC_MISSING_ARG
   fi
 
-  # Ensure .ini extension
-  local instance="${instance_name%.ini}.ini"
-  local instance_config_file="$INSTANCES_SOURCE_DIR/$instance"
-
-  if [[ ! -f "$instance_config_file" ]]; then
+  # Find instance config file using standard finder
+  local instance_config_file
+  if ! instance_config_file=$(__find_instance_config "$instance_name" 2>/dev/null); then
     __print_error "Instance '$instance_name' not found"
     return $EC_NOT_FOUND
   fi
@@ -327,17 +325,15 @@ function _cmd_test() {
     return $EC_MISSING_ARG
   fi
 
-  # Ensure .ini extension
-  local instance="${instance_name%.ini}.ini"
-  local instance_config_file="$INSTANCES_SOURCE_DIR/$instance"
-
-  if [[ ! -f "$instance_config_file" ]]; then
+  # Find instance config file using standard finder
+  local instance_config_file
+  if ! instance_config_file=$(__find_instance_config "$instance_name" 2>/dev/null); then
     __print_error "Instance '$instance_name' not found"
     return $EC_NOT_FOUND
   fi
 
   # Source instance for display purposes
-  __source_instance "$instance"
+  __source_instance "$instance_config_file"
 
   __print_info "Testing port monitoring for '$instance_name'"
   __print_info "Configured ports: $instance_ports"
@@ -428,11 +424,9 @@ function _cmd_status() {
     return $EC_MISSING_ARG
   fi
 
-  # Ensure .ini extension
-  local instance="${instance_name%.ini}.ini"
-  local instance_config_file="$INSTANCES_SOURCE_DIR/$instance"
-
-  if [[ ! -f "$instance_config_file" ]]; then
+  # Find instance config file using standard finder
+  local instance_config_file
+  if ! instance_config_file=$(__find_instance_config "$instance_name" 2>/dev/null); then
     __print_error "Instance '$instance_name' not found"
     return $EC_NOT_FOUND
   fi

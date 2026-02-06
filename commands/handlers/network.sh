@@ -165,7 +165,7 @@ export -f __logic_list_used_ports
 #   EC_SUCCESS_NETWORK_PORT_CHECKED - Conflicts checked (echoes conflict info or "no_conflicts")
 #   EC_MISSING_DEPENDENCY - Required tools not available
 function __logic_find_port_conflicts() {
-  local instances_dir="$KGSM_ROOT/instances"
+  local instances_dir="$INSTANCES_SOURCE_DIR"
 
   if [[ ! -d "$instances_dir" ]]; then
     echo "no_conflicts"
@@ -176,11 +176,20 @@ function __logic_find_port_conflicts() {
   declare -A port_map
   local conflicts_found=false
 
-  for instance_config in "$instances_dir"/*/*.ini; do
-    [[ ! -f "$instance_config" ]] && continue
+  # Iterate over directory symlinks
+  for instance_dir in "$instances_dir"/*/*/; do
+    # Remove trailing slash
+    instance_dir="${instance_dir%/}"
+
+    # Skip if not a symlink
+    [[ ! -L "$instance_dir" ]] && continue
 
     local _instance_name
-    _instance_name=$(basename "$(dirname "$instance_config")")
+    _instance_name=$(basename "$instance_dir")
+
+    # Find config file inside symlinked directory
+    local instance_config="${instance_dir}/${_instance_name}.config.ini"
+    [[ ! -f "$instance_config" ]] && continue
 
     # Extract ports from config
     local ports
@@ -411,7 +420,7 @@ export -f __logic_test_port_accessibility
 #   EC_SUCCESS_NETWORK_PORT_CHECKED - Tests completed (echoes results)
 #   EC_MISSING_DEPENDENCY - Required tools not available
 function __logic_test_all_instance_ports() {
-  local instances_dir="$KGSM_ROOT/instances"
+  local instances_dir="$INSTANCES_SOURCE_DIR"
 
   if [[ ! -d "$instances_dir" ]]; then
     echo "no_instances"
@@ -420,11 +429,20 @@ function __logic_test_all_instance_ports() {
 
   local tests_run=false
 
-  for instance_config in "$instances_dir"/*/*.ini; do
-    [[ ! -f "$instance_config" ]] && continue
+  # Iterate over directory symlinks
+  for instance_dir in "$instances_dir"/*/*/; do
+    # Remove trailing slash
+    instance_dir="${instance_dir%/}"
+
+    # Skip if not a symlink
+    [[ ! -L "$instance_dir" ]] && continue
 
     local _instance_name
-    _instance_name=$(basename "$(dirname "$instance_config")")
+    _instance_name=$(basename "$instance_dir")
+
+    # Find config file inside symlinked directory
+    local instance_config="${instance_dir}/${_instance_name}.config.ini"
+    [[ ! -f "$instance_config" ]] && continue
 
     # Extract ports
     local ports

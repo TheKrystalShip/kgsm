@@ -61,14 +61,24 @@ function __logic_instance_config_exists() {
     return $EC_INVALID_ARG
   fi
 
-  # Append .ini if not present
-  if [[ ! "$_instance_name" =~ \.ini$ ]]; then
-    _instance_name="${_instance_name}.ini"
+  # Strip .ini suffix if present
+  _instance_name="${_instance_name%.ini}"
+
+  local instance_dir_path="${INSTANCES_SOURCE_DIR}/${blueprint_name}"
+
+  # Check for directory symlink (instance fully created)
+  local instance_symlink_dir="${instance_dir_path}/${_instance_name}"
+  if [[ -L "$instance_symlink_dir" && -d "$instance_symlink_dir" ]]; then
+    return 0
   fi
 
-  local instance_config_file="${INSTANCES_SOURCE_DIR}/${blueprint_name}/${_instance_name}.ini"
+  # Check for temporary .ini file (instance creation in progress)
+  local instance_config_file="${instance_dir_path}/${_instance_name}.ini"
+  if [[ -f "$instance_config_file" ]]; then
+    return 0
+  fi
 
-  [[ -f "$instance_config_file" ]] && return 0 || return 1
+  return 1
 }
 
 export -f __logic_instance_config_exists
@@ -318,22 +328,31 @@ function __logic_remove_instance() {
     return $EC_INVALID_ARG
   fi
 
-  # Find instance config symlink
-  local instance_config_symlink
-  if ! instance_config_symlink=$(__find_instance_config "$instance"); then
+  # Find instance config file (inside the symlinked directory)
+  local instance_config_file
+  if ! instance_config_file=$(__find_instance_config "$instance"); then
     return $EC_NOT_FOUND
+  fi
+
+  # Extract the directory symlink path (parent of config file)
+  local instance_symlink_dir
+  instance_symlink_dir="$(dirname "$instance_config_file")"
+
+  # Verify it's actually a symlink
+  if [[ ! -L "$instance_symlink_dir" ]]; then
+    return $EC_INVALID_INSTANCE
   fi
 
   # Extract blueprint name from symlink path
   local blueprint_name
-  blueprint_name="$(basename "$(dirname "$instance_config_symlink")")"
+  blueprint_name="$(basename "$(dirname "$instance_symlink_dir")")"
 
-  # Remove the symlink
-  if ! rm "$instance_config_symlink" 2>/dev/null; then
+  # Remove the directory symlink
+  if ! rm "$instance_symlink_dir" 2>/dev/null; then
     return $EC_FAILED_RM
   fi
 
-  # Remove directory if empty
+  # Remove blueprint directory if empty
   local instances_dir="${INSTANCES_SOURCE_DIR}/${blueprint_name}"
   if [[ -d "$instances_dir" ]] && [[ -z "$(ls -A "$instances_dir" 2>/dev/null)" ]]; then
     rmdir "$instances_dir" 2>/dev/null || true  # Don't fail if this fails
@@ -352,18 +371,22 @@ function __logic_get_instances() {
 
   shopt -s extglob nullglob
 
-  local -a instances=()
+  local -a instance_dirs=()
   if [[ -z "$blueprint" ]]; then
-    instances=("$INSTANCES_SOURCE_DIR"/**/*.ini)
+    # Find all directory symlinks at depth 2 (blueprint/instance)
+    instance_dirs=("$INSTANCES_SOURCE_DIR"/*/*/)
   else
-    instances=("$INSTANCES_SOURCE_DIR/$blueprint"/*.ini)
+    instance_dirs=("$INSTANCES_SOURCE_DIR/$blueprint"/*/)
   fi
 
-  # Extract just the instance names (no path, no extension)
-  for instance_path in "${instances[@]}"; do
-    local filename
-    filename="$(basename "$instance_path")"
-    echo "${filename%.ini}"
+  # Extract just the instance names (basename of directory)
+  for instance_dir in "${instance_dirs[@]}"; do
+    # Remove trailing slash
+    instance_dir="${instance_dir%/}"
+    # Check if it's a symlink (skip regular directories)
+    if [[ -L "$instance_dir" ]]; then
+      echo "$(basename "$instance_dir")"
+    fi
   done
 
   return 0
@@ -379,15 +402,27 @@ function __logic_get_instance_paths() {
 
   shopt -s extglob nullglob
 
-  local -a instances=()
+  local -a instance_dirs=()
   if [[ -z "$blueprint" ]]; then
-    instances=("$INSTANCES_SOURCE_DIR"/**/*.ini)
+    instance_dirs=("$INSTANCES_SOURCE_DIR"/*/*/)
   else
-    instances=("$INSTANCES_SOURCE_DIR/$blueprint"/*.ini)
+    instance_dirs=("$INSTANCES_SOURCE_DIR/$blueprint"/*/)
   fi
 
-  # Echo full paths
-  printf '%s\n' "${instances[@]}"
+  # Echo full paths to config files inside symlinked directories
+  for instance_dir in "${instance_dirs[@]}"; do
+    # Remove trailing slash
+    instance_dir="${instance_dir%/}"
+    # Check if it's a symlink (skip regular directories)
+    if [[ -L "$instance_dir" ]]; then
+      local instance_name="$(basename "$instance_dir")"
+      local config_file="${instance_dir}/${instance_name}.config.ini"
+      # Only output if config file exists
+      if [[ -f "$config_file" ]]; then
+        echo "$config_file"
+      fi
+    fi
+  done
 
   return 0
 }

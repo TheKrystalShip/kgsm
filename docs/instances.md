@@ -19,7 +19,7 @@ Each instance consists of two main components:
 
 1. **Game Server Files**: Located in the installation directory you specified during instance creation. This contains the actual game server executables, configuration files, world data, etc.
 
-2. **Instance Configuration**: Stored in the `instances` directory within your KGSM installation. These files track metadata about each instance and are used internally by KGSM for management.
+2. **Instance Reference**: Stored in the `instances` directory within your KGSM installation. This is a symbolic link to your game server installation directory, allowing KGSM to track and access your instances. The symlink structure is organized by blueprint type for easy navigation.
 
 ### Listing instances
 
@@ -27,16 +27,16 @@ To list all your game server instances, run:
 
 ```sh
 # List all instances
-./kgsm.sh --instances
+kgsm.sh instances
 
 # List instances with detailed information
-./kgsm.sh --instances --detailed
+kgsm.sh instances --detailed
 
 # List only instances of a specific game
-./kgsm.sh --instances minecraft
+kgsm.sh instances minecraft
 
 # Get JSON output for scripting
-./kgsm.sh --instances --json
+kgsm.sh instances --json
 ```
 
 For example, the output might look like this:
@@ -53,28 +53,26 @@ Creating an instance involves using a blueprint to set up a new game server. You
 
 ```sh
 # Basic usage
-./kgsm.sh --create <blueprint> --name <instance-name> --install-dir <directory>
+kgsm.sh install <blueprint> --name <instance-name> --install-dir <directory>
 
 # Example
-./kgsm.sh --create minecraft --name survival-server --install-dir /opt/servers
+kgsm.sh install minecraft --name survival-server --install-dir /opt/servers
 
 # Interactive mode
-./kgsm.sh   # Then select "Install" from the menu
+kgsm.sh   # Then select "Install" from the menu
 ```
 
 During the creation process, KGSM:
 
 1. Sets up the game server files in the specified installation directory
-2. Generates an **instance configuration file** in the `instances` directory to track the instance
+2. Creates a **symbolic link** in the `instances` directory that points to your installation, allowing KGSM to track the instance
 3. Creates the necessary directory structure for logs, backups, saves, etc.
 4. Downloads and installs the game server files
 
-The instance configuration file includes metadata about the instance, such as the blueprint it was created from, the installation path, and other relevant details. This file is used by KGSM for management tasks like starting, stopping, and updating the instance.
+> [!NOTE]
+> The symbolic link allows KGSM to access all instance files (configuration, logs, saves, etc.) while keeping your game server completely standalone and functional without KGSM.
 
 For detailed step-by-step instructions on instance creation, see [Creating a New Game Server Instance](create_new_game_server_instance.md).
-
-> [!NOTE]
-> The instance configuration file is not required by the game server itself; it is only used internally by KGSM.
 
 ## Managing instances
 
@@ -96,7 +94,7 @@ Please refer to the [Managing Game Servers](managing_game_servers.md) document.
 
 - **Meaningful names:** Use descriptive names for your instances (e.g., `minecraft-survival`, `valheim-pvp`) to easily identify them.
 
-- **Regular backups:** Use the `--create-backup` command before making significant changes or regularly via cron jobs.
+- **Regular backups:** Use the `create-backup` command before making significant changes or regularly via cron jobs.
 
 - **Systemd integration:** For servers that need to be always online, add systemd integration for automatic startup on system boot.
 
@@ -107,7 +105,7 @@ Please refer to the [Managing Game Servers](managing_game_servers.md) document.
 To completely remove an instance, use the uninstall command:
 
 ```sh
-./kgsm.sh --uninstall <instance-name>
+kgsm.sh uninstall <instance-name>
 ```
 
 This ensures that:
@@ -116,7 +114,7 @@ This ensures that:
 3. Any system integrations (systemd, ufw) are properly disabled
 
 > [!WARNING]
-> Uninstalling an instance permanently removes all game data, including world saves. Create a backup first if you want to preserve your data!
+> Uninstalling an instance permanently removes all game data, including world saves. Create a manual backup first if you want to preserve your data!
 
 ---
 

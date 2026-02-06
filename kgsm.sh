@@ -11,10 +11,6 @@ source "$(dirname "$(readlink -f "$0")")/core/bootstrap.sh"
 # KGSM version (managed by package manager)
 export KGSM_VERSION="3.0.0"
 
-function get_version() {
-  echo "$KGSM_VERSION"
-}
-
 function show_usage() {
   local self
   self=$(basename "$0")
@@ -23,7 +19,7 @@ function show_usage() {
   local END="\e[0m"
   local BOLD="\e[1m"
 
-  echo -e "Krystal Game Server Manager - $(get_version)
+  echo -e "Krystal Game Server Manager - ${KGSM_VERSION}
 
 Create, install, and manage game servers on Linux.
 
@@ -98,7 +94,7 @@ ${BOLD}${UNDERLINE}Examples:${END}
 
 # Version command - display KGSM version
 function _cmd_version() {
-  echo "KGSM, version $(get_version)
+  echo "KGSM, version ${KGSM_VERSION}
 Copyright (C) 2024 TheKrystalShip
 License GPL-3.0: GNU GPL version 3 <https://www.gnu.org/licenses/gpl-3.0.en.html>
 
@@ -112,26 +108,26 @@ function _cmd_paths() {
   echo "KGSM Directory Layout:
 
 System Paths (Read-only):
-  KGSM_ROOT:                           $KGSM_ROOT
-  KGSM_CORE_DIR:                       $KGSM_CORE_DIR
-  KGSM_COMMANDS_DIR:                   $KGSM_COMMANDS_DIR
-  KGSM_HANDLERS_DIR:                   $KGSM_HANDLERS_DIR
-  KGSM_TEMPLATES_DIR:                  $KGSM_TEMPLATES_DIR
-  KGSM_MIGRATIONS_DIR:                 $KGSM_MIGRATIONS_DIR
-  KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR:   $KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR
+  KGSM_ROOT:                            $KGSM_ROOT
+  KGSM_CORE_DIR:                        $KGSM_CORE_DIR
+  KGSM_COMMANDS_DIR:                    $KGSM_COMMANDS_DIR
+  KGSM_HANDLERS_DIR:                    $KGSM_HANDLERS_DIR
+  KGSM_TEMPLATES_DIR:                   $KGSM_TEMPLATES_DIR
+  KGSM_MIGRATIONS_DIR:                  $KGSM_MIGRATIONS_DIR
+  KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR:    $KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR
   KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR: $KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR
-  KGSM_SYSTEM_OVERRIDES_DIR:           $KGSM_SYSTEM_OVERRIDES_DIR
-  KGSM_DEFAULT_CONFIG_FILE:            $KGSM_DEFAULT_CONFIG_FILE
+  KGSM_SYSTEM_OVERRIDES_DIR:            $KGSM_SYSTEM_OVERRIDES_DIR
+  KGSM_DEFAULT_CONFIG_FILE:             $KGSM_DEFAULT_CONFIG_FILE
 
 User Paths (Writable):
-  KGSM_CONFIG_DIR:                     $KGSM_CONFIG_DIR
-  KGSM_CONFIG_FILE:                    $KGSM_CONFIG_FILE
-  KGSM_DATA_DIR:                       $KGSM_DATA_DIR
-  KGSM_INSTANCES_DIR:                  $KGSM_INSTANCES_DIR
-  KGSM_LOGS_DIR:                       $KGSM_LOGS_DIR
-  KGSM_USER_BLUEPRINTS_NATIVE_DIR:     $KGSM_USER_BLUEPRINTS_NATIVE_DIR
-  KGSM_USER_BLUEPRINTS_CONTAINER_DIR:  $KGSM_USER_BLUEPRINTS_CONTAINER_DIR
-  KGSM_USER_OVERRIDES_DIR:             $KGSM_USER_OVERRIDES_DIR"
+  KGSM_CONFIG_DIR:                      $KGSM_CONFIG_DIR
+  KGSM_CONFIG_FILE:                     $KGSM_CONFIG_FILE
+  KGSM_DATA_DIR:                        $KGSM_DATA_DIR
+  KGSM_INSTANCES_DIR:                   $KGSM_INSTANCES_DIR
+  KGSM_LOGS_DIR:                        $KGSM_LOGS_DIR
+  KGSM_USER_BLUEPRINTS_NATIVE_DIR:      $KGSM_USER_BLUEPRINTS_NATIVE_DIR
+  KGSM_USER_BLUEPRINTS_CONTAINER_DIR:   $KGSM_USER_BLUEPRINTS_CONTAINER_DIR
+  KGSM_USER_OVERRIDES_DIR:              $KGSM_USER_OVERRIDES_DIR"
   return 0
 }
 

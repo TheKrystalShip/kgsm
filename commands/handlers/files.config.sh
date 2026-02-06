@@ -40,15 +40,19 @@ function __logic_install_standalone_config() {
   fi
 
   # Get required variables from instance config
-  local _instance_name _instance_working_dir
+  local _instance_name _instance_working_dir blueprint_name
   _instance_name=$(basename "$_instance_config_file" .ini)
   _instance_working_dir=$(__get_config_value "$_instance_config_file" "working_dir" 2> /dev/null)
 
-  if [[ -z "$_instance_working_dir" ]]; then
+  # Extract blueprint name from path: instances/<blueprint>/<instance>.ini
+  blueprint_name="$(basename "$(dirname "$_instance_config_file")")"
+
+  if [[ -z "$_instance_working_dir" || -z "$blueprint_name" ]]; then
     return $EC_INVALID_CONFIG
   fi
 
   local instance_config_standalone="${_instance_working_dir}/${_instance_name}.config.ini"
+  local instance_symlink_dir="${INSTANCES_SOURCE_DIR}/${blueprint_name}/${_instance_name}"
 
   # Copy the config file to the instance working directory (becomes source of truth)
   if ! cp -f "$_instance_config_file" "$instance_config_standalone" 2> /dev/null; then
@@ -60,15 +64,13 @@ function __logic_install_standalone_config() {
     return $EC_PERMISSION
   fi
 
-  # Remove existing KGSM symlink/file if it exists
-  if [[ -e "$_instance_config_file" || -L "$_instance_config_file" ]]; then
-    if ! rm -f "$_instance_config_file" 2> /dev/null; then
-      return $EC_FAILED_RM
-    fi
+  # Remove the original config file (no longer needed)
+  if ! rm -f "$_instance_config_file" 2> /dev/null; then
+    return $EC_FAILED_RM
   fi
 
-  # Create symlink from KGSM pointing to the standalone config
-  if ! ln -s "$instance_config_standalone" "$_instance_config_file" 2> /dev/null; then
+  # Create directory symlink from KGSM pointing to the working directory
+  if ! ln -s "$_instance_working_dir" "$instance_symlink_dir" 2> /dev/null; then
     return $EC_FAILED_LN
   fi
 
@@ -89,25 +91,22 @@ function __logic_uninstall_standalone_config() {
   fi
 
   # Get instance name and working directory
-  local _instance_name _instance_working_dir
+  local _instance_name _instance_working_dir blueprint_name
   _instance_name=$(basename "$_instance_config_file" .ini)
 
   # We need to get working_dir before removing the config
-  # Try to read it if the symlink still exists
+  # Try to read it if the config/symlink still exists
   if [[ -e "$_instance_config_file" ]]; then
     _instance_working_dir=$(__get_config_value "$_instance_config_file" "working_dir" 2> /dev/null)
+    blueprint_name="$(basename "$(dirname "$_instance_config_file")")"
   fi
 
   local instance_config_standalone="${_instance_working_dir}/${_instance_name}.config.ini"
+  local instance_symlink_dir="${INSTANCES_SOURCE_DIR}/${blueprint_name}/${_instance_name}"
 
-  # Remove KGSM symlink if it exists
-  if [[ -L "$_instance_config_file" ]]; then
-    if ! rm -f "$_instance_config_file" 2> /dev/null; then
-      return $EC_FAILED_RM
-    fi
-  elif [[ -e "$_instance_config_file" ]]; then
-    # If it's a regular file instead of symlink, still try to remove it
-    if ! rm -f "$_instance_config_file" 2> /dev/null; then
+  # Remove KGSM directory symlink if it exists
+  if [[ -L "$instance_symlink_dir" ]]; then
+    if ! rm -f "$instance_symlink_dir" 2> /dev/null; then
       return $EC_FAILED_RM
     fi
   fi

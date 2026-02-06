@@ -184,8 +184,36 @@ export -f __find_command_handler
 
 function __find_instance_config() {
   local instance=$1
-  [[ "$instance" != *.ini ]] && instance="${instance}.ini"
-  __find_or_fail "$instance" "$INSTANCES_SOURCE_DIR"
+  
+  # Strip .ini suffix if present (for backward compatibility)
+  instance="${instance%.ini}"
+  
+  # Find directory symlinks matching the instance name
+  # The structure is: $INSTANCES_SOURCE_DIR/<blueprint>/<instance>/
+  local instance_dir
+  instance_dir="$(find "$INSTANCES_SOURCE_DIR" -mindepth 2 -maxdepth 2 -type l -name "$instance" -print -quit)"
+  
+  if [[ -z "$instance_dir" ]]; then
+    __print_error "Could not find instance directory for '$instance' in $INSTANCES_SOURCE_DIR"
+    exit $EC_FILE_NOT_FOUND
+  fi
+  
+  # Verify the symlink resolves to a valid directory
+  if [[ ! -d "$instance_dir" ]]; then
+    __print_error "Instance directory for '$instance' exists but does not resolve to a valid directory (broken symlink?)"
+    exit $EC_FILE_NOT_FOUND
+  fi
+  
+  # Construct path to config file inside the directory
+  local config_file="${instance_dir}/${instance}.config.ini"
+  
+  # Verify config file exists
+  if [[ ! -f "$config_file" ]]; then
+    __print_error "Config file not found at '$config_file'"
+    exit $EC_FILE_NOT_FOUND
+  fi
+  
+  echo "$config_file"
 }
 
 export -f __find_instance_config
