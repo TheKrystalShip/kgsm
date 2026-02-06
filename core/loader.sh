@@ -8,35 +8,6 @@ if [[ -n "${KGSM_LOADER_LOADED:-}" ]]; then
   return 0
 fi
 
-# Blueprints (*.bp) are stored here
-export BLUEPRINTS_SOURCE_DIR=$KGSM_ROOT/blueprints
-
-export BLUEPRINTS_NATIVE_DIR=$BLUEPRINTS_SOURCE_DIR/native
-export BLUEPRINTS_CONTAINER_DIR=$BLUEPRINTS_SOURCE_DIR/container
-
-export BLUEPRINTS_NATIVE_DEFAULT_DIR=$BLUEPRINTS_NATIVE_DIR/default
-export BLUEPRINTS_NATIVE_CUSTOM_DIR=$BLUEPRINTS_NATIVE_DIR/custom
-
-export BLUEPRINTS_CONTAINER_DEFAULT_DIR=$BLUEPRINTS_CONTAINER_DIR/default
-export BLUEPRINTS_CONTAINER_CUSTOM_DIR=$BLUEPRINTS_CONTAINER_DIR/custom
-
-# Specific game server overrides ([service].overrides.sh) are stored here
-export OVERRIDES_SOURCE_DIR=$KGSM_ROOT/overrides
-
-# Templates (*.tp) are stored here
-export TEMPLATES_SOURCE_DIR=$KGSM_ROOT/templates
-
-# All other scripts (*.sh) are stored here
-export COMMANDS_SOURCE_DIR=$KGSM_ROOT/commands
-
-# Command handler scripts (*.sh) are stored here
-export COMMAND_HANDLERS_SOURCE_DIR=$COMMANDS_SOURCE_DIR/handlers
-
-# Core scripts (*.sh) are stored here
-export CORE_SOURCE_DIR=$KGSM_ROOT/core
-
-# Directory where instances and their config is stored
-export INSTANCES_SOURCE_DIR=$KGSM_ROOT/instances
 
 # Locate files inside $KGSM_ROOT or a specified source directory, or
 # print an error and exit with a specific error code if not found.
@@ -228,6 +199,7 @@ function __find_template() {
 export -f __find_template
 
 # Find the overrides file for a specific instance.
+# Searches in user overrides directory first, then system overrides directory.
 function __find_override() {
   local _instance_name=$1
 
@@ -273,9 +245,21 @@ function __find_override() {
 
   instance_overrides_file="${blueprint_name}.overrides.sh"
 
-  # Instead of using __find_or_fail which exits on missing files,
-  # construct the expected path and let the caller handle missing files
-  echo "${OVERRIDES_SOURCE_DIR}/${instance_overrides_file}"
+  # Search order:
+  # 1. User overrides directory
+  # 2. System overrides directory
+  local found_override=""
+
+  if [[ -f "${KGSM_USER_OVERRIDES_DIR}/${instance_overrides_file}" ]]; then
+    found_override="${KGSM_USER_OVERRIDES_DIR}/${instance_overrides_file}"
+  elif [[ -f "${KGSM_SYSTEM_OVERRIDES_DIR}/${instance_overrides_file}" ]]; then
+    found_override="${KGSM_SYSTEM_OVERRIDES_DIR}/${instance_overrides_file}"
+  else
+    # Return expected path for backwards compatibility (caller handles missing files)
+    found_override="${KGSM_SYSTEM_OVERRIDES_DIR}/${instance_overrides_file}"
+  fi
+
+  echo "$found_override"
 }
 
 export -f __find_override

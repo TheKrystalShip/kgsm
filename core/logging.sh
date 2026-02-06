@@ -39,7 +39,7 @@ export LOG_LEVEL_INFO="INFO"
 export LOG_LEVEL_WARNING="WARNING"
 export LOG_LEVEL_ERROR="ERROR"
 
-# Initialize logging variables (will be set properly when KGSM_ROOT is available)
+# Initialize logging variables (will be set properly when paths.sh is loaded)
 export LOGS_SOURCE_DIR=""
 export LOG_FILE=""
 
@@ -71,8 +71,8 @@ function __log_message() {
 
   # Initialize logging paths if not set
   if [[ -z "$LOGS_SOURCE_DIR" ]] || [[ -z "$LOG_FILE" ]]; then
-    # KGSM_ROOT is guaranteed to be set by common.sh before this module loads
-    export LOGS_SOURCE_DIR="$KGSM_ROOT/logs"
+    # KGSM_LOGS_DIR is set by paths.sh before this module loads
+    export LOGS_SOURCE_DIR="$KGSM_LOGS_DIR"
     export LOG_FILE="$LOGS_SOURCE_DIR/kgsm.log"
   fi
 
@@ -189,8 +189,8 @@ function __log_message_file_only() {
 
   # Initialize logging paths if not set
   if [[ -z "$LOGS_SOURCE_DIR" ]]; then
-    # KGSM_ROOT is guaranteed to be set by common.sh before this module loads
-    export LOGS_SOURCE_DIR="$KGSM_ROOT/logs"
+    # KGSM_LOGS_DIR is set by paths.sh before this module loads
+    export LOGS_SOURCE_DIR="$KGSM_LOGS_DIR"
   fi
 
   # Sanitize message to prevent injection

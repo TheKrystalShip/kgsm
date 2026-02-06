@@ -38,13 +38,26 @@ unset -f __kgsm_enable_debug
 # Check for KGSM_ROOT. If it's not set, determine it from this script's location.
 # This makes the library self-aware and keeps module logic clean.
 if [[ -z "$KGSM_ROOT" ]]; then
-  # This script (common.sh) is in .../core/. Its parent dir is KGSM_ROOT.
+  # This script (bootstrap.sh) is in .../core/. Its parent dir is KGSM_ROOT.
   _bootstrap_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
   _kgsm_root="$(cd "$_bootstrap_dir/.." && pwd)"
   export KGSM_ROOT="$_kgsm_root"
   declare -g KGSM_ROOT
   unset _bootstrap_dir _kgsm_root
 fi
+
+# --- Load paths configuration ---
+# shellcheck disable=SC1091
+source "$KGSM_ROOT/core/paths.sh" || {
+  echo "ERROR: Failed to load paths.sh" >&2
+  exit 1
+}
+
+# --- Initialize user directories ---
+__init_user_directories || {
+  echo "ERROR: Failed to initialize user directories" >&2
+  exit 1
+}
 
 # Load common.sh library.
 # shellcheck disable=SC1091

@@ -3,9 +3,10 @@
 # Disabling SC2086 globally
 # shellcheck disable=SC2086
 
-export CONFIG_FILE="$KGSM_ROOT/config.ini"
-export DEFAULT_CONFIG_FILE="$KGSM_ROOT/config.default.ini"
-export MERGED_CONFIG_FILE="$KGSM_ROOT/config.merged.ini"
+# Use XDG-compliant paths from core/paths.sh
+export CONFIG_FILE="$KGSM_CONFIG_FILE"
+export DEFAULT_CONFIG_FILE="$KGSM_DEFAULT_CONFIG_FILE"
+export MERGED_CONFIG_FILE="${KGSM_CONFIG_DIR}/config.merged.ini"
 
 # Avoid reloading config if it's already been loaded once
 if [[ -z "$KGSM_CONFIG_LOADED" ]]; then
