@@ -137,6 +137,9 @@ export EC_WATCHER_PORT_NOT_ACTIVE
 declare -g -r EC_WATCHER_LOG_FILE_MISSING=45
 export EC_WATCHER_LOG_FILE_MISSING
 
+declare -g -r EC_DIRECTORY_NOT_FOUND=46
+export EC_DIRECTORY_NOT_FOUND
+
 # =============================================================================
 # EVENT SUCCESS CODES (200-255 range)
 # =============================================================================

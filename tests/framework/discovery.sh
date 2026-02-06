@@ -103,7 +103,7 @@ function should_run_test() {
   # Check configuration skip variable
   local skip_var="SKIP_${test_name^^}"
   if [[ "${!skip_var:-false}" == "true" ]]; then
-    log_info "Skipping test (config): $test_name"
+    # log_info "Skipping test (config): $test_name"
     ((TESTS_FILTERED++))
     return 1
   fi
@@ -119,7 +119,7 @@ function should_run_test() {
     done
 
     if [[ "$matched" != "true" ]]; then
-      log_info "Skipping test (pattern mismatch): $test_name"
+      # log_info "Skipping test (pattern mismatch): $test_name"
       ((TESTS_FILTERED++))
       return 1
     fi
@@ -128,7 +128,7 @@ function should_run_test() {
   # Check exclusion patterns
   for exclude in "${TEST_EXCLUDE[@]}"; do
     if [[ "$test_name" =~ $exclude ]]; then
-      log_info "Skipping test (excluded): $test_name"
+      # log_info "Skipping test (excluded): $test_name"
       ((TESTS_FILTERED++))
       return 1
     fi

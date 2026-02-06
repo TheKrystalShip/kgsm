@@ -156,6 +156,8 @@ OPTIONS:
 FILTERING:
     --pattern REGEX     Only run tests matching pattern
     --exclude REGEX     Exclude tests matching pattern
+    --failed [PATH]     Re-run tests that failed in the last run
+                        (optionally specify explicit CSV path)
 
 TEST TYPES:
     unit                Run unit tests
@@ -169,6 +171,7 @@ EXAMPLES:
     $(basename "$0") unit               # Run only unit tests
     $(basename "$0") --debug e2e        # Run e2e tests with debug
     $(basename "$0") --pattern "instance"  # Run tests matching "instance"
+    $(basename "$0") --failed           # Re-run tests that failed last time
     $(basename "$0") --clean-logs       # Clean up old test logs
 
 LOGS:
@@ -220,6 +223,17 @@ function main() {
         shift
         TEST_EXCLUDE+=("$1")
         ;;
+      --failed)
+        # Check if next arg exists and doesn't start with '-'
+        if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+          shift
+          FAILED_CSV_PATH="$1"
+        else
+          # No path provided - use latest symlink
+          FAILED_CSV_PATH="${TEST_LATEST_LINK}/results.csv"
+        fi
+        TEST_RERUN_FAILED=true
+        ;;
       unit | integration | e2e)
         TEST_TYPES+=("$1")
         ;;
@@ -238,6 +252,40 @@ function main() {
   # Default to all tests if none specified
   if [[ ${#TEST_TYPES[@]} -eq 0 ]]; then
     TEST_TYPES=("unit" "integration" "e2e")
+  fi
+
+  # Handle --failed flag: populate TEST_PATTERNS with failed test names
+  if [[ "${TEST_RERUN_FAILED:-false}" == "true" ]]; then
+    # If no explicit path provided, resolve via symlink
+    if [[ "$FAILED_CSV_PATH" == "${TEST_LATEST_LINK}/results.csv" ]]; then
+      FAILED_CSV_PATH="$(get_latest_results_csv)" || {
+        print_error "Failed to find previous test results. Run tests at least once before using --failed."
+        exit $EC_FAILURE
+      }
+    fi
+    
+    # Validate explicit path exists
+    if [[ ! -f "$FAILED_CSV_PATH" ]]; then
+      print_error "Results CSV not found: $FAILED_CSV_PATH"
+      exit $EC_FAILURE
+    fi
+    
+    # Get failed test names from CSV
+    local failed_tests
+    failed_tests="$(get_failed_tests_from_csv "$FAILED_CSV_PATH")" || exit $EC_FAILURE
+    
+    # Check if any tests failed
+    if [[ -z "$failed_tests" ]]; then
+      print_success "No failed tests found in previous run. All tests passed!"
+      exit $EC_SUCCESS
+    fi
+    
+    # Convert newline-separated list to array and add to TEST_PATTERNS
+    while IFS= read -r test_name; do
+      [[ -n "$test_name" ]] && TEST_PATTERNS+=("$test_name")
+    done <<< "$failed_tests"
+    
+    print_info "Re-running $(echo "$failed_tests" | wc -l) failed test(s) from: $FAILED_CSV_PATH"
   fi
 
   # Initialize testing environment
@@ -291,6 +339,10 @@ function main() {
 
   # Generate final summary (uses reporting.sh module)
   generate_summary
+  
+  # Create/update 'latest' symlink for easy access to most recent run
+  # Use -n flag to treat existing symlink-to-directory as a file
+  ln -sfn "$TEST_LOG_DIR" "$TEST_LATEST_LINK"
 }
 
 function cleanup_all() {

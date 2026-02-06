@@ -10,6 +10,7 @@ Modular, sandboxed testing framework for KGSM. Follows **bootstrap â†’ loader â†
 ./tests/run.sh --pattern "config" # Filter by name
 ./tests/run.sh --parallel 4       # 4 concurrent tests
 ./tests/run.sh --debug            # Preserve sandboxes
+./tests/run.sh --failed           # Re-run tests that failed last time
 ```
 
 ## Configuration (`tests/config.test.ini`)
@@ -75,54 +76,7 @@ Framework unsets KGSM module load flags before context switch, forcing reload wi
 
 ### Test File Structure
 
-```bash
-#!/usr/bin/env bash
-
-# Source framework (loads all modules)
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-source "$SCRIPT_DIR/../framework/bootstrap.sh"
-
-readonly TEST_NAME="my_test"
-
-# Setup (runs once)
-setup_test() {
-  log_test_step "Setting up"
-  # Create test data
-}
-
-# Test functions (Arrange-Act-Assert pattern)
-test_something() {
-  log_test_step "Testing something"
-  
-  local expected="value"
-  local actual=$(function_under_test)
-  
-  assert_equals "$expected" "$actual" "Should match"
-  assert_not_empty "$actual" "Should not be empty"
-}
-
-# Cleanup (optional)
-cleanup_test() {
-  log_test_step "Cleaning up"
-  # Kill processes, delete external resources
-  # Sandbox cleanup is automatic
-}
-
-# Main
-main() {
-    setup_test
-    test_something
-    cleanup_test
-    
-    if print_assert_summary "$TEST_NAME"; then
-        pass_test "All assertions passed"
-    else
-        fail_test "Some assertions failed"
-    fi
-}
-
-main "$@"
-```
+**Check `tests/templates/test.template.sh` for an exact structure of a test file.**
 
 ### Available Assertions
 
@@ -142,6 +96,8 @@ assert_string_contains, assert_string_matches, assert_empty, assert_not_empty
 # Arrays
 assert_array_contains, assert_array_length
 ```
+
+**Check `tests/framework/assert.sh` for exact functions and their definitions.**
 
 ### Utility Functions
 
@@ -187,6 +143,29 @@ grep ERROR tests/logs/2025-12-22_14-30-45/*.log
 
 **Levels:** DEBUG (TEST_DEBUG=true only), INFO (default), WARN, ERROR
 
+### Failed Test Re-runs
+
+The framework automatically tracks test results and allows re-running only failed tests:
+
+```bash
+# Re-run tests that failed in the most recent run
+./tests/run.sh --failed
+
+# Re-run failed tests from a specific results file
+./tests/run.sh --failed tests/logs/2026-01-30_16-26-11/results.csv
+```
+
+**How it works:**
+- After each test run, a `tests/logs/latest` symlink points to the most recent results
+- The `--failed` flag reads the `results.csv` file and filters for tests with non-zero exit codes
+- If no tests failed, prints success message and exits
+- Compatible with other flags: `./tests/run.sh --failed --debug --parallel 4`
+
+**Use cases:**
+- Quick iteration when fixing failing tests
+- CI/CD pipelines for flaky test detection
+- Performance optimization (skip passing tests during development)
+
 ### Sandbox Inspection
 
 ```bash
@@ -214,6 +193,12 @@ ls -la
 
 # Run sequentially for debugging
 TEST_PARALLEL=1 ./tests/run.sh unit
+
+# Re-run only failed tests from last run
+./tests/run.sh --failed
+
+# Re-run failed tests from specific results file
+./tests/run.sh --failed tests/logs/2026-01-30_16-26-11/results.csv
 
 # Skip unavailable dependencies
 echo "SKIP_STEAMCMD_TESTS=true" >> tests/config.test.ini

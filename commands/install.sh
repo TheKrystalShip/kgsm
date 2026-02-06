@@ -110,6 +110,16 @@ function _cmd_install() {
     return $EC_MISSING_ARG
   fi
 
+  # Check if install_dir is relative or absolute path
+  if [[ "$install_dir" != /* ]]; then
+    install_dir="${KGSM_ROOT}/$install_dir"
+  fi
+
+  directories.sh ensure-created "$install_dir" || {
+    __print_error "Failed to ensure installation directory exists and is writable: $install_dir"
+    return $?
+  }
+
   __print_info "Creating a new instance of $blueprint in $install_dir..."
 
   local instance

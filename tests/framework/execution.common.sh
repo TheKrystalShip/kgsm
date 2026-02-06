@@ -29,7 +29,7 @@ fi
 #   $2 - test_log: Absolute path to test log file
 # Returns:
 #   Exit code: EC_SUCCESS (0)
-#   Stdout: Original KGSM_ROOT value (for restoration)
+#   Exit code: EC_FAILURE (1) on error
 # ------------------------------------------------------------------------------
 function __setup_test_environment() {
   local sandbox_path="$1"
@@ -37,7 +37,6 @@ function __setup_test_environment() {
 
   # Save original KGSM_ROOT for restoration
   local original_kgsm_root="${KGSM_ROOT:-}"
-  echo "$original_kgsm_root"
 
   # Set sandbox context environment variables
   declare -g KGSM_ROOT="$sandbox_path"
@@ -52,6 +51,8 @@ function __setup_test_environment() {
   export KGSM_LOG_CONSOLE_ENABLED
   declare -g KGSM_TEST_LOG_LEVEL="${KGSM_TEST_LOG_LEVEL:-INFO}"
   export KGSM_TEST_LOG_LEVEL
+  declare -g TEST_SANDBOX_INSTANCES_INSTALL_DIR="${sandbox_path}/test_instances"
+  export TEST_SANDBOX_INSTANCES_INSTALL_DIR
 
   # CRITICAL: Unset all module load flags to force fresh initialization in sandbox
   # The test framework loaded KGSM modules with HOST KGSM_ROOT, but tests need

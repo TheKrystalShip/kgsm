@@ -97,7 +97,6 @@ __load_module "discovery.sh" "Discovery Module" || return 1
 __load_module "sandbox.sh" "Sandbox Module" || return 1
 
 # 7. Execution orchestrator module (delegates to sequential or parallel)
-#    This module internally loads execution.common.sh and the appropriate executor
 __load_module "execution.sh" "Execution Module" || return 1
 
 # 8. Assertion module (independent utility)
@@ -105,6 +104,9 @@ __load_module "assert.sh" "Assertion Module" || return 1
 
 # 9. Fixtures module (independent utility)
 __load_module "fixtures.sh" "Fixtures Module" || return 1
+
+# 10. KGSM wrapper module (provides KGSM-specific test utilities)
+__load_module "kgsm.wrapper.sh" "KGSM Wrapper Module" || return 1
 
 # ============================================================================
 # KGSM Bootstrap Loading

@@ -691,6 +691,58 @@ function __get_failure_breakdown_by_type() {
 export -f __get_failure_breakdown_by_type
 
 # ------------------------------------------------------------------------------
+# Get latest results CSV path
+# ------------------------------------------------------------------------------
+# Returns:
+#   Stdout: Path to the most recent results.csv (via 'latest' symlink)
+#   Exit code: EC_SUCCESS if found, EC_FAILURE if not
+# ------------------------------------------------------------------------------
+function get_latest_results_csv() {
+  local latest_csv="${TEST_LATEST_LINK}/results.csv"
+  
+  if [[ ! -L "$TEST_LATEST_LINK" ]]; then
+    log_error "No previous test results found (latest symlink missing)"
+    return $EC_FAILURE
+  fi
+  
+  if [[ ! -f "$latest_csv" ]]; then
+    log_error "Latest results.csv not found at: $latest_csv"
+    return $EC_FAILURE
+  fi
+  
+  echo "$latest_csv"
+  return $EC_SUCCESS
+}
+export -f get_latest_results_csv
+
+# ------------------------------------------------------------------------------
+# Get failed test names from CSV
+# ------------------------------------------------------------------------------
+# Extracts test names where exit_code != 0 and exit_code != 33 (skip)
+# Arguments:
+#   $1 - csv_path: Path to CSV file
+# Returns:
+#   Stdout: Space-separated list of failed test names
+#   Exit code: EC_SUCCESS
+# ------------------------------------------------------------------------------
+function get_failed_tests_from_csv() {
+  local csv_path="$1"
+  
+  if [[ ! -f "$csv_path" ]]; then
+    log_error "CSV file not found: $csv_path"
+    return $EC_FAILURE
+  fi
+  
+  # Parse CSV: skip header, filter for failures (exit_code != 0 and != 33)
+  local failed_tests
+  failed_tests=$(tail -n +2 "$csv_path" | awk -F',' '$3 != 0 && $3 != 33 {print $1}')
+  
+  echo "$failed_tests"
+  return $EC_SUCCESS
+}
+export -f get_failed_tests_from_csv
+
+# ------------------------------------------------------------------------------
 # Get tests with highest failure rates (≥25%)
 # ------------------------------------------------------------------------------
 # Arguments:

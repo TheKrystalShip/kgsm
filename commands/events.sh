@@ -386,7 +386,7 @@ function _delegate_to_transports() {
 
   # Delegate to transport modules in parallel
   # shellcheck disable=SC2154
-  if [[ "$config_enable_event_broadcasting" == "true" ]]; then
+  if [[ "$config_enable_socket_events" == "true" ]]; then
     events.socket.sh emit "$payload" &
     any_success=true
   fi
@@ -412,6 +412,11 @@ function _cmd_emit() {
   local event_name="$1"
   shift
   local params=("$@")
+
+  # If event broadcasting is disabled, exit early
+  if [[ "${config_enable_event_broadcasting:-false}" != "true" ]]; then
+    return $EC_SUCCESS
+  fi
 
   if [[ -z "$event_name" ]]; then
     __print_error "Event type is required"

@@ -410,7 +410,7 @@ function __source_with_prefix() {
       value="${value#\'}"
       value="${value%\'}"
 
-      declare -g -r "${prefix}${key}=${value}"
+      declare -g "${prefix}${key}=${value}"
       export "${prefix}${key}"
     else
       # Warn about malformed lines that passed grep but failed regex parsing

@@ -35,6 +35,7 @@ declare -gr TEST_FRAMEWORK_DIR="${TEST_ROOT}/framework"
 declare -gr TEST_TEMPLATES_DIR="${TEST_ROOT}/templates"
 declare -gr TEST_CONFIG_DIR="${TEST_ROOT}"
 declare -gr TEST_LOGS_DIR="${TEST_ROOT}/logs"
+declare -gr TEST_LATEST_LINK="${TEST_LOGS_DIR}/latest"
 
 # Test suite directories
 declare -gr TEST_UNIT_DIR="${TEST_ROOT}/unit"
@@ -81,6 +82,7 @@ declare -gr KGSM_MAIN_SCRIPT="${KGSM_ROOT}/kgsm.sh"
 # These are NOT readonly because they're set at runtime by test runner
 declare -g TEST_SANDBOX_DIR="${TEST_SANDBOX_DIR:-}"
 declare -g TEST_SANDBOX_KGSM_ROOT="${TEST_SANDBOX_KGSM_ROOT:-}"
+declare -g TEST_SANDBOX_INSTANCES_INSTALL_DIR="${TEST_SANDBOX_INSTANCES_INSTALL_DIR:-}"
 
 # ============================================================================
 # Color Constants - ANSI Codes

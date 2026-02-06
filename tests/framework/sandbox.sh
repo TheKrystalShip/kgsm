@@ -193,7 +193,7 @@ enable_command_shortcuts=false
 
 [instance_defaults]
 # Set test-specific paths (relative to sandbox)
-default_install_directory=instances
+default_install_directory=
 instance_suffix_length=3
 instance_auto_update_before_start=false
 
@@ -217,8 +217,9 @@ log_max_size_kb=1024
 
 [events]
 # Disable network-based event systems
-enable_webhook_events=false
+enable_event_broadcasting=false
 enable_socket_events=false
+enable_webhook_events=false
 
 EOF
 

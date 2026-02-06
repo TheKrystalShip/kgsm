@@ -24,6 +24,8 @@ ${UNDERLINE}Commands:${END}
                               directories.
   remove <instance>           Remove directory structure for an instance.
                               Warning: This will delete all instance data.
+  ensure-created <path>       Ensure the specified directory path exists,
+                              creating it if necessary.
   help [command]              Display help information.
 
 ${UNDERLINE}Options:${END}
@@ -98,6 +100,26 @@ This action cannot be undone!
 ${UNDERLINE}Examples:${END}
   ${self} remove valheim-h1up6V
   ${self} remove minecraft-server
+"
+}
+
+function show_ensure_created_usage() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Ensure Directory Exists${END}
+Ensures that the specified directory path exists, creating it if necessary.
+
+${UNDERLINE}Usage:${END}
+  ${self} ensure-created <path>
+
+${UNDERLINE}Options:${END}
+  <path>                      Directory path to ensure exists (required)
+  -h | --help                 Display this help information
+
+${UNDERLINE}Examples:${END}
+  ${self} ensure-created /var/kgsm/instances/minecraft-server
+  ${self} ensure-created /opt/kgsm/backups
 "
 }
 
@@ -241,6 +263,51 @@ function _cmd_remove() {
   esac
 }
 
+function _cmd_ensure_created() {
+  local dir_path=""
+
+  # Parse ensure-created command options
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+      -h | --help | help)
+        show_ensure_created_usage
+        return 0
+        ;;
+      -*)
+        __print_error "Invalid option for ensure-created command: $1"
+        exit $EC_INVALID_ARG
+        ;;
+      *)
+        dir_path="$1"
+        ;;
+    esac
+    shift
+  done
+
+  # Validate required parameters
+  if [[ -z "$dir_path" ]]; then
+    __print_error "Missing required option: <path>"
+    __print_error "Use '${self} ensure-created --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  # Call pure logic function
+  local exit_code
+  __create_dir "$dir_path"
+  exit_code=$?
+
+  # Handle result based on exit code
+  case $exit_code in
+    $EC_SUCCESS_DIRECTORY_EXISTS | $EC_SUCCESS)
+      exit 0
+      ;;
+    *)
+      __print_error "Failed to ensure directory exists: $dir_path"
+      exit $exit_code
+      ;;
+  esac
+}
+
 function _cmd_help() {
   local command="$1"
 
@@ -255,6 +322,9 @@ function _cmd_help() {
       ;;
     remove)
       show_usage_remove
+      ;;
+    ensure-created)
+      show_ensure_created_usage
       ;;
     *)
       __print_error "Unknown command for help: $command"
@@ -284,6 +354,10 @@ case "$command" in
     ;;
   remove)
     _cmd_remove "$@"
+    exit $?
+    ;;
+  ensure-created)
+    _cmd_ensure_created "$@"
     exit $?
     ;;
   *)

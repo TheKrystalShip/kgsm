@@ -3,7 +3,6 @@
 - [Changelog](#changelog)
   - [Ideas for the future](#ideas-for-the-future)
   - [Work in progress](#work-in-progress)
-  - [2.2.0](#220)
   - [2.1.0](#210)
   - [2.0.1](#201)
   - [2.0](#20)
@@ -48,41 +47,85 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
-- Bug fixing after version 2.0
+- Events system refactoring to command-based architecture
 
-## 2.2.0
+## [Unreleased] - 3.0.0 (Major Version)
 
-**New stuff**
-- New `watcher.sh` module responsible for detecting when an instance logs the `startup_success_regex`, emitting a new event `instance_ready`.
-  This is used to determine when an instance is finished starting up and can be considered ready to connect to.
+### Breaking Changes
 
-- Webhooks for the event system: Events can now be emitted to webhooks, configured in the `config.ini` file.
-- Event sockets: Support for multiple sockets has also been added, configured in the `config.ini` file.
-- New command for instance management files: `--status` has been added which outputs runtime information about the instance. Additional `--json` flag is also supported for machine readable output.
+#### Events System Refactoring
+Complete refactor of the events system from legacy dash-argument style to modern command-based architecture with separated I/O and logic layers.
 
-**Changes**
-- Added support for multiple event sockets and webhooks, allowing KGSM to communicate with multiple external processes simultaneously.
-- New standalone `config.sh` CLI module for handling KGSM configuration independently.
-- Refactored watcher configuration variables to support container images and improved port monitoring.
-- Added `--fast` flag for instance status output to skip version checks for quicker responses.
-- Updated instance management files to be more standalone when using systemd as lifecycle manager.
-- Moved `modules/include` to `lib/` directory for better code organization.
-- Created `bootstrap.sh` library script to reduce redundant code across modules.
-- Updated all modules to use the new `lib/common.sh` location.
-- Enhanced blueprints with better comments and improved structure.
-- Modified `watcher.sh` modules to write to log file instead of terminal output.
-- Changed log rotation behavior in `manage.native.sh` for better performance.
+**Old Command Format:**
+```bash
+events.sh --emit --instance-created myserver factorio
+events.socket.sh --enable
+events.webhook.sh --configure
+```
 
-**Bug fixes**
-- Fixed failed blueprint name resolution for container blueprints.
-- Fixed empty entries in `blueprints --detailed --json` output.
-- Fixed bug in `kgsm.sh` when requesting instance version information.
-- Fixed exit codes availability across modules.
-- Modified systemd templates to properly account for instance PID files.
-- Fixed bug where UPnP was disabled every time the management script exited.
-- Fixed tests for multiple event sockets and webhooks functionality.
-- Fixed `installer.sh` not updating version information correctly.
-- Fixed various shellcheck warnings for better code quality.
+**New Command Format:**
+```bash
+events.sh emit instance-created myserver factorio
+events.socket.sh enable
+events.webhook.sh configure
+```
+
+**Module Changes:**
+- `commands/events.sh`: Refactored to command-based (`status`, `test`, `socket`, `webhook`, `emit`, `help`)
+- `commands/events.socket.sh`: Refactored to command-based (`enable`, `disable`, `test`, `status`, `emit`, `help`)
+- `commands/events.webhook.sh`: Refactored to command-based (`enable`, `disable`, `configure`, `test`, `status`, `emit`, `help`)
+
+**Architecture Changes:**
+- Created `commands/handlers/events.sh` with pure validation logic
+- Moved event constants and parameter specifications to logic layer
+- Event emission now validates event types and parameters
+- Updated `core/events.sh` dispatcher to use new command format
+
+**Event Name Format:**
+- Event names now use dash-separated format: `instance-created`, `instance-started`, `instance-version-updated`
+- Internally converted to underscore format for constant matching
+
+**New Exit Codes:**
+- `EC_EVENT_TYPE_INVALID` (37): Invalid or unknown event type
+- `EC_EVENT_PARAMS_INVALID` (38): Invalid parameters for event type
+- `EC_EVENT_TRANSPORT_FAILED` (39): All event transports failed
+- `EC_EVENT_JSON_FAILED` (40): Failed to generate JSON event payload
+- `EC_SUCCESS_BLUEPRINT_LISTED` (256): Blueprint listing succeeded
+- `EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED` (257): Blueprint info retrieved
+- `EC_SUCCESS_BLUEPRINT_FOUND` (258): Blueprint found
+- `EC_SUCCESS_BLUEPRINT_VALIDATED` (259): Blueprint validated
+
+**Migration Required:**
+All event emission calls throughout the codebase have been updated to the new format. External scripts or integrations calling KGSM events will need to update their command syntax.
+
+**Example Migrations:**
+```bash
+# Old → New
+events.sh --status → events.sh status
+events.sh --test-all → events.sh test all
+events.sh --emit --instance-started myserver → events.sh emit instance-started myserver
+events.socket.sh --enable → events.socket.sh enable
+events.webhook.sh --test → events.webhook.sh test
+```
+
+### Added
+- Comprehensive event validation in `commands/handlers/events.sh`
+- Command-specific help for all event commands
+- Unit tests for event logic library (`tests/unit/test_events_logic.sh`)
+- Integration tests for event modules (`tests/integration/test_events_module.sh`)
+
+### Changed
+- Event system now uses command-based CLI instead of flag-based
+- All event emission calls updated across all modules
+- Event dispatcher in `core/events.sh` uses new command format
+- Improved error messages for invalid events and parameters
+
+### Technical Details
+- All 28 event types supported with full parameter validation
+- Transport delegation maintained (socket and webhook run in parallel)
+- JSON payload generation remains in module layer (jq dependency)
+- Event constants exported globally for external script consumption
+- Complete I/O/logic separation following KGSM architecture standards
 
 ## 2.1.0
 
@@ -94,7 +137,7 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 - The `--info` command now outputs raw instance configuration file contents instead of computed values. Use `--info --json` for structured JSON configuration data ideal for automation and scripting.
 - Enhanced `--status` command with unified behavior across all instance types (systemd, standalone, container) and added `--status --json` support for web interfaces and APIs.
 - Added flexible log line control to instance management scripts with `--tail <number>` option, including Unix standard aliases `--lines <number>` and `-n <number>`. Works for both static log viewing and live log following.
-- Complete rework of interactive mode (`modules/interactive.sh`) with improved user experience, enhanced visual design using color-coded interface, hierarchical menu navigation, context-aware system overview, and comprehensive help system.
+- Complete rework of interactive mode (`commands/interactive.sh`) with improved user experience, enhanced visual design using color-coded interface, hierarchical menu navigation, context-aware system overview, and comprehensive help system.
 
 **Bug fixes**
 - Removed duplicate debug tracking in the management templates
@@ -187,17 +230,17 @@ This release focuses on improving internal code quality and enhancing debugging 
 - **Update checker**: Added the `./kgsm.sh --check-update` command to verify if a new version is available.
 - **Contributor guide**: A `CONTRIBUTING.md` file has been added to the repository to assist contributors.
 - **Force kill game server**: `[instance].manage.sh` includes a new `--kill` argument to terminate unresponsive game servers. This is used internally by the `[instance].manage.sh` file in conjunction with a timeout mechanism during the normal `--stop` procedure.
-- **Instance activity check**: `[instance].manage.sh` now includes a `--is-active` flag to verify if a game server is running. This is called internally by `modules/instances.sh` for more accurate status reporting.
+- **Instance activity check**: `[instance].manage.sh` now includes a `--is-active` flag to verify if a game server is running. This is called internally by `commands/instances.sh` for more accurate status reporting.
 - **Template update**: The `manage.tp` template has been updated to include the `--kill` flag for newly created instances.
 
 To apply the new `[instance].manage.sh` changes to existing instances, run:
 ```sh
-./modules/files.sh -i [instance] --create --manage
+./commands/files.sh -i [instance] --create --manage
 ```
 
 - **Environment simplification**: Modules no longer require `KGSM_ROOT` to be set before execution.
 - **Installer consolidation**: The `installer.sh` script now handles installation, version control, and updates. Update-related tasks can be accessed through `kgsm.sh`, eliminating the need to call `installer.sh` directly.
-- **Codebase refactoring**: `modules/include/common.sh` has been split into sub-modules to improve code organization and responsibility separation.
+- **Codebase refactoring**: `commands/include/common.sh` has been split into sub-modules to improve code organization and responsibility separation.
 - **Versioning improvements**:
   - The `version.txt` file has been replaced with `.kgsm.version`.
   - KGSM versions now align with GitHub Releases instead of relying on a repository file.
@@ -210,7 +253,7 @@ To apply the new `[instance].manage.sh` changes to existing instances, run:
 - `config.default.ini` options are now a bit better organized
 
 **Bug fixes**
-- `modules/instances.sh` now reflects the correct default value for `INSTANCE_RANDOM_CHAR_COUNT` for the instance ID generation.
+- `commands/instances.sh` now reflects the correct default value for `INSTANCE_RANDOM_CHAR_COUNT` for the instance ID generation.
 
 ## 1.6.0 - Events
 
@@ -221,9 +264,9 @@ Leveraging KGSM as the source of truth allows dependent processes to operate wit
 
 - Unix Domain Socket support for IPC.
 - New configurable option in `config.default.ini` to enable/disable events and set the socket path. Make sure to add the new configuration to your own `config.ini` file to enable events.
-- New module: `modules/include/events.sh`.
+- New module: `commands/include/events.sh`.
 - Event emissions for all major stages and actions, from instance creation to removal, formatted as JSON using the existing jq dependency.
-- Optional `--json` argument for `modules/instances.sh` and `modules/blueprints.sh` to display information in JSON format. Documented in the `--help` command for both modules and the `kgsm.sh --help` documentation.
+- Optional `--json` argument for `commands/instances.sh` and `commands/blueprints.sh` to display information in JSON format. Documented in the `--help` command for both modules and the `kgsm.sh --help` documentation.
 - Optional `KGSM_BRANCH=` option in `config.default.ini` allowing you to update KGSM from either the `main` development branch or the `dev` testing branch.
 
 **Bug fixes**
@@ -237,7 +280,7 @@ Leveraging KGSM as the source of truth allows dependent processes to operate wit
 ## 1.5.1
 
 **Bug fixes**
-- Wrong argument order in `modules/instances.sh` for `--logs`.
+- Wrong argument order in `commands/instances.sh` for `--logs`.
 
 ## 1.5.0
 **Breaking changes**
@@ -254,7 +297,7 @@ Leveraging KGSM as the source of truth allows dependent processes to operate wit
 ## 1.4.2
 
 **Bug fixes**
-- - `modules/instances.sh` was not properly accounting for `systemd` as a lifecycle manager, meaning the `--input` argument was sent to systemd which errored out.
+- - `commands/instances.sh` was not properly accounting for `systemd` as a lifecycle manager, meaning the `--input` argument was sent to systemd which errored out.
 
 ## 1.4.1
 
@@ -276,18 +319,18 @@ These new features are currently **not** available for the interactive mode, the
 ## 1.3.1
 
 **Bug fixes**
-- `modules/deploy.sh` now recursively copies and force overwrites the content of `$INSTANCE_INSTALL_DIR` with the contents of `$INSTANCE_TEMP_DIR`. The lack of force overwrite was causing the update process to fail for some game servers.
+- `commands/deploy.sh` now recursively copies and force overwrites the content of `$INSTANCE_INSTALL_DIR` with the contents of `$INSTANCE_TEMP_DIR`. The lack of force overwrite was causing the update process to fail for some game servers.
 
 ## 1.3.0
 
-**Breaking** - Changed modules/instances.sh to use the `--id` argument as the full name of the instance instead of appending it to a predefined name.
+**Breaking** - Changed commands/instances.sh to use the `--id` argument as the full name of the instance instead of appending it to a predefined name.
 Useful when you want to run a single instance and don't want to have the random numbers in the instance name.
 > This also works through `kgsm.sh` Ex: `kgsm.sh --install factorio --id factorio`
 
 Non `--id` generation hasn't been changed
 
 **Bug fixes**
-- Fixed `modules/instances.sh` now properly checks for duplicates when generating instance IDs.
+- Fixed `commands/instances.sh` now properly checks for duplicates when generating instance IDs.
 
 ## 1.2.7
 
@@ -328,12 +371,12 @@ Usage:
 ## 1.2.3
 
 **Bug fixes**
-- Fixed `modules/deploy.sh` bug that expected the instance's install directory to be empty. That's no longer the case since version `1.2.0`.
+- Fixed `commands/deploy.sh` bug that expected the instance's install directory to be empty. That's no longer the case since version `1.2.0`.
 
 ## 1.2.1
 
 **Bug fixes**
-- Fixed bug in `modules/backup.sh` restore it didn't read the version number.
+- Fixed bug in `commands/backup.sh` restore it didn't read the version number.
 
 ## 1.2.0
 
@@ -370,7 +413,7 @@ Both the interactive mode `Help` option and `./kgsm.sh --help` will display thes
 
 **Bug fixes**
 
-- Fixed `modules/update.sh` not taking into account the instance lifecycle manager when stopping/starting an instance.
+- Fixed `commands/update.sh` not taking into account the instance lifecycle manager when stopping/starting an instance.
 
 ## 1.0.3
 
@@ -380,15 +423,15 @@ Both the interactive mode `Help` option and `./kgsm.sh --help` will display thes
 **Bug fixes**
 
 - Fixed wrong argument bug when restoring backup using interactive mode.
-- Fixed `modules/update.sh` not asking for root password when issuing systemctl commands.
+- Fixed `commands/update.sh` not asking for root password when issuing systemctl commands.
 - Fixed some inconsistencies between `--help` functions on different modules.
 
 - Known issue:
-  - `modules/update.sh` doesn't take into account the INSTANCE_LIFECYCLE_MANAGER and defaults to using systemctl to manage instances
+  - `commands/update.sh` doesn't take into account the INSTANCE_LIFECYCLE_MANAGER and defaults to using systemctl to manage instances
 
 ## 1.0.2
 
-- Changed `modules/instances.sh --print-info` to `modules/instances.sh --info`.
+- Changed `commands/instances.sh --print-info` to `commands/instances.sh --info`.
 - Added shorthand `kgsm.sh [-i, --instance]` argument option to match the modules.
 - Added `kgsm.sh --instance <instance> --info` argument to print out instance information.
 

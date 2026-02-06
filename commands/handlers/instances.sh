@@ -261,7 +261,7 @@ function __logic_create_instance() {
   # Validate install directory
   if [[ -n "$install_dir" ]]; then
     if ! validate_directory_exists "$install_dir" "install directory" >/dev/null 2>&1; then
-      return $EC_FILE_NOT_FOUND
+      return $EC_DIRECTORY_NOT_FOUND
     fi
     if ! validate_directory_writable "$install_dir" "install directory" >/dev/null 2>&1; then
       return $EC_PERMISSION
