@@ -63,8 +63,8 @@ function _cmd_install() {
 
   # shellcheck disable=SC2154
   local install_dir=$config_default_install_directory
-  local version=0  # 0 means get latest
-  local identifier=
+  local version=0 # 0 means get latest
+  local identifier
 
   # Parse optional arguments
   while [[ $# -ne 0 ]]; do
@@ -115,12 +115,12 @@ function _cmd_install() {
     install_dir="${KGSM_ROOT}/$install_dir"
   fi
 
+  __print_info "Creating a new instance of $blueprint in $install_dir..."
+
   directories.sh ensure-created "$install_dir" || {
     __print_error "Failed to ensure installation directory exists and is writable: $install_dir"
     return $?
   }
-
-  __print_info "Creating a new instance of $blueprint in $install_dir..."
 
   local instance
 

@@ -85,7 +85,7 @@ function create_mock_override_file() {
   fi
 
   # Create override file
-  local override_file="$OVERRIDES_SOURCE_DIR/${blueprint_name}.overrides.sh"
+  local override_file="$KGSM_SYSTEM_OVERRIDES_DIR/${blueprint_name}.overrides.sh"
 
   cat > "$override_file" << 'EOF'
 #!/usr/bin/env bash

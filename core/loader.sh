@@ -33,7 +33,7 @@ export -f __find_or_fail
 function __find_native_default_blueprint() {
   local blueprint=$1
   [[ "$blueprint" != *.bp ]] && blueprint="${blueprint}.bp"
-  __find_or_fail "$blueprint" "$BLUEPRINTS_NATIVE_DEFAULT_DIR"
+  __find_or_fail "$blueprint" "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR"
 }
 
 export -f __find_native_default_blueprint
@@ -42,7 +42,7 @@ export -f __find_native_default_blueprint
 function __find_default_container_blueprint() {
   local blueprint=$1
   [[ "$blueprint" != *.docker-compose.yml ]] && blueprint="${blueprint}.docker-compose.yml"
-  __find_or_fail "$blueprint" "$BLUEPRINTS_CONTAINER_DEFAULT_DIR"
+  __find_or_fail "$blueprint" "$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR"
 }
 
 export -f __find_default_container_blueprint
@@ -70,7 +70,7 @@ export -f __find_default_blueprint
 function __find_custom_native_blueprint() {
   local blueprint=$1
   [[ "$blueprint" != *.bp ]] && blueprint="${blueprint}.bp"
-  __find_or_fail "$blueprint" "$BLUEPRINTS_NATIVE_CUSTOM_DIR"
+  __find_or_fail "$blueprint" "$KGSM_USER_BLUEPRINTS_NATIVE_DIR"
 }
 
 export -f __find_custom_native_blueprint
@@ -79,7 +79,7 @@ export -f __find_custom_native_blueprint
 function __find_custom_container_blueprint() {
   local blueprint=$1
   [[ "$blueprint" != *.docker-compose.yml ]] && blueprint="${blueprint}.docker-compose.yml"
-  __find_or_fail "$blueprint" "$BLUEPRINTS_CONTAINER_CUSTOM_DIR"
+  __find_or_fail "$blueprint" "$KGSM_USER_BLUEPRINTS_CONTAINER_DIR"
 }
 
 export -f __find_custom_container_blueprint
@@ -148,7 +148,7 @@ export -f __find_blueprint
 function __find_core_module() {
   local library=$1
   [[ "$library" != *.sh ]] && library="${library}.sh"
-  __find_or_fail "$library" "$CORE_SOURCE_DIR"
+  __find_or_fail "$library" "$KGSM_CORE_DIR"
 }
 
 export -f __find_core_module
@@ -162,10 +162,10 @@ function __find_command() {
   [[ "$module" != *.sh ]] && module="${module}.sh"
 
   local file_path
-  file_path="$(find "$COMMANDS_SOURCE_DIR" -maxdepth 1 \( -type f -o -type l \) -name "$module" -print -quit)"
+  file_path="$(find "$KGSM_COMMANDS_DIR" -maxdepth 1 \( -type f -o -type l \) -name "$module" -print -quit)"
 
   if [[ -z "$file_path" ]]; then
-    __print_error "Could not find $module in $COMMANDS_SOURCE_DIR"
+    __print_error "Could not find $module in $KGSM_COMMANDS_DIR"
     exit $EC_FILE_NOT_FOUND
   fi
 
@@ -177,42 +177,46 @@ export -f __find_command
 function __find_command_handler() {
   local library=$1
   [[ "$library" != *.sh ]] && library="${library}.sh"
-  __find_or_fail "$library" "$COMMAND_HANDLERS_SOURCE_DIR"
+  __find_or_fail "$library" "$KGSM_HANDLERS_DIR"
 }
 
 export -f __find_command_handler
 
 function __find_instance_config() {
   local instance=$1
-  
-  # Strip .ini suffix if present (for backward compatibility)
-  instance="${instance%.ini}"
-  
+
+  # Ensure the instance name has the .config.ini extension for exact matching.
+  [[ "$instance" != *.config.ini ]] && instance="${instance}.config.ini"
+
   # Find directory symlinks matching the instance name
-  # The structure is: $INSTANCES_SOURCE_DIR/<blueprint>/<instance>/
+  # The structure is: $KGSM_INSTANCES_DIR/<blueprint>/<instance>/
   local instance_dir
-  instance_dir="$(find "$INSTANCES_SOURCE_DIR" -mindepth 2 -maxdepth 2 -type l -name "$instance" -print -quit)"
-  
+  instance_dir="$(find "$KGSM_INSTANCES_DIR" -maxdepth 2 -mindepth 2 -type f -name "$instance" -print -quit)"
+
+  __print_debug "KGSM_INSTANCES_DIR: $KGSM_INSTANCES_DIR"
+  __print_debug "Looking for instance config '$instance' in $KGSM_INSTANCES_DIR..."
+  __print_debug "Found instance config at: $instance_dir"
+
   if [[ -z "$instance_dir" ]]; then
-    __print_error "Could not find instance directory for '$instance' in $INSTANCES_SOURCE_DIR"
+    __print_debug "Could not find instance directory for '$instance' in $KGSM_INSTANCES_DIR"
     exit $EC_FILE_NOT_FOUND
   fi
-  
+
   # Verify the symlink resolves to a valid directory
   if [[ ! -d "$instance_dir" ]]; then
-    __print_error "Instance directory for '$instance' exists but does not resolve to a valid directory (broken symlink?)"
+    __print_debug "Instance directory for '$instance' exists but does not resolve to a valid directory (broken symlink?)"
     exit $EC_FILE_NOT_FOUND
   fi
-  
+
   # Construct path to config file inside the directory
-  local config_file="${instance_dir}/${instance}.config.ini"
-  
+  local config_file="${instance_dir}/${instance}"
+
   # Verify config file exists
   if [[ ! -f "$config_file" ]]; then
     __print_error "Config file not found at '$config_file'"
     exit $EC_FILE_NOT_FOUND
   fi
-  
+
   echo "$config_file"
 }
 
@@ -221,7 +225,7 @@ export -f __find_instance_config
 function __find_template() {
   local template=$1
   [[ "$template" != *.tp ]] && template="${template}.tp"
-  __find_or_fail "$template" "$TEMPLATES_SOURCE_DIR"
+  __find_or_fail "$template" "$KGSM_TEMPLATES_DIR"
 }
 
 export -f __find_template

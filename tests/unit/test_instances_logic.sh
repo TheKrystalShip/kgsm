@@ -267,12 +267,12 @@ function test_create_config_file_valid_params() {
   assert_equals "0" "$exit_code" "Should return 0 for success"
   assert_not_null "$config_file" "Should output config file path"
   assert_file_exists "$config_file" "Config file should exist at returned path"
-  assert_contains "$config_file" "$INSTANCES_SOURCE_DIR/$blueprint_name/$instance_name.ini" \
+  assert_contains "$config_file" "$KGSM_INSTANCES_DIR/$blueprint_name/$instance_name.ini" \
     "Config file path should match expected structure"
 
   # Cleanup
   rm -f "$config_file"
-  rmdir "$INSTANCES_SOURCE_DIR/$blueprint_name" 2> /dev/null || true
+  rmdir "$KGSM_INSTANCES_DIR/$blueprint_name" 2> /dev/null || true
 }
 
 function test_create_config_file_creates_directory() {
@@ -283,19 +283,19 @@ function test_create_config_file_creates_directory() {
   instance_name=$(generate_test_id "$blueprint_name")
 
   # Ensure directory doesn't exist
-  rm -rf "$INSTANCES_SOURCE_DIR/$blueprint_name"
+  rm -rf "$KGSM_INSTANCES_DIR/$blueprint_name"
 
   local config_file
   config_file=$(__logic_create_instance_config_file "$instance_name" "$blueprint_name")
   local exit_code=$?
 
   assert_equals "0" "$exit_code" "Should return 0 for success"
-  assert_dir_exists "$INSTANCES_SOURCE_DIR/$blueprint_name" \
+  assert_dir_exists "$KGSM_INSTANCES_DIR/$blueprint_name" \
     "Should create blueprint directory"
 
   # Cleanup
   rm -f "$config_file"
-  rmdir "$INSTANCES_SOURCE_DIR/$blueprint_name" 2> /dev/null || true
+  rmdir "$KGSM_INSTANCES_DIR/$blueprint_name" 2> /dev/null || true
 }
 
 function test_create_config_file_permission_denied() {
@@ -303,8 +303,8 @@ function test_create_config_file_permission_denied() {
 
   # Make instances directory read-only
   local original_perms
-  original_perms=$(stat -c '%a' "$INSTANCES_SOURCE_DIR")
-  chmod 555 "$INSTANCES_SOURCE_DIR"
+  original_perms=$(stat -c '%a' "$KGSM_INSTANCES_DIR")
+  chmod 555 "$KGSM_INSTANCES_DIR"
 
   local blueprint_name="factorio"
   local instance_name
@@ -314,7 +314,7 @@ function test_create_config_file_permission_denied() {
   local exit_code=$?
 
   # Restore permissions immediately
-  chmod "$original_perms" "$INSTANCES_SOURCE_DIR"
+  chmod "$original_perms" "$KGSM_INSTANCES_DIR"
 
   assert_equals "$EC_FAILED_MKDIR" "$exit_code" "Should return EC_FAILED_MKDIR when directory creation fails"
 }
@@ -553,7 +553,7 @@ function test_create_instance_auto_generated_name() {
 
   # Verify instance was created
   local instance_name="$output"
-  assert_file_exists "$INSTANCES_SOURCE_DIR/factorio/${instance_name}.ini" \
+  assert_file_exists "$KGSM_INSTANCES_DIR/factorio/${instance_name}.ini" \
     "Instance config should exist"
 
   # Cleanup
@@ -576,7 +576,7 @@ function test_create_instance_custom_identifier() {
     "Should use provided custom identifier"
 
   # Verify instance was created with custom name
-  assert_file_exists "$INSTANCES_SOURCE_DIR/factorio/${custom_name}.ini" \
+  assert_file_exists "$KGSM_INSTANCES_DIR/factorio/${custom_name}.ini" \
     "Instance config should exist with custom name"
 
   # Cleanup
@@ -615,7 +615,7 @@ function test_create_instance_native_blueprint() {
     "Should create native instance successfully"
 
   # Verify config has native runtime
-  local config_file="$INSTANCES_SOURCE_DIR/factorio/${output}.ini"
+  local config_file="$KGSM_INSTANCES_DIR/factorio/${output}.ini"
   assert_file_contains "$config_file" "instance_runtime=native" \
     "Config should specify native runtime"
 
@@ -639,7 +639,7 @@ function test_create_instance_container_blueprint() {
   assert_equals "$EC_SUCCESS_INSTANCE_CREATED" "$exit_code" "Should create container instance successfully"
 
   # Verify config has container runtime
-  local config_file="$INSTANCES_SOURCE_DIR/vrising/${output}.ini"
+  local config_file="$KGSM_INSTANCES_DIR/vrising/${output}.ini"
   assert_file_contains "$config_file" "instance_runtime=container" "Config should specify container runtime"
 
   # Cleanup
@@ -685,7 +685,7 @@ function test_remove_instance_valid() {
     "Should return EC_SUCCESS_INSTANCE_REMOVED for success"
 
   # Verify config file was removed
-  assert_file_not_exists "$INSTANCES_SOURCE_DIR/factorio/${instance}.ini" \
+  assert_file_not_exists "$KGSM_INSTANCES_DIR/factorio/${instance}.ini" \
     "Instance config should be removed"
 }
 
@@ -697,7 +697,7 @@ function test_remove_instance_empty_directory_cleanup() {
   instance=$(create_test_instance "factorio" "$(generate_test_id)")
 
   # Directory should exist
-  assert_dir_exists "$INSTANCES_SOURCE_DIR/factorio" \
+  assert_dir_exists "$KGSM_INSTANCES_DIR/factorio" \
     "Blueprint directory should exist before removal"
 
   # Remove instance
@@ -727,7 +727,7 @@ function test_remove_instance_keeps_nonempty_directory() {
     "Should successfully remove first instance"
 
   # Directory should still exist because second instance remains
-  assert_dir_exists "$INSTANCES_SOURCE_DIR/factorio" \
+  assert_dir_exists "$KGSM_INSTANCES_DIR/factorio" \
     "Blueprint directory should remain when other instances exist"
 
   # Cleanup
@@ -742,7 +742,7 @@ function test_get_instances_empty_no_filter() {
   log_test_step "Testing __logic_get_instances with no instances and no filter"
 
   # Ensure clean state
-  rm -rf "$INSTANCES_SOURCE_DIR"/*
+  rm -rf "$KGSM_INSTANCES_DIR"/*
 
   local output
   output=$(__logic_get_instances)
@@ -844,7 +844,7 @@ function test_get_instance_paths_empty_no_filter() {
   log_test_step "Testing __logic_get_instance_paths with no instances and no filter"
 
   # Ensure clean state
-  rm -rf "$INSTANCES_SOURCE_DIR"/*
+  rm -rf "$KGSM_INSTANCES_DIR"/*
 
   local output
   output=$(__logic_get_instance_paths)
@@ -868,9 +868,9 @@ function test_get_instance_paths_multiple_no_filter() {
 
   assert_equals "0" "$exit_code" "Should return 0 for success"
   assert_not_null "$output" "Should output paths"
-  assert_contains "$output" "$INSTANCES_SOURCE_DIR/factorio/${instance1}.ini" \
+  assert_contains "$output" "$KGSM_INSTANCES_DIR/factorio/${instance1}.ini" \
     "Should include full path to factorio instance"
-  assert_contains "$output" "$INSTANCES_SOURCE_DIR/terraria/${instance2}.ini" \
+  assert_contains "$output" "$KGSM_INSTANCES_DIR/terraria/${instance2}.ini" \
     "Should include full path to terraria instance"
 
   # Cleanup
@@ -909,8 +909,8 @@ function test_get_instance_paths_format() {
   output=$(__logic_get_instance_paths "factorio")
 
   assert_contains "$output" ".ini" "Output should contain .ini extension"
-  assert_contains "$output" "$INSTANCES_SOURCE_DIR" \
-    "Output should contain full path from INSTANCES_SOURCE_DIR"
+  assert_contains "$output" "$KGSM_INSTANCES_DIR" \
+    "Output should contain full path from KGSM_INSTANCES_DIR"
   assert_matches "$output" "^/" "Output should start with / (absolute path)"
 
   # Cleanup

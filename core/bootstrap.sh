@@ -8,7 +8,8 @@
 # Enables debug mode if --debug flag is present or if KGSM_DEBUG is set.
 # This ensures that debug mode propagates to all sub-modules.
 __kgsm_enable_debug() {
-  export PS4='+(\033[0;33m${BASH_SOURCE}:${LINENO}\033[0m): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+  declare -g PS4='+(\033[0;33m${BASH_SOURCE}:${LINENO}\033[0m): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
+  export PS4
   set -x
 }
 
@@ -46,6 +47,10 @@ if [[ -z "$KGSM_ROOT" ]]; then
   unset _bootstrap_dir _kgsm_root
 fi
 
+if [[ -n "${KGSM_BOOTSTRAP_LOADED:-}" ]]; then
+  return 0
+fi
+
 # --- Load paths configuration ---
 # shellcheck disable=SC1091
 source "$KGSM_ROOT/core/paths.sh" || {
@@ -65,3 +70,6 @@ source "$KGSM_ROOT/core/common.sh" || {
   echo -e "ERROR: Failed to load common.sh library" >&2
   exit 1
 }
+
+declare -g KGSM_BOOTSTRAP_LOADED=1
+export KGSM_BOOTSTRAP_LOADED

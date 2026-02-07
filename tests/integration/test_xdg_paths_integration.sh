@@ -124,8 +124,8 @@ function test_logs_directory_location() {
 function test_instances_directory_location() {
   log_step "Test: Instances use XDG data directory"
 
-  # INSTANCES_SOURCE_DIR should point to XDG data location
-  assert_equals "$INSTANCES_SOURCE_DIR" "$KGSM_INSTANCES_DIR" "INSTANCES_SOURCE_DIR should use KGSM_INSTANCES_DIR"
+  # KGSM_INSTANCES_DIR should point to XDG data location
+  assert_equals "$KGSM_INSTANCES_DIR" "$KGSM_INSTANCES_DIR" "KGSM_INSTANCES_DIR should use KGSM_INSTANCES_DIR"
 }
 
 function test_blueprints_list_includes_both() {

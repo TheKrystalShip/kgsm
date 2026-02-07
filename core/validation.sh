@@ -90,10 +90,10 @@ function validate_blueprint_exists() {
     # Blueprint not found, provide helpful error message
     __print_error "Blueprint '$blueprint_input' not found"
     __print_error "Searched in:"
-    __print_error "  - Custom native: $BLUEPRINTS_NATIVE_CUSTOM_DIR"
-    __print_error "  - Custom container: $BLUEPRINTS_CONTAINER_CUSTOM_DIR"
-    __print_error "  - Default native: $BLUEPRINTS_NATIVE_DEFAULT_DIR"
-    __print_error "  - Default container: $BLUEPRINTS_CONTAINER_DEFAULT_DIR"
+    __print_error "  - Custom native: $KGSM_USER_BLUEPRINTS_NATIVE_DIR"
+    __print_error "  - Custom container: $KGSM_USER_BLUEPRINTS_CONTAINER_DIR"
+    __print_error "  - Default native: $KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR"
+    __print_error "  - Default container: $KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR"
     return $EC_FILE_NOT_FOUND
   fi
 }
@@ -335,7 +335,7 @@ function validate_instance_name() {
   local instance_config_file
   if ! instance_config_file=$(__find_instance_config "$instance_name" 2>/dev/null); then
     __print_error "Instance '$instance_name' not found"
-    __print_error "Available instances can be found in: $INSTANCES_SOURCE_DIR"
+    __print_error "Available instances can be found in: $KGSM_INSTANCES_DIR"
     return $EC_FILE_NOT_FOUND
   fi
 

@@ -26,7 +26,7 @@ function _init_delagator() {
       }
       export -f ${module_name}
     "
-  done < <(find "$COMMANDS_SOURCE_DIR" -maxdepth 1 -type f -name '*.sh' -print0)
+  done < <(find "$KGSM_COMMANDS_DIR" -maxdepth 1 -type f -name '*.sh' -print0)
 }
 
 _init_delagator

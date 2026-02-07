@@ -521,9 +521,9 @@ function _get_instance_status_json() {
 # Command handler functions
 
 function _cmd_create() {
-  local blueprint=""
-  local install_dir=""
   local instance_name=""
+  local blueprint=""
+  local install_dir="$config_default_install_directory"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -572,7 +572,7 @@ function _cmd_create() {
       exit 0
       ;;
     *)
-      __print_error "Failed to create instance"
+      __print_error "Failed to create instance ($exit_code)"
       exit $exit_code
       ;;
   esac

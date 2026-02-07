@@ -65,7 +65,7 @@ function __logic_inject_overrides() {
     return $EC_INVALID_CONFIG
   fi
 
-  local instance_overrides_file="${OVERRIDES_SOURCE_DIR}/${blueprint_name}.overrides.sh"
+  local instance_overrides_file="${KGSM_SYSTEM_OVERRIDES_DIR}/${blueprint_name}.overrides.sh"
 
   # If no overrides file exists, nothing to inject (this is valid)
   if [[ ! -f "$instance_overrides_file" ]]; then

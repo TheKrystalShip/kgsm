@@ -171,14 +171,14 @@ function __logic_find_native_blueprint() {
   [[ "$blueprint" == *.bp ]] && blueprint="${blueprint%.bp}"
 
   # Check custom blueprints first (user-made blueprints take priority)
-  local bp_path="$BLUEPRINTS_NATIVE_CUSTOM_DIR/$blueprint.bp"
+  local bp_path="$KGSM_USER_BLUEPRINTS_NATIVE_DIR/$blueprint.bp"
   if [[ -f "$bp_path" ]]; then
     echo "$bp_path"
     return $EC_SUCCESS_BLUEPRINT_FOUND
   fi
 
   # Check default blueprints (included with KGSM)
-  bp_path="$BLUEPRINTS_NATIVE_DEFAULT_DIR/$blueprint.bp"
+  bp_path="$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/$blueprint.bp"
   if [[ -f "$bp_path" ]]; then
     echo "$bp_path"
     return $EC_SUCCESS_BLUEPRINT_FOUND
@@ -202,10 +202,10 @@ function __logic_list_native_blueprints() {
   local source_dir=""
   case "$source" in
     custom)
-      source_dir="$BLUEPRINTS_NATIVE_CUSTOM_DIR"
+      source_dir="$KGSM_USER_BLUEPRINTS_NATIVE_DIR"
       ;;
     default)
-      source_dir="$BLUEPRINTS_NATIVE_DEFAULT_DIR"
+      source_dir="$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR"
       ;;
     all)
       # Will be handled by combining both
@@ -220,21 +220,21 @@ function __logic_list_native_blueprints() {
     local -a blueprints=()
 
     # Get custom blueprints
-    if [[ -d "$BLUEPRINTS_NATIVE_CUSTOM_DIR" ]]; then
+    if [[ -d "$KGSM_USER_BLUEPRINTS_NATIVE_DIR" ]]; then
       while IFS= read -r -d '' file; do
         local basename="${file##*/}"
         basename="${basename%.bp}"
         [[ -n "$basename" ]] && blueprints+=("$basename")
-      done < <(find "$BLUEPRINTS_NATIVE_CUSTOM_DIR" -maxdepth 1 -name "*.bp" -type f -print0 2>/dev/null)
+      done < <(find "$KGSM_USER_BLUEPRINTS_NATIVE_DIR" -maxdepth 1 -name "*.bp" -type f -print0 2>/dev/null)
     fi
 
     # Get default blueprints
-    if [[ -d "$BLUEPRINTS_NATIVE_DEFAULT_DIR" ]]; then
+    if [[ -d "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR" ]]; then
       while IFS= read -r -d '' file; do
         local basename="${file##*/}"
         basename="${basename%.bp}"
         [[ -n "$basename" ]] && blueprints+=("$basename")
-      done < <(find "$BLUEPRINTS_NATIVE_DEFAULT_DIR" -maxdepth 1 -name "*.bp" -type f -print0 2>/dev/null)
+      done < <(find "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR" -maxdepth 1 -name "*.bp" -type f -print0 2>/dev/null)
     fi
 
     # Remove duplicates and sort
@@ -337,14 +337,14 @@ function __logic_find_container_blueprint() {
   [[ "$blueprint" == *.docker-compose.yml ]] && blueprint="${blueprint%.docker-compose.yml}"
 
   # Check custom blueprints first
-  local bp_path="$BLUEPRINTS_CONTAINER_CUSTOM_DIR/$blueprint.docker-compose.yml"
+  local bp_path="$KGSM_USER_BLUEPRINTS_CONTAINER_DIR/$blueprint.docker-compose.yml"
   if [[ -f "$bp_path" ]]; then
     echo "$bp_path"
     return $EC_SUCCESS_BLUEPRINT_FOUND
   fi
 
   # Check default blueprints
-  bp_path="$BLUEPRINTS_CONTAINER_DEFAULT_DIR/$blueprint.docker-compose.yml"
+  bp_path="$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR/$blueprint.docker-compose.yml"
   if [[ -f "$bp_path" ]]; then
     echo "$bp_path"
     return $EC_SUCCESS_BLUEPRINT_FOUND
@@ -368,10 +368,10 @@ function __logic_list_container_blueprints() {
   local source_dir=""
   case "$source" in
     custom)
-      source_dir="$BLUEPRINTS_CONTAINER_CUSTOM_DIR"
+      source_dir="$KGSM_USER_BLUEPRINTS_CONTAINER_DIR"
       ;;
     default)
-      source_dir="$BLUEPRINTS_CONTAINER_DEFAULT_DIR"
+      source_dir="$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR"
       ;;
     all)
       # Will be handled by combining both
@@ -386,21 +386,21 @@ function __logic_list_container_blueprints() {
     local -a blueprints=()
 
     # Get custom blueprints
-    if [[ -d "$BLUEPRINTS_CONTAINER_CUSTOM_DIR" ]]; then
+    if [[ -d "$KGSM_USER_BLUEPRINTS_CONTAINER_DIR" ]]; then
       while IFS= read -r -d '' file; do
         local basename="${file##*/}"
         basename="${basename%.docker-compose.yml}"
         [[ -n "$basename" ]] && blueprints+=("$basename")
-      done < <(find "$BLUEPRINTS_CONTAINER_CUSTOM_DIR" -maxdepth 1 -name "*.docker-compose.yml" -type f -print0 2>/dev/null)
+      done < <(find "$KGSM_USER_BLUEPRINTS_CONTAINER_DIR" -maxdepth 1 -name "*.docker-compose.yml" -type f -print0 2>/dev/null)
     fi
 
     # Get default blueprints
-    if [[ -d "$BLUEPRINTS_CONTAINER_DEFAULT_DIR" ]]; then
+    if [[ -d "$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR" ]]; then
       while IFS= read -r -d '' file; do
         local basename="${file##*/}"
         basename="${basename%.docker-compose.yml}"
         [[ -n "$basename" ]] && blueprints+=("$basename")
-      done < <(find "$BLUEPRINTS_CONTAINER_DEFAULT_DIR" -maxdepth 1 -name "*.docker-compose.yml" -type f -print0 2>/dev/null)
+      done < <(find "$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR" -maxdepth 1 -name "*.docker-compose.yml" -type f -print0 2>/dev/null)
     fi
 
     # Remove duplicates and sort

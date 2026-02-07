@@ -165,7 +165,7 @@ export -f __logic_list_used_ports
 #   EC_SUCCESS_NETWORK_PORT_CHECKED - Conflicts checked (echoes conflict info or "no_conflicts")
 #   EC_MISSING_DEPENDENCY - Required tools not available
 function __logic_find_port_conflicts() {
-  local instances_dir="$INSTANCES_SOURCE_DIR"
+  local instances_dir="$KGSM_INSTANCES_DIR"
 
   if [[ ! -d "$instances_dir" ]]; then
     echo "no_conflicts"
@@ -420,7 +420,7 @@ export -f __logic_test_port_accessibility
 #   EC_SUCCESS_NETWORK_PORT_CHECKED - Tests completed (echoes results)
 #   EC_MISSING_DEPENDENCY - Required tools not available
 function __logic_test_all_instance_ports() {
-  local instances_dir="$INSTANCES_SOURCE_DIR"
+  local instances_dir="$KGSM_INSTANCES_DIR"
 
   if [[ ! -d "$instances_dir" ]]; then
     echo "no_instances"

@@ -38,15 +38,15 @@ function setup_test() {
   assert_not_null "$EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED" "EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED should be defined"
 
   # Verify blueprint directories exist
-  assert_dir_exists "$BLUEPRINTS_NATIVE_DEFAULT_DIR" "Native default blueprints should exist"
-  assert_dir_exists "$BLUEPRINTS_CONTAINER_DEFAULT_DIR" "Container default blueprints should exist"
+  assert_dir_exists "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR" "Native default blueprints should exist"
+  assert_dir_exists "$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR" "Container default blueprints should exist"
 
   # Verify test blueprints exist
-  assert_file_exists "$BLUEPRINTS_NATIVE_DEFAULT_DIR/factorio.bp" "Factorio blueprint should exist"
-  assert_file_exists "$BLUEPRINTS_NATIVE_DEFAULT_DIR/terraria.bp" "Terraria blueprint should exist"
-  assert_file_exists "$BLUEPRINTS_NATIVE_DEFAULT_DIR/starbound.bp" "Starbound blueprint should exist"
-  assert_file_exists "$BLUEPRINTS_NATIVE_DEFAULT_DIR/necesse.bp" "Necesse blueprint should exist"
-  assert_file_exists "$BLUEPRINTS_CONTAINER_DEFAULT_DIR/vrising.docker-compose.yml" "VRising blueprint should exist"
+  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/factorio.bp" "Factorio blueprint should exist"
+  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/terraria.bp" "Terraria blueprint should exist"
+  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/starbound.bp" "Starbound blueprint should exist"
+  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/necesse.bp" "Necesse blueprint should exist"
+  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR/vrising.docker-compose.yml" "VRising blueprint should exist"
 
   # Verify logic functions are exported
   assert_function_exists "__logic_get_blueprint_type" "get_blueprint_type should be exported"
@@ -196,7 +196,7 @@ function test_get_blueprint_path_empty_param() {
 function test_get_blueprint_path_permission_denied() {
   log_test_step "Testing __logic_get_blueprint_path with unreadable blueprint"
 
-  local blueprint_path="$BLUEPRINTS_NATIVE_DEFAULT_DIR/necesse.bp"
+  local blueprint_path="$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/necesse.bp"
   local original_perms=$(stat -c "%a" "$blueprint_path")
 
   # Make unreadable
@@ -304,7 +304,7 @@ function test_find_native_blueprint_priority() {
   log_test_step "Testing __logic_find_native_blueprint custom > default priority"
 
   # Create custom blueprint
-  local custom_blueprint="$BLUEPRINTS_NATIVE_CUSTOM_DIR/test-priority.bp"
+  local custom_blueprint="$KGSM_USER_BLUEPRINTS_NATIVE_DIR/test-priority.bp"
   cat > "$custom_blueprint" << EOF
 name=test-priority
 executable_file=test.sh
@@ -356,7 +356,7 @@ function test_list_native_blueprints_custom() {
   log_test_step "Testing __logic_list_native_blueprints with 'custom' source"
 
   # Create a custom blueprint
-  local custom_bp="$BLUEPRINTS_NATIVE_CUSTOM_DIR/test-custom.bp"
+  local custom_bp="$KGSM_USER_BLUEPRINTS_NATIVE_DIR/test-custom.bp"
   cat > "$custom_bp" << EOF
 name=test-custom
 executable_file=test.sh
@@ -469,7 +469,7 @@ function test_get_native_blueprint_info_empty_param() {
 function test_get_native_blueprint_info_permission_denied() {
   log_test_step "Testing __logic_get_native_blueprint_info with unreadable blueprint"
 
-  local blueprint_path="$BLUEPRINTS_NATIVE_DEFAULT_DIR/terraria.bp"
+  local blueprint_path="$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/terraria.bp"
   local original_perms=$(stat -c "%a" "$blueprint_path")
 
   # Make unreadable
@@ -654,7 +654,7 @@ function test_get_container_blueprint_info_output_format() {
 function test_get_container_blueprint_info_permission_denied() {
   log_test_step "Testing __logic_get_container_blueprint_info with unreadable blueprint"
 
-  local blueprint_path="$BLUEPRINTS_CONTAINER_DEFAULT_DIR/vrising.docker-compose.yml"
+  local blueprint_path="$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR/vrising.docker-compose.yml"
   local original_perms=$(stat -c "%a" "$blueprint_path")
 
   # Make unreadable

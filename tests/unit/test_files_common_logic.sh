@@ -280,7 +280,7 @@ function test_inject_overrides_malformed_override_file() {
   create_mock_management_script "$mgmt_script" "_get_latest_version"
 
   # Create malformed override file (syntax error)
-  local override_file="$OVERRIDES_SOURCE_DIR/factorio.overrides.sh"
+  local override_file="$KGSM_SYSTEM_OVERRIDES_DIR/factorio.overrides.sh"
   local override_backup="${override_file}.backup.$$"
 
   # Backup real override file

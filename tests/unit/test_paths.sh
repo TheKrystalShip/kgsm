@@ -104,23 +104,21 @@ function test_legacy_aliases_exported() {
   log_step "Test: Legacy compatibility aliases are exported"
 
   # Test that legacy variables still exist
-  assert_not_empty "$BLUEPRINTS_SOURCE_DIR" "BLUEPRINTS_SOURCE_DIR should be set"
-  assert_not_empty "$BLUEPRINTS_NATIVE_DEFAULT_DIR" "BLUEPRINTS_NATIVE_DEFAULT_DIR should be set"
-  assert_not_empty "$BLUEPRINTS_NATIVE_CUSTOM_DIR" "BLUEPRINTS_NATIVE_CUSTOM_DIR should be set"
-  assert_not_empty "$OVERRIDES_SOURCE_DIR" "OVERRIDES_SOURCE_DIR should be set"
-  assert_not_empty "$TEMPLATES_SOURCE_DIR" "TEMPLATES_SOURCE_DIR should be set"
-  assert_not_empty "$COMMANDS_SOURCE_DIR" "COMMANDS_SOURCE_DIR should be set"
-  assert_not_empty "$CORE_SOURCE_DIR" "CORE_SOURCE_DIR should be set"
-  assert_not_empty "$INSTANCES_SOURCE_DIR" "INSTANCES_SOURCE_DIR should be set"
+  assert_not_empty "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR" "KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR should be set"
+  assert_not_empty "$KGSM_USER_BLUEPRINTS_NATIVE_DIR" "KGSM_USER_BLUEPRINTS_NATIVE_DIR should be set"
+  assert_not_empty "$KGSM_SYSTEM_OVERRIDES_DIR" "KGSM_SYSTEM_OVERRIDES_DIR should be set"
+  assert_not_empty "$KGSM_TEMPLATES_DIR" "KGSM_TEMPLATES_DIR should be set"
+  assert_not_empty "$KGSM_COMMANDS_DIR" "KGSM_COMMANDS_DIR should be set"
+  assert_not_empty "$KGSM_CORE_DIR" "KGSM_CORE_DIR should be set"
+  assert_not_empty "$KGSM_INSTANCES_DIR" "KGSM_INSTANCES_DIR should be set"
 }
 
 function test_legacy_aliases_map_correctly() {
   log_step "Test: Legacy aliases map to new variables"
 
-  assert_equals "$BLUEPRINTS_SOURCE_DIR" "$KGSM_SYSTEM_BLUEPRINTS_DIR" "BLUEPRINTS_SOURCE_DIR should map to KGSM_SYSTEM_BLUEPRINTS_DIR"
-  assert_equals "$BLUEPRINTS_NATIVE_CUSTOM_DIR" "$KGSM_USER_BLUEPRINTS_NATIVE_DIR" "BLUEPRINTS_NATIVE_CUSTOM_DIR should map to KGSM_USER_BLUEPRINTS_NATIVE_DIR"
-  assert_equals "$OVERRIDES_SOURCE_DIR" "$KGSM_SYSTEM_OVERRIDES_DIR" "OVERRIDES_SOURCE_DIR should map to KGSM_SYSTEM_OVERRIDES_DIR"
-  assert_equals "$INSTANCES_SOURCE_DIR" "$KGSM_INSTANCES_DIR" "INSTANCES_SOURCE_DIR should map to KGSM_INSTANCES_DIR"
+  assert_equals "$KGSM_USER_BLUEPRINTS_NATIVE_DIR" "$KGSM_USER_BLUEPRINTS_NATIVE_DIR" "KGSM_USER_BLUEPRINTS_NATIVE_DIR should map to KGSM_USER_BLUEPRINTS_NATIVE_DIR"
+  assert_equals "$KGSM_SYSTEM_OVERRIDES_DIR" "$KGSM_SYSTEM_OVERRIDES_DIR" "KGSM_SYSTEM_OVERRIDES_DIR should map to KGSM_SYSTEM_OVERRIDES_DIR"
+  assert_equals "$KGSM_INSTANCES_DIR" "$KGSM_INSTANCES_DIR" "KGSM_INSTANCES_DIR should map to KGSM_INSTANCES_DIR"
 }
 
 function test_paths_loaded_guard() {

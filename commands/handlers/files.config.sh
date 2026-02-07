@@ -52,7 +52,7 @@ function __logic_install_standalone_config() {
   fi
 
   local instance_config_standalone="${_instance_working_dir}/${_instance_name}.config.ini"
-  local instance_symlink_dir="${INSTANCES_SOURCE_DIR}/${blueprint_name}/${_instance_name}"
+  local instance_symlink_dir="${KGSM_INSTANCES_DIR}/${blueprint_name}/${_instance_name}"
 
   # Copy the config file to the instance working directory (becomes source of truth)
   if ! cp -f "$_instance_config_file" "$instance_config_standalone" 2> /dev/null; then
@@ -102,7 +102,7 @@ function __logic_uninstall_standalone_config() {
   fi
 
   local instance_config_standalone="${_instance_working_dir}/${_instance_name}.config.ini"
-  local instance_symlink_dir="${INSTANCES_SOURCE_DIR}/${blueprint_name}/${_instance_name}"
+  local instance_symlink_dir="${KGSM_INSTANCES_DIR}/${blueprint_name}/${_instance_name}"
 
   # Remove KGSM directory symlink if it exists
   if [[ -L "$instance_symlink_dir" ]]; then
