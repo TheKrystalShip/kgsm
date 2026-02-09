@@ -791,12 +791,21 @@ function _cmd_find() {
 
 function _cmd_generate_id() {
   local blueprint=""
+  local custom_name=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -h | --help | help)
         show_usage_generate_id
         return 0
+        ;;
+      --name)
+        shift
+        if [[ -z "$1" ]]; then
+          __print_error "Missing argument for --name"
+          return $EC_MISSING_ARG
+        fi
+        custom_name="$1"
         ;;
       -*)
         __print_error "Invalid option for generate-id command: $1"
@@ -827,7 +836,17 @@ function _cmd_generate_id() {
   local blueprint_name
   blueprint_name="$(__extract_blueprint_name "$blueprint")"
 
-  # Call logic function
+  # If custom name provided, validate it's unique and return it
+  if [[ -n "$custom_name" ]]; then
+    if __logic_instance_config_exists "$custom_name" "$blueprint_name"; then
+      __print_error "Instance '$custom_name' already exists for blueprint '$blueprint_name'"
+      return $EC_INVALID_INSTANCE
+    fi
+    echo "$custom_name"
+    return 0
+  fi
+
+  # Otherwise, generate unique name
   __logic_generate_unique_instance_name "$blueprint_name"
 }
 

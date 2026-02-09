@@ -30,7 +30,7 @@ function __logic_generate_unique_instance_name() {
   fi
 
   # If no instance with the same name as the blueprint exists, use blueprint name
-  if [[ ! -f "$KGSM_INSTANCES_DIR/$blueprint_name/${blueprint_name}.ini" ]]; then
+  if [[ ! -f "$KGSM_INSTANCES_DIR/${blueprint_name}/${blueprint_name}/${blueprint_name}.config.ini" ]]; then
     echo "$blueprint_name"
     return 0
   fi
@@ -41,7 +41,7 @@ function __logic_generate_unique_instance_name() {
     _instance_name=$(tr -dc 0-9 </dev/urandom | head -c "${config_instance_suffix_length:-2}")
     _instance_name="${blueprint_name}-${_instance_name}"
 
-    if [[ ! -f "$KGSM_INSTANCES_DIR/$blueprint_name/${_instance_name}.ini" ]]; then
+    if [[ ! -f "$KGSM_INSTANCES_DIR/$blueprint_name/${_instance_name}/${_instance_name}.config.ini" ]]; then
       echo "$_instance_name"
       return 0
     fi
@@ -61,20 +61,7 @@ function __logic_instance_config_exists() {
     return $EC_INVALID_ARG
   fi
 
-  # Strip .ini suffix if present
-  _instance_name="${_instance_name%.ini}"
-
-  local instance_dir_path="${KGSM_INSTANCES_DIR}/${blueprint_name}"
-
-  # Check for directory symlink (instance fully created)
-  local instance_symlink_dir="${instance_dir_path}/${_instance_name}"
-  if [[ -L "$instance_symlink_dir" && -d "$instance_symlink_dir" ]]; then
-    return 0
-  fi
-
-  # Check for temporary .ini file (instance creation in progress)
-  local instance_config_file="${instance_dir_path}/${_instance_name}.ini"
-  if [[ -f "$instance_config_file" ]]; then
+  if [[ -f "${KGSM_INSTANCES_DIR}/${blueprint_name}/${_instance_name}/${_instance_name}.config.ini" ]]; then
     return 0
   fi
 
@@ -90,21 +77,24 @@ function __logic_create_instance_config_file() {
   local _instance_name="$1"
   local blueprint_name="$2"
 
-
   if [[ -z "$_instance_name" || -z "$blueprint_name" ]]; then
     return $EC_INVALID_ARG
   fi
 
-  # Create instance directory
-  local instance_dir_path="${KGSM_INSTANCES_DIR}/${blueprint_name}"
-  if ! __create_dir "$instance_dir_path" >/dev/null 2>&1; then
-    return $EC_FAILED_MKDIR
+  # The instance directory at $KGSM_INSTANCES_DIR/$blueprint_name/$instance_name
+  # should already exist as a symlink to the actual working directory
+  local instance_dir_path="${KGSM_INSTANCES_DIR}/${blueprint_name}/${_instance_name}"
+
+  # Verify the instance directory exists (either as directory or symlink)
+  if [[ ! -e "$instance_dir_path" ]]; then
+    return $EC_DIRECTORY_NOT_FOUND
   fi
 
-  # Create instance config file
+  # Create instance config file inside the instance directory
+  # (which resolves through symlink to the actual working directory)
   local instance_config_file="${instance_dir_path}/${_instance_name}.config.ini"
   if ! __create_file "$instance_config_file" >/dev/null 2>&1; then
-    return $EC_FAILED_CREATE_FILE
+    return $EC_FAILED_TOUCH
   fi
 
   echo "$instance_config_file"
@@ -136,7 +126,10 @@ function __logic_create_base_instance() {
   # Set instance variables
   export _instance_name=$_instance_name
   export instance_blueprint_file=$blueprint_abs_path
-  export instance_working_dir="${install_dir}/${_instance_name}"
+
+  local instance_blueprint_name
+  instance_blueprint_name="$(__extract_blueprint_name "$blueprint_abs_path")"
+  export instance_working_dir="${install_dir}/${instance_blueprint_name}/${_instance_name}"
 
   # shellcheck disable=SC2155
   export instance_install_datetime="$(date +"%Y-%m-%dT%H:%M:%S")"

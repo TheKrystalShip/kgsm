@@ -186,9 +186,6 @@ function _cmd_create() {
   # Create management file
   files.management.sh create "$instance_name" || return $?
 
-  # Install standalone config
-  files.config.sh install "$instance_name" || return $?
-
   # When creating files, we read the $config_ variables from the KGSM config file.
   # This is necessary to determine if we need to create systemd service files,
   # the firewall rules, or command shortcuts.
@@ -334,10 +331,6 @@ case "$command" in
     ;;
   management)
     files.management.sh "$@"
-    exit $?
-    ;;
-  config)
-    files.config.sh "$@"
     exit $?
     ;;
   systemd)

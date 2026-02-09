@@ -147,6 +147,7 @@ function _cmd_enable() {
   fi
 
   __print_info "Enabling command shortcut integration for instance '$instance_name'..."
+  __print_info "This might ask for your password if elevated permissions are required to create symlinks in the shortcuts directory."
 
   # Call logic function
   __logic_enable_symlink_integration "$instance_config_file"
@@ -227,6 +228,7 @@ function _cmd_disable() {
   fi
 
   __print_info "Disabling command shortcut integration for instance '$instance_name'..."
+  __print_info "This might ask for your password if elevated permissions are required to remove symlinks from the shortcuts directory."
 
   # Call logic function
   __logic_disable_symlink_integration "$instance_config_file"

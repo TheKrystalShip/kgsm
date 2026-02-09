@@ -75,11 +75,20 @@ function _uninstall() {
     return $EC_MISSING_ARG
   fi
 
-  # Validate instance exists before proceeding
-  if ! validate_instance_name "$instance" > /dev/null 2>&1; then
+  # Validate instance exists before proceeding and resolve blueprint name
+  local instance_config_file
+  if ! instance_config_file=$(validate_instance_name "$instance"); then
     __print_error "Instance '$instance' not found"
     return $EC_INSTANCE_NOT_FOUND
   fi
+
+  # Extract blueprint name from config file path before any destructive operations
+  # Path structure: $KGSM_INSTANCES_DIR/<blueprint>/<instance>/<instance>.config.ini
+  local blueprint_name
+  blueprint_name="$(basename "$(dirname "$(dirname "$instance_config_file")")")" || {
+    __print_error "Failed to determine blueprint name for instance '$instance'"
+    return $EC_GENERAL
+  }
 
   # Warning message about destructive operation
   __print_warning "This operation is destructive and irreversible."
@@ -112,16 +121,17 @@ function _uninstall() {
 
   # Remove directory structure
   directories.sh remove "$instance" || {
+    exit_code=$?
     __print_error "Failed to remove instance directories"
     events.sh emit instance-uninstall-failed "${instance}"
-    return $?
+    return $exit_code
   }
 
-  # Remove instance configuration
-  instances.sh remove "$instance" || {
-    __print_error "Failed to remove instance configuration"
-    events.sh emit instance-uninstall-failed "${instance}"
-    return $?
+  # Remove KGSM's reference to the instance (symlink in instances directory)
+  directories.sh unlink-instance "$blueprint_name" "$instance" || {
+    exit_code=$?
+    __print_error "Failed to unlink instance directories (may be already unlinked)"
+    return $exit_code
   }
 
   events.sh emit instance-uninstall-finished "${instance}"

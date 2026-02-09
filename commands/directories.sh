@@ -24,6 +24,11 @@ ${UNDERLINE}Commands:${END}
                               directories.
   remove <instance>           Remove directory structure for an instance.
                               Warning: This will delete all instance data.
+  link-instance <blueprint> <instance> <working-dir>
+                              Create symlink from KGSM instances directory
+                              to instance working directory.
+  unlink-instance <blueprint> <instance>
+                              Remove symlink from KGSM instances directory.
   ensure-created <path>       Ensure the specified directory path exists,
                               creating it if necessary.
   help [command]              Display help information.
@@ -120,6 +125,64 @@ ${UNDERLINE}Options:${END}
 ${UNDERLINE}Examples:${END}
   ${self} ensure-created /var/kgsm/instances/minecraft-server
   ${self} ensure-created /opt/kgsm/backups
+"
+}
+
+function show_usage_link_instance() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Link Instance${END}
+
+Create a symlink from KGSM's instances directory to the instance working directory.
+
+${UNDERLINE}Usage:${END}
+  ${self} link-instance <blueprint> <instance> <working-dir>
+
+${UNDERLINE}Arguments:${END}
+  <blueprint>                 Blueprint name (required)
+  <instance>                  Instance name (required)
+  <working-dir>               Instance working directory path (required)
+
+${UNDERLINE}Options:${END}
+  -h | --help                 Display this help information
+
+${UNDERLINE}Description:${END}
+Creates a symlink at \$KGSM_INSTANCES_DIR/<blueprint>/<instance> that points
+to the instance's working directory. This allows KGSM to track instances
+regardless of where they are physically installed.
+
+${UNDERLINE}Examples:${END}
+  ${self} link-instance factorio factorio-01 /opt/servers/factorio-01
+  ${self} link-instance minecraft mc-server /home/user/servers/mc-server
+"
+}
+
+function show_usage_unlink_instance() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Unlink Instance${END}
+
+Remove the symlink from KGSM's instances directory.
+
+${UNDERLINE}Usage:${END}
+  ${self} unlink-instance <blueprint> <instance>
+
+${UNDERLINE}Arguments:${END}
+  <blueprint>                 Blueprint name (required)
+  <instance>                  Instance name (required)
+
+${UNDERLINE}Options:${END}
+  -h | --help                 Display this help information
+
+${UNDERLINE}Description:${END}
+Removes the symlink at \$KGSM_INSTANCES_DIR/<blueprint>/<instance>. This
+does not delete the actual instance files, only the tracking symlink.
+
+${UNDERLINE}Examples:${END}
+  ${self} unlink-instance factorio factorio-01
+  ${self} unlink-instance minecraft mc-server
 "
 }
 
@@ -308,6 +371,133 @@ function _cmd_ensure_created() {
   esac
 }
 
+function _cmd_link_instance() {
+  local blueprint_name=""
+  local instance_name=""
+  local working_dir=""
+
+  # Parse link-instance command options
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+      -h | --help | help)
+        show_usage_link_instance
+        return 0
+        ;;
+      -*)
+        __print_error "Invalid option for link-instance command: $1"
+        exit $EC_INVALID_ARG
+        ;;
+      *)
+        if [[ -z "$blueprint_name" ]]; then
+          blueprint_name="$1"
+        elif [[ -z "$instance_name" ]]; then
+          instance_name="$1"
+        elif [[ -z "$working_dir" ]]; then
+          working_dir="$1"
+        else
+          __print_error "Too many arguments"
+          exit $EC_INVALID_ARG
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  # Validate required parameters
+  if [[ -z "$blueprint_name" ]]; then
+    __print_error "Missing required argument: <blueprint>"
+    __print_error "Use '${self} link-instance --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  if [[ -z "$instance_name" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '${self} link-instance --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  if [[ -z "$working_dir" ]]; then
+    __print_error "Missing required argument: <working-dir>"
+    __print_error "Use '${self} link-instance --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  # Call pure logic function
+  local exit_code
+  __logic_create_instance_symlink "$blueprint_name" "$instance_name" "$working_dir"
+  exit_code=$?
+
+  # Handle result based on exit code
+  case $exit_code in
+    $EC_SUCCESS)
+      exit 0
+      ;;
+    *)
+      __print_error "Failed to create instance symlink"
+      exit $exit_code
+      ;;
+  esac
+}
+
+function _cmd_unlink_instance() {
+  local blueprint_name=""
+  local instance_name=""
+
+  # Parse unlink-instance command options
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+      -h | --help | help)
+        show_usage_unlink_instance
+        return 0
+        ;;
+      -*)
+        __print_error "Invalid option for unlink-instance command: $1"
+        exit $EC_INVALID_ARG
+        ;;
+      *)
+        if [[ -z "$blueprint_name" ]]; then
+          blueprint_name="$1"
+        elif [[ -z "$instance_name" ]]; then
+          instance_name="$1"
+        else
+          __print_error "Too many arguments"
+          exit $EC_INVALID_ARG
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  # Validate required parameters
+  if [[ -z "$blueprint_name" ]]; then
+    __print_error "Missing required argument: <blueprint>"
+    __print_error "Use '${self} unlink-instance --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  if [[ -z "$instance_name" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '${self} unlink-instance --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  # Call pure logic function
+  local exit_code
+  __logic_remove_instance_symlink "$blueprint_name" "$instance_name"
+  exit_code=$?
+
+  # Handle result based on exit code
+  case $exit_code in
+    $EC_SUCCESS)
+      exit 0
+      ;;
+    *)
+      __print_error "Failed to remove instance symlink"
+      exit $exit_code
+      ;;
+  esac
+}
+
 function _cmd_help() {
   local command="$1"
 
@@ -322,6 +512,12 @@ function _cmd_help() {
       ;;
     remove)
       show_usage_remove
+      ;;
+    link-instance)
+      show_usage_link_instance
+      ;;
+    unlink-instance)
+      show_usage_unlink_instance
       ;;
     ensure-created)
       show_ensure_created_usage
@@ -354,6 +550,14 @@ case "$command" in
     ;;
   remove)
     _cmd_remove "$@"
+    exit $?
+    ;;
+  link-instance)
+    _cmd_link_instance "$@"
+    exit $?
+    ;;
+  unlink-instance)
+    _cmd_unlink_instance "$@"
     exit $?
     ;;
   ensure-created)

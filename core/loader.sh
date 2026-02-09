@@ -20,7 +20,7 @@ function __find_or_fail() {
   file_path="$(find "$source" \( -type f -o -type l \) -name "$file_name" -print -quit)"
 
   if [[ -z "$file_path" ]]; then
-    __print_error "Could not find $file_name in $source"
+    __print_debug "Could not find $file_name in $source"
     exit $EC_FILE_NOT_FOUND
   fi
 
@@ -186,32 +186,26 @@ function __find_instance_config() {
   local instance=$1
 
   # Ensure the instance name has the .config.ini extension for exact matching.
-  [[ "$instance" != *.config.ini ]] && instance="${instance}.config.ini"
+  local config_filename="${instance}.config.ini"
+  [[ "$instance" == *.config.ini ]] && config_filename="$instance"
 
-  # Find directory symlinks matching the instance name
-  # The structure is: $KGSM_INSTANCES_DIR/<blueprint>/<instance>/
-  local instance_dir
-  instance_dir="$(find "$KGSM_INSTANCES_DIR" -maxdepth 2 -mindepth 2 -type f -name "$instance" -print -quit)"
+  # Find config files in the instance directories (through symlinks)
+  # The structure is: $KGSM_INSTANCES_DIR/<blueprint>/<instance>/<instance>.config.ini
+  # where <instance> is a symlink to the actual working directory
+  # Use -L to follow symbolic links during traversal
+  local config_file
+  config_file="$(find -L "$KGSM_INSTANCES_DIR" -maxdepth 3 -mindepth 1 -type f -name "$config_filename" -print -quit)"
 
   __print_debug "KGSM_INSTANCES_DIR: $KGSM_INSTANCES_DIR"
-  __print_debug "Looking for instance config '$instance' in $KGSM_INSTANCES_DIR..."
-  __print_debug "Found instance config at: $instance_dir"
+  __print_debug "Looking for instance config '$config_filename' in $KGSM_INSTANCES_DIR..."
+  __print_debug "Found instance config at: $config_file"
 
-  if [[ -z "$instance_dir" ]]; then
-    __print_debug "Could not find instance directory for '$instance' in $KGSM_INSTANCES_DIR"
+  if [[ -z "$config_file" ]]; then
+    __print_debug "Could not find instance config '$config_filename' in $KGSM_INSTANCES_DIR"
     exit $EC_FILE_NOT_FOUND
   fi
 
-  # Verify the symlink resolves to a valid directory
-  if [[ ! -d "$instance_dir" ]]; then
-    __print_debug "Instance directory for '$instance' exists but does not resolve to a valid directory (broken symlink?)"
-    exit $EC_FILE_NOT_FOUND
-  fi
-
-  # Construct path to config file inside the directory
-  local config_file="${instance_dir}/${instance}"
-
-  # Verify config file exists
+  # Verify config file exists and is readable
   if [[ ! -f "$config_file" ]]; then
     __print_error "Config file not found at '$config_file'"
     exit $EC_FILE_NOT_FOUND

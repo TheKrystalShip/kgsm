@@ -122,20 +122,43 @@ function _cmd_install() {
     return $?
   }
 
+  # Generate instance name early (before any config/file creation)
   local instance
-
-  # Create instance configuration
-  instance="$(instances.sh create "$blueprint" --install-dir "$install_dir" ${identifier:+--name $identifier})" || {
+  instance="$(instances.sh generate-id "$blueprint" ${identifier:+--name $identifier})" || {
     exit_code=$?
-    __print_error "Failed to create instance configuration"
+    __print_error "Failed to generate instance identifier"
     return $exit_code
   }
 
-  local exit_code=$?
-  if [[ $exit_code -ne 0 ]]; then
+  # Calculate working directory path
+  local working_dir="${install_dir}/${blueprint}/${instance}"
+
+  # Create the working directory first (symlink target must exist)
+  directories.sh ensure-created "$working_dir" || {
+    __print_error "Failed to create instance working directory: $working_dir"
+    return $?
+  }
+
+  # Create symlink from KGSM instances directory to working directory
+  # This must happen before instance config creation so the config can be
+  # written through the symlink into the actual working directory
+  directories.sh link-instance "$blueprint" "$instance" "$working_dir" || {
+    __print_error "Failed to create instance symlink"
+    return $?
+  }
+
+  # Create instance configuration (name is now pre-determined)
+  # Config will be created at $KGSM_INSTANCES_DIR/$blueprint/$instance/$instance.config.ini
+  # which resolves through the symlink to $working_dir/$instance.config.ini
+  instance="$(instances.sh create "$blueprint" --install-dir "$install_dir" --name "$instance")" || {
+    exit_code=$?
     __print_error "Failed to create instance configuration"
+    # Clean up on failure
+    directories.sh unlink-instance "$blueprint" "$instance" 2>/dev/null || true
+    rm -rf "$working_dir" 2>/dev/null || true
     return $exit_code
-  fi
+  }
+
 
   # Emit after the instance has been created, so we can use the identifier
   events.sh emit instance-installation-started "${instance}" "${blueprint}"

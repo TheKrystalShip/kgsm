@@ -23,6 +23,7 @@ if test -t 1; then
     export COLOR_GREEN="\033[0;32m"
     export COLOR_ORANGE="\033[0;33m"
     export COLOR_BLUE="\033[0;34m"
+    export COLOR_MAGENTA="\033[0;35m"
     export COLOR_END="\033[0m"
   else
     # Fallback: no colors
@@ -30,6 +31,7 @@ if test -t 1; then
     export COLOR_GREEN=""
     export COLOR_ORANGE=""
     export COLOR_BLUE=""
+    export COLOR_MAGENTA=""
     export COLOR_END=""
   fi
 fi
@@ -38,6 +40,7 @@ export LOG_LEVEL_SUCCESS="SUCCESS"
 export LOG_LEVEL_INFO="INFO"
 export LOG_LEVEL_WARNING="WARNING"
 export LOG_LEVEL_ERROR="ERROR"
+export LOG_LEVEL_DEBUG="DEBUG"
 
 # Initialize logging variables (will be set properly when paths.sh is loaded)
 export LOGS_SOURCE_DIR=""
@@ -61,7 +64,7 @@ function __log_message() {
 
   # Validate log level
   case "$log_level" in
-    "$LOG_LEVEL_SUCCESS"|"$LOG_LEVEL_INFO"|"$LOG_LEVEL_WARNING"|"$LOG_LEVEL_ERROR")
+    "$LOG_LEVEL_SUCCESS"|"$LOG_LEVEL_INFO"|"$LOG_LEVEL_WARNING"|"$LOG_LEVEL_ERROR"|"$LOG_LEVEL_DEBUG")
       ;;
     *)
       echo "ERROR: Invalid log level: $log_level" >&2
@@ -104,6 +107,7 @@ function __log_message() {
     ["$LOG_LEVEL_INFO"]="$COLOR_BLUE"
     ["$LOG_LEVEL_WARNING"]="$COLOR_ORANGE"
     ["$LOG_LEVEL_ERROR"]="$COLOR_RED"
+    ["$LOG_LEVEL_DEBUG"]="$COLOR_MAGENTA"
   )
 
   # Get the color for the log level (with fallback)
@@ -141,16 +145,18 @@ function __log_message() {
     fi
   fi
 
-  # Output to console with error handling
-  if [[ "$log_level" = "$LOG_LEVEL_ERROR" ]]; then
-    if ! echo -e "$printable_log_entry" >&2; then
-      # Fallback without colors if echo -e fails
-      echo "[$log_level] $full_message" >&2
-    fi
-  else
-    if ! echo -e "$printable_log_entry"; then
-      # Fallback without colors if echo -e fails
-      echo "[$log_level] $full_message"
+  # Output to console (skip for DEBUG level)
+  if [[ "$log_level" != "$LOG_LEVEL_DEBUG" ]]; then
+    if [[ "$log_level" = "$LOG_LEVEL_ERROR" ]]; then
+      if ! echo -e "$printable_log_entry" >&2; then
+        # Fallback without colors if echo -e fails
+        echo "[$log_level] $full_message" >&2
+      fi
+    else
+      if ! echo -e "$printable_log_entry"; then
+        # Fallback without colors if echo -e fails
+        echo "[$log_level] $full_message"
+      fi
     fi
   fi
 }
@@ -159,7 +165,7 @@ function __log_message() {
 function __log_message_file_only() {
   local log_level="$1"
   local message="$2"
-  local custom_log_file="$3"
+  local custom_log_file="${3:-$KGSM_LOG_FILE}"
 
   # Input validation
   if [[ -z "$log_level" ]]; then
@@ -179,7 +185,7 @@ function __log_message_file_only() {
 
   # Validate log level
   case "$log_level" in
-    "$LOG_LEVEL_SUCCESS"|"$LOG_LEVEL_INFO"|"$LOG_LEVEL_WARNING"|"$LOG_LEVEL_ERROR")
+    "$LOG_LEVEL_SUCCESS"|"$LOG_LEVEL_INFO"|"$LOG_LEVEL_WARNING"|"$LOG_LEVEL_ERROR"|"$LOG_LEVEL_DEBUG")
       ;;
     *)
       echo "ERROR: Invalid log level: $log_level" >&2
@@ -246,6 +252,16 @@ function __log_message_file_only() {
 
 export -f __log_message
 export -f __log_message_file_only
+
+function __print_debug() {
+  if [[ $# -eq 0 ]]; then
+    echo "ERROR: __print_debug requires a message argument" >&2
+    return $EC_INVALID_ARG
+  fi
+  __log_message "$LOG_LEVEL_DEBUG" "$*"
+}
+
+export -f __print_debug
 
 function __print_error() {
   if [[ $# -eq 0 ]]; then

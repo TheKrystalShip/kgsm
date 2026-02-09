@@ -193,6 +193,94 @@ function __logic_remove_directories() {
 
 export -f __logic_remove_directories
 
+# Creates a symlink from KGSM's instances directory to the actual working directory
+# Args: $1 = blueprint_name, $2 = instance_name, $3 = working_dir
+# Returns: EC_SUCCESS on success, error codes on failure
+function __logic_create_instance_symlink() {
+  local blueprint_name="$1"
+  local instance_name="$2"
+  local working_dir="$3"
+
+  # Validate required parameters
+  if [[ -z "$blueprint_name" || -z "$instance_name" || -z "$working_dir" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  # Ensure working_dir is an absolute path
+  if [[ ! "$working_dir" = /* ]]; then
+    return $EC_INVALID_CONFIG
+  fi
+
+  # Calculate symlink paths
+  local symlink_parent_dir="${KGSM_INSTANCES_DIR}/${blueprint_name}"
+  local symlink_path="${symlink_parent_dir}/${instance_name}"
+
+  # Create parent directory for blueprint if it doesn't exist
+  if ! __create_dir "$symlink_parent_dir" >/dev/null 2>&1; then
+    return $EC_FAILED_MKDIR
+  fi
+
+  # Check if symlink already exists
+  if [[ -L "$symlink_path" ]]; then
+    # Symlink exists - check if it points to the correct location
+    local current_target
+    current_target="$(readlink -f "$symlink_path")"
+    if [[ "$current_target" != "$working_dir" ]]; then
+      # Symlink points to wrong location - remove and recreate
+      rm -f "$symlink_path" 2>/dev/null || return $EC_FAILED_RM
+    else
+      # Symlink already correct - nothing to do
+      return $EC_SUCCESS
+    fi
+  elif [[ -e "$symlink_path" ]]; then
+    # Path exists but is not a symlink - error
+    return $EC_ERROR
+  fi
+
+  # Create the symlink
+  if ! ln -s "$working_dir" "$symlink_path" 2>/dev/null; then
+    return $EC_FAILED_LN
+  fi
+
+  return $EC_SUCCESS
+}
+
+export -f __logic_create_instance_symlink
+
+# Removes a symlink from KGSM's instances directory
+# Args: $1 = blueprint_name, $2 = instance_name
+# Returns: EC_SUCCESS on success, error codes on failure
+function __logic_remove_instance_symlink() {
+  local blueprint_name="$1"
+  local instance_name="$2"
+
+  # Validate required parameters
+  if [[ -z "$blueprint_name" || -z "$instance_name" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  # Calculate symlink path
+  local symlink_path="${KGSM_INSTANCES_DIR}/${blueprint_name}/${instance_name}"
+
+  # Check if symlink exists
+  if [[ ! -L "$symlink_path" ]]; then
+    # Symlink doesn't exist - success (idempotent)
+    return $EC_SUCCESS
+  fi
+
+  # Remove the symlink
+  if ! rm -f "$symlink_path" 2>/dev/null; then
+    return $EC_FAILED_RM
+  fi
+
+  # Try to remove parent directory if empty
+  rmdir "${KGSM_INSTANCES_DIR}/${blueprint_name}" 2>/dev/null || true
+
+  return $EC_SUCCESS
+}
+
+export -f __logic_remove_instance_symlink
+
 # Mark module as loaded
 declare -g KGSM_LOGIC_DIRECTORIES_LOADED=1
 export KGSM_LOGIC_DIRECTORIES_LOADED
