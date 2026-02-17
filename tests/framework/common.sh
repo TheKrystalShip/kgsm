@@ -102,10 +102,7 @@ __load_module "execution.sh" "Execution Module" || return 1
 # 8. Assertion module (independent utility)
 __load_module "assert.sh" "Assertion Module" || return 1
 
-# 9. Fixtures module (independent utility)
-__load_module "fixtures.sh" "Fixtures Module" || return 1
-
-# 10. KGSM wrapper module (provides KGSM-specific test utilities)
+# 9. KGSM wrapper module (provides KGSM-specific test utilities)
 __load_module "kgsm.wrapper.sh" "KGSM Wrapper Module" || return 1
 
 # ============================================================================
@@ -132,7 +129,7 @@ if [[ "${TEST_DEBUG:-false}" == "true" ]]; then
   echo "  - discovery.sh:           ${TEST_DISCOVERY_LOADED:-not loaded}" >&2
   echo "  - sandbox.sh:             ${TEST_SANDBOX_LOADED:-not loaded}" >&2
   echo "  - assert.sh:              ${TEST_ASSERT_LOADED:-not loaded}" >&2
-  echo "  - fixtures.sh:            ${TEST_FIXTURES_LOADED:-not loaded}" >&2
+  echo "  - kgsm.wrapper.sh:        ${TEST_KGSM_WRAPPER_LOADED:-not loaded}" >&2
   echo "  - execution.sh:           ${TEST_EXECUTION_LOADED:-not loaded}" >&2
   echo "    - common:               ${TEST_EXECUTION_COMMON_LOADED:-not loaded}" >&2
   echo "    - sequential:           ${TEST_EXECUTION_SEQUENTIAL_LOADED:-not loaded}" >&2
