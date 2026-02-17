@@ -37,10 +37,10 @@ SKIP_<TEST_NAME>=false            # Skip specific test
 | **discovery.sh** | Find/filter tests                          | discover_tests(), should_run_test() |
 | **execution.sh** | Sequential/parallel delegation             | execute_tests()                     |
 | **reporting.sh** | Results and summaries                      | generate_summary()                  |
-| **logging.sh**   | Structured logging (DEBUG/INFO/WARN/ERROR) | log_debug/info/warn/error()         |
-| **assert.sh**    | 50+ assertion functions                    | assert_equals(), assert_true()      |
-| **fixtures.sh**  | Mock test data                             | create_mock_* ()                    |
-| **runner.sh**    | Main orchestrator                          | Coordinate all phases               |
+| **logging.sh**     | Structured logging (DEBUG/INFO/WARN/ERROR) | log_debug/info/warn/error()         |
+| **assert.sh**      | 50+ assertion functions                    | assert_equals(), assert_true()      |
+| **kgsm.wrapper.sh** | Test instance management                   | create_test_instance(), remove_test_instance() |
+| **runner.sh**      | Main orchestrator                          | Coordinate all phases               |
 
 ### Loading Order
 
@@ -48,7 +48,7 @@ SKIP_<TEST_NAME>=false            # Skip specific test
 bootstrap.sh → loader.sh → common.sh → [
     logging.sh, config.sh, reporting.sh,
     discovery.sh, sandbox.sh, execution.sh,
-    assert.sh, fixtures.sh
+    assert.sh, kgsm.wrapper.sh
 ]
 ```
 
@@ -101,6 +101,8 @@ assert_array_contains, assert_array_length
 
 ### Utility Functions
 
+#### Logging and Test Control
+
 ```bash
 # Logging
 log_debug/info/warn/error "message"
@@ -110,12 +112,40 @@ log_test_step "step_name"
 skip_test "reason"
 pass_test "message"
 fail_test "message"
-
-# Fixtures
-create_mock_config()
-create_mock_blueprint "name"
-create_mock_instance "name" "blueprint"
 ```
+
+#### Test Instance Management (kgsm.wrapper.sh)
+
+The framework provides comprehensive instance management utilities:
+
+```bash
+# Automatic instance creation (recommended)
+local instance_name
+instance_name=$(create_test_instance "factorio")  # Auto-generated name
+
+# Custom instance name
+instance_name=$(create_test_instance "factorio" "my_custom_name")
+
+# Custom install directory
+instance_name=$(create_test_instance "factorio" "test_instance" "/custom/path")
+
+# Complete instance removal
+remove_test_instance "factorio" "$instance_name"
+remove_test_instance "factorio" "$instance_name" "/custom/path"  # With custom dir
+
+# Manual prerequisite setup (for edge case testing)
+setup_instance_prereqs "factorio" "test_instance" "$TEST_INSTALL_DIR"
+
+# Generate unique test ID
+test_id=$(generate_test_id)          # Default prefix: "test"
+test_id=$(generate_test_id "custom") # Custom prefix: "custom"
+```
+
+**Functions:**
+- `create_test_instance <blueprint> [name] [dir]` - Full instance creation with prereqs
+- `remove_test_instance <blueprint> <name> [dir]` - Complete cleanup (config + symlink + dirs)
+- `setup_instance_prereqs <blueprint> <name> [dir]` - Manual working dir + symlink setup
+- `generate_test_id [prefix]` - Generate unique instance name
 
 ## Debugging
 
