@@ -60,19 +60,19 @@ declare -gr TEST_RUNNER_FILE="${TEST_ROOT}/run.sh"
 # ============================================================================
 
 # KGSM core directories
-declare -gr KGSM_CORE_DIR="${KGSM_ROOT}/core"
-declare -gr KGSM_COMMANDS_DIR="${KGSM_ROOT}/commands"
-declare -gr KGSM_OVERRIDES_DIR="${KGSM_ROOT}/overrides"
-declare -gr KGSM_BLUEPRINTS_DIR="${KGSM_ROOT}/blueprints"
-declare -gr KGSM_TEMPLATES_DIR="${KGSM_ROOT}/templates"
-declare -gr KGSM_INSTANCES_DIR="${KGSM_ROOT}/instances"
+declare -g KGSM_CORE_DIR="${KGSM_ROOT}/core"
+declare -g KGSM_COMMANDS_DIR="${KGSM_ROOT}/commands"
+declare -g KGSM_OVERRIDES_DIR="${KGSM_ROOT}/overrides"
+declare -g KGSM_BLUEPRINTS_DIR="${KGSM_ROOT}/blueprints"
+declare -g KGSM_TEMPLATES_DIR="${KGSM_ROOT}/templates"
+declare -g KGSM_INSTANCES_DIR="${KGSM_ROOT}/instances"
 
 # KGSM core files
-declare -gr KGSM_BOOTSTRAP_FILE="${KGSM_CORE_DIR}/bootstrap.sh"
-declare -gr KGSM_COMMON_FILE="${KGSM_CORE_DIR}/common.sh"
-declare -gr KGSM_LOADER_FILE="${KGSM_CORE_DIR}/loader.sh"
-declare -gr KGSM_CONFIG_FILE="${KGSM_ROOT}/config.ini"
-declare -gr KGSM_MAIN_SCRIPT="${KGSM_ROOT}/kgsm.sh"
+declare -g KGSM_BOOTSTRAP_FILE="${KGSM_CORE_DIR}/bootstrap.sh"
+declare -g KGSM_COMMON_FILE="${KGSM_CORE_DIR}/common.sh"
+declare -g KGSM_LOADER_FILE="${KGSM_CORE_DIR}/loader.sh"
+declare -g KGSM_CONFIG_FILE="${KGSM_ROOT}/config.ini"
+declare -g KGSM_MAIN_SCRIPT="${KGSM_ROOT}/kgsm.sh"
 
 # ============================================================================
 # Path Constants - Sandbox (Runtime-Set)
