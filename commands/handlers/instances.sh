@@ -296,8 +296,11 @@ function __logic_create_instance() {
 
   # Create instance config file
   local instance_config_file
-  if ! instance_config_file="$(__logic_create_instance_config_file "$_instance_name" "$blueprint_name" "$install_dir")"; then
-    return $?
+  instance_config_file="$(__logic_create_instance_config_file "$_instance_name" "$blueprint_name" "$install_dir")"
+  exit_code=$?
+
+  if [[ $exit_code -ne 0 || -z "$instance_config_file" ]]; then
+    return $exit_code
   fi
 
   # Create base instance configuration
