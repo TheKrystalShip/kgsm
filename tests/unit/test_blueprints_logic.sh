@@ -320,7 +320,7 @@ EOF
   rm -f "$custom_blueprint"
 
   assert_equals "$EC_SUCCESS_BLUEPRINT_FOUND" "$exit_code" "Should find custom blueprint"
-  assert_contains "$output" "custom" "Should return custom directory path"
+  assert_contains "$output" "$KGSM_USER_BLUEPRINTS_NATIVE_DIR" "Should return user directory path"
 }
 
 # =============================================================================
