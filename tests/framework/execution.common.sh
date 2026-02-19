@@ -198,7 +198,7 @@ function __parse_assertion_stats() {
 
   # Check if log file exists
   if [[ ! -f "$test_log" ]]; then
-    echo "0 0 0"
+    echo "0 0 0 0"
     return $EC_SUCCESS
   fi
 
@@ -207,38 +207,44 @@ function __parse_assertion_stats() {
   stats_line=$(grep "^KGSM_ASSERT_STATS:" "$test_log" 2>/dev/null | tail -1 || echo "")
 
   if [[ -n "$stats_line" ]]; then
-    # Extract "passed/failed/total" from marker
+    # Extract "passed/failed/total/skipped" from marker
     local stats_value
     stats_value=$(echo "$stats_line" | sed 's/^KGSM_ASSERT_STATS: *//' | tr -d '[:space:]')
 
-    # Parse format: 133/0/133
-    local passed failed total
-    IFS='/' read -r passed failed total <<< "$stats_value"
+    # Parse format: 133/0/133/2 (passed/failed/total/skipped)
+    local passed failed total skipped
+    IFS='/' read -r passed failed total skipped <<< "$stats_value"
+
+    # If skipped is not present, default to 0 (backward compatibility)
+    [[ -z "$skipped" ]] && skipped=0
 
     # Validate extracted values are numbers
-    if [[ "$passed" =~ ^[0-9]+$ ]] && [[ "$failed" =~ ^[0-9]+$ ]] && [[ "$total" =~ ^[0-9]+$ ]]; then
-      echo "$passed $failed $total"
+    if [[ "$passed" =~ ^[0-9]+$ ]] && [[ "$failed" =~ ^[0-9]+$ ]] && [[ "$total" =~ ^[0-9]+$ ]] && [[ "$skipped" =~ ^[0-9]+$ ]]; then
+      echo "$passed $failed $total $skipped"
       return $EC_SUCCESS
     fi
   fi
 
   # Fallback method: Count PASS: and FAIL: markers
-  local passed failed total
+  local passed failed total skipped
   # Look for PASS: anywhere in the line (not just at beginning) to handle bash tracing output
   passed=$(grep -c "PASS:" "$test_log" 2>/dev/null || echo "0")
   failed=$(grep -c "FAIL:" "$test_log" 2>/dev/null || echo "0")
+  skipped=$(grep -c "^\[SKIP\]" "$test_log" 2>/dev/null || echo "0")
 
   # Ensure we have clean numeric values (strip whitespace)
   passed=$(echo "$passed" | tr -d '[:space:]')
   failed=$(echo "$failed" | tr -d '[:space:]')
+  skipped=$(echo "$skipped" | tr -d '[:space:]')
 
   # Validate they are numbers
   [[ ! "$passed" =~ ^[0-9]+$ ]] && passed=0
   [[ ! "$failed" =~ ^[0-9]+$ ]] && failed=0
+  [[ ! "$skipped" =~ ^[0-9]+$ ]] && skipped=0
 
   total=$((passed + failed))
 
-  echo "$passed $failed $total"
+  echo "$passed $failed $total $skipped"
   return $EC_SUCCESS
 }
 export -f __parse_assertion_stats
@@ -514,6 +520,7 @@ function execute_test_in_sandbox() {
   result_array[assertions_passed]="0"
   result_array[assertions_failed]="0"
   result_array[assertions_total]="0"
+  result_array[functions_skipped]="0"
   result_array[duration_seconds]="0"
   result_array[test_log_path]="$test_log"
   result_array[sandbox_path]="$sandbox_path"
@@ -557,7 +564,7 @@ function execute_test_in_sandbox() {
   # Parse assertion statistics from log
   local stats
   stats=$(__parse_assertion_stats "$test_log")
-  read -r passed failed total <<< "$stats"
+  read -r passed failed total skipped <<< "$stats"
 
   # Calculate duration (in milliseconds)
   duration=$(__calculate_duration "$start_time" "$end_time")
@@ -567,6 +574,7 @@ function execute_test_in_sandbox() {
   result_array[assertions_passed]="$passed"
   result_array[assertions_failed]="$failed"
   result_array[assertions_total]="$total"
+  result_array[functions_skipped]="$skipped"
   result_array[duration_seconds]="$duration"
 
   # Restore environment (also happens via trap)

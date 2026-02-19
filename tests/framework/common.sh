@@ -159,13 +159,34 @@ function fail_test() {
 
 export -f fail_test
 
-# Mark test as skipped
+# Mark current test function as skipped
+# NOTE: This function does NOT exit the test file - it only marks the current
+# test function as skipped. The calling function should return immediately after.
+# Usage: skip_test "reason" && return
 function skip_test() {
   local reason="${1:-Test skipped}"
-  log_test_step "SKIP: $reason"
-  printf "${YELLOW}[SKIP]${NC} %s\n" "$reason" >&2
-  # Use literal 33 to avoid KGSM core overwriting EC_SKIP (KGSM uses 35)
-  exit $EC_TEST_SKIP
+  local func_name="${FUNCNAME[1]:-unknown}"
+
+  # Track skipped function (if assert.sh is loaded)
+  if declare -p ASSERT_FUNCTIONS_SKIPPED &>/dev/null; then
+    ((ASSERT_FUNCTIONS_SKIPPED++))
+    ASSERT_SKIPPED_FUNCTION_NAMES+=("$func_name")
+  fi
+
+  # Print skip message to stderr (only if not being captured by test framework)
+  # During test execution, KGSM_LOG_CONSOLE_ENABLED is set to "false" to prevent
+  # duplicate log entries (stderr is captured and appended to log separately)
+  if [[ "${KGSM_LOG_CONSOLE_ENABLED:-true}" == "true" ]]; then
+    printf "${YELLOW}[SKIP]${NC} %s: %s\n" "$func_name" "$reason" >&2
+  fi
+
+  # Write skip marker to test log for reporting
+  if [[ -n "${KGSM_TEST_LOG:-}" ]]; then
+    echo "[SKIP] $func_name: $reason" >>"$KGSM_TEST_LOG"
+  fi
+
+  # Return success so caller can use: skip_test "reason" && return
+  return 0
 }
 
 export -f skip_test

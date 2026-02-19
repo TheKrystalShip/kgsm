@@ -50,6 +50,8 @@ fi
 declare -gi ASSERT_COUNT=0
 declare -gi ASSERT_PASSED=0
 declare -gi ASSERT_FAILED=0
+declare -gi ASSERT_FUNCTIONS_SKIPPED=0
+declare -ga ASSERT_SKIPPED_FUNCTION_NAMES=()
 
 # =============================================================================
 # UTILITY FUNCTIONS
@@ -723,11 +725,15 @@ function reset_assert_stats() {
   ASSERT_COUNT=0
   ASSERT_PASSED=0
   ASSERT_FAILED=0
+  ASSERT_FUNCTIONS_SKIPPED=0
+  ASSERT_SKIPPED_FUNCTION_NAMES=()
 
   # Also reset in case they were exported from parent shell
   declare -gi ASSERT_COUNT=0
   declare -gi ASSERT_PASSED=0
   declare -gi ASSERT_FAILED=0
+  declare -gi ASSERT_FUNCTIONS_SKIPPED=0
+  declare -ga ASSERT_SKIPPED_FUNCTION_NAMES=()
 }
 
 export -f reset_assert_stats
@@ -740,6 +746,7 @@ function print_assert_summary() {
   local assert_count=$ASSERT_COUNT
   local assert_passed=$ASSERT_PASSED
   local assert_failed=$ASSERT_FAILED
+  local functions_skipped=$ASSERT_FUNCTIONS_SKIPPED
 
   # Reset counters for next test
   reset_assert_stats
@@ -749,9 +756,13 @@ function print_assert_summary() {
   printf "${GREEN}Passed: %d${NC}\n" "${assert_passed:-0}"
   printf "${RED}Failed: %d${NC}\n" "${assert_failed:-0}"
 
+  if [[ $functions_skipped -gt 0 ]]; then
+    printf "${YELLOW}Test functions skipped: %d${NC}\n" "$functions_skipped"
+  fi
+
   # Write assertion stats marker to test log for runner to parse
   if [[ -n "${KGSM_TEST_LOG:-}" ]]; then
-    echo "KGSM_ASSERT_STATS: ${assert_passed}/${assert_failed}/${assert_count}" >>"$KGSM_TEST_LOG" 2>/dev/null || true
+    echo "KGSM_ASSERT_STATS: ${assert_passed}/${assert_failed}/${assert_count}/${functions_skipped}" >>"$KGSM_TEST_LOG" 2>/dev/null || true
   fi
 
   if [[ $assert_failed -gt 0 ]]; then
@@ -764,22 +775,6 @@ function print_assert_summary() {
 }
 
 export -f print_assert_summary
-
-# Skip current test with message
-function skip_test() {
-  local reason="${1:-Test skipped}"
-  local caller_info="$(get_caller_info)"
-
-  printf "${YELLOW}⊘ SKIP${NC}: %s ${GRAY}[%s]${NC}\n" "$reason" "$caller_info" >&2
-
-  if [[ -n "${KGSM_TEST_LOG:-}" ]]; then
-    echo "[SKIP] $reason [$caller_info]" >>"$KGSM_TEST_LOG"
-  fi
-
-  exit 77 # Special exit code for skipped tests
-}
-
-export -f skip_test
 
 # =============================================================================
 # HELPER FUNCTIONS FOR KGSM-SPECIFIC TESTING

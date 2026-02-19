@@ -120,7 +120,7 @@ function __create_results_csv_header() {
   local csv_path="$1"
 
   # Write CSV header row
-  echo "test_name,test_type,exit_code,duration_ms,timestamp,assertions_passed,assertions_failed,assertions_total" \
+  echo "test_name,test_type,exit_code,duration_ms,timestamp,assertions_passed,assertions_failed,assertions_total,functions_skipped" \
     > "$csv_path" || {
     log_error "Failed to create CSV file: $csv_path"
     return $EC_FAILURE
@@ -160,6 +160,7 @@ function __append_result_to_csv() {
   csv_row+=",${_csv_result_ref[assertions_passed]:-0}"
   csv_row+=",${_csv_result_ref[assertions_failed]:-0}"
   csv_row+=",${_csv_result_ref[assertions_total]:-0}"
+  csv_row+=",${_csv_result_ref[functions_skipped]:-0}"
 
   # Append with file locking for parallel safety
   # flock ensures only one process writes at a time
@@ -294,14 +295,15 @@ function aggregate_results() {
 
     # Write to CSV (single source of truth)
     declare -A _agg_single_result=(
-       [test_name]="$test_name"
-       [test_type]="${_agg_results_ref[${test_name}__test_type]:-unknown}"
-       [exit_code]="${_agg_results_ref[${test_name}__exit_code]:-1}"
-       [duration_seconds]="${_agg_results_ref[${test_name}__duration_seconds]:-0}"
-       [timestamp]="${_agg_results_ref[${test_name}__timestamp]:-}"
-       [assertions_passed]="${_agg_results_ref[${test_name}__assertions_passed]:-0}"
-       [assertions_failed]="${_agg_results_ref[${test_name}__assertions_failed]:-0}"
-       [assertions_total]="${_agg_results_ref[${test_name}__assertions_total]:-0}"
+      [test_name]="$test_name"
+      [test_type]="${_agg_results_ref[${test_name}__test_type]:-unknown}"
+      [exit_code]="${_agg_results_ref[${test_name}__exit_code]:-1}"
+      [duration_seconds]="${_agg_results_ref[${test_name}__duration_seconds]:-0}"
+      [timestamp]="${_agg_results_ref[${test_name}__timestamp]:-}"
+      [assertions_passed]="${_agg_results_ref[${test_name}__assertions_passed]:-0}"
+      [assertions_failed]="${_agg_results_ref[${test_name}__assertions_failed]:-0}"
+      [assertions_total]="${_agg_results_ref[${test_name}__assertions_total]:-0}"
+      [functions_skipped]="${_agg_results_ref[${test_name}__functions_skipped]:-0}"
     )
     __append_result_to_csv _agg_single_result
     count=$((count + 1))
@@ -403,6 +405,7 @@ function print_test_result() {
   local assertions_passed="${_print_result_ref[assertions_passed]:-0}"
   local assertions_failed="${_print_result_ref[assertions_failed]:-0}"
   local assertions_total="${_print_result_ref[assertions_total]:-0}"
+  local functions_skipped="${_print_result_ref[functions_skipped]:-0}"
 
   # Format duration for display
   local duration_formatted
@@ -416,6 +419,9 @@ function print_test_result() {
       color="${COLOR_SUCCESS}"
       if [[ "$assertions_total" -gt 0 ]]; then
         message="$test_name (${assertions_total} assertions, ${duration_formatted})"
+        if [[ "$functions_skipped" -gt 0 ]]; then
+          message="$test_name (${assertions_total} assertions, ${functions_skipped} functions skipped, ${duration_formatted})"
+        fi
       else
         message="$test_name (${duration_formatted})"
       fi
@@ -435,6 +441,9 @@ function print_test_result() {
       color="${COLOR_FAILURE}"
       if [[ "$assertions_total" -gt 0 ]]; then
         message="$test_name (${assertions_passed}/${assertions_total} assertions passed, ${duration_formatted})"
+        if [[ "$functions_skipped" -gt 0 ]]; then
+          message="$test_name (${assertions_passed}/${assertions_total} assertions passed, ${functions_skipped} functions skipped, ${duration_formatted})"
+        fi
       else
         message="$test_name (${duration_formatted})"
       fi
@@ -490,6 +499,7 @@ function print_all_results() {
        [assertions_passed]="${_print_all_ref[${test_name}__assertions_passed]:-0}"
        [assertions_failed]="${_print_all_ref[${test_name}__assertions_failed]:-0}"
        [assertions_total]="${_print_all_ref[${test_name}__assertions_total]:-0}"
+       [functions_skipped]="${_print_all_ref[${test_name}__functions_skipped]:-0}"
     )
     print_test_result _print_single_result
   done
@@ -512,6 +522,8 @@ export -f print_all_results
 # ------------------------------------------------------------------------------
 function print_all_results_from_csv() {
   local csv_path="${REPORT_STATS[results_csv_path]:-}"
+  local log_dir
+  log_dir="$(dirname "$csv_path")"
 
   printf "\n"
   printf "${COLOR_BOLD}TEST RESULTS${COLOR_RESET}\n"
@@ -526,6 +538,7 @@ function print_all_results_from_csv() {
   function __collect_result() {
     local test_name="$1" test_type="$2" exit_code="$3" duration="$4"
     local timestamp="$5" a_passed="$6" a_failed="$7" a_total="$8"
+    local f_skipped="${9:-0}"  # 9th column: functions_skipped
 
     # Track test types we've seen
     if [[ ! " ${test_types_found[*]} " =~ " ${test_type} " ]]; then
@@ -541,6 +554,7 @@ function print_all_results_from_csv() {
     results_by_type["${key}::assertions_passed"]="$a_passed"
     results_by_type["${key}::assertions_failed"]="$a_failed"
     results_by_type["${key}::assertions_total"]="$a_total"
+    results_by_type["${key}::functions_skipped"]="$f_skipped"
   }
 
   # Read CSV and organize by type using shared helper
@@ -577,8 +591,15 @@ function print_all_results_from_csv() {
         [assertions_passed]="${results_by_type[${key}::assertions_passed]}"
         [assertions_failed]="${results_by_type[${key}::assertions_failed]}"
         [assertions_total]="${results_by_type[${key}::assertions_total]}"
+        [functions_skipped]="${results_by_type[${key}::functions_skipped]:-0}"
       )
       print_test_result _csv_result
+
+      # Print skip details if any functions were skipped
+      local skipped_count="${results_by_type[${key}::functions_skipped]:-0}"
+      if [[ "$skipped_count" -gt 0 ]]; then
+        __print_skip_details "$test_name" "$log_dir"
+      fi
     done
 
     printf "\n"
@@ -587,6 +608,52 @@ function print_all_results_from_csv() {
   return $EC_SUCCESS
 }
 export -f print_all_results_from_csv
+
+# ------------------------------------------------------------------------------
+# Print detailed skip information for a test
+# ------------------------------------------------------------------------------
+# Extracts SKIP markers from test log and displays which functions were skipped
+# and why. Only prints if functions were actually skipped.
+#
+# Arguments:
+#   $1 - test_name: Name of the test
+#   $2 - exit_code: Exit code of the test
+#   $3 - test_type: Type of test (unit, integration, e2e)
+# Returns:
+#   Exit code: EC_SUCCESS (0)
+# ------------------------------------------------------------------------------
+function __print_skip_details() {
+  local test_name="$1"
+  local log_dir="$2"
+
+  # Construct path to test log file
+  local test_log="${log_dir}/${test_name}.log"
+
+  # Check if log file exists
+  [[ ! -f "$test_log" ]] && return $EC_SUCCESS
+
+  # Extract SKIP entries from log (format: [SKIP] function_name: reason)
+  # Strip ANSI color codes first (grep with --color=never doesn't help since colors are already in log)
+  local skip_entries
+  skip_entries=$(sed 's/\x1b\[[0-9;]*m//g' "$test_log" | grep "^\[SKIP\]" 2>/dev/null || echo "")
+
+  # If no skip entries found, return
+  [[ -z "$skip_entries" ]] && return $EC_SUCCESS
+
+  # Print skip details with indentation
+  while IFS= read -r line; do
+    # Extract function name and reason
+    # Format: [SKIP] test_function_name: Reason for skip
+    if [[ "$line" =~ ^\[SKIP\][[:space:]](.+):[[:space:]](.+)$ ]]; then
+      local func_name="${BASH_REMATCH[1]}"
+      local reason="${BASH_REMATCH[2]}"
+      printf "  ${COLOR_WARNING}↳ Skipped:${COLOR_RESET} %s ${COLOR_DIM}(${reason})${COLOR_RESET}\n" "$func_name"
+    fi
+  done <<< "$skip_entries"
+
+  return $EC_SUCCESS
+}
+export -f __print_skip_details
 
 # ==============================================================================
 # CSV Parsing Helper Functions
@@ -615,14 +682,14 @@ function __foreach_csv_line() {
   fi
 
   # Read CSV line by line and invoke callback for each valid row
-  while IFS=',' read -r test_name test_type exit_code duration_ms timestamp a_passed a_failed a_total; do
+  while IFS=',' read -r test_name test_type exit_code duration_ms timestamp a_passed a_failed a_total f_skipped; do
     # Skip header row
     [[ "$test_name" == "test_name" ]] && continue
     # Skip empty lines
     [[ -z "$test_name" ]] && continue
 
-    # Invoke callback with parsed fields
-    "$callback" "$test_name" "$test_type" "$exit_code" "$duration_ms" "$timestamp" "$a_passed" "$a_failed" "$a_total"
+    # Invoke callback with parsed fields (9 columns including functions_skipped)
+    "$callback" "$test_name" "$test_type" "$exit_code" "$duration_ms" "$timestamp" "$a_passed" "$a_failed" "$a_total" "${f_skipped:-0}"
   done < "$csv_path"
 
   return $EC_SUCCESS
@@ -699,17 +766,17 @@ export -f __get_failure_breakdown_by_type
 # ------------------------------------------------------------------------------
 function get_latest_results_csv() {
   local latest_csv="${TEST_LATEST_LINK}/results.csv"
-  
+
   if [[ ! -L "$TEST_LATEST_LINK" ]]; then
     log_error "No previous test results found (latest symlink missing)"
     return $EC_FAILURE
   fi
-  
+
   if [[ ! -f "$latest_csv" ]]; then
     log_error "Latest results.csv not found at: $latest_csv"
     return $EC_FAILURE
   fi
-  
+
   echo "$latest_csv"
   return $EC_SUCCESS
 }
@@ -727,16 +794,16 @@ export -f get_latest_results_csv
 # ------------------------------------------------------------------------------
 function get_failed_tests_from_csv() {
   local csv_path="$1"
-  
+
   if [[ ! -f "$csv_path" ]]; then
     log_error "CSV file not found: $csv_path"
     return $EC_FAILURE
   fi
-  
+
   # Parse CSV: skip header, filter for failures (exit_code != 0 and != 33)
   local failed_tests
   failed_tests=$(tail -n +2 "$csv_path" | awk -F',' '$3 != 0 && $3 != 33 {print $1}')
-  
+
   echo "$failed_tests"
   return $EC_SUCCESS
 }
@@ -788,9 +855,9 @@ function __get_environment_info() {
   os_name=$(uname -s 2>/dev/null || echo "unknown")
   kernel_version=$(uname -r 2>/dev/null || echo "unknown")
 
-  # Get KGSM version from .kgsm.version file
-  if [[ -n "${KGSM_ROOT:-}" && -f "${KGSM_ROOT}/.kgsm.version" ]]; then
-    kgsm_version=$(cat "${KGSM_ROOT}/.kgsm.version" 2>/dev/null || echo "unknown")
+  # Extract KGSM version from kgsm.sh export statement
+  if [[ -f "${KGSM_ROOT}/kgsm.sh" ]]; then
+    kgsm_version=$(grep -oP '^export KGSM_VERSION="\K[^"]+' "${KGSM_ROOT}/kgsm.sh" 2>/dev/null || echo "unknown")
   fi
 
   echo "${os_name}|${kernel_version}|${bash_version}|${kgsm_version}|${framework_version}"
