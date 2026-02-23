@@ -1,0 +1,427 @@
+#!/usr/bin/env bash
+
+# KGSM Watcher Ports Command CLI Tests
+#
+# Test Type: UNIT
+# Target: commands/watcher.ports.sh - CLI interface and argument handling
+#
+# Tests the CLI interface of watcher.ports.sh including help system,
+# error handling for missing/invalid args, and non-blocking status commands.
+
+# =============================================================================
+# TEST SETUP
+# =============================================================================
+
+readonly TEST_NAME="watcher_ports_commands"
+readonly MODULE="$KGSM_ROOT/commands/watcher.ports.sh"
+
+TEST_INSTALL_DIR=""
+
+# =============================================================================
+# TEST FUNCTIONS
+# =============================================================================
+
+function setup_test() {
+  log_test_step "Setting up watcher ports commands tests"
+
+  TEST_INSTALL_DIR="$KGSM_ROOT/test-installs"
+  mkdir -p "$TEST_INSTALL_DIR"
+
+  assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
+  assert_dir_exists "$KGSM_ROOT" "KGSM root directory should exist"
+  assert_file_exists "$MODULE" "watcher.ports.sh module should exist"
+  assert_file_executable "$MODULE" "watcher.ports.sh should be executable"
+
+  log_test_step "Test environment validated"
+}
+
+# =============================================================================
+# HELP SYSTEM TESTS
+# =============================================================================
+
+function test_help_top_level() {
+  log_test_step "Testing top-level help output"
+
+  local output
+  output=$("$MODULE" help 2>&1)
+  local exit_code=$?
+
+  assert_equals 0 "$exit_code" "help command should succeed"
+  assert_contains "$output" "watch" "Help should mention watch command"
+  assert_contains "$output" "test" "Help should mention test command"
+  assert_contains "$output" "status" "Help should mention status command"
+}
+
+function test_help_flag() {
+  log_test_step "Testing --help flag output"
+
+  local output
+  output=$("$MODULE" --help 2>&1)
+  local exit_code=$?
+
+  assert_equals 0 "$exit_code" "--help flag should succeed"
+  assert_contains "$output" "watch" "Help output should contain watch"
+}
+
+function test_help_watch_command() {
+  log_test_step "Testing help for watch command"
+
+  local output
+  output=$("$MODULE" help watch 2>&1)
+  local exit_code=$?
+
+  assert_equals 0 "$exit_code" "help watch should succeed"
+  assert_contains "$output" "Watch" "Should show watch command help"
+}
+
+function test_help_test_command() {
+  log_test_step "Testing help for test command"
+
+  local output
+  output=$("$MODULE" help test 2>&1)
+  local exit_code=$?
+
+  assert_equals 0 "$exit_code" "help test should succeed"
+  assert_contains "$output" "Test" "Should show test command help"
+}
+
+function test_help_status_command() {
+  log_test_step "Testing help for status command"
+
+  local output
+  output=$("$MODULE" help status 2>&1)
+  local exit_code=$?
+
+  assert_equals 0 "$exit_code" "help status should succeed"
+  assert_contains "$output" "Status" "Should show status command help"
+}
+
+function test_help_unknown_command() {
+  log_test_step "Testing help for unknown command returns error"
+
+  assert_command_fails "$MODULE help nonexistent_cmd_xyz" \
+    "help for unknown command should fail"
+}
+
+# =============================================================================
+# NO-COMMAND TESTS
+# =============================================================================
+
+function test_no_command() {
+  log_test_step "Testing module with no command shows usage"
+
+  local output
+  output=$("$MODULE" 2>&1 || true)
+
+  assert_contains "$output" "watch" "No-command output should mention watch"
+}
+
+# =============================================================================
+# MISSING ARGUMENT TESTS
+# =============================================================================
+
+function test_watch_missing_instance() {
+  log_test_step "Testing watch with missing instance argument"
+
+  assert_command_fails "$MODULE watch" \
+    "watch with no instance should fail"
+
+  local output
+  output=$("$MODULE" watch 2>&1 || true)
+  assert_contains "$output" "Missing required argument" "Should show missing arg error"
+}
+
+function test_test_missing_instance() {
+  log_test_step "Testing test with missing instance argument"
+
+  assert_command_fails "$MODULE test" \
+    "test with no instance should fail"
+
+  local output
+  output=$("$MODULE" test 2>&1 || true)
+  assert_contains "$output" "Missing required argument" "Should show missing arg error"
+}
+
+function test_status_missing_instance() {
+  log_test_step "Testing status with missing instance argument"
+
+  assert_command_fails "$MODULE status" \
+    "status with no instance should fail"
+
+  local output
+  output=$("$MODULE" status 2>&1 || true)
+  assert_contains "$output" "Missing required argument" "Should show missing arg error"
+}
+
+# =============================================================================
+# INVALID INSTANCE TESTS
+# =============================================================================
+
+function test_watch_invalid_instance() {
+  log_test_step "Testing watch with invalid instance name"
+
+  assert_command_fails "$MODULE watch nonexistent_instance_xyz_12345" \
+    "watch with invalid instance should fail"
+}
+
+function test_test_invalid_instance() {
+  log_test_step "Testing test with invalid instance name"
+
+  assert_command_fails "$MODULE test nonexistent_instance_xyz_12345" \
+    "test with invalid instance should fail"
+}
+
+function test_status_invalid_instance() {
+  log_test_step "Testing status with invalid instance name"
+
+  assert_command_fails "$MODULE status nonexistent_instance_xyz_12345" \
+    "status with invalid instance should fail"
+}
+
+# =============================================================================
+# INVALID OPTIONS / UNKNOWN COMMANDS
+# =============================================================================
+
+function test_watch_extra_argument() {
+  log_test_step "Testing watch with extra unknown argument"
+
+  assert_command_fails "$MODULE watch someinstance --unknown-flag" \
+    "watch with unknown flag should fail"
+}
+
+function test_unknown_command() {
+  log_test_step "Testing unknown top-level command"
+
+  assert_command_fails "$MODULE notacommand" \
+    "unknown command should fail"
+
+  local output
+  output=$("$MODULE" notacommand 2>&1 || true)
+  assert_contains "$output" "Unknown command" "Should show unknown command error"
+}
+
+# =============================================================================
+# COMMAND-SPECIFIC HELP FLAGS
+# =============================================================================
+
+function test_watch_help_flag() {
+  log_test_step "Testing watch --help flag"
+
+  local output
+  output=$("$MODULE" watch --help 2>&1)
+  local exit_code=$?
+
+  assert_equals 0 "$exit_code" "watch --help should succeed"
+  assert_contains "$output" "Watch" "Should show watch help"
+}
+
+function test_test_help_flag() {
+  log_test_step "Testing test --help flag"
+
+  local output
+  output=$("$MODULE" test --help 2>&1)
+  local exit_code=$?
+
+  assert_equals 0 "$exit_code" "test --help should succeed"
+  assert_contains "$output" "Test" "Should show test help"
+}
+
+function test_status_help_flag() {
+  log_test_step "Testing status --help flag"
+
+  local output
+  output=$("$MODULE" status --help 2>&1)
+  local exit_code=$?
+
+  assert_equals 0 "$exit_code" "status --help should succeed"
+  assert_contains "$output" "Status" "Should show status help"
+}
+
+# =============================================================================
+# STATUS COMMAND WITH VALID INSTANCE
+# =============================================================================
+
+function test_status_on_valid_instance() {
+  log_test_step "Testing status on a valid instance succeeds and shows info"
+
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$(generate_test_id)" "$TEST_INSTALL_DIR" 2>/dev/null)
+
+  if [[ -z "$instance_name" ]]; then
+    skip_test "Instance creation failed - skipping test"
+    return
+  fi
+
+  local output
+  output=$("$MODULE" status "$instance_name" 2>&1)
+  local exit_code=$?
+
+  assert_equals 0 "$exit_code" "status on valid instance should succeed"
+  assert_not_null "$output" "status should produce output"
+  assert_contains "$output" "$instance_name" "status output should mention instance name"
+
+  remove_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR"
+}
+
+function test_status_shows_port_info() {
+  log_test_step "Testing status shows port configuration info"
+
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$(generate_test_id)" "$TEST_INSTALL_DIR" 2>/dev/null)
+
+  if [[ -z "$instance_name" ]]; then
+    skip_test "Instance creation failed - skipping test"
+    return
+  fi
+
+  local output
+  output=$("$MODULE" status "$instance_name" 2>&1)
+
+  assert_contains "$output" "Port" "status should mention Port configuration"
+
+  remove_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR"
+}
+
+function test_status_with_ports_blueprint() {
+  log_test_step "Testing status on instance with ports configured (necesse blueprint)"
+
+  if ! is_steamcmd_available 2>/dev/null; then
+    skip_test "SteamCMD not available - skipping necesse blueprint test"
+    return
+  fi
+
+  local blueprint="necesse"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$(generate_test_id)" "$TEST_INSTALL_DIR" 2>/dev/null)
+  local create_exit=$?
+
+  if [[ $create_exit -ne 0 || -z "$instance_name" ]]; then
+    skip_test "Instance creation failed - skipping test"
+    return
+  fi
+
+  local output
+  output=$("$MODULE" status "$instance_name" 2>&1)
+  local exit_code=$?
+
+  assert_equals 0 "$exit_code" "status on instance with ports should succeed"
+  assert_not_null "$output" "status should produce output"
+
+  remove_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR"
+}
+
+# =============================================================================
+# TEST COMMAND WITH VALID INSTANCE (NO PORTS CONFIGURED)
+# =============================================================================
+
+function test_test_on_instance_without_ports() {
+  log_test_step "Testing 'test' on instance without ports configured"
+
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$(generate_test_id)" "$TEST_INSTALL_DIR" 2>/dev/null)
+
+  if [[ -z "$instance_name" ]]; then
+    skip_test "Instance creation failed - skipping test"
+    return
+  fi
+
+  # factorio has no ports configured in default blueprint
+  # The test command should fail because no ports are configured
+  "$MODULE" test "$instance_name" 2>/dev/null
+  local exit_code=$?
+
+  assert_not_equals 0 "$exit_code" "test on instance without ports should fail"
+
+  remove_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR"
+}
+
+function test_test_on_instance_with_ports() {
+  log_test_step "Testing 'test' on instance with ports configured (ports inactive)"
+
+  if ! is_steamcmd_available 2>/dev/null; then
+    skip_test "SteamCMD not available - skipping necesse blueprint test"
+    return
+  fi
+
+  local blueprint="necesse"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$(generate_test_id)" "$TEST_INSTALL_DIR" 2>/dev/null)
+  local create_exit=$?
+
+  if [[ $create_exit -ne 0 || -z "$instance_name" ]]; then
+    skip_test "Instance creation failed - skipping test"
+    return
+  fi
+
+  # necesse has ports configured but the server isn't running
+  # So all ports are inactive - test should return non-zero but not crash
+  "$MODULE" test "$instance_name" 2>/dev/null
+  local exit_code=$?
+
+  # Ports exist but are inactive - should fail (non-zero) but not error out completely
+  assert_not_equals 0 "$exit_code" "test with inactive ports should return non-zero"
+
+  remove_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR"
+}
+
+# =============================================================================
+# MAIN TEST EXECUTION
+# =============================================================================
+
+function main() {
+  log_test_step "Starting watcher ports commands tests"
+
+  setup_test
+
+  # Help system
+  test_help_top_level
+  test_help_flag
+  test_help_watch_command
+  test_help_test_command
+  test_help_status_command
+  test_help_unknown_command
+
+  # No command
+  test_no_command
+
+  # Missing arguments
+  test_watch_missing_instance
+  test_test_missing_instance
+  test_status_missing_instance
+
+  # Invalid instances
+  test_watch_invalid_instance
+  test_test_invalid_instance
+  test_status_invalid_instance
+
+  # Invalid options / unknown commands
+  test_watch_extra_argument
+  test_unknown_command
+
+  # Command-specific help flags
+  test_watch_help_flag
+  test_test_help_flag
+  test_status_help_flag
+
+  # Status on valid instance
+  test_status_on_valid_instance
+  test_status_shows_port_info
+  test_status_with_ports_blueprint
+
+  # Test command error paths
+  test_test_on_instance_without_ports
+  test_test_on_instance_with_ports
+
+  log_test_step "Watcher ports commands tests completed"
+
+  if print_assert_summary "$TEST_NAME"; then
+    pass_test "All watcher ports commands tests passed"
+  else
+    fail_test "Some watcher ports commands tests failed"
+  fi
+}
+
+main "$@"
