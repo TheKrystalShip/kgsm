@@ -287,7 +287,7 @@ function test_status_shows_port_info() {
 function test_status_with_ports_blueprint() {
   log_test_step "Testing status on instance with ports configured (necesse blueprint)"
 
-  if ! is_steamcmd_available 2>/dev/null; then
+  if ! command -v steamcmd >/dev/null 2>&1; then
     skip_test "SteamCMD not available - skipping necesse blueprint test"
     return
   fi
@@ -341,7 +341,7 @@ function test_test_on_instance_without_ports() {
 function test_test_on_instance_with_ports() {
   log_test_step "Testing 'test' on instance with ports configured (ports inactive)"
 
-  if ! is_steamcmd_available 2>/dev/null; then
+  if ! command -v steamcmd >/dev/null 2>&1; then
     skip_test "SteamCMD not available - skipping necesse blueprint test"
     return
   fi
