@@ -431,6 +431,9 @@ function _cmd_status() {
     return $EC_NOT_FOUND
   fi
 
+  # Source the instance configuration so instance_* variables are available to logic functions
+  __source_instance "$instance_config_file"
+
   # Get status data from logic layer
   local status_data
   status_data=$(__logic_get_port_status_data "$instance_config_file")
