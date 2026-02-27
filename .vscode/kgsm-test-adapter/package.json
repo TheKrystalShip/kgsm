@@ -1,0 +1,25 @@
+{
+  "name": "kgsm-test-adapter",
+  "displayName": "KGSM Test Adapter",
+  "description": "Test adapter for KGSM's Bash testing framework",
+  "version": "0.2.0",
+  "publisher": "TheKrystalShip",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": ["Testing"],
+  "activationEvents": [
+    "workspaceContains:tests/run.sh"
+  ],
+  "main": "./extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "kgsm.runTestFunction",
+        "title": "KGSM: Run Test Function"
+      }
+    ]
+  },
+  "scripts": {},
+  "devDependencies": {}
+}
