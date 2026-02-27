@@ -205,35 +205,3 @@ function test_kgsm_paths_command() {
   assert_contains "$output" "$KGSM_DATA_DIR" "Should display KGSM_DATA_DIR"
 }
 
-# =============================================================================
-# MAIN TEST EXECUTION
-# =============================================================================
-
-function main() {
-  log_test_step "Starting XDG path integration tests"
-
-  setup_test
-
-  test_find_blueprint_user_first
-  test_find_blueprint_system_fallback
-  test_find_blueprint_user_only
-  test_find_blueprint_not_found
-  test_config_file_location
-  test_config_file_creation
-  test_logs_directory_location
-  test_instances_directory_location
-  test_blueprints_list_includes_both
-  test_user_override_precedence
-  test_kgsm_paths_command
-
-  log_test_step "XDG path integration tests completed"
-
-  # Print summary and determine exit code
-  if print_assert_summary "$TEST_NAME"; then
-    pass_test "All XDG path integration tests passed"
-  else
-    fail_test "Some XDG path integration tests failed"
-  fi
-}
-
-main "$@"

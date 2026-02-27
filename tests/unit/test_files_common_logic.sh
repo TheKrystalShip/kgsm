@@ -566,39 +566,3 @@ function test_set_file_ownership_permission_denied() {
   assert_equals "$EC_PERMISSION" "$exit_code" "Should return EC_PERMISSION when chown fails"
 }
 
-# =============================================================================
-# MAIN TEST EXECUTION
-# =============================================================================
-
-function main() {
-  log_test_step "Starting files.common logic tests"
-
-  # Setup
-  setup_test
-
-  # __logic_inject_overrides tests
-  test_inject_overrides_empty_instance_name
-  test_inject_overrides_empty_management_file
-  test_inject_overrides_management_file_not_found
-  test_inject_overrides_instance_not_found
-  test_inject_overrides_missing_blueprint_file_config
-  test_inject_overrides_missing_blueprint_name
-  test_inject_overrides_container_blueprint_skips
-  test_inject_overrides_no_override_file_exists
-  test_inject_overrides_success_with_overrides
-  test_inject_overrides_corrupt_override_file
-
-  # __logic_set_file_ownership tests
-  test_set_file_ownership_empty_path
-  test_set_file_ownership_file_not_found
-  test_set_file_ownership_success_file
-  test_set_file_ownership_success_directory
-  test_set_file_ownership_permission_denied
-
-  log_test_step "All files.common logic tests completed"
-
-  # Return success if we got here (individual test failures are tracked by framework)
-  return 0
-}
-
-main "$@"

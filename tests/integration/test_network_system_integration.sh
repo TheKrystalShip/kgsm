@@ -420,35 +420,3 @@ function test_network_check_factorio_port() {
     "Port check on factorio port 34197/udp should return free/in-use/missing-dep, got: $exit_code"
 }
 
-# =============================================================================
-# MAIN TEST EXECUTION
-# =============================================================================
-
-function main() {
-  log_test_step "Starting network+system integration tests"
-
-  setup_test
-
-  test_system_info_includes_network_section
-  test_system_info_json_has_network_keys
-  test_system_readonly_commands_succeed
-  test_network_port_check_free_port
-  test_network_port_check_invalid_port
-  test_network_conflicts_no_instances
-  test_network_conflicts_single_instance
-  test_network_conflicts_duplicate_ports_detected
-  test_network_test_all_with_instance
-  test_network_ports_list_used_succeeds
-  test_system_info_works_with_instances_present
-  test_network_check_factorio_port
-
-  log_test_step "Network+system integration tests completed"
-
-  if print_assert_summary "$TEST_NAME"; then
-    pass_test "All network+system integration tests passed"
-  else
-    fail_test "Some network+system integration tests failed"
-  fi
-}
-
-main "$@"

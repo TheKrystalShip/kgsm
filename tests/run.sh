@@ -156,15 +156,13 @@ function validate_test_environment() {
   local essential_files=(
     "$FRAMEWORK_DIR/bootstrap.sh"
     "$FRAMEWORK_DIR/sandbox.sh"
-    "$FRAMEWORK_DIR/execution.sh"
-    "$FRAMEWORK_DIR/execution.sequential.sh"
-    "$FRAMEWORK_DIR/execution.parallel.sh"
+    "$FRAMEWORK_DIR/execution.common.sh"
     "$FRAMEWORK_DIR/discovery.sh"
-    "$FRAMEWORK_DIR/reporting.sh"
     "$FRAMEWORK_DIR/reporting.tap.sh"
     "$FRAMEWORK_DIR/runner.sh"
     "$FRAMEWORK_DIR/common.sh"
     "$FRAMEWORK_DIR/assert.sh"
+    "$FRAMEWORK_DIR/logging.sh"
   )
 
   for file in "${essential_files[@]}"; do

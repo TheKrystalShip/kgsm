@@ -66,6 +66,12 @@ function setup_test() {
   log_test_step "Blueprint management e2e environment validated"
 }
 
+function cleanup_test() {
+  log_test_step "Cleaning up blueprint management e2e tests"
+  # No cleanup actions needed for read-only blueprint management tests
+  log_test_step "Blueprint management e2e cleanup complete"
+}
+
 # =============================================================================
 # WORKFLOW 1: List all blueprints
 # Verify the list command returns results and includes all known blueprints
@@ -395,36 +401,3 @@ function test_json_output() {
     "info factorio --json output should include factorio"
 }
 
-# =============================================================================
-# MAIN TEST EXECUTION
-# =============================================================================
-
-function main() {
-  log_test_step "Starting blueprint management e2e tests"
-
-  setup_test
-
-  # Workflow tests
-  test_list_all_blueprints
-  test_find_native_blueprint
-  test_get_native_blueprint_info
-  test_find_container_blueprint
-  test_list_native_only
-  test_list_container_only
-  test_all_native_blueprints_have_required_fields
-  test_invalid_blueprint_returns_error
-  test_list_find_consistency
-  test_all_standard_blueprints_accessible
-  test_steam_blueprint_field_differentiation
-  test_json_output
-
-  log_test_step "Blueprint management e2e tests completed"
-
-  if print_assert_summary "$TEST_NAME"; then
-    pass_test "All blueprint management e2e tests passed"
-  else
-    fail_test "Some blueprint management e2e tests failed"
-  fi
-}
-
-main "$@"

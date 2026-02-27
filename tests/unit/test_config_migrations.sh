@@ -304,32 +304,3 @@ EOF
   assert_command_fails "grep -q 'config_schema_version' '${test_config}.pre-migration-v1.bak'"
 }
 
-# =============================================================================
-# MAIN TEST EXECUTION
-# =============================================================================
-
-function main() {
-  log_test_step "Starting config migration tests"
-
-  # Setup
-  setup_test
-
-  # Run all migration tests
-  test_migration_001_minimal_config
-  test_migration_001_full_config
-  test_migration_001_idempotent
-  test_migration_001_missing_keys_get_defaults
-  test_migration_001_empty_values
-  test_migration_001_file_not_found
-  test_migration_001_no_file_provided
-  test_migration_001_creates_backup
-
-  # Summary
-  if print_assert_summary "$TEST_NAME"; then
-    pass_test "All config migration tests passed"
-  else
-    fail_test "Some config migration tests failed"
-  fi
-}
-
-main "$@"

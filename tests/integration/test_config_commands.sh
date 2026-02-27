@@ -219,31 +219,3 @@ function test_config_help_commands() {
   assert_contains "$diff_help" "Show differences" "Should show diff help"
 }
 
-# =============================================================================
-# MAIN TEST EXECUTION
-# =============================================================================
-
-function main() {
-  log_test_step "Starting config commands integration tests"
-
-  # Setup
-  setup_test
-
-  # Run all tests
-  test_config_merge_command
-  test_config_rollback_command
-  test_config_rollback_invalid_generation
-  test_config_diff_command
-  test_config_diff_missing_backup
-  test_config_validate_command
-  test_config_help_commands
-
-  # Summary
-  if print_assert_summary "$TEST_NAME"; then
-    pass_test "All config commands integration tests passed"
-  else
-    fail_test "Some config commands integration tests failed"
-  fi
-}
-
-main "$@"

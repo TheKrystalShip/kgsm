@@ -347,30 +347,3 @@ function test_config_list_shows_instance_keys() {
     "config list should show enable_backup_compression"
 }
 
-# =============================================================================
-# MAIN TEST EXECUTION
-# =============================================================================
-
-function main() {
-  log_test_step "Starting config+instances integration tests"
-
-  setup_test
-
-  test_instance_suffix_length_affects_name_generation
-  test_config_save_timeout_embedded_in_instance
-  test_config_stop_timeout_embedded_in_instance
-  test_config_backup_compression_embedded_in_instance
-  test_config_validate_after_instance_operations
-  test_config_merge_preserves_instance_defaults
-  test_config_get_instance_default_keys
-  test_config_set_invalid_value_rejected
-  test_config_list_shows_instance_keys
-
-  if print_assert_summary "$TEST_NAME"; then
-    pass_test "All config+instances integration tests passed"
-  else
-    fail_test "Some config+instances integration tests failed"
-  fi
-}
-
-main "$@"

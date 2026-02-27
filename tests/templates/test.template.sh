@@ -12,8 +12,11 @@
 #    - E2E tests:         tests/e2e/test_<workflow>_e2e.sh
 # 2. Replace <PLACEHOLDERS> with actual values
 # 3. Implement test functions (each starting with log_test_step)
-# 4. Update main() to call your test functions
-# 5. Run: ./tests/run.sh --pattern <test_name>
+# 4. Run: ./tests/run.sh --pattern <test_name>
+#
+# NOTE: Do NOT add a main() function or "main "$@"" invocation.
+# The framework auto-discovers test_* functions and calls them automatically.
+# The framework also calls setup_test() before tests and print_assert_summary() after.
 
 # =============================================================================
 # TEST SETUP
@@ -175,33 +178,7 @@ function test_complete_workflow() {
     "Instance should be removed"
 }
 
-# =============================================================================
-# MAIN TEST EXECUTION
-# =============================================================================
-
-function main() {
-  log_test_step "Starting <test_name> tests"
-
-  # Initialize test environment
-  setup_test
-
-  # Execute all test functions
-  # Replace these with your actual test function names:
-  # test_logic_operation_success
-  # test_command_execution
-  # test_error_handling
-  # test_workflow_integration
-  # test_complete_workflow
-
-  log_test_step "<Test_name> tests completed successfully"
-
-  # Print summary and determine exit code
-  if print_assert_summary "$TEST_NAME"; then
-    pass_test "All <test_name> tests completed successfully"
-  else
-    fail_test "Some <test_name> tests failed"
-  fi
-}
-
-# Execute main function
-main "$@"
+# Optional: cleanup_test() is called by the framework after all tests complete
+# function cleanup_test() {
+#   # Clean up any resources created during testing
+# }

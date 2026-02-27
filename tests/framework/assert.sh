@@ -69,7 +69,7 @@ function get_caller_info() {
 
 export -f get_caller_info
 
-# Print assertion result
+# Print assertion result and write to log file
 function print_assert_result() {
   local result="$1"
   local message="$2"
@@ -83,7 +83,22 @@ function print_assert_result() {
     ((ASSERT_FAILED++))
   fi
 
-  log_assertion "$result" "$message" "$caller_info"
+  # Write structured entry to test log file (plain text for TAP parsing)
+  if [[ -n "${KGSM_TEST_LOG:-}" ]]; then
+    local timestamp
+    timestamp=$(date -Iseconds)
+    local level="SUCCESS"
+    [[ "$result" != "PASS" ]] && level="ERROR"
+
+    local clean_message
+    clean_message=$(echo "$message" | sed 's/\x1b\[[0-9;]*m//g')
+    echo "[$timestamp] [$level] [$caller_info] $result: $clean_message" >> "$KGSM_TEST_LOG"
+
+    # Write expected/actual detail line on failure (consumed by TAP reporter)
+    if [[ "$result" == "FAIL" && -n "${ASSERT_EXPECTED+x}" && -n "${ASSERT_ACTUAL+x}" ]]; then
+      echo "ASSERT_DETAIL: expected=${ASSERT_EXPECTED} actual=${ASSERT_ACTUAL}" >> "$KGSM_TEST_LOG"
+    fi
+  fi
 }
 
 export -f print_assert_result

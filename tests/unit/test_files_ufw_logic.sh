@@ -352,38 +352,3 @@ EOF
   rm -f "$temp_config"
 }
 
-# =============================================================================
-# MAIN TEST EXECUTION
-# =============================================================================
-
-function main() {
-  log_test_step "Starting files.ufw logic tests"
-
-  setup_test
-
-  # __logic_enable_ufw_integration tests
-  test_enable_ufw_empty_arg
-  test_enable_ufw_file_not_found
-  test_enable_ufw_missing_name_in_config
-  test_enable_ufw_missing_firewall_rules_dir
-  test_enable_ufw_rule_already_exists
-
-  # __logic_disable_ufw_integration tests
-  test_disable_ufw_empty_arg
-  test_disable_ufw_file_not_found
-  test_disable_ufw_missing_name_in_config
-  test_disable_ufw_no_rule_configured
-  test_disable_ufw_rule_file_not_exist
-  test_disable_ufw_updates_config
-  test_disable_ufw_clears_rule_file_in_config
-
-  log_test_step "files.ufw logic tests completed"
-
-  if print_assert_summary "$TEST_NAME"; then
-    pass_test "All files.ufw logic tests passed"
-  else
-    fail_test "Some files.ufw logic tests failed"
-  fi
-}
-
-main "$@"

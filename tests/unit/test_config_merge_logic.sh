@@ -303,30 +303,3 @@ EOF
   rm -f "$test_user_config" "$test_default_config" "${test_user_config}.0"
 }
 
-# =============================================================================
-# MAIN TEST EXECUTION
-# =============================================================================
-
-function main() {
-  log_test_step "Starting config merge logic tests"
-
-  # Setup
-  setup_test
-
-  # Run all tests
-  test_create_config_backup
-  test_create_config_backup_rotation
-  test_parse_config_to_map
-  test_parse_config_to_map_empty_values
-  test_merge_user_config_with_default
-  test_merge_handles_deprecated_keys
-
-  # Summary
-  if print_assert_summary "$TEST_NAME"; then
-    pass_test "All config merge logic tests passed"
-  else
-    fail_test "Some config merge logic tests failed"
-  fi
-}
-
-main "$@"

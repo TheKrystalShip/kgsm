@@ -49,8 +49,6 @@ function __setup_test_environment() {
   export KGSM_TEST_SANDBOX
   declare -g KGSM_LOG_CONSOLE_ENABLED="false"
   export KGSM_LOG_CONSOLE_ENABLED
-  declare -g KGSM_TEST_LOG_LEVEL="${KGSM_TEST_LOG_LEVEL:-INFO}"
-  export KGSM_TEST_LOG_LEVEL
   declare -g TEST_SANDBOX_INSTANCES_INSTALL_DIR="${sandbox_path}/test_instances"
   export TEST_SANDBOX_INSTANCES_INSTALL_DIR
 
@@ -87,7 +85,6 @@ function __setup_test_environment() {
   # Enable debug mode if configured
   if [[ "${TEST_DEBUG:-false}" == "true" ]]; then
     export KGSM_DEBUG="true"
-    export KGSM_TEST_LOG_LEVEL="DEBUG"
     set -x
   fi
 
@@ -181,32 +178,44 @@ function __capture_test_output() {
   local output_file="/tmp/kgsm-test-output-$$.txt"
   local exit_code
 
-  if [[ -n "${KGSM_TEST_FUNCTION_FILTER:-}" ]]; then
-    # Run only the specified function: source a temp copy with main call removed,
-    # then call setup_test + target function + print_assert_summary.
-    # Using source (not eval) preserves BASH_LINENO for correct failure locations.
-    local filtered_file="/tmp/kgsm-test-filtered-$$.sh"
-    sed '/^main "\$@"/d' "$test_file" > "$filtered_file"
-    (
-      source "$filtered_file"
+  (
+    # Source the test file — only defines functions (no main "$@" invocation)
+    source "$test_file"
 
-      if declare -f setup_test >/dev/null 2>&1; then
-        setup_test
-      fi
+    # Run setup_test if defined
+    if declare -f setup_test >/dev/null 2>&1; then
+      setup_test
+    fi
 
+    if [[ -n "${KGSM_TEST_FUNCTION_FILTER:-}" ]]; then
+      # Run only the specified function
       "${KGSM_TEST_FUNCTION_FILTER}"
+    else
+      # Auto-discover and run all test_* functions in file order
+      local -a _test_functions
+      mapfile -t _test_functions < <(grep -oP '^function \Ktest_\w+' "$test_file")
+      for _fn in "${_test_functions[@]}"; do
+        if declare -f "$_fn" >/dev/null 2>&1; then
+          "$_fn"
+        fi
+      done
+    fi
 
-      if declare -f print_assert_summary >/dev/null 2>&1; then
-        print_assert_summary "${TEST_NAME:-}"
-      fi
-    ) >"$output_file" 2>&1 &
-    local test_pid=$!
-    rm -f "$filtered_file"
-  else
-    # Run the full test file
-    (source "$test_file") >"$output_file" 2>&1 &
-    local test_pid=$!
-  fi
+    # Framework calls print_assert_summary — capture its exit code
+    local _test_exit=0
+    if declare -f print_assert_summary >/dev/null 2>&1; then
+      print_assert_summary "${TEST_NAME:-}" || _test_exit=$?
+    fi
+
+    # Run cleanup_test if defined (must not affect test result)
+    if declare -f cleanup_test >/dev/null 2>&1; then
+      cleanup_test
+    fi
+
+    exit $_test_exit
+  ) >"$output_file" 2>&1 &
+
+  local test_pid=$!
 
   # Wait for completion or timeout
   if ! wait_with_timeout "$test_pid" "$timeout_seconds"; then
@@ -576,6 +585,9 @@ function execute_test_in_sandbox() {
     result_array[exit_code]="$EC_ERROR"
     return $EC_SUCCESS
   fi
+
+  # Save original KGSM_ROOT before setup modifies it
+  local original_kgsm_root="${KGSM_ROOT:-}"
 
   # Setup environment (exports KGSM_TEST_SANDBOX and other variables)
   __setup_test_environment "$sandbox_path" "$test_log"

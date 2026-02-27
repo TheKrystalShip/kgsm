@@ -40,6 +40,20 @@ function setup_test() {
   log_test_step "Configuration workflow E2E environment validated"
 }
 
+function cleanup_test() {
+  log_test_step "Cleaning up configuration workflow E2E tests"
+
+  # Remove any backup files created during tests
+  rm -f "${CONFIG_FILE}".{0..9} 2>/dev/null || true
+
+  # Restore config to defaults
+  if [[ -f "$DEFAULT_CONFIG_FILE" ]]; then
+    cp "$DEFAULT_CONFIG_FILE" "$CONFIG_FILE"
+  fi
+
+  log_test_step "Configuration workflow E2E cleanup complete"
+}
+
 # =============================================================================
 # TEST 1: config validate - Valid Config Passes
 # =============================================================================
@@ -355,36 +369,3 @@ function cleanup_test() {
   fi
 }
 
-# =============================================================================
-# MAIN TEST EXECUTION
-# =============================================================================
-
-function main() {
-  log_test_step "Starting configuration workflow E2E tests"
-
-  setup_test
-
-  test_config_validate_with_valid_config
-  test_config_merge_creates_backup
-  test_backup_is_valid_ini
-  test_config_diff_with_backup
-  test_config_diff_missing_backup_fails
-  test_config_rollback_restores_from_backup
-  test_config_validate_after_rollback
-  test_config_key_access
-  test_config_rollback_nonexistent_backup_fails
-  test_config_list_shows_all_keys
-  test_config_file_integrity_after_operations
-
-  cleanup_test
-
-  log_test_step "Configuration workflow E2E tests completed"
-
-  if print_assert_summary "$TEST_NAME"; then
-    pass_test "All configuration workflow E2E tests passed"
-  else
-    fail_test "Some configuration workflow E2E tests failed"
-  fi
-}
-
-main "$@"

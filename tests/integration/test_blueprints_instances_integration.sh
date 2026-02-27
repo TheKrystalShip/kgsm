@@ -505,36 +505,3 @@ function test_blueprint_type_reflected_in_instance_runtime() {
   remove_test_instance "vrising" "$container_instance" "$TEST_INSTALL_DIR"
 }
 
-# =============================================================================
-# MAIN TEST EXECUTION
-# =============================================================================
-
-function main() {
-  log_test_step "Starting blueprints+instances integration tests"
-
-  setup_test
-
-  # Core integration tests
-  test_invalid_blueprint_blocks_instance_creation
-  test_blueprint_path_reflected_in_instance_config
-  test_blueprint_info_fields_in_instance_config
-  test_blueprint_list_unaffected_by_instances
-  test_instance_list_filtered_by_blueprint
-  test_multiple_instances_from_same_blueprint
-  test_instance_removal_does_not_affect_blueprint
-  test_generate_id_compatible_with_create
-  test_duplicate_instance_name_rejected
-  test_steam_blueprint_data_flows_to_instance
-  test_instance_info_json_contains_blueprint_data
-  test_blueprint_type_reflected_in_instance_runtime
-
-  log_test_step "Blueprints+instances integration tests completed"
-
-  if print_assert_summary "$TEST_NAME"; then
-    pass_test "All blueprints+instances integration tests passed"
-  else
-    fail_test "Some blueprints+instances integration tests failed"
-  fi
-}
-
-main "$@"

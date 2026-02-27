@@ -87,10 +87,7 @@ __load_module "logging.sh" "Logging Module" || return 1
 # 3. Configuration module (loads test configuration)
 __load_module "config.sh" "Config Module" || return 1
 
-# 4. Reporting module (test statistics and summary generation)
-__load_module "reporting.sh" "Reporting Module" || return 1
-
-# 4a. TAP reporting module (TAP v14 output for VS Code integration)
+# 4. Reporting module (TAP v14 output for VS Code integration)
 __load_module "reporting.tap.sh" "TAP Reporting Module" || return 1
 
 # 5. Discovery module (test discovery and filtering)
@@ -99,8 +96,8 @@ __load_module "discovery.sh" "Discovery Module" || return 1
 # 6. Sandbox module (test environment isolation)
 __load_module "sandbox.sh" "Sandbox Module" || return 1
 
-# 7. Execution orchestrator module (delegates to sequential or parallel)
-__load_module "execution.sh" "Execution Module" || return 1
+# 7. Execution module (test execution in sandboxed environments)
+__load_module "execution.common.sh" "Execution Module" || return 1
 
 # 8. Assertion module (independent utility)
 __load_module "assert.sh" "Assertion Module" || return 1
@@ -128,16 +125,12 @@ if [[ "${TEST_DEBUG:-false}" == "true" ]]; then
   echo "  - loader.sh:              ${TEST_LOADER_LOADED:-not loaded}" >&2
   echo "  - logging.sh:             ${TEST_LOGGING_LOADED:-not loaded}" >&2
   echo "  - config.sh:              ${TEST_CONFIG_LOADED:-not loaded}" >&2
-  echo "  - reporting.sh:           ${TEST_REPORTING_LOADED:-not loaded}" >&2
+  echo "  - reporting.tap.sh:       ${TEST_REPORTING_TAP_LOADED:-not loaded}" >&2
   echo "  - discovery.sh:           ${TEST_DISCOVERY_LOADED:-not loaded}" >&2
   echo "  - sandbox.sh:             ${TEST_SANDBOX_LOADED:-not loaded}" >&2
   echo "  - assert.sh:              ${TEST_ASSERT_LOADED:-not loaded}" >&2
   echo "  - kgsm.wrapper.sh:        ${TEST_KGSM_WRAPPER_LOADED:-not loaded}" >&2
-  echo "  - execution.sh:           ${TEST_EXECUTION_LOADED:-not loaded}" >&2
-  echo "    - common:               ${TEST_EXECUTION_COMMON_LOADED:-not loaded}" >&2
-  echo "    - sequential:           ${TEST_EXECUTION_SEQUENTIAL_LOADED:-not loaded}" >&2
-  echo "    - parallel:             ${TEST_EXECUTION_PARALLEL_LOADED:-not loaded}" >&2
-  echo "    - active executor:      ${_active_executor:-unknown}" >&2
+  echo "  - execution.common.sh:    ${TEST_EXECUTION_COMMON_LOADED:-not loaded}" >&2
   echo "[DEBUG] KGSM core loaded: ${KGSM_COMMON_LOADED:-not loaded}" >&2
 fi
 

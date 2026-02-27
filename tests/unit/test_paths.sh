@@ -144,30 +144,3 @@ function test_paths_loaded_guard() {
   assert_not_equals "0" "$KGSM_PATHS_LOADED" "KGSM_PATHS_LOADED should be truthy (non-zero)"
 }
 
-# =============================================================================
-# MAIN TEST EXECUTION
-# =============================================================================
-
-function main() {
-  log_test_step "Starting paths module tests"
-
-  setup_test
-
-  test_system_paths_exported
-  test_user_paths_exported
-  test_xdg_compliance
-  test_init_user_directories
-  test_legacy_aliases_exported
-  test_paths_loaded_guard
-
-  log_test_step "Paths module tests completed"
-
-  # Print summary and determine exit code
-  if print_assert_summary "$TEST_NAME"; then
-    pass_test "All paths module tests passed"
-  else
-    fail_test "Some paths module tests failed"
-  fi
-}
-
-main "$@"
