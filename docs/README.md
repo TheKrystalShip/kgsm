@@ -24,9 +24,3 @@ Read these sections in order to understand the core concepts of how KGSM operate
 ## Advanced Features
 
 - [Event System](events.md) - Using KGSM's event broadcasting to build integrations
-
-## Development & Testing
-
-- [Testing Framework](testing_framework.md) - Comprehensive testing system for KGSM development
-- [Behavioral Uncertainty Discovery](behavioral_uncertainty_discovery.md) - Critical findings about KGSM behavior consistency
-- [Behavioral Uncertainty Quick Reference](behavioral_uncertainty_quick_reference.md) - Developer guide for handling uncertain behavior

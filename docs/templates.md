@@ -1,68 +1,336 @@
 # Templates in KGSM
 
-Templates in KGSM are standardized files that provide consistent structure for various aspects of game server management. They act as blueprints that define what information KGSM needs to parse, generate, and manage game server configurations effectively.
+Templates in KGSM are standardized files that provide consistent structure for generating and managing game server configuration and runtime artifacts. They act as the blueprints that KGSM uses to produce instance configuration files, management scripts, systemd units, and firewall rules — each tailored to the specific parameters of a deployed game server.
 
-## Purpose and Function
+## Table of Contents
 
-Templates serve to:
-- Standardize configuration formats across different game servers
-- Enable reliable parsing and extraction of user settings
-- Provide a base for generating implementation files
-- Support user customization through a consistent interface
+- [How Templates Work](#how-templates-work)
+- [Template Reference](#template-reference)
+  - [blueprint.tp](#blueprinttp)
+  - [instance.tp](#instancetp)
+  - [manage.native.tp](#managenativetp)
+  - [manage.container.tp](#managecontainertp)
+  - [service.tp](#servicetp)
+  - [socket.tp](#sockettp)
+  - [ufw.tp](#ufwtp)
+  - [overrides.tp](#overridestown)
+- [Template Variables Reference](#template-variables-reference)
+- [Usage Guidelines](#usage-guidelines)
 
-KGSM stores template files with a `.tp` extension in the `/templates` directory, and users should never modify these directly. Instead, users create their own configuration files based on these templates in the appropriate directories (`/blueprints`, `/instances`, or `/overrides`).
+## How Templates Work
 
-## Template Types
+All template files use the `.tp` extension and live in the `templates/` directory. KGSM expands templates using bash variable substitution: the template content is evaluated in a subshell that has all relevant `$instance_*` and `$config_*` variables exported into it. This means any shell variable reference (`$instance_name`, `${instance_ports}`, etc.) in a template is replaced with its value at expansion time.
 
-KGSM utilizes several template types:
+The template engine lives in `commands/handlers/templates.sh` and exposes these functions for internal use:
 
-### Configuration Templates
-- **Blueprint Templates** (`blueprint.tp`): Define game server configurations with fields for server info, Steam integration, executable paths, and runtime parameters
-- **Instance Templates** (`instance.tp`): Configure deployed game server instances with identification, blueprint references, and runtime settings
+| Function | Purpose |
+|---|---|
+| `__logic_find_template` | Locate a `.tp` file by name |
+| `__logic_expand_template` | Expand a template using current environment variables |
+| `__logic_expand_template_with_vars` | Expand a template with an explicit variable map |
+| `__logic_validate_template_vars` | Confirm that required variables are present in a template |
+| `__logic_list_templates` | List all available templates by name |
 
-### Management Templates
-- **Native Management** (`manage.native.tp`): Generate scripts for managing native processes (start/stop, backups, updates)
-- **Container Management** (`manage.container.tp`): Generate scripts for containerized servers (lifecycle, volumes, networking)
+The low-level file discovery is handled by `__find_template` in `core/loader.sh`.
 
-### System Integration Templates
-- **Service Templates** (`service.tp`): Define systemd service files
-- **Socket Templates** (`socket.tp`): Define systemd socket files 
-- **Firewall Templates** (`ufw.tp`): Define firewall rules for network access
+> [!NOTE]
+> Template files in `templates/` should never be modified directly. They are internal KGSM artifacts. To customize behavior, use the appropriate directories: `blueprints/custom/` for blueprint variants, or `overrides/` for game-specific function implementations.
 
-### Customization Templates
-- **Override Templates** (`overrides.tp`): Provide structure for custom function implementations
+## Template Reference
 
-## Working with Templates
+### blueprint.tp
 
-### Structure and Format
+**Purpose:** A human-readable starting point for creating a new native blueprint. It documents every supported field with inline comments, examples, and the full list of `$instance_*` variables available for use in `executable_arguments`.
 
-Template files follow a consistent structure:
-- Header comments with usage instructions
-- Configuration parameters with clear explanations
-- Optional sections for advanced settings
+**Used by:** Not expanded programmatically. Referenced in `commands/blueprints.sh` documentation and in the KGSM user guide as the canonical example for authoring blueprints.
 
-Most templates use an INI-like format with parameter names and values, making them easy to read and modify:
+**Format:** INI-style `key=value`.
 
-```ini
-# Parameter description
-parameter_name=value
+**Key fields defined:**
+
+| Field | Required | Description |
+|---|---|---|
+| `name` | Yes | Unique identifier (lowercase, no spaces) |
+| `executable_file` | Yes | Server binary name |
+| `level_name` | Yes | Default world/map name |
+| `ports` | No | Network ports in UFW format, e.g. `'27015/tcp\|27015/udp'` |
+| `steam_app_id` | No | Steam App ID; `0` if not applicable |
+| `is_steam_account_required` | No | `true` if a Steam account is needed |
+| `platform` | No | Target OS: `linux` (default), `windows`, `macos` |
+| `executable_subdirectory` | No | Relative subdirectory containing the binary |
+| `executable_arguments` | No | CLI arguments passed to the server binary |
+| `stop_command` | No | Command sent to the input socket to stop the server |
+| `save_command` | No | Command sent to the input socket to save the game |
+| `startup_success_regex` | No | Regex matched against server log to detect successful startup |
+
+---
+
+### instance.tp
+
+**Purpose:** Template for the per-instance configuration file (`.ini`-style). When a new instance is created, KGSM expands this template with all resolved `$instance_*` values and writes the result to the instance's working directory. This file is the authoritative runtime configuration for the instance.
+
+**Used by:** `commands/handlers/instances.sh` during instance creation.
+
+**Format:** Sectioned INI-style, with inline comments grouping fields into logical sections.
+
+**Sections:**
+
+| Section | Fields |
+|---|---|
+| Basic Instance Information | `name`, `blueprint_file`, `install_datetime` |
+| Directory and File Paths | `working_dir`, `backups_dir`, `install_dir`, `saves_dir`, `temp_dir`, `logs_dir`, `launch_dir`, `executable_subdirectory`, `executable_file`, `management_file`, `compose_file` |
+| Process Management Files | `version_file`, `pid_file`, `socket_file`, `log_file`, `port_forwarding_state_file` |
+| Runtime Configuration | `lifecycle_manager`, `runtime`, `platform`, `auto_update`, `startup_success_regex` |
+| Game Server Executable Configuration | `level_name`, `executable_arguments` |
+| Steam Integration | `steam_app_id`, `steamcmd_arguments`, `is_steam_account_required` |
+| Network Configuration | `ports`, `enable_port_forwarding`, `upnp_ports`, `enable_firewall_management`, `firewall_rule_file`, `wget_timeout_seconds` |
+| Server Control Commands | `stop_command`, `save_command`, `save_command_timeout_seconds`, `stop_command_timeout_seconds` |
+| Backup Configuration | `compress_backups` |
+| System Integration | `enable_systemd`, `systemd_service_file`, `systemd_socket_file` |
+| Management Features | `enable_command_shortcuts`, `command_shortcut_file` |
+
+---
+
+### manage.native.tp
+
+**Purpose:** Template for the per-instance management script used by **native** (non-containerized) game servers. KGSM expands this template and writes the result to the instance directory. The resulting script is the primary interface for starting, stopping, restarting, updating, backing up, and otherwise controlling a running game server.
+
+**Used by:** `commands/handlers/files.management.sh` when `instance_runtime=native`. Can be manually regenerated with:
+
+```bash
+./kgsm.sh files --instance <instance_name> --create --manage
 ```
 
-### Template Variables
+**Format:** Bash script (`#!/usr/bin/env bash`). Contains `__source_instance_config` to load the instance config at runtime, plus all lifecycle functions. Supports `--debug` flag propagation.
 
-Templates may contain variables that KGSM replaces during processing:
-- `$instance_name`: The unique identifier for an instance
-- `$instance_blueprint_file`: Path to the blueprint file used by an instance
-- `$instance_working_dir`: The working directory for an instance
+---
 
-### Usage Guidelines
+### manage.container.tp
 
-When working with templates:
-1. **Never modify template files** in the `/templates` directory
-2. Create new configuration files in their appropriate directories instead
-3. Reference the template structure when creating new configurations
-4. Advanced users can extend the system with custom templates
+**Purpose:** Template for the per-instance management script used by **containerized** game servers. Structurally similar to `manage.native.tp`, but all lifecycle operations (`--start`, `--stop`, `--restart`, `--update`) are implemented via `docker compose` rather than direct process management.
 
-## Conclusion
+**Used by:** `commands/handlers/files.management.sh` when `instance_runtime=container`. Can be manually regenerated with:
 
-Templates provide the foundation for KGSM's flexibility and standardization, enabling seamless configuration and management of diverse game server types while maintaining a consistent interface.
+```bash
+./kgsm.sh files --instance <instance_name> --create --manage
+```
+
+**Format:** Bash script (`#!/usr/bin/env bash`). Reads `$instance_compose_file` and delegates all container operations to Docker Compose.
+
+---
+
+### service.tp
+
+**Purpose:** Template for the systemd `.service` unit file for a game server instance. When systemd integration is enabled, KGSM expands this template and installs the resulting unit file.
+
+**Used by:** `commands/handlers/files.systemd.sh`.
+
+**Variables used:**
+
+| Variable | Description |
+|---|---|
+| `$instance_name` | Used for the service description and socket reference |
+| `$instance_pid_file` | PID file path for the service |
+| `$INSTANCE_USER` | OS user the service runs as |
+| `$instance_working_dir` | Working directory for the service |
+| `$instance_management_file` | Path to the management script for `ExecStart`/`ExecStop` |
+| `$instance_socket_file` | (Indirect) bound via the socket unit |
+
+**Generated unit excerpt:**
+
+```ini
+[Unit]
+Description=$instance_name Dedicated Server
+Requires=$instance_name.socket
+
+[Service]
+Type=exec
+PIDFile=$instance_pid_file
+User=$INSTANCE_USER
+WorkingDirectory=$instance_working_dir
+ExecStart=$instance_management_file --start
+ExecStop=$instance_management_file --stop
+```
+
+---
+
+### socket.tp
+
+**Purpose:** Template for the systemd `.socket` unit file that provides the named pipe (FIFO) used for sending commands to the running server process.
+
+**Used by:** `commands/handlers/files.systemd.sh` (expanded alongside `service.tp`).
+
+**Variables used:**
+
+| Variable | Description |
+|---|---|
+| `$instance_name` | Used for unit description and `PartOf` reference |
+| `$instance_socket_file` | Path to the `ListenFIFO` named pipe |
+
+---
+
+### ufw.tp
+
+**Purpose:** Template for the UFW application profile file that defines the firewall rules for a game server instance.
+
+**Used by:** `commands/handlers/files.ufw.sh`.
+
+**Variables used:**
+
+| Variable | Description |
+|---|---|
+| `$instance_name` | UFW profile title and description |
+| `$instance_ports` | Port specification in UFW format |
+
+**Generated profile excerpt:**
+
+```ini
+[$instance_name]
+title=$instance_name
+description=$instance_name
+ports=$instance_ports
+```
+
+---
+
+### overrides.tp
+
+**Purpose:** A comprehensive reference template for creating game-specific override files. It documents every overridable function with its expected input/output contract, available global variables, and example implementations. Users copy this file to `overrides/<blueprint_name>.overrides.sh` and uncomment only the functions they need to customize.
+
+**Used by:** Not expanded programmatically. Serves as a starting point and API reference for authors writing override files.
+
+**Format:** Bash script with all function bodies commented out. Includes detailed inline documentation for each overridable function and the full list of available `$instance_*` and `$config_*` variables.
+
+For a detailed explanation of overrides and the override system, see [Overrides 101](overrides.md).
+
+---
+
+## Template Variables Reference
+
+The following `$instance_*` variables are available in templates that are expanded during instance creation or file generation. They are resolved from the instance configuration file at the time of expansion.
+
+### Basic Instance Information
+
+| Variable | Description |
+|---|---|
+| `$instance_name` | Unique instance identifier |
+| `$instance_blueprint_file` | Absolute path to the blueprint file |
+| `$instance_install_datetime` | Timestamp of when the instance was installed |
+
+### Directory and File Paths
+
+| Variable | Description |
+|---|---|
+| `$instance_working_dir` | Root working directory for all instance files |
+| `$instance_install_dir` | Directory where server binaries are installed |
+| `$instance_backups_dir` | Directory for backup archives |
+| `$instance_saves_dir` | Directory for save files |
+| `$instance_temp_dir` | Temporary directory for downloads and processing |
+| `$instance_logs_dir` | Directory for server log output |
+| `$instance_launch_dir` | Directory from which the server binary is launched |
+| `$instance_executable_subdirectory` | Subdirectory within `install_dir` containing the binary |
+| `$instance_management_file` | Absolute path to the generated management script |
+| `$instance_compose_file` | Absolute path to the docker-compose file (container only) |
+
+### Process Management Files
+
+| Variable | Description |
+|---|---|
+| `$instance_version_file` | Path to the file storing the installed version |
+| `$instance_pid_file` | Path to the PID file for the running process |
+| `$instance_tail_pid_file` | Path to the tail PID file |
+| `$instance_socket_file` | Path to the named pipe for sending commands to the server |
+| `$instance_log_file` | Path to the active server log file |
+| `$instance_port_forwarding_state_file` | Path to the UPnP state file |
+
+### Runtime Configuration
+
+| Variable | Description |
+|---|---|
+| `$instance_lifecycle_manager` | How the instance is managed: `standalone` or `systemd` |
+| `$instance_runtime` | Runtime type: `native` or `container` |
+| `$instance_platform` | Target platform: `linux`, `windows`, or `macos` |
+| `$instance_auto_update` | `true` if the server auto-updates before starting |
+| `$instance_startup_success_regex` | Regex matched against log output to detect successful startup |
+
+### Game Server Executable Configuration
+
+| Variable | Description |
+|---|---|
+| `$instance_level_name` | Default world/level name |
+| `$instance_executable_file` | Server binary filename |
+| `$instance_executable_arguments` | CLI arguments passed to the server binary |
+
+### Steam Integration
+
+| Variable | Description |
+|---|---|
+| `$instance_steam_app_id` | Steam App ID; `0` if not Steam-based |
+| `$instance_steamcmd_arguments` | Additional arguments passed to SteamCMD |
+| `$instance_is_steam_account_required` | `true` if a Steam account is required for download |
+
+### Network Configuration
+
+| Variable | Description |
+|---|---|
+| `$instance_ports` | Ports in UFW format, e.g. `27015/udp\|27015/tcp` |
+| `$instance_enable_port_forwarding` | `true` if UPnP port forwarding is enabled |
+| `$instance_upnp_ports` | Array of ports to forward via UPnP |
+| `$instance_enable_firewall_management` | `true` if UFW firewall management is enabled |
+| `$instance_firewall_rule_file` | Path to the generated UFW profile file |
+
+### Server Control
+
+| Variable | Description |
+|---|---|
+| `$instance_stop_command` | Command sent to the socket to gracefully stop the server |
+| `$instance_save_command` | Command sent to the socket to save game state |
+| `$instance_save_command_timeout_seconds` | Seconds to wait after sending the save command |
+| `$instance_stop_command_timeout_seconds` | Seconds to wait for graceful shutdown |
+
+### Backup Configuration
+
+| Variable | Description |
+|---|---|
+| `$instance_compress_backups` | `true` if backups are compressed |
+
+### System Integration
+
+| Variable | Description |
+|---|---|
+| `$instance_enable_systemd` | `true` if systemd integration is enabled |
+| `$instance_systemd_service_file` | Path to the systemd service unit file |
+| `$instance_systemd_socket_file` | Path to the systemd socket unit file |
+
+### Management Features
+
+| Variable | Description |
+|---|---|
+| `$instance_enable_command_shortcuts` | `true` if command shortcut symlinks are created |
+| `$instance_command_shortcut_file` | Path to the command shortcut symlink |
+
+### Global Configuration Variables
+
+These `$config_*` variables reflect KGSM-wide settings and are also available in templates:
+
+| Variable | Description |
+|---|---|
+| `$config_wget_timeout_seconds` | Timeout in seconds for `wget` operations (default: `60`) |
+| `$config_enable_logging` | `true` if file logging is enabled |
+| `$config_enable_systemd` | Global systemd integration toggle |
+| `$config_enable_firewall_management` | Global UFW management toggle |
+| `$config_enable_port_forwarding` | Global UPnP toggle |
+| `$config_enable_backup_compression` | Global backup compression toggle |
+
+---
+
+## Usage Guidelines
+
+- **Never modify files in `templates/`**. These are internal KGSM files and may be overwritten during updates.
+- To create a new blueprint, copy `templates/blueprint.tp` to `blueprints/custom/native/your_game.bp` and fill in the fields.
+- To add game-specific logic, copy `templates/overrides.tp` to `overrides/your_game.overrides.sh` and implement only the functions you need.
+- If a management script becomes corrupted or needs to be regenerated, use:
+  ```bash
+  ./kgsm.sh files --instance <instance_name> --create --manage
+  ```
+- Management script templates (`manage.native.tp`, `manage.container.tp`) are selected automatically based on the instance's `runtime` field (`native` or `container`).

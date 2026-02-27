@@ -3,108 +3,96 @@
 This document explains the day-to-day operations of managing game server instances after they've been created. For information about what instances are and how they're created, see [Instances 101](instances.md).
 
 > [!NOTE]
-> Throughout this document, `<instance>` refers to the name of your game server instance as shown when running `./kgsm.sh --instances`.
+> Throughout this document, `<instance>` refers to the name of your game server instance. Run `./kgsm.sh instances list` to see all created instances.
 
 ---
 
-## Startup
+## Lifecycle Management
 
-To start a game server instance, you can choose from several methods:
+KGSM provides dedicated commands for controlling the operational state of game server instances through the `lifecycle` module. The most common commands are available as top-level shortcuts directly on `kgsm.sh`.
 
-### Option 1: Using KGSM
+### Starting a Server
 
-KGSM provides built-in functionality for managing instances. While not mandatory, it simplifies the process.
-
-#### Interactive Mode
-
-Run KGSM in interactive mode, then select the `Start` option in the menu. You will be prompted to select an instance to start.
-
-#### Named Arguments
-
-Use the following command:
+#### Using KGSM (recommended)
 
 ```sh
-./kgsm.sh --instance <instance> --start
+./kgsm.sh start <instance>
 ```
 
-> [!NOTE]
-> To list all created instances, either select `List instances` in interactive mode or run:
->
-> ```sh
-> ./kgsm.sh --instances
-> ```
+When a server starts, KGSM automatically launches a readiness watcher (if configured) to monitor when the instance is ready for players.
 
-### Option 2: Systemctl
+#### Using systemctl
 
-If `enable_systemd` is enabled in `config.ini`, the instance will be configured to run as a `systemctl` service.
-
-Example command:
+If `enable_systemd=true` is set in `config.ini` (under the `[services]` section), the instance is registered as a systemd service:
 
 ```sh
 sudo systemctl start <instance>
 ```
 
-### Option 3: Manually
+#### Using the instance management script directly
 
-If `enable_systemd` is not enabled, you can manage the instance manually using the `<instance>.manage.sh` script in the instance’s installation directory.
-
-To start the instance in the current terminal, run:
+Each instance ships with a self-contained management script in its installation directory:
 
 ```sh
-./<instance>.manage.sh --start
+./<instance>.manage.sh start            # Attach terminal to the server
+./<instance>.manage.sh start --detached # Start as a background process
 ```
 
-To start the instance as a background process, run:
+Run `./<instance>.manage.sh --help` to see all available options.
+
+---
+
+### Stopping a Server
+
+#### Using KGSM
 
 ```sh
-./<instance>.manage.sh --start --background
+./kgsm.sh stop <instance>
 ```
 
-To see all options, run:
+#### Using systemctl
 
 ```sh
-./<instance>.manage.sh --help
+sudo systemctl stop <instance>
+```
+
+#### Using the instance management script directly
+
+```sh
+./<instance>.manage.sh stop
+./<instance>.manage.sh stop --no-save      # Skip saving before shutdown
+./<instance>.manage.sh stop --no-graceful  # Force-terminate the server process
 ```
 
 ---
 
-## Restart
+### Restarting a Server
 
-To restart a game server instance:
-
-### Using KGSM
+#### Using KGSM
 
 ```sh
-./kgsm.sh --instance <instance> --restart
+./kgsm.sh restart <instance>
 ```
 
-### Using Systemctl
+#### Using systemctl
 
 ```sh
 sudo systemctl restart <instance>
 ```
 
-### Manually
-
-Navigate to the instance’s installation directory and run:
-
-```sh
-./<instance>.manage.sh --restart
-```
-
 ---
 
-## Status Checks
+### Checking Instance Status
 
-To check the status of a game server instance:
-
-### Using KGSM
+#### Using KGSM
 
 ```sh
-./kgsm.sh --instance <instance> --status
+./kgsm.sh status <instance>             # Comprehensive runtime status
+./kgsm.sh status <instance> --json      # Machine-readable JSON output
+./kgsm.sh status <instance> --fast      # Skip update checking for faster response
 ```
 
-### Using Systemctl
+#### Using systemctl
 
 ```sh
 sudo systemctl status <instance>
@@ -112,98 +100,194 @@ sudo systemctl status <instance>
 
 ---
 
-## Logs
+### Checking if an Instance is Running
 
-To view logs for a game server instance, KGSM provides a dedicated command:
-
-```sh
-./kgsm.sh --instance <instance> --logs
-```
-
-To follow logs in real-time (similar to `tail -f`), use:
+`is-active` returns exit code `0` if the instance is running, or `1` if it is not. This is useful for scripting and health checks.
 
 ```sh
-./kgsm.sh --instance <instance> --logs --follow
-# or
-./kgsm.sh --instance <instance> --logs -f
+./kgsm.sh is-active <instance>
 ```
-
-This command automatically retrieves logs from:
-
-- `journalctl` if the instance is managed by `systemctl`.
-- The instance’s log file if `systemctl` integration is not enabled.
 
 ---
 
-## Automatic Start on Boot
+### Viewing Logs
 
-### Systemctl
+```sh
+./kgsm.sh logs <instance>                     # Show last 10 log lines (default)
+./kgsm.sh logs <instance> --follow            # Follow logs in real-time
+./kgsm.sh logs <instance> -f                  # Alias for --follow
+./kgsm.sh logs <instance> --tail 50           # Show last 50 lines
+./kgsm.sh logs <instance> --follow --tail 100 # Follow, starting with last 100 lines
+```
 
-For instances created with `enable_systemd` enabled, enable automatic startup on boot using:
+Logs are sourced from `journalctl` when the instance runs under systemd, or from the instance's own log file otherwise.
+
+The instance management script exposes the same options directly:
+
+```sh
+./<instance>.manage.sh --logs
+./<instance>.manage.sh --logs --follow
+./<instance>.manage.sh --logs --tail 50
+```
+
+---
+
+### Automatic Start on Boot
+
+#### With systemd integration
+
+Enable automatic startup on boot for any instance managed by systemd:
 
 ```sh
 sudo systemctl enable <instance>
 ```
 
-### Manually
+#### Without systemd
 
-If `enable_systemd` is not enabled, add the following line to your system’s startup script:
-
-```sh
-/full/path/to/instance/<instance>.manage.sh --start --background
-```
-
----
-
-## Shutdown
-
-To shut down a game server instance:
-
-### Option 1: Using KGSM
-
-From the interactive mode menu, select the `Stop` option and choose an instance when prompted. Alternatively, use:
+Add the instance management script to your system's startup configuration, using the `--detached` flag:
 
 ```sh
-./kgsm.sh --instance <instance> --stop
+/full/path/to/instance/<instance>.manage.sh start --detached
 ```
-
-### Option 2: Systemctl
-
-```sh
-sudo systemctl stop <instance>
-```
-
-### Option 3: Manually
-
-Navigate to the instance’s installation directory and run:
-
-```sh
-./<instance>.manage.sh --stop
-```
-
-> [!NOTE]
-> This will stop the instance if it's running as a background process.
 
 ---
 
 ## Decommissioning Game Servers
 
-To completely remove a game server instance, use KGSM’s uninstall command:
+To completely remove a game server instance:
 
 ```sh
-./kgsm.sh --uninstall <instance>
+./kgsm.sh uninstall <instance>
 ```
 
 This will:
 
-- Stop the instance.
+- Stop the instance if it is running.
 - Remove all files and directories associated with the instance.
 - Delete `systemd` and `ufw` integrations, if applicable.
 
-## Advanced Management Features
+---
+
+## System Operations
+
+The `system` module provides OS-level information and power management. These commands act on the **host machine**, not on individual game server instances.
+
+### Power Management
+
+> [!WARNING]
+> Shutdown and restart commands require `sudo` privileges and affect the entire host system.
+
+```sh
+./kgsm.sh system shutdown         # Immediate system shutdown
+./kgsm.sh system shutdown 10      # Shutdown in 10 minutes
+./kgsm.sh system restart          # Immediate system restart
+./kgsm.sh system restart 5        # Restart in 5 minutes
+./kgsm.sh system cancel           # Cancel a scheduled shutdown or restart
+```
+
+### System Information
+
+```sh
+./kgsm.sh system uptime           # Show system uptime
+./kgsm.sh system load             # Show CPU load averages
+./kgsm.sh system memory           # Show memory usage
+./kgsm.sh system disk             # Show disk usage
+./kgsm.sh system reboot-required  # Check if a reboot is needed
+./kgsm.sh system info             # Show all of the above at once
+./kgsm.sh system info --json      # Machine-readable JSON output
+```
+
+---
+
+## Network Management
+
+The `network` module provides tools for inspecting and troubleshooting ports and connectivity on the host machine.
+
+### Port Operations
+
+```sh
+./kgsm.sh network ports check 27015         # Check if TCP port 27015 is in use
+./kgsm.sh network ports check 27015 udp     # Check UDP port 27015
+./kgsm.sh network ports list-used           # List all ports currently in use
+./kgsm.sh network ports conflicts           # Find port conflicts across KGSM instances
+./kgsm.sh network ports kill 27015          # Force-stop the process using port 27015
+```
+
+### Connectivity Testing
+
+```sh
+./kgsm.sh network test-port 27015           # Test if TCP port 27015 is externally accessible
+./kgsm.sh network test-port 27015 udp       # Test UDP port 27015
+./kgsm.sh network test-all                  # Test all ports across all KGSM instances
+```
+
+### Network Information
+
+```sh
+./kgsm.sh network ip                        # Show external and local IP addresses
+./kgsm.sh network dns                       # Show DNS server configuration
+```
+
+> [!NOTE]
+> Port protocol defaults to `tcp` if not specified. Terminating a process using a port may require `sudo` privileges.
+
+---
+
+## Readiness Watchers
+
+The `watcher` module monitors game server instances to detect when they are ready to accept players. It supports two detection strategies:
+
+- **Log pattern matching** (primary): Watches the instance log file for a configured regex pattern (`startup_success_regex`).
+- **Port monitoring** (fallback): Polls the instance's configured port(s) until they are active.
+
+Strategy selection is automatic—log pattern matching takes precedence when both are configured.
+
+> [!NOTE]
+> Watchers are started automatically by `./kgsm.sh start <instance>` when `enable_watcher=true` is set in `config.ini`. The commands below are for manual control.
+
+### Watcher Commands
+
+```sh
+./kgsm.sh watcher start <instance>           # Launch watcher with auto-selected strategy
+./kgsm.sh watcher start <instance> --detach  # Run watcher as a background process
+./kgsm.sh watcher test <instance>            # Test watcher configuration
+./kgsm.sh watcher status <instance>          # Show watcher configuration for all strategies
+```
+
+### Component-Level Control
+
+For direct control over individual strategies:
+
+```sh
+# Log pattern strategy
+./kgsm.sh watcher logs watch <instance>            # Start log watcher
+./kgsm.sh watcher logs watch <instance> --detach   # Run in background
+./kgsm.sh watcher logs test <instance>             # Test log pattern configuration
+./kgsm.sh watcher logs status <instance>           # Show log watcher status
+
+# Port monitoring strategy
+./kgsm.sh watcher ports watch <instance>           # Start port watcher
+./kgsm.sh watcher ports watch <instance> --detach  # Run in background
+./kgsm.sh watcher ports test <instance>            # Test port monitoring configuration
+./kgsm.sh watcher ports status <instance>          # Show port watcher status
+```
+
+### Configuration
+
+Watcher behaviour is controlled by the `[watchers]` section in `config.ini`:
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `enable_watcher` | `false` | Auto-start a watcher when an instance is started |
+| `watcher_global_timeout_seconds` | `600` | Maximum time (in seconds) to wait for a ready signal |
+| `watcher_ports_check_interval_seconds` | `5` | How often (in seconds) to poll ports |
+
+---
+
+## Advanced Features
 
 ### Event System
 
-KGSM features an event broadcasting system that emits notifications when important actions occur (such as starting a server, creating backups, etc.). This allows for building sophisticated integrations and monitoring tools.
+KGSM emits events when important actions occur—server start, stop, backup creation, instance readiness, and more. These events can be consumed by external systems via webhooks or Unix sockets, enabling custom monitoring and automation workflows.
 
-For details on the event system and how to use it, see [KGSM Event System](events.md).
+For details, see [KGSM Event System](events.md).

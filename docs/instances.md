@@ -17,29 +17,57 @@ You can create multiple instances from a single blueprint (for example, several 
 
 Each instance consists of two main components:
 
-1. **Game Server Files**: Located in the installation directory you specified during instance creation. This contains the actual game server executables, configuration files, world data, etc.
+1. **Working Directory**: Located under the installation directory you specify during creation, at `<install-dir>/<blueprint-name>/<instance-name>/`. This contains the game server executables, configuration, world data, and all runtime files.
 
-2. **Instance Reference**: Stored in the `instances` directory within your KGSM installation. This is a symbolic link to your game server installation directory, allowing KGSM to track and access your instances. The symlink structure is organized by blueprint type for easy navigation.
+2. **Instance Reference**: A symbolic link stored inside the `instances/` directory of your KGSM installation, at `instances/<blueprint-name>/<instance-name>/`. This symlink points to the working directory, allowing KGSM to track and access your instances without requiring them to live inside the KGSM directory tree.
 
-### Listing instances
+### Instance directory structure
 
-To list all your game server instances, run:
+Each working directory is laid out as follows:
+
+```
+<instance-name>/
+├── <instance-name>.config.ini   # Instance configuration (variables, paths, settings)
+├── <instance-name>.manage.sh    # Management script (start, stop, update, backup, …)
+├── <instance-name>.log          # Live server log output
+├── .<instance-name>.pid         # PID of the running server process
+├── .<instance-name>.sock        # Named pipe for sending console commands
+├── .<instance-name>.version     # Installed version record
+├── install/                     # Game server binary and data files
+├── backups/                     # Backup archives
+├── saves/                       # Game save files and world data
+├── temp/                        # Temporary files used during downloads and updates
+└── logs/                        # Rotated historical log files
+```
+
+> [!NOTE]
+> The symbolic link in `instances/` lets KGSM reach all instance files while your game server remains completely self-contained and functional without KGSM.
+
+## Listing instances
+
+Use `instances list` to see your game server instances:
 
 ```sh
 # List all instances
-kgsm.sh instances
+kgsm.sh instances list
 
-# List instances with detailed information
-kgsm.sh instances --detailed
+# List only instances created from a specific blueprint
+kgsm.sh instances list factorio
 
-# List only instances of a specific game
-kgsm.sh instances minecraft
+# Show detailed configuration for each instance
+kgsm.sh instances list --detailed
+
+# Show runtime status for all instances
+kgsm.sh instances list --status
 
 # Get JSON output for scripting
-kgsm.sh instances --json
+kgsm.sh instances list --json
+
+# Combine flags
+kgsm.sh instances list factorio --detailed --json
 ```
 
-For example, the output might look like this:
+Example plain output:
 
 ```
 minecraft-survival
@@ -49,30 +77,94 @@ terraria-hardmode
 
 ## How to create an instance
 
-Creating an instance involves using a blueprint to set up a new game server. You can do this in several ways:
+Creating an instance registers the instance configuration with KGSM and sets up the directory structure. The game server files themselves are downloaded during the separate `install` step.
 
 ```sh
-# Basic usage
-kgsm.sh install <blueprint> --name <instance-name> --install-dir <directory>
+# Full install (create + download + deploy) via the top-level command
+kgsm.sh install <blueprint> --install-dir <directory>
 
-# Example
-kgsm.sh install minecraft --name survival-server --install-dir /opt/servers
+# Provide a custom instance name (auto-generated if omitted)
+kgsm.sh install minecraft --install-dir /opt/servers --name survival-server
 
-# Interactive mode
+# Create only the instance configuration (no download)
+kgsm.sh instances create <blueprint> --install-dir <directory>
+kgsm.sh instances create factorio --install-dir /opt/gameservers --name factorio-01
+
+# Interactive wizard
 kgsm.sh   # Then select "Install" from the menu
 ```
 
-During the creation process, KGSM:
+During a full `kgsm.sh install`, KGSM:
 
-1. Sets up the game server files in the specified installation directory
-2. Creates a **symbolic link** in the `instances` directory that points to your installation, allowing KGSM to track the instance
-3. Creates the necessary directory structure for logs, backups, saves, etc.
-4. Downloads and installs the game server files
-
-> [!NOTE]
-> The symbolic link allows KGSM to access all instance files (configuration, logs, saves, etc.) while keeping your game server completely standalone and functional without KGSM.
+1. Validates the blueprint and the target directory
+2. Generates a unique instance name if one is not supplied
+3. Creates the working directory structure (`install/`, `backups/`, `saves/`, `temp/`, `logs/`)
+4. Writes the instance configuration file (`<instance-name>.config.ini`)
+5. Generates the instance management script (`<instance-name>.manage.sh`)
+6. Creates the symbolic link in `instances/`
+7. Downloads and deploys the game server files
+8. Records the installed version
 
 For detailed step-by-step instructions on instance creation, see [Creating a New Game Server Instance](create_new_game_server_instance.md).
+
+## Inspecting instances
+
+### View instance configuration
+
+```sh
+# Display the raw configuration file
+kgsm.sh instances info <instance>
+
+# Output as JSON for scripting
+kgsm.sh instances info factorio-01 --json
+```
+
+### Check instance status
+
+```sh
+# Show full runtime status (process state, version, resource usage, recent logs)
+kgsm.sh instances status <instance>
+
+# Skip version checks for faster response (useful in monitoring loops)
+kgsm.sh instances status factorio-01 --fast
+
+# Output as JSON
+kgsm.sh instances status factorio-01 --json
+kgsm.sh instances status factorio-01 --json --fast
+```
+
+### Locate the instance configuration file
+
+```sh
+# Print the absolute path to the instance config file
+kgsm.sh instances find factorio-01
+```
+
+### Generate a unique instance name
+
+```sh
+# Preview the name KGSM would auto-generate for a blueprint
+kgsm.sh instances generate-id factorio
+
+# Validate a custom name and echo it back if it is available
+kgsm.sh instances generate-id factorio --name my-factory
+```
+
+## Sending commands to a running instance
+
+```sh
+# Trigger an in-game save
+kgsm.sh instances save <instance>
+
+# Send an arbitrary console command
+kgsm.sh instances input <instance> "<command>"
+
+# Examples
+kgsm.sh instances save factorio-01
+kgsm.sh instances input factorio-01 "/say Hello players!"
+```
+
+These commands write to the instance's named pipe (`.sock` file) so they reach the server's standard input in real time.
 
 ## Managing instances
 
@@ -94,27 +186,34 @@ Please refer to the [Managing Game Servers](managing_game_servers.md) document.
 
 - **Meaningful names:** Use descriptive names for your instances (e.g., `minecraft-survival`, `valheim-pvp`) to easily identify them.
 
-- **Regular backups:** Use the `create-backup` command before making significant changes or regularly via cron jobs.
+- **Regular backups:** Use the `--create-backup` option on the management script before making significant changes, or schedule it via cron.
 
-- **Systemd integration:** For servers that need to be always online, add systemd integration for automatic startup on system boot.
+- **Systemd integration:** For servers that need to be always online, configure systemd integration for automatic startup on system boot.
 
-- **Avoid manual edits:** Don't manually modify the instance configuration files unless you know exactly what you're doing.
+- **Avoid manual edits:** Don't manually modify `<instance-name>.config.ini` or `<instance-name>.manage.sh` unless you know exactly what you're doing. If the management script becomes broken, it can be regenerated.
+
+- **Use `--fast` for monitoring:** When polling status frequently (dashboards, scripts), pass `--fast` to skip remote version checks and reduce latency.
 
 ## Removing an instance
 
-To completely remove an instance, use the uninstall command:
+### Full uninstall (removes all game data)
 
 ```sh
 kgsm.sh uninstall <instance-name>
 ```
 
-This ensures that:
-1. All game server files are properly removed
-2. The instance configuration is cleaned up
-3. Any system integrations (systemd, ufw) are properly disabled
+This removes the working directory, all game files, saves, backups, the instance configuration, the management script, the symlink in `instances/`, and any system integrations (systemd, firewall rules).
 
 > [!WARNING]
-> Uninstalling an instance permanently removes all game data, including world saves. Create a manual backup first if you want to preserve your data!
+> Uninstalling an instance permanently removes all game data, including world saves. Create a backup first if you want to preserve your data.
+
+### Remove only the instance record (keep game files)
+
+```sh
+kgsm.sh instances remove <instance-name>
+```
+
+This removes only the symbolic link and the instance configuration file from KGSM's tracking. The game server files in the working directory are left intact. This is useful when you want to deregister an instance without deleting the underlying server data.
 
 ---
 

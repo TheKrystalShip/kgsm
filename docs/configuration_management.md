@@ -12,39 +12,49 @@ KGSM's configuration is stored in `config.ini` at the root of your KGSM installa
 config_schema_version=1
 
 [system]
-update_channel=main
+wget_timeout_seconds=60
 enable_logging=false
-...
-
-[network]
-enable_firewall_management=false
-enable_port_forwarding=false
-...
+log_max_size_kb=10240
 
 [steam]
 STEAM_USERNAME=
 STEAM_PASSWORD=
-...
 
 [services]
 enable_systemd=false
-...
+systemd_files_dir=/etc/systemd/system
 
-[instance_defaults]
-instance_suffix_length=3
-...
+[network]
+enable_firewall_management=false
+firewall_rules_dir=/etc/ufw/applications.d
+enable_port_forwarding=false
 
 [events]
 enable_event_broadcasting=false
-...
+enable_socket_events=false
+event_socket_filenames=kgsm.sock
+enable_webhook_events=false
+webhook_urls=
+webhook_timeout_seconds=10
+webhook_retry_count=2
+webhook_secret=
 
 [watchers]
-watcher_timeout_seconds=300
-...
+enable_watcher=false
+watcher_global_timeout_seconds=600
+watcher_ports_check_interval_seconds=5
+
+[instance_defaults]
+default_install_directory=
+instance_suffix_length=2
+enable_backup_compression=false
+instance_save_command_timeout_seconds=5
+instance_stop_command_timeout_seconds=30
+instance_auto_update_before_start=false
 
 [accessibility]
 enable_command_shortcuts=false
-...
+command_shortcuts_directory=/usr/local/bin
 ```
 
 ### Schema Versioning
@@ -91,6 +101,9 @@ KGSM provides several commands to manage your configuration:
 # List all configuration values
 ./kgsm.sh config list
 
+# List all configuration values in JSON format
+./kgsm.sh config list --json
+
 # Get a specific value
 ./kgsm.sh config get enable_logging
 
@@ -99,6 +112,17 @@ KGSM provides several commands to manage your configuration:
 
 # Open config in your default editor
 ./kgsm.sh config edit
+```
+
+### Getting Command Help
+
+```bash
+# Show all available config subcommands
+./kgsm.sh config help
+
+# Show help for a specific subcommand
+./kgsm.sh config help set
+./kgsm.sh config help rollback
 ```
 
 ### Validation
@@ -110,9 +134,8 @@ KGSM provides several commands to manage your configuration:
 
 This checks for:
 - Missing required keys
-- Invalid values
+- Invalid values (wrong type, out-of-range numbers, malformed booleans)
 - Structural integrity
-- Schema version compatibility
 
 ### Manual Merging
 
@@ -160,7 +183,7 @@ This displays a color-coded diff showing:
 ./kgsm.sh config reset
 ```
 
-⚠️ **Warning:** This replaces your entire config with defaults. Use with caution.
+> ⚠️ **Warning:** This replaces your entire config with the defaults from `config.default.ini`. A timestamped backup (e.g. `config.ini.20250101_120000.bak`) is created automatically before the reset. Use with caution.
 
 ## Configuration Migrations
 
@@ -200,7 +223,7 @@ When updating from KGSM 2.x to 3.0:
 
 **Before (flat format):**
 ```ini
-update_channel=main
+wget_timeout_seconds=60
 enable_logging=true
 STEAM_USERNAME=myuser
 ```
@@ -210,14 +233,14 @@ STEAM_USERNAME=myuser
 config_schema_version=1
 
 [system]
-update_channel=main
+wget_timeout_seconds=60
 enable_logging=true
 
 [steam]
 STEAM_USERNAME=myuser
 ```
 
-Your custom values (`update_channel=main`, `enable_logging=true`) are preserved while the structure is modernized.
+Your custom values (`wget_timeout_seconds=60`, `enable_logging=true`) are preserved while the structure is modernized.
 
 ## Deprecated Keys
 
@@ -358,10 +381,10 @@ cp config.default.ini config.ini
 ### Want to Start Fresh
 
 ```bash
-# Option 1: Reset to defaults (keeps backups)
+# Option 1: Reset to defaults (creates a timestamped backup automatically)
 ./kgsm.sh config reset
 
-# Option 2: Complete clean slate
+# Option 2: Complete clean slate (no backup kept)
 rm config.ini config.ini.*
 cp config.default.ini config.ini
 ```
@@ -406,14 +429,14 @@ For a complete list of all configuration keys and their meanings, see:
 - Each section in the file explains the purpose and valid values
 
 Common sections:
-- **[system]** - Core KGSM behavior (logging, updates)
-- **[network]** - Firewall, port forwarding
+- **[system]** - Core KGSM behavior (logging, download timeouts)
 - **[steam]** - Steam integration credentials
-- **[services]** - systemd, UFW integration
-- **[instance_defaults]** - Default settings for new game servers
-- **[events]** - Webhook notifications
-- **[watchers]** - Server readiness detection
-- **[accessibility]** - Command shortcuts, UI features
+- **[services]** - systemd service file integration
+- **[network]** - UFW firewall management, UPnP port forwarding
+- **[events]** - Event broadcasting (webhooks, Unix Domain Sockets)
+- **[watchers]** - Server readiness detection (log pattern / port monitoring)
+- **[instance_defaults]** - Default settings for new game server instances
+- **[accessibility]** - Command shortcuts
 
 ## Related Documentation
 

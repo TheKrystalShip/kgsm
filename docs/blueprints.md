@@ -7,12 +7,14 @@ This document explains what blueprints are, how they work in KGSM, and how to cr
 - [Blueprint Types and Storage](#blueprint-types-and-storage)
 - [Managing Blueprints](#managing-blueprints)
   - [Listing Available Blueprints](#listing-available-blueprints)
+  - [Inspecting a Blueprint](#inspecting-a-blueprint)
   - [Creating New Blueprints](#creating-new-blueprints)
   - [Customizing Existing Blueprints](#customizing-existing-blueprints)
 - [Using Blueprints](#using-blueprints)
 - [Native Blueprint Reference](#native-blueprint-reference)
   - [Example Template](#native-blueprint-example-template)
   - [Key Parameters](#native-blueprint-key-parameters)
+  - [Available Instance Variables](#available-instance-variables)
 - [Container Blueprint Reference](#container-blueprint-reference)
   - [Example Template](#container-blueprint-example-template)
   - [Key Components](#container-blueprint-components)
@@ -25,7 +27,7 @@ This document explains what blueprints are, how they work in KGSM, and how to cr
 
 Blueprints in KGSM are configuration files that define the parameters needed to create a game server. These parameters typically include server settings such as port numbers, game world names, maximum player counts, and other initialization values required to start and configure the server properly. Think of them like an architect's blueprint: a detailed plan to build something specific.
 
-KGSM 2.0 supports two types of blueprints:
+KGSM supports two types of blueprints:
 
 1. **Native Blueprints** (`.bp` files): Simple text files using a `key=value` format for game servers that run directly on your system.
 2. **Container Blueprints** (`.docker-compose.yml` files): Standard Docker Compose files that define containerized game servers.
@@ -34,24 +36,26 @@ KGSM comes with a growing collection of pre-configured blueprints for popular ga
 
 ## Blueprint Types and Storage
 
-Blueprints are stored in specific locations within the KGSM directory structure, each serving a distinct purpose:
+KGSM follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/) to separate read-only system blueprints from user-managed ones.
 
-- **Default Blueprints:** These are the standard, pre-configured blueprints provided by KGSM and stored in the `blueprints/default` directory. They are divided into two types:
-  - `blueprints/default/native`: For game servers that run directly on your system
-  - `blueprints/default/container`: For game servers that run in Docker containers
+- **System Blueprints** (read-only, provided by KGSM, updated with the package):
+  - `blueprints/native/` — Native server blueprints (`.bp` files)
+  - `blueprints/container/` — Container server blueprints (`.docker-compose.yml` files)
 
-- **Custom Blueprints:** These are stored in the corresponding folders in the `blueprints/custom` directory:
-  - `blueprints/custom/native`: For your custom native server blueprints
-  - `blueprints/custom/container`: For your custom container-based server blueprints
+- **User Blueprints** (writable, managed by you):
+  - `~/.local/share/kgsm/blueprints/native/` — Your custom native blueprints
+  - `~/.local/share/kgsm/blueprints/container/` — Your custom container blueprints
 
-Custom blueprints take precedence over default ones if they share the same name, allowing you to tailor configurations without altering the originals.
+  > The base path respects `$XDG_DATA_HOME` if that environment variable is set.
+
+When KGSM resolves a blueprint by name, **user blueprints take precedence over system blueprints**. A user blueprint with the same filename as a system blueprint will shadow it, allowing you to override defaults without modifying the originals.
 
 > [!IMPORTANT]
-> Always place your custom blueprints in the appropriate `blueprints/custom` directory. Do not modify files directly in the `blueprints/default` directories, as these may be overwritten during KGSM updates.
+> Never modify files in the system `blueprints/` directories directly. Those files may be overwritten during KGSM updates. Always create your customized copies in the user blueprint directories.
 
 ### Blueprint to Override Relationship
 
-The `name` field in a blueprint connects it to a corresponding override file. For example, if a blueprint has `name=factorio`, KGSM will use `overrides/factorio.overrides.sh` for custom functions.
+The `name` field in a blueprint connects it to a corresponding override file. For example, if a blueprint has `name=factorio`, KGSM will use `overrides/factorio.overrides.sh` for custom functions. Multiple blueprint variants can share the same `name`, allowing them to reuse the same override logic (e.g., `terraria-modded.bp` with `name=terraria`).
 
 For details about overrides and how they provide custom functionality for specific game servers, see [Overrides 101](overrides.md).
 
@@ -62,84 +66,104 @@ For details about overrides and how they provide custom functionality for specif
 To list all available blueprints, run:
 
 ```sh
-./kgsm.sh --blueprints
+./kgsm.sh blueprints list
 ```
 
-For more detailed information about each blueprint, use:
+Filter to show only system (default) or user (custom) blueprints:
 
 ```sh
-./kgsm.sh --blueprints --detailed
+./kgsm.sh blueprints list default
+./kgsm.sh blueprints list custom
 ```
 
-You can also get the output in JSON format for scripting purposes:
+Show detailed metadata for each blueprint:
 
 ```sh
-./kgsm.sh --blueprints --json
+./kgsm.sh blueprints list detailed
+```
+
+Output any of the above in JSON format for scripting:
+
+```sh
+./kgsm.sh blueprints list --json
+./kgsm.sh blueprints list default --json
+./kgsm.sh blueprints list detailed --json
+```
+
+### Inspecting a Blueprint
+
+Display the full contents of a blueprint:
+
+```sh
+./kgsm.sh blueprints info factorio
+./kgsm.sh blueprints info factorio --json
+```
+
+Find the absolute path to a blueprint file:
+
+```sh
+./kgsm.sh blueprints find factorio
 ```
 
 ### Creating New Blueprints
 
-If KGSM doesn't have a blueprint for your desired game server, you have several options to create one:
+To create a blueprint for a game server that KGSM does not include:
 
-#### Using the Blueprint Creation Tool (Native Servers)
+1. Copy the blank template to the appropriate user blueprint directory:
 
-#### Blueprint Creation
+   ```sh
+   # For a native (Linux) server
+   cp templates/blueprint.tp ~/.local/share/kgsm/blueprints/native/mygame.bp
 
-For more advanced configurations:
+   # For a Docker-based server
+   cp blueprints/container/enshrouded.docker-compose.yml \
+      ~/.local/share/kgsm/blueprints/container/mygame.docker-compose.yml
+   ```
 
-1. Create a new file in the appropriate `blueprints/custom` directory (`native` for traditional game servers, `container` for Docker-based).
-2. For native servers, use the `key=value` format to define the server configuration. For container servers, use Docker Compose format.
-3. Save the file with the proper extension (`.bp` for native servers or `.docker-compose.yml` for containers).
+2. Open the file in your editor and fill in the required fields (`name`, `executable_file`, `level_name`) plus any optional fields.
 
-##### Native Blueprint Example
+3. Save the file. The blueprint is immediately available to KGSM.
 
-You can use an existing blueprint as a template by copying it from the default directory:
-
-```sh
-cp blueprints/default/native/minecraft.bp blueprints/custom/native/my-custom-game.bp
-```
-
-Then edit the new file to match your game server's requirements.
-
-##### Container Blueprint Example
-
-For container-based servers in KGSM 2.0, you can copy an existing Docker Compose blueprint:
-
-```sh
-cp blueprints/default/container/enshrouded.docker-compose.yml blueprints/custom/container/my-custom-container.docker-compose.yml
-```
-
-Then edit the file to match your containerized game server requirements.
+> [!TIP]
+> You can use an existing blueprint as a starting point. For example:
+> ```sh
+> cp blueprints/native/minecraft.bp ~/.local/share/kgsm/blueprints/native/my-custom-game.bp
+> ```
 
 ### Customizing Existing Blueprints
 
-To modify a default blueprint (e.g., changing the starting game world, server port, or other settings):
+To adjust a system blueprint without modifying the original:
 
-1. Copy the desired blueprint from `blueprints/default/native` or `blueprints/default/container` into the corresponding `blueprints/custom` directory.
-2. Edit the copied file to adjust the values as needed.
+1. Copy it from the system directory to the corresponding user directory:
 
-The custom blueprint will override the default one as long as it shares the same name. Ensure the file retains the `.bp` extension for native servers or `.docker-compose.yml` for container-based servers.
+   ```sh
+   cp blueprints/native/minecraft.bp ~/.local/share/kgsm/blueprints/native/minecraft.bp
+   ```
+
+2. Edit your copy. KGSM will automatically prefer the user copy over the system original.
 
 ## Using Blueprints
 
-Once you have a blueprint, you can create a new game server instance with:
+Once you have a blueprint, create a new game server instance with:
 
 ```sh
-./kgsm.sh --create <blueprint> --name <instance-name> --install-dir <path>
+./kgsm.sh install <blueprint> [--install-dir <path>] [--name <instance-name>]
 ```
 
-KGSM 2.0 automatically detects whether the blueprint is native or container-based by its file extension and handles it accordingly.
+`create` is an accepted alias for `install`.
 
-### Native Server Example:
+KGSM automatically detects whether the blueprint is native or container-based by its file extension and handles it accordingly.
+
+### Native Server Example
 
 ```sh
-./kgsm.sh --create minecraft --name survival-server --install-dir /opt/servers
+./kgsm.sh install minecraft --install-dir /opt/servers --name survival-server
 ```
 
-### Container Server Example:
+### Container Server Example
 
 ```sh
-./kgsm.sh --create enshrouded --name enshrouded-server --install-dir /opt/containers
+./kgsm.sh install enshrouded --install-dir /opt/servers --name enshrouded-server
 ```
 
 > [!NOTE]
@@ -149,223 +173,289 @@ KGSM 2.0 automatically detects whether the blueprint is native or container-base
 
 ### Native Blueprint Example Template
 
-Below is an example of the default blueprint file for `7 Days to Die`. It includes comments explaining each key-value pair for native game servers:
+Below is a representative native blueprint (Factorio). It illustrates the full set of available fields:
 
 ```bash
-# KGSM Blueprint for 7 Days to Die (7dtd)
-#
-# Author: Cristian Moraru <cristian.moraru@live.com>
-# Version: 2.0
-#
-# Copyright (c) 2025 The Krystal Ship
-# Licensed under the GNU General Public License v3.0
-# https://www.gnu.org/licenses/gpl-3.0.en.html
-#
-# DO NOT MODIFY THIS FILE
-# Instead, copy it to the custom blueprints directory and modify it there
-
 # Unique name, lowercase with no spaces
-name=7dtd
+name=factorio
 
 # Port(s), used by UFW
 # Wrap in single quotes (')
 # Example: '1111:2222/tcp|1111:2222/udp'
-ports='26900:26903/tcp|26900:26903/udp'
+ports='34197'
 
 # Steam APP_ID
 # Values: 0 if not applicable, Valid Steam app id otherwise
 # Default: 0
-steam_app_id=294420
+steam_app_id=0
 
-# (Optional)
-# Only used if steam_app_id != 0
-# Values: 0 for anonymous, 1 for account required
-is_steam_account_required=0
+# (Optional) Additional steamcmd arguments
+# Values: Any valid steamcmd arguments, for example: "+beta <branch>".
+# Default: ""
+steamcmd_arguments=""
 
-# Name of the executable that will start the server
-# Values: start.sh / my_game.x86_64 / start_server
-executable_file=7DaysToDieServer.x86_64
+# Only applicable if steam_app_id != 0
+# Values: false for anonymous, true for account required
+# Default: false
+is_steam_account_required=false
+
+# (Optional) Target platform if not Linux
+# Values: windows / linux / macos
+# Default: linux
+platform=linux
 
 # Savefile name or world name, level, whichever is applicable
-# Values: my_world / de_dust2 / my_cool_factorio_map
-level_name=default
+level_name="default"
 
-# (Optional)
-# If the executable happens to be in a subdirectory from the main install
-# and needs to be ran from inside that subdirectory
-# Values: Relative path from inside install directory: $INSTALL_DIR/bin
-executable_subdirectory=
+# (Optional) Subdirectory containing the executable, relative to install dir
+# Example: bin/x64 | DedicatedServer
+executable_subdirectory=bin/x64
 
-# Any args passed onto the executable
-# Availble vars that can be used:
-#  $instance_id
-#  $instance_blueprint_file
-#  $instance_working_dir
-#  $instance_install_datetime
-#  $instance_version_file
-#  $instance_lifecycle_manager
-#  $instance_manage_file
-#  $instance_runtime
-#  $instance_ports
-#  $instance_executable_file
-#  $instance_executable_arguments
-#  $instance_socket_file
-#  $instance_stop_command
-#  $instance_save_command
-#  $instance_pid_file
-#  $instance_tail_pid_file
-#  $instance_platform
-#  $instance_level_name
-#  $instance_steam_app_id
-#  $instance_is_steam_account_required
-#  $instance_save_command_timeout_seconds
-#  $instance_stop_command_timeout_seconds
-#  $instance_compress_backups
-#  $instance_use_upnp
-#  $instance_upnp_ports
-executable_arguments="-quit -batchmode -nographics -headless -dedicated -configfile=$instance_install_dir/serverconfig.xml"
+# Name of the executable that starts the server
+executable_file=factorio
 
-# (Optional)
-# Stop command sent to the input socket
-stop_command=
+# (Optional) Arguments passed to the executable
+# See "Available Instance Variables" below for substitution variables
+executable_arguments="--start-server $instance_saves_dir/$instance_level_name"
 
-# (Optional)
-# Save command sent to the input socket
-save_command=
+# (Optional) Stop command sent to the input socket
+stop_command=/quit
+
+# (Optional) Save command sent to the input socket
+save_command=/save
+
+# (Optional) Regex to match the startup success message
+# If not set, KGSM waits for the server to listen on the declared ports
+startup_success_regex="Hosting game at IP ADDR"
 ```
 
 ### Native Blueprint Key Parameters
 
-When creating or modifying native blueprints, the following parameters are essential:
-
 | Parameter | Description | Required | Example |
 |-----------|-------------|:--------:|---------|
-| `name` | Unique identifier, lowercase with no spaces | Yes | `minecraft` |
-| `ports` | Network ports used by the server | Yes | `'25565:25565/tcp'` |
-| `executable_file` | Name of the server executable file | Yes | `server.jar` |
-| `level_name` | World/map/save name | Yes | `world` |
-| `steam_app_id` | Steam App ID (0 if not applicable) | Yes | `294420` |
-| `is_steam_account_required` | Whether Steam login is needed | No | `0` |
-| `executable_subdirectory` | Subdirectory where executable is located | No | `bin` |
-| `executable_arguments` | Command-line arguments for the server | No | `-Xmx2G -Xms1G` |
-| `stop_command` | Command to gracefully stop server | No | `stop` |
-| `save_command` | Command to save world/data | No | `save-all` |
+| `name` | Unique identifier, lowercase with no spaces | Yes | `factorio` |
+| `executable_file` | Name of the server executable | Yes | `factorio` |
+| `level_name` | World/map/save name | Yes | `"default"` |
+| `ports` | Network ports in UFW format (single-quoted) | No | `'25565/tcp'` |
+| `steam_app_id` | Steam App ID (`0` if not applicable) | No | `294420` |
+| `steamcmd_arguments` | Extra arguments passed to steamcmd | No | `"+beta public"` |
+| `is_steam_account_required` | Whether a Steam account is required (`false`/`true`) | No | `false` |
+| `platform` | Target platform (`linux`, `windows`, `macos`) | No | `linux` |
+| `executable_subdirectory` | Subdirectory containing the executable | No | `bin/x64` |
+| `executable_arguments` | Command-line arguments for the server | No | `--dedicated` |
+| `stop_command` | Command sent to socket to stop the server | No | `/quit` |
+| `save_command` | Command sent to socket to save the game | No | `/save` |
+| `startup_success_regex` | Regex matching the server-ready log line | No | `"Server started"` |
+
+### Available Instance Variables
+
+The following variables can be used inside `executable_arguments` and are resolved at runtime:
+
+**Basic Instance Information**
+
+| Variable | Description |
+|----------|-------------|
+| `$instance_name` | The instance identifier |
+| `$instance_blueprint_file` | Absolute path to the blueprint file |
+| `$instance_install_datetime` | Timestamp when the instance was installed |
+
+**Directory and File Paths**
+
+| Variable | Description |
+|----------|-------------|
+| `$instance_working_dir` | Absolute path to the working directory |
+| `$instance_install_dir` | Absolute path to the installation directory |
+| `$instance_saves_dir` | Absolute path to the saves directory |
+| `$instance_backups_dir` | Absolute path to the backups directory |
+| `$instance_temp_dir` | Absolute path to the temp directory |
+| `$instance_logs_dir` | Absolute path to the logs directory |
+| `$instance_launch_dir` | Directory from which the binary is launched |
+| `$instance_executable_subdirectory` | Subdirectory containing the executable |
+| `$instance_management_file` | Path to the management script |
+| `$instance_compose_file` | Path to the docker-compose file (container only) |
+
+**Process Management Files**
+
+| Variable | Description |
+|----------|-------------|
+| `$instance_version_file` | Path to the version file |
+| `$instance_pid_file` | Path to the PID file |
+| `$instance_tail_pid_file` | Path to the tail PID file |
+| `$instance_socket_file` | Path to the input socket file |
+
+**Runtime Configuration**
+
+| Variable | Description |
+|----------|-------------|
+| `$instance_lifecycle_manager` | How the instance is managed (`standalone`, `systemd`) |
+| `$instance_runtime` | Runtime type (`native`, `container`) |
+| `$instance_platform` | Target platform (`linux`, `windows`, `macos`) |
+| `$instance_auto_update` | Whether to auto-update before starting |
+| `$instance_logs_redirect` | Log redirection pattern |
+
+**Game Server Configuration**
+
+| Variable | Description |
+|----------|-------------|
+| `$instance_level_name` | Default level/world name |
+| `$instance_executable_file` | The executable filename |
+| `$instance_executable_arguments` | The command-line arguments |
+
+**Steam Integration**
+
+| Variable | Description |
+|----------|-------------|
+| `$instance_steam_app_id` | Steam App ID for downloads |
+| `$instance_is_steam_account_required` | Whether a Steam account is required |
+
+**Network Configuration**
+
+| Variable | Description |
+|----------|-------------|
+| `$instance_ports` | Network ports in UFW format |
+| `$instance_enable_port_forwarding` | Whether UPnP port forwarding is enabled |
+| `$instance_upnp_ports` | Array of ports to forward via UPnP |
+| `$instance_enable_firewall_management` | Whether firewall management is enabled |
+| `$instance_firewall_rule_file` | Path to the firewall rule file |
+
+**Server Control**
+
+| Variable | Description |
+|----------|-------------|
+| `$instance_stop_command` | Command to gracefully stop the server |
+| `$instance_save_command` | Command to save the game state |
+| `$instance_save_command_timeout_seconds` | Timeout for the save command |
+| `$instance_stop_command_timeout_seconds` | Timeout for the stop command |
+
+**Backup Configuration**
+
+| Variable | Description |
+|----------|-------------|
+| `$instance_compress_backups` | Whether to compress backups |
+
+**System Integration**
+
+| Variable | Description |
+|----------|-------------|
+| `$instance_enable_systemd` | Whether systemd integration is enabled |
+| `$instance_systemd_service_file` | Path to the systemd service file |
+| `$instance_systemd_socket_file` | Path to the systemd socket file |
+
+**Management Features**
+
+| Variable | Description |
+|----------|-------------|
+| `$instance_enable_command_shortcuts` | Whether command shortcuts are enabled |
+| `$instance_command_shortcut_file` | Path to the command shortcut file |
 
 ## Container Blueprint Reference
 
 ### Container Blueprint Example Template
 
-With KGSM 2.0, you can also use Docker containers to run game servers. Container-based blueprints use standard Docker Compose files with the `.docker-compose.yml` extension. 
-
-> [!IMPORTANT]
-> KGSM uses official container images from the [KGSM-Containers](https://github.com/TheKrystalShip/KGSM-Containers) project. These images are specifically tested and configured to work with the KGSM ecosystem. While you can use other container images, the official ones ensure compatibility and proper integration.
-
-Below is an example for a containerized game server:
+Container-based blueprints are standard Docker Compose files with the `.docker-compose.yml` extension. Below is a representative example (V Rising):
 
 ```yml
-# KGSM Docker Compose file for V Rising
-#
-# Author: Cristian Moraru <cristian.moraru@live.com>
-# Version: 1.0
-#
-# Copyright (c) 2025 The Krystal Ship
-# Licensed under the GNU General Public License v3.0
-# https://www.gnu.org/licenses/gpl-3.0.en.html
-#
 # DO NOT MODIFY THIS FILE
-# Instead, copy it to the custom blueprints directory and modify it there
+# Instead, copy it to the user blueprints directory and modify it there
 
-
-
-# This Docker Compose file is for setting up a V Rising server container.
 services:
   vrising:
 
-    # Docker image for V Rising server
+    # Official image for V Rising
     image: ghcr.io/thekrystalship/vrising:latest
 
-    # Dynamic container name
-    container_name: "${instance_name}"
+    # Dynamic container name set by KGSM at deploy time
+    container_name: ${instance_name}
 
-    # Use the host's network stack directly.
+    # Use the host's network stack directly
     network_mode: host
 
-    # Ensure these ports are forwarded to allow external access
+    # Ports the server uses (informational when network_mode: host)
     ports:
-      - "9876:9876/udp"
-      - "9877:9877/udp"
-      - "27015:27015/udp"
-      - "27016:27016/udp"
+      - 9876:9876/udp
+      - 9877:9877/udp
+      - 27015:27015/udp
+      - 27016:27016/udp
 
+    # Bind mount volumes for persistent storage
     volumes:
-      # Local directory : Container directory
-      - "${instance_working_dir:-.}:/opt/vrising"
-
-    environment:
-      # Environment variables for Steam authentication
-      STEAM_USERNAME: "${STEAM_USERNAME}"
-      STEAM_PASSWORD: "${STEAM_PASSWORD}"
+      - type: bind
+        source: ${instance_backups_dir}
+        target: /opt/vrising/backups
+      - type: bind
+        source: ${instance_install_dir}
+        target: /opt/vrising/install
 
     # Restart policy to keep the container running
     restart: unless-stopped
 ```
 
+> [!IMPORTANT]
+> KGSM uses official container images from the [KGSM-Containers](https://github.com/TheKrystalShip/kgsm-containers) project. These images are specifically tested and configured to work with the KGSM ecosystem. While you can use other container images, the official ones ensure compatibility and proper integration.
+
 ### Container Blueprint Components
 
-When creating or modifying container blueprints, pay attention to the following key components:
-
 #### 1. Docker Image
-Specify the Docker image to use for the game server. For best compatibility and integration with KGSM, use the official TheKrystalShip images:
+
+Specify the Docker image for the game server. The official KGSM images are hosted at `ghcr.io/thekrystalship/`:
 
 ```yml
 image: ghcr.io/thekrystalship/vrising:latest
 ```
 
-These images are maintained in the [KGSM-Containers](https://github.com/TheKrystalShip/KGSM-Containers) repository and are designed to work seamlessly with KGSM.
-
 #### 2. Container Name
-KGSM will automatically set the container name based on the instance name:
+
+Set the container name to the KGSM instance name so KGSM can manage it:
 
 ```yml
-container_name: "${instance_name}"
+container_name: ${instance_name}
 ```
 
 #### 3. Network Configuration
-Most game servers benefit from using the host network for optimal performance:
+
+Most game servers benefit from host networking for optimal performance:
 
 ```yml
 network_mode: host
 ```
 
 #### 4. Port Mapping
-Even with host network mode, explicitly defining ports helps document which ports the server uses:
+
+Explicitly declaring ports documents which ports the server uses and allows KGSM to configure firewall rules:
 
 ```yml
 ports:
-  - "27015:27015/udp"
-  - "27016:27016/tcp"
+  - 27015:27015/udp
+  - 27016:27016/tcp
 ```
 
 #### 5. Volume Mounts
-Map the working directory to the appropriate location in the container:
+
+Use `$instance_*` path variables to bind-mount the correct KGSM-managed directories into the container:
 
 ```yml
 volumes:
-  - "${instance_working_dir:-.}:/path/in/container"
+  - type: bind
+    source: ${instance_install_dir}
+    target: /app/install
+  - type: bind
+    source: ${instance_backups_dir}
+    target: /app/backups
 ```
 
 #### 6. Environment Variables
-Set any required environment variables:
+
+Pass any required configuration as environment variables:
 
 ```yml
 environment:
-  VARIABLE_NAME: "value"
-  STEAM_USERNAME: "${STEAM_USERNAME}"
-  STEAM_PASSWORD: "${STEAM_PASSWORD}"
+  SERVER_NAME: "My Server"
+  MAX_PLAYERS: "16"
 ```
 
 #### 7. Restart Policy
-For stability, include a restart policy:
+
+Include a restart policy for production stability:
 
 ```yml
 restart: unless-stopped
@@ -373,7 +463,7 @@ restart: unless-stopped
 
 ### Container Images
 
-The container images used by KGSM are maintained in a dedicated repository: [KGSM-Containers](https://github.com/TheKrystalShip/KGSM-Containers). These images are specifically designed to work well with the KGSM ecosystem and have been thoroughly tested.
+The container images used by KGSM are maintained in a dedicated repository: [kgsm-containers](https://github.com/TheKrystalShip/kgsm-containers). These images are specifically designed to work well with the KGSM ecosystem and have been thoroughly tested.
 
 ## Contributing
 
@@ -384,7 +474,7 @@ The list of supported game servers in KGSM is constantly growing! If you create 
 To submit your blueprint:
 1. Ensure it is well-tested and properly configured
 2. Create a pull request on GitHub with your blueprint file
-3. Alternatively, [submit a feature request](https://github.com/TheKrystalShip/KGSM/issues/new?template=add_game_server.md) with your blueprint attached
+3. Alternatively, [submit a feature request](https://github.com/TheKrystalShip/kgsm/issues/new?template=add_game_server.md) with your blueprint attached
 
 Community contributions are what make KGSM better for everyone!
 
@@ -392,7 +482,7 @@ Community contributions are what make KGSM better for everyone!
 
 If you want to contribute a new container image for a game server:
 
-1. Visit the [KGSM-Containers](https://github.com/TheKrystalShip/KGSM-Containers) repository
+1. Visit the [kgsm-containers](https://github.com/TheKrystalShip/kgsm-containers) repository
 2. Follow the contribution guidelines specific to that project
 3. Submit your container image via a Pull Request
 
