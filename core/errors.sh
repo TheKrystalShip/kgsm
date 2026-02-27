@@ -110,6 +110,9 @@ export EC_MISSING_ARGS
 declare -g -r EC_SKIP=35
 export EC_SKIP
 
+declare -g -r EC_TIMEOUT=36
+export EC_TIMEOUT
+
 declare -g -r EC_EVENT_TYPE_INVALID=37
 export EC_EVENT_TYPE_INVALID
 
@@ -327,6 +330,7 @@ declare -A EXIT_CODES=(
    [$EC_FAILURE]="Operation failed"
    [$EC_MISSING_ARGS]="Missing arguments"
    [$EC_SKIP]="Operation skipped"
+   [$EC_TIMEOUT]="Test timed out"
    [$EC_EVENT_TYPE_INVALID]="Invalid event type"
    [$EC_EVENT_PARAMS_INVALID]="Invalid event parameters"
    [$EC_EVENT_TRANSPORT_FAILED]="Event transport failed"

@@ -60,6 +60,7 @@ ${BOLD}OPTIONS:${NC}
 ${BOLD}FILTERING:${NC}
     --pattern REGEX     Only run tests matching pattern
     --exclude REGEX     Exclude tests matching pattern
+    --function NAME     Run only the specified function within matched tests
 
 ${BOLD}TEST TYPES:${NC}
     unit                Run unit tests (fast, no dependencies)

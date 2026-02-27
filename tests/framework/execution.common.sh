@@ -140,43 +140,87 @@ export -f __restore_test_environment
 # ==============================================================================
 
 # ------------------------------------------------------------------------------
+# Wait for a process to complete or timeout
+# ------------------------------------------------------------------------------
+# Arguments:
+#   $1 - pid: Process ID to wait for
+#   $2 - timeout: Max wait time in seconds
+# Returns:
+#   0 if process completed, 1 if timeout reached
+# ------------------------------------------------------------------------------
+function wait_with_timeout() {
+  local pid=$1
+  local timeout=$2
+  local elapsed=0
+
+  while kill -0 "$pid" 2>/dev/null; do
+    if [[ $elapsed -ge $timeout ]]; then
+      return 1
+    fi
+    sleep 1
+    ((elapsed++))
+  done
+  return 0
+}
+export -f wait_with_timeout
+
+# ------------------------------------------------------------------------------
 # Execute test file with timeout and capture output
 # ------------------------------------------------------------------------------
 # Arguments:
 #   $1 - test_file: Absolute path to test file
 #   $2 - timeout_seconds: Max execution time (default: TEST_DEFAULT_TIMEOUT)
 # Returns:
-#   Exit code: Test's exit code (or 124 if timeout)
+#   Exit code: Test's exit code (or EC_TIMEOUT if timeout)
 #   Stdout: Captured output (stderr + stdout combined)
 # ------------------------------------------------------------------------------
 function __capture_test_output() {
   local test_file="$1"
   local timeout_seconds="${2:-${TEST_DEFAULT_TIMEOUT}}"
 
-  local output
+  local output_file="/tmp/kgsm-test-output-$$.txt"
   local exit_code
 
-  # Source test directly in current shell - no new bash process
-  # The current shell already has:
-  # - Test framework functions (assert_*, log_*, etc.) via export -f
-  # - Environment variables (KGSM_ROOT, KGSM_TEST_SANDBOX, etc.) set by __setup_test_environment
-  # - We're already in a sandboxed subshell from __spawn_test_job
-  #
-  # We capture output by redirecting to a temp file instead of command substitution
-  # to avoid creating another subshell layer
-  local output_file="/tmp/kgsm-test-output-$$.txt"
+  if [[ -n "${KGSM_TEST_FUNCTION_FILTER:-}" ]]; then
+    # Run only the specified function: source a temp copy with main call removed,
+    # then call setup_test + target function + print_assert_summary.
+    # Using source (not eval) preserves BASH_LINENO for correct failure locations.
+    local filtered_file="/tmp/kgsm-test-filtered-$$.sh"
+    sed '/^main "\$@"/d' "$test_file" > "$filtered_file"
+    (
+      source "$filtered_file"
 
-  # Source the test file, capturing all output
-  # Note: We lose timeout functionality this way, but gain proper environment inheritance
-  # TODO: Implement timeout using a background process + wait with timeout
-  if (source "$test_file") >"$output_file" 2>&1; then
-    exit_code=$EC_SUCCESS
+      if declare -f setup_test >/dev/null 2>&1; then
+        setup_test
+      fi
+
+      "${KGSM_TEST_FUNCTION_FILTER}"
+
+      if declare -f print_assert_summary >/dev/null 2>&1; then
+        print_assert_summary "${TEST_NAME:-}"
+      fi
+    ) >"$output_file" 2>&1 &
+    local test_pid=$!
+    rm -f "$filtered_file"
   else
+    # Run the full test file
+    (source "$test_file") >"$output_file" 2>&1 &
+    local test_pid=$!
+  fi
+
+  # Wait for completion or timeout
+  if ! wait_with_timeout "$test_pid" "$timeout_seconds"; then
+    # Timeout - kill the test process
+    kill -9 "$test_pid" 2>/dev/null
+    wait "$test_pid" 2>/dev/null
+    echo "TEST TIMEOUT: Test exceeded ${timeout_seconds}s limit" >> "$output_file"
+    exit_code=$EC_TIMEOUT
+  else
+    wait "$test_pid"
     exit_code=$?
   fi
 
-  # Read captured output
-  output=$(<"$output_file")
+  local output=$(<"$output_file")
   rm -f "$output_file"
 
   echo "$output"

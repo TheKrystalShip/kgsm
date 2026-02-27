@@ -137,6 +137,9 @@ function __tap_emit_yaml_diagnostic() {
   if [[ "$exit_code" -eq 2 ]]; then
     echo "  severity: error"
     echo "  message: \"Internal framework error during test execution\""
+  elif [[ "$exit_code" -eq ${EC_TIMEOUT:-36} ]]; then
+    echo "  severity: error"
+    echo "  message: \"Test timed out after ${duration_ms}ms\""
   else
     echo "  severity: fail"
     if [[ "$a_total" -gt 0 ]]; then
@@ -162,6 +165,9 @@ function __tap_emit_yaml_diagnostic() {
   if [[ -n "$test_file" ]]; then
     echo "  file: \"${test_file}\""
   fi
+
+  # Extract individual failure details from the per-test log file
+  __tap_emit_failure_details "$test_name" "$test_file"
 
   echo "  ..."
 }
@@ -208,6 +214,103 @@ function __tap_resolve_file_path() {
   return 0
 }
 export -f __tap_resolve_file_path
+
+# ------------------------------------------------------------------------------
+# Emit failure detail entries from per-test log file
+# ------------------------------------------------------------------------------
+# Parses the test log file for FAIL assertion lines and emits them as a YAML
+# array in the diagnostic block. Each entry includes the line number in the
+# source test file, the function name, and the failure message.
+#
+# Log line format:
+#   [TIMESTAMP] [ERROR] [filename.sh:LINE in function()] FAIL: message
+#
+# Arguments:
+#   $1 - test_name: Test name (used to locate log file)
+#   $2 - test_file: Relative path to test source file
+# Returns:
+#   Exit code: EC_SUCCESS (0)
+# Output:
+#   YAML array entries to stdout (indented for TAP diagnostic block)
+# ------------------------------------------------------------------------------
+function __tap_emit_failure_details() {
+  local test_name="$1"
+  local test_file="$2"
+
+  local log_dir="${REPORT_STATS[log_dir]:-}"
+  local log_file="${log_dir}/${test_name}.log"
+
+  if [[ -z "$log_dir" || ! -f "$log_file" ]]; then
+    return 0
+  fi
+
+  # Read all lines into an array for look-ahead capability
+  local -a log_lines
+  mapfile -t log_lines < <(grep -n '' "$log_file" 2>/dev/null || true)
+
+  # Extract indices of FAIL lines
+  local -a fail_indices=()
+  local i
+  for i in "${!log_lines[@]}"; do
+    if [[ "${log_lines[$i]}" == *'] FAIL: '* ]]; then
+      fail_indices+=("$i")
+    fi
+  done
+
+  if [[ ${#fail_indices[@]} -eq 0 ]]; then
+    return 0
+  fi
+
+  echo "  failures:"
+
+  for i in "${fail_indices[@]}"; do
+    local line="${log_lines[$i]}"
+    local source_info fail_message line_num func_name
+
+    # Extract the source bracket: [filename.sh:LINE in function()]
+    source_info=$(echo "$line" | grep -oP '\[\K[^]]+\.sh:\d+ in [^]]+' || true)
+
+    # Extract the FAIL message after "FAIL: "
+    fail_message=$(echo "$line" | sed -n 's/.*FAIL: //p' || true)
+
+    if [[ -n "$source_info" && -n "$fail_message" ]]; then
+      # Parse line number from "filename.sh:LINE in function()"
+      line_num=$(echo "$source_info" | grep -oP ':\K\d+' || echo "0")
+      # Parse function name
+      func_name=$(echo "$source_info" | grep -oP 'in \K[^()]+' || echo "unknown")
+
+      # Escape quotes in the message for YAML
+      fail_message="${fail_message//\"/\\\"}"
+
+      echo "    - line: ${line_num}"
+      echo "      function: \"${func_name}\""
+      echo "      message: \"${fail_message}\""
+
+      # Check if the next line contains ASSERT_DETAIL
+      local next_idx=$((i + 1))
+      if [[ $next_idx -lt ${#log_lines[@]} ]]; then
+        local next_line="${log_lines[$next_idx]}"
+        if [[ "$next_line" == *'ASSERT_DETAIL: expected='* ]]; then
+          local detail_part="${next_line##*ASSERT_DETAIL: }"
+          local exp_val act_val
+          exp_val=$(echo "$detail_part" | sed -n 's/^expected=\(.*\) actual=.*$/\1/p')
+          act_val=$(echo "$detail_part" | sed -n 's/^.*actual=\(.*\)$/\1/p')
+          if [[ -n "$exp_val" || -n "$act_val" ]]; then
+            echo "      expected: \"${exp_val//\"/\\\"}\""
+            echo "      actual: \"${act_val//\"/\\\"}\""
+          fi
+        fi
+      fi
+
+      if [[ -n "$test_file" ]]; then
+        echo "      file: \"${test_file}\""
+      fi
+    fi
+  done
+
+  return 0
+}
+export -f __tap_emit_failure_details
 
 # ==============================================================================
 # Module Initialization

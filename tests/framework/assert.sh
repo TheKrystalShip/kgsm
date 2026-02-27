@@ -103,7 +103,10 @@ function assert_equals() {
     print_assert_result "PASS" "$message: '$actual' equals '$expected'" "$caller_info"
     return $ASSERT_SUCCESS
   else
+    export ASSERT_EXPECTED="$expected"
+    export ASSERT_ACTUAL="$actual"
     print_assert_result "FAIL" "$message: expected '$expected', got '$actual'" "$caller_info"
+    unset ASSERT_EXPECTED ASSERT_ACTUAL
     return $ASSERT_FAILURE
   fi
 }
@@ -121,7 +124,10 @@ function assert_not_equals() {
     print_assert_result "PASS" "$message: '$actual' does not equal '$not_expected'" "$caller_info"
     return $ASSERT_SUCCESS
   else
+    export ASSERT_EXPECTED="not $not_expected"
+    export ASSERT_ACTUAL="$actual"
     print_assert_result "FAIL" "$message: '$actual' should not equal '$not_expected'" "$caller_info"
+    unset ASSERT_EXPECTED ASSERT_ACTUAL
     return $ASSERT_FAILURE
   fi
 }
@@ -683,7 +689,10 @@ function assert_command_output() {
     print_assert_result "PASS" "$message: command output contains expected text" "$caller_info"
     return $ASSERT_SUCCESS
   else
+    export ASSERT_EXPECTED="$expected_output"
+    export ASSERT_ACTUAL="$actual_output"
     print_assert_result "FAIL" "$message: command output does not contain expected text" "$caller_info"
+    unset ASSERT_EXPECTED ASSERT_ACTUAL
     printf "${RED}Expected:${NC} %s\n" "$expected_output" >&2
     printf "${RED}Actual:${NC} %s\n" "$actual_output" >&2
     return $ASSERT_FAILURE

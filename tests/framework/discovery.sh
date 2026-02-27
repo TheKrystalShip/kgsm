@@ -346,7 +346,29 @@ function list_tests_json() {
         printf ','
       fi
 
-      printf '{"name":"%s","type":"%s","file":"%s"}' "$test_name" "$test_type" "$relative_path"
+      # Discover test functions in the file with line numbers
+      local -a func_lines=()
+      mapfile -t func_lines < <(grep -nP '^function (test_\w+|setup_test)' "$test_file" 2>/dev/null || true)
+
+      local func_json="["
+      local first_func=true
+      for func_entry in "${func_lines[@]}"; do
+        if [[ -z "$func_entry" ]]; then continue; fi
+        # func_entry format: "LINE:function func_name() {" or "LINE:function func_name {"
+        local func_line="${func_entry%%:*}"
+        local func_name
+        func_name=$(echo "$func_entry" | grep -oP 'function \K(test_\w+|setup_test)')
+        if [[ -z "$func_name" ]]; then continue; fi
+        if [[ "$first_func" == "true" ]]; then
+          first_func=false
+        else
+          func_json+=","
+        fi
+        func_json+="{\"name\":\"${func_name}\",\"line\":${func_line}}"
+      done
+      func_json+="]"
+
+      printf '{"name":"%s","type":"%s","file":"%s","functions":%s}' "$test_name" "$test_type" "$relative_path" "$func_json"
     done
   done
 

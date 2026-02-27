@@ -246,6 +246,14 @@ function log_assertion() {
   # Write to file in standardized format
   __log_write_to_file "$timestamp" "$level" "$caller_info" "$result: $message"
 
+  # Write structured expected/actual detail line on failure
+  if [[ "$result" == "FAIL" && -n "${ASSERT_EXPECTED+x}" && -n "${ASSERT_ACTUAL+x}" ]]; then
+    if [[ -n "${KGSM_TEST_LOG:-}" ]]; then
+      echo "ASSERT_DETAIL: expected=${ASSERT_EXPECTED} actual=${ASSERT_ACTUAL}" >> "$KGSM_TEST_LOG"
+    fi
+    unset ASSERT_EXPECTED ASSERT_ACTUAL
+  fi
+
   # Write to console with visual symbol
   if [[ "${KGSM_LOG_CONSOLE_ENABLED:-true}" == "true" ]]; then
     printf "${color}%s %s:${NC} %s\n" "$symbol" "$result" "$message" >&2

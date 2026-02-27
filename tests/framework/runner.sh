@@ -160,6 +160,8 @@ OPTIONS:
 FILTERING:
     --pattern REGEX     Only run tests matching pattern
     --exclude REGEX     Exclude tests matching pattern
+    --function NAME     Run only the specified function within matched tests
+                        (setup_test is always called first)
     --failed [PATH]     Re-run tests that failed in the last run
                         (optionally specify explicit CSV path)
 
@@ -237,6 +239,10 @@ function main() {
       --exclude)
         shift
         TEST_EXCLUDE+=("$1")
+        ;;
+      --function)
+        shift
+        export KGSM_TEST_FUNCTION_FILTER="$1"
         ;;
       --failed)
         # Check if next arg exists and doesn't start with '-'
