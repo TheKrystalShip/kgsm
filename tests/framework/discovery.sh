@@ -299,6 +299,62 @@ function list_tests() {
 
 export -f list_tests
 
+#
+# list_tests_json()
+#
+# Output all discoverable tests as a JSON array for machine consumption.
+#
+# Arguments:
+#   $@ - test_types (array, optional): Test types to list (default: all types)
+#
+# Output:
+#   JSON array to stdout: [{"name":"test_paths","type":"unit","file":"tests/unit/test_paths.sh"}, ...]
+#
+# Return Codes:
+#   0 - Success
+#
+function list_tests_json() {
+  local test_types=("$@")
+
+  # Default to all test types
+  if [[ ${#test_types[@]} -eq 0 ]]; then
+    test_types=("unit" "integration" "e2e")
+  fi
+
+  local first=true
+  local kgsm_root="${KGSM_ROOT:-}"
+
+  printf '['
+
+  for test_type in "${test_types[@]}"; do
+    local tests
+    mapfile -t tests < <(discover_tests "$test_type")
+
+    for test_file in "${tests[@]}"; do
+      local test_name
+      test_name=$(get_test_name "$test_file")
+
+      # Make path relative to KGSM_ROOT
+      local relative_path="$test_file"
+      if [[ -n "$kgsm_root" && "$test_file" == "${kgsm_root}/"* ]]; then
+        relative_path="${test_file#${kgsm_root}/}"
+      fi
+
+      if [[ "$first" == "true" ]]; then
+        first=false
+      else
+        printf ','
+      fi
+
+      printf '{"name":"%s","type":"%s","file":"%s"}' "$test_name" "$test_type" "$relative_path"
+    done
+  done
+
+  printf ']\n'
+}
+
+export -f list_tests_json
+
 # =============================================================================
 # MODULE INITIALIZATION
 # =============================================================================

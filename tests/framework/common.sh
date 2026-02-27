@@ -90,6 +90,9 @@ __load_module "config.sh" "Config Module" || return 1
 # 4. Reporting module (test statistics and summary generation)
 __load_module "reporting.sh" "Reporting Module" || return 1
 
+# 4a. TAP reporting module (TAP v14 output for VS Code integration)
+__load_module "reporting.tap.sh" "TAP Reporting Module" || return 1
+
 # 5. Discovery module (test discovery and filtering)
 __load_module "discovery.sh" "Discovery Module" || return 1
 

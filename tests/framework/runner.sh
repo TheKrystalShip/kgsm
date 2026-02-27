@@ -81,12 +81,14 @@ function run_test_suite() {
   fi
 
   # Show execution progress for this test type
-  printf "\n${COLOR_BOLD}Running %d %s test(s):${NC}\n" "${#filtered_tests[@]}" "$test_type"
+  if [[ "$TEST_QUIET" != "true" ]]; then
+    printf "\n${COLOR_BOLD}Running %d %s test(s):${NC}\n" "${#filtered_tests[@]}" "$test_type"
 
-  # Print out the list of tests to be executed
-  for test_file in "${filtered_tests[@]}"; do
-    printf "  - %s\n" "$(basename "$test_file")"
-  done
+    # Print out the list of tests to be executed
+    for test_file in "${filtered_tests[@]}"; do
+      printf "  - %s\n" "$(basename "$test_file")"
+    done
+  fi
 
   # Delegate to execution module (handles sequential vs parallel internally)
   declare -A test_results
@@ -147,10 +149,12 @@ Usage: $(basename "$0") [OPTIONS] [TEST_TYPES...]
 OPTIONS:
     -h, --help          Show this help message
     -l, --list          List available tests with status (no execution)
+    --list-json         List tests as JSON array (machine-readable)
     -d, --debug         Enable debug mode (preserves sandboxes)
     -v, --verbose       Enable verbose output
     -q, --quiet         Suppress non-essential output
     -p, --parallel      Run tests in parallel (where possible)
+    --tap               Output results in TAP version 14 format (stdout)
     --clean-logs        Remove old test logs (keeps last 10)
 
 FILTERING:
@@ -172,6 +176,7 @@ EXAMPLES:
     $(basename "$0") --debug e2e        # Run e2e tests with debug
     $(basename "$0") --pattern "instance"  # Run tests matching "instance"
     $(basename "$0") --failed           # Re-run tests that failed last time
+    $(basename "$0") --tap unit         # Run unit tests with TAP output
     $(basename "$0") --clean-logs       # Clean up old test logs
 
 LOGS:
@@ -205,6 +210,10 @@ function main() {
       -p | --parallel)
         TEST_PARALLEL=true
         ;;
+      --tap)
+        TEST_TAP_OUTPUT=true
+        TEST_QUIET=true
+        ;;
       --clean-logs)
         clean_old_logs
         exit $EC_SUCCESS
@@ -213,6 +222,12 @@ function main() {
         # List tests (delegate to discovery.sh list_tests function)
         shift
         list_tests "$@"
+        exit $EC_SUCCESS
+        ;;
+      --list-json)
+        # List tests as JSON (for machine consumption)
+        shift
+        list_tests_json "$@"
         exit $EC_SUCCESS
         ;;
       --pattern)
@@ -324,7 +339,9 @@ function main() {
   print_color "$GRAY" "  Logs:      $TEST_LOG_DIR"
 
   # Show test execution plan
-  print_test_plan TEST_TYPES
+  if [[ "$TEST_QUIET" != "true" ]]; then
+    print_test_plan TEST_TYPES
+  fi
 
   # Set up signal handlers for cleanup
   trap 'cleanup_all' EXIT INT TERM
@@ -334,11 +351,20 @@ function main() {
     run_test_suite "$test_type"
   done
 
-  # Display all results (read from CSV)
-  print_all_results_from_csv
+  if [[ "${TEST_TAP_OUTPUT:-false}" == "true" ]]; then
+    # Finalize timing for CSV accuracy
+    finalize_reporting
+    __read_stats_from_csv
 
-  # Generate final summary (uses reporting.sh module)
-  generate_summary
+    # Generate TAP output to stdout
+    generate_tap_output
+  else
+    # Display all results (read from CSV)
+    print_all_results_from_csv
+
+    # Generate final summary (uses reporting.sh module)
+    generate_summary
+  fi
   
   # Create/update 'latest' symlink for easy access to most recent run
   # Use -n flag to treat existing symlink-to-directory as a file

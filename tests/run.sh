@@ -54,6 +54,7 @@ ${BOLD}OPTIONS:${NC}
     -q, --quiet         Suppress non-essential output
     -l, --list          List available tests without running them
     -c, --config FILE   Use specific test configuration file
+    --tap               Output results in TAP version 14 format (stdout)
     --clean-logs        Remove old test logs (keeps last 10)
 
 ${BOLD}FILTERING:${NC}
@@ -72,6 +73,7 @@ ${BOLD}EXAMPLES:${NC}
     ${self} --debug e2e               # Run e2e tests with debug
     ${self} --pattern \"instance\"     # Run tests matching \"instance\"
     ${self} --verbose --exclude \"long\"  # Verbose mode, exclude long tests
+    ${self} --tap unit                   # Run unit tests with TAP output
 
 ${BOLD}CONFIGURATION:${NC}
     Test behavior can be customized by editing:
@@ -158,6 +160,7 @@ function validate_test_environment() {
     "$FRAMEWORK_DIR/execution.parallel.sh"
     "$FRAMEWORK_DIR/discovery.sh"
     "$FRAMEWORK_DIR/reporting.sh"
+    "$FRAMEWORK_DIR/reporting.tap.sh"
     "$FRAMEWORK_DIR/runner.sh"
     "$FRAMEWORK_DIR/common.sh"
     "$FRAMEWORK_DIR/assert.sh"
@@ -177,16 +180,28 @@ function validate_test_environment() {
 export -f validate_test_environment
 
 function _run_tests() {
-  # Normal execution
-  print_banner
+  # Check if --tap flag is present to suppress non-TAP output
+  local tap_mode=false
+  for arg in "$@"; do
+    [[ "$arg" == "--tap" ]] && tap_mode=true && break
+  done
 
-  echo -e "${BLUE}Checking dependencies...${NC}"
+  if [[ "$tap_mode" != "true" ]]; then
+    print_banner
+    echo -e "${BLUE}Checking dependencies...${NC}"
+  fi
+
   check_dependencies
 
-  echo -e "${BLUE}Validating test environment...${NC}"
+  if [[ "$tap_mode" != "true" ]]; then
+    echo -e "${BLUE}Validating test environment...${NC}"
+  fi
+
   validate_test_environment
 
-  echo -e "${BLUE}Starting test execution...${NC}\n"
+  if [[ "$tap_mode" != "true" ]]; then
+    echo -e "${BLUE}Starting test execution...${NC}\n"
+  fi
 
   # Execute the test runner with all arguments
   exec "$RUNNER_SCRIPT" "$@"
@@ -209,6 +224,10 @@ case "$command" in
     # Delegate to runner.sh which uses discovery.sh list_tests()
     print_banner
     exec "$RUNNER_SCRIPT" --list "$@"
+    ;;
+  --list-json)
+    # JSON output - no banner, pass directly to runner
+    exec "$RUNNER_SCRIPT" "$@"
     ;;
   -c | --config)
     exec "$RUNNER_SCRIPT" "$@"
