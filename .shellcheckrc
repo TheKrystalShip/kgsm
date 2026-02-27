@@ -1,0 +1,4 @@
+# Enable source-path resolution relative to each script's directory
+source-path=SCRIPTDIR
+# Also check one level up (for commands/ -> project root resolution)
+source-path=SCRIPTDIR/..

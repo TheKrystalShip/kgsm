@@ -10,7 +10,7 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
-# shellcheck disable=SC1091
+# shellcheck source=../core/bootstrap.sh
 source "$(dirname "$(readlink -f "$0")")/../core/bootstrap.sh"
 
 self="$(basename "$0")"
@@ -187,7 +187,7 @@ ${UNDERLINE}Examples:${END}
 }
 
 # Load the internal logic library
-# shellcheck disable=SC1090
+# shellcheck source=handlers/lifecycle.sh
 source "$(__find_command_handler lifecycle.sh)" || {
   __print_error "Failed to load lifecycle.sh library"
   exit $EC_FAILED_SOURCE

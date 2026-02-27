@@ -8,7 +8,7 @@
 # jq syntax uses single quotes intentionally for variable interpolation
 # shellcheck disable=SC2016
 
-# shellcheck disable=SC1091
+# shellcheck source=../core/bootstrap.sh
 source "$(dirname "$(readlink -f "$0")")/../core/bootstrap.sh"
 
 self="$(basename "$0")"
@@ -16,7 +16,7 @@ self="$(basename "$0")"
 # Load events logic library
 logic_library=$(__find_command_handler events.sh)
 
-# shellcheck disable=SC1090
+# shellcheck source=handlers/events.sh
 source "$logic_library" || {
   __print_error "Failed to load events logic library"
   exit $EC_FAILED_SOURCE

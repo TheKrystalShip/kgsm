@@ -4,12 +4,12 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
-# shellcheck disable=SC1091
+# shellcheck source=../core/bootstrap.sh
 source "$(dirname "$(readlink -f "$0")")/../core/bootstrap.sh"
 
 # Load logic library
 logic_library=$(__find_command_handler watchers.sh)
-# shellcheck disable=SC1090
+# shellcheck source=handlers/watchers.sh
 source "$logic_library" || {
   __print_error "Failed to load watcher logic library"
   exit $EC_FAILED_SOURCE

@@ -52,7 +52,7 @@ if [[ -n "${KGSM_BOOTSTRAP_LOADED:-}" ]]; then
 fi
 
 # --- Load paths configuration ---
-# shellcheck disable=SC1091
+# shellcheck source=paths.sh
 source "$KGSM_ROOT/core/paths.sh" || {
   echo "ERROR: Failed to load paths.sh" >&2
   exit 1
@@ -65,7 +65,7 @@ __init_user_directories || {
 }
 
 # Load common.sh library.
-# shellcheck disable=SC1091
+# shellcheck source=common.sh
 source "$KGSM_ROOT/core/common.sh" || {
   echo -e "ERROR: Failed to load common.sh library" >&2
   exit 1

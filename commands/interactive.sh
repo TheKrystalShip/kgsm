@@ -20,28 +20,28 @@
 # Functions in this script are called dynamically by name through callbacks.
 # shellcheck disable=SC2329
 
-# shellcheck disable=SC1091
+# shellcheck source=../core/bootstrap.sh
 source "$(dirname "$(readlink -f "$0")")/../core/bootstrap.sh"
 
 self="$(basename "$0")"
 
 # Load required libraries
 ui_library=$(__find_core_module ui.sh)
-# shellcheck disable=SC1090
+# shellcheck source=../core/ui.sh
 source "$ui_library" || {
   __print_error "Failed to load UI library"
   exit $EC_FAILED_SOURCE
 }
 
 wizards_logic=$(__find_command_handler wizards.sh)
-# shellcheck disable=SC1090
+# shellcheck source=handlers/wizards.sh
 source "$wizards_logic" || {
   __print_error "Failed to load wizards logic library"
   exit $EC_FAILED_SOURCE
 }
 
 menus_logic=$(__find_command_handler menus.sh)
-# shellcheck disable=SC1090
+# shellcheck source=handlers/menus.sh
 source "$menus_logic" || {
   __print_error "Failed to load menus logic library"
   exit $EC_FAILED_SOURCE

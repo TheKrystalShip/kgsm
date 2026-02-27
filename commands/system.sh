@@ -4,7 +4,7 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
-# shellcheck disable=SC1091
+# shellcheck source=../core/bootstrap.sh
 source "$(dirname "$(readlink -f "$0")")/../core/bootstrap.sh"
 
 self="$(basename "$0")"
@@ -164,7 +164,7 @@ ${UNDERLINE}Examples:${END}
 }
 
 logic_library=$(__find_command_handler system.sh)
-# shellcheck disable=SC1090
+# shellcheck source=handlers/system.sh
 source "$logic_library" || {
   __print_error "Failed to load system logic library"
   exit $EC_FAILED_SOURCE
@@ -172,7 +172,7 @@ source "$logic_library" || {
 
 # Load network logic library for IP address functions used by info command
 network_logic_library=$(__find_command_handler network.sh)
-# shellcheck disable=SC1090
+# shellcheck source=handlers/network.sh
 source "$network_logic_library" || {
   __print_error "Failed to load network logic library"
   exit $EC_FAILED_SOURCE

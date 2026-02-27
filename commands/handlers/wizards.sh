@@ -39,7 +39,7 @@ function __logic_get_blueprints() {
   local blueprints_logic
   blueprints_logic=$(__find_command_handler blueprints.sh) || return $EC_FAILED_SOURCE
 
-  # shellcheck disable=SC1090
+  # shellcheck source=blueprints.sh
   source "$blueprints_logic" || return $EC_FAILED_SOURCE
 
   __logic_list_blueprints
@@ -54,7 +54,7 @@ export -f __logic_get_blueprints
 # Load instances logic library for __logic_get_instances function
 # This is sourced here so that all wizard functions can access instance operations
 instances_logic=$(__find_command_handler instances.sh)
-# shellcheck disable=SC1090
+# shellcheck source=instances.sh
 source "$instances_logic" || {
   echo "Failed to load instances logic library" >&2
   return $EC_FAILED_SOURCE
@@ -241,7 +241,7 @@ function __logic_wizard_start_instance() {
   local lifecycle_logic
   lifecycle_logic=$(__find_command_handler lifecycle.sh) || return $EC_FAILED_SOURCE
 
-  # shellcheck disable=SC1090
+  # shellcheck source=lifecycle.sh
   source "$lifecycle_logic" || return $EC_FAILED_SOURCE
 
   __logic_instance_start "$_instance_name"
@@ -269,7 +269,7 @@ function __logic_wizard_stop_instance() {
   local lifecycle_logic
   lifecycle_logic=$(__find_command_handler lifecycle.sh) || return $EC_FAILED_SOURCE
 
-  # shellcheck disable=SC1090
+  # shellcheck source=lifecycle.sh
   source "$lifecycle_logic" || return $EC_FAILED_SOURCE
 
   __logic_instance_stop "$_instance_name"
@@ -297,7 +297,7 @@ function __logic_wizard_restart_instance() {
   local lifecycle_logic
   lifecycle_logic=$(__find_command_handler lifecycle.sh) || return $EC_FAILED_SOURCE
 
-  # shellcheck disable=SC1090
+  # shellcheck source=lifecycle.sh
   source "$lifecycle_logic" || return $EC_FAILED_SOURCE
 
   __logic_instance_restart "$_instance_name"
@@ -329,7 +329,7 @@ function __logic_wizard_instance_status() {
   local lifecycle_logic
   lifecycle_logic=$(__find_command_handler lifecycle.sh) || return $EC_FAILED_SOURCE
 
-  # shellcheck disable=SC1090
+  # shellcheck source=lifecycle.sh
   source "$lifecycle_logic" || return $EC_FAILED_SOURCE
 
   __logic_instance_status "$_instance_name" "$json_format" "$fast_mode"
@@ -361,7 +361,7 @@ function __logic_wizard_instance_logs() {
   local lifecycle_logic
   lifecycle_logic=$(__find_command_handler lifecycle.sh) || return $EC_FAILED_SOURCE
 
-  # shellcheck disable=SC1090
+  # shellcheck source=lifecycle.sh
   source "$lifecycle_logic" || return $EC_FAILED_SOURCE
 
   __logic_instance_logs "$_instance_name" "$follow_flag" "$line_count"

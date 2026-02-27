@@ -1,0 +1,4 @@
+{
+  "bashIde.includeAllWorkspaceSymbols": true,
+  "bashIde.globPattern": "**/*@(.sh|.inc|.bash|.command|.overrides.sh)"
+}

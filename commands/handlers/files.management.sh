@@ -20,7 +20,7 @@ fi
 
 # Load common file logic functions
 if [[ -z "${KGSM_LOGIC_FILES_COMMON_LOADED}" ]]; then
-  # shellcheck disable=SC1090
+  # shellcheck source=files.common.sh
   source "$(__find_command_handler files.common.sh)" || return $EC_FAILED_SOURCE
 fi
 

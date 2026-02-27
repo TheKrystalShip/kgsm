@@ -5,7 +5,7 @@
 # shellcheck disable=SC2086
 # shellcheck disable=SC2254
 
-# shellcheck disable=SC1091
+# shellcheck source=../core/bootstrap.sh
 source "$(dirname "$(readlink -f "$0")")/../core/bootstrap.sh"
 
 self="$(basename "$0")"
@@ -321,14 +321,14 @@ ${UNDERLINE}Examples:${END}
 
 # Load required libraries
 logic_instances=$(__find_command_handler instances.sh)
-# shellcheck disable=SC1090
+# shellcheck source=handlers/instances.sh
 source "$logic_instances" || {
   __print_error "Failed to load instances logic library"
   exit $EC_FAILED_SOURCE
 }
 
 events_library=$(__find_core_module events.sh)
-# shellcheck disable=SC1090
+# shellcheck source=../core/events.sh
 source "$events_library" || {
   __print_error "Failed to load events library"
   exit $EC_FAILED_SOURCE
