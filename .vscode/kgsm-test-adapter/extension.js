@@ -1,6 +1,6 @@
 // KGSM Test Adapter - VS Code Extension
 // Integrates KGSM's bash testing framework with VS Code's native Testing API.
-// Discovers tests via `tests/run.sh --list-json` and runs them via `tests/run.sh --tap`.
+// Discovers tests via `tests/run.sh --list-json` and runs them via `tests/run.sh` (TAP output).
 
 const vscode = require("vscode");
 const { spawn } = require("child_process");
@@ -291,8 +291,8 @@ async function runTests(request, token) {
     functionItems.size === 1 &&
     functionItems.get(testsToRun[0].id)?.length === 1;
 
-  // Build args
-  const args = ["--tap"];
+  // Build args — TAP is now the default output format
+  const args = [];
   if (names.length < 58) {
     // Only add pattern filter if not running all tests
     args.push("--pattern", names.join("|"));
@@ -313,39 +313,18 @@ async function runTests(request, token) {
     });
   }
 
-  // Run and parse TAP
-  const tapOutput = await runCommand(
-    path.join(workspaceRoot, "tests/run.sh"),
-    args,
-    token,
-    true
-  );
-
-  if (tapOutput === null) {
-    // Cancelled or error
-    for (const t of testsToRun) {
-      run.skipped(t);
-      t.children.forEach((fn) => {
-        if (requestedFnIds.size === 0 || requestedFnIds.has(fn.id)) {
-          run.skipped(fn);
-        }
-      });
-    }
-    run.end();
-    return;
-  }
-
-  // Parse TAP output
-  const results = parseTap(tapOutput);
+  // Run and parse TAP incrementally — update Test Explorer as each test completes
   const testMap = new Map(testsToRun.map((t) => [t.id, t]));
+  const emittedTests = new Set();
+  let hasFailures = false;
 
-  for (const r of results) {
+  const parser = new TapStreamParser((r) => {
+    emittedTests.add(r.name);
     const testItem = testMap.get(r.name);
-    if (!testItem) continue;
+    if (!testItem) return;
 
     if (r.status === "pass") {
       run.passed(testItem, r.duration);
-      // Only mark function children that were actually run
       testItem.children.forEach((fn) => {
         if (requestedFnIds.size === 0 || requestedFnIds.has(fn.id)) {
           run.passed(fn, r.duration);
@@ -359,19 +338,17 @@ async function runTests(request, token) {
         }
       });
     } else {
+      hasFailures = true;
       const messages = [];
       const failedFunctions = new Set();
 
       if (r.failures && r.failures.length > 0) {
-        // Create a TestMessage for each individual assertion failure
         for (const f of r.failures) {
           const msg = new vscode.TestMessage(
             `${f.function}(): ${f.message}`
           );
-          // Set expected/actual for diff view
           if (f.expected !== undefined) msg.expectedOutput = f.expected;
           if (f.actual !== undefined) msg.actualOutput = f.actual;
-          // Set location to the exact line in the test file
           const filePath = f.file || (testItem.uri ? undefined : null);
           const uri = filePath
             ? vscode.Uri.file(path.join(workspaceRoot, filePath))
@@ -386,7 +363,6 @@ async function runTests(request, token) {
           if (f.function) failedFunctions.add(f.function);
         }
       } else {
-        // Fallback: generic failure message
         const msg = new vscode.TestMessage(r.message || "Test failed");
         if (testItem.uri) {
           msg.location = new vscode.Location(
@@ -399,7 +375,6 @@ async function runTests(request, token) {
 
       run.failed(testItem, messages, r.duration);
 
-      // Map results to function-level children (only those requested)
       testItem.children.forEach((fn) => {
         if (requestedFnIds.size > 0 && !requestedFnIds.has(fn.id)) return;
         const fnName = fn.label;
@@ -412,12 +387,41 @@ async function runTests(request, token) {
           run.passed(fn, r.duration);
         }
       });
+
+      outputChannel.show(true);
     }
+  });
+
+  const tapOutput = await runCommand(
+    path.join(workspaceRoot, "tests/run.sh"),
+    args,
+    token,
+    true,
+    (line) => parser.addLine(line)
+  );
+
+  if (tapOutput === null) {
+    // Cancelled or error
+    for (const t of testsToRun) {
+      if (!emittedTests.has(t.id)) {
+        run.skipped(t);
+        t.children.forEach((fn) => {
+          if (requestedFnIds.size === 0 || requestedFnIds.has(fn.id)) {
+            run.skipped(fn);
+          }
+        });
+      }
+    }
+    run.end();
+    return;
   }
+
+  // Flush any remaining buffered result
+  parser.flush();
 
   // Any tests not in results — mark as errored
   for (const t of testsToRun) {
-    if (!results.find((r) => r.name === t.id)) {
+    if (!emittedTests.has(t.id)) {
       run.errored(t, new vscode.TestMessage("Test did not produce TAP output"));
       t.children.forEach((fn) => {
         if (requestedFnIds.size === 0 || requestedFnIds.has(fn.id)) {
@@ -425,11 +429,6 @@ async function runTests(request, token) {
         }
       });
     }
-  }
-
-  // Auto-show output channel on failures
-  if (results.some((r) => r.status === "fail")) {
-    outputChannel.show(true); // true = preserve focus
   }
 
   run.end();
@@ -516,13 +515,35 @@ async function debugTests(request) {
 // TAP Parser
 // ---------------------------------------------------------------------------
 
-function parseTap(output) {
-  const results = [];
-  const lines = output.split("\n");
-  let i = 0;
+// ---------------------------------------------------------------------------
+// Streaming TAP v14 Parser
+// ---------------------------------------------------------------------------
+// Parses TAP output line-by-line, emitting results via callback as each test
+// (including multi-line YAML diagnostic blocks) completes.
 
-  while (i < lines.length) {
-    const line = lines[i];
+class TapStreamParser {
+  constructor(onResult) {
+    this.onResult = onResult;
+    this.currentResult = null;
+    this.inYaml = false;
+    this.yamlLines = [];
+  }
+
+  addLine(line) {
+    // TAP header lines — skip
+    if (line.match(/^TAP version/) || line.match(/^1\.\.\d+/)) return;
+
+    // Inside a YAML diagnostic block
+    if (this.inYaml) {
+      if (line.trim() === "...") {
+        this._parseYamlBlock();
+        this.inYaml = false;
+        this._emitCurrent();
+      } else {
+        this.yamlLines.push(line);
+      }
+      return;
+    }
 
     // Match: ok N - test_name [type] # comment
     // Match: not ok N - test_name [type]
@@ -531,8 +552,11 @@ function parseTap(output) {
     );
 
     if (match) {
+      // Emit any previous result that had no YAML block
+      this._emitCurrent();
+
       const [, status, name, , rest] = match;
-      const result = {
+      this.currentResult = {
         name,
         status: "fail",
         message: "",
@@ -542,74 +566,95 @@ function parseTap(output) {
 
       if (status === "ok") {
         if (rest.includes("# SKIP")) {
-          result.status = "skip";
+          this.currentResult.status = "skip";
         } else {
-          result.status = "pass";
-          // Parse duration from "# 44 assertions in 309ms"
+          this.currentResult.status = "pass";
           const durMatch = rest.match(/(\d+)ms/);
-          if (durMatch) result.duration = parseInt(durMatch[1], 10);
+          if (durMatch)
+            this.currentResult.duration = parseInt(durMatch[1], 10);
         }
+        // Passing/skip tests have no YAML block — emit immediately
+        this._emitCurrent();
       } else {
-        // not ok — look for YAML diagnostic block
-        result.status = "fail";
-        if (i + 1 < lines.length && lines[i + 1].trim() === "---") {
-          i++; // skip ---
-          const yamlLines = [];
-          while (++i < lines.length && lines[i].trim() !== "...") {
-            yamlLines.push(lines[i]);
-          }
-          // Parse YAML fields
-          let currentFailure = null;
-          for (const yl of yamlLines) {
-            const msgMatch = yl.match(/^\s+message:\s+"(.+)"$/);
-            const durMatch = yl.match(/^\s+duration_ms:\s+(\d+)$/);
-            const failStart = yl.match(/^\s+failures:\s*$/);
-            const failLine = yl.match(/^\s+- line:\s+(\d+)$/);
-            const failFunc = yl.match(/^\s+function:\s+"(.+)"$/);
-            const failMsg = yl.match(/^\s+message:\s+"(.+)"$/);
-            const failFile = yl.match(/^\s+file:\s+"(.+)"$/);
-            const failExpected = yl.match(/^\s+expected:\s+"(.+)"$/);
-            const failActual = yl.match(/^\s+actual:\s+"(.+)"$/);
-
-            if (failStart) {
-              // Entering failures array
-              continue;
-            } else if (failLine) {
-              // New failure entry
-              if (currentFailure) result.failures.push(currentFailure);
-              currentFailure = {
-                line: parseInt(failLine[1], 10),
-                function: "",
-                message: "",
-                file: "",
-              };
-            } else if (currentFailure && failFunc) {
-              currentFailure.function = failFunc[1];
-            } else if (currentFailure && failMsg) {
-              currentFailure.message = failMsg[1];
-            } else if (currentFailure && failFile) {
-              currentFailure.file = failFile[1];
-            } else if (currentFailure && failExpected) {
-              currentFailure.expected = failExpected[1];
-            } else if (currentFailure && failActual) {
-              currentFailure.actual = failActual[1];
-            } else if (msgMatch && !currentFailure) {
-              result.message = msgMatch[1];
-            } else if (durMatch) {
-              result.duration = parseInt(durMatch[1], 10);
-            }
-          }
-          if (currentFailure) result.failures.push(currentFailure);
-        }
+        // "not ok" — may be followed by YAML block on next line(s)
+        this.currentResult.status = "fail";
       }
-
-      results.push(result);
+      return;
     }
 
-    i++;
+    // Start of YAML block (must follow a "not ok" line)
+    if (line.trim() === "---" && this.currentResult) {
+      this.inYaml = true;
+      this.yamlLines = [];
+      return;
+    }
+
+    // If we have a pending "not ok" with no YAML block and hit a non-YAML line,
+    // emit it as-is
+    if (
+      this.currentResult &&
+      this.currentResult.status === "fail" &&
+      !this.inYaml
+    ) {
+      this._emitCurrent();
+    }
   }
 
-  return results;
+  flush() {
+    this._emitCurrent();
+  }
+
+  _emitCurrent() {
+    if (this.currentResult) {
+      const r = this.currentResult;
+      this.currentResult = null;
+      if (this.onResult) this.onResult(r);
+    }
+  }
+
+  _parseYamlBlock() {
+    if (!this.currentResult) return;
+
+    let currentFailure = null;
+    for (const yl of this.yamlLines) {
+      const msgMatch = yl.match(/^\s+message:\s+"(.+)"$/);
+      const durMatch = yl.match(/^\s+duration_ms:\s+(\d+)$/);
+      const failStart = yl.match(/^\s+failures:\s*$/);
+      const failLine = yl.match(/^\s+- line:\s+(\d+)$/);
+      const failFunc = yl.match(/^\s+function:\s+"(.+)"$/);
+      const failMsg = yl.match(/^\s+message:\s+"(.+)"$/);
+      const failFile = yl.match(/^\s+file:\s+"(.+)"$/);
+      const failExpected = yl.match(/^\s+expected:\s+"(.+)"$/);
+      const failActual = yl.match(/^\s+actual:\s+"(.+)"$/);
+
+      if (failStart) {
+        continue;
+      } else if (failLine) {
+        if (currentFailure) this.currentResult.failures.push(currentFailure);
+        currentFailure = {
+          line: parseInt(failLine[1], 10),
+          function: "",
+          message: "",
+          file: "",
+        };
+      } else if (currentFailure && failFunc) {
+        currentFailure.function = failFunc[1];
+      } else if (currentFailure && failMsg) {
+        currentFailure.message = failMsg[1];
+      } else if (currentFailure && failFile) {
+        currentFailure.file = failFile[1];
+      } else if (currentFailure && failExpected) {
+        currentFailure.expected = failExpected[1];
+      } else if (currentFailure && failActual) {
+        currentFailure.actual = failActual[1];
+      } else if (msgMatch && !currentFailure) {
+        this.currentResult.message = msgMatch[1];
+      } else if (durMatch) {
+        this.currentResult.duration = parseInt(durMatch[1], 10);
+      }
+    }
+    if (currentFailure) this.currentResult.failures.push(currentFailure);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -626,7 +671,7 @@ function findTestItem(id) {
   return found;
 }
 
-function runCommand(cmd, args, token, logToChannel = false) {
+function runCommand(cmd, args, token, logToChannel = false, onLine = null) {
   return new Promise((resolve) => {
     const proc = spawn(cmd, args, {
       cwd: workspaceRoot,
@@ -634,15 +679,35 @@ function runCommand(cmd, args, token, logToChannel = false) {
     });
 
     let stdout = "";
+    let lineBuffer = "";
 
-    proc.stdout.on("data", (data) => (stdout += data.toString()));
+    proc.stdout.on("data", (data) => {
+      const chunk = data.toString();
+      stdout += chunk;
+
+      if (onLine) {
+        lineBuffer += chunk;
+        const lines = lineBuffer.split("\n");
+        // All but last element are complete lines
+        for (let i = 0; i < lines.length - 1; i++) {
+          onLine(lines[i]);
+        }
+        lineBuffer = lines[lines.length - 1];
+      }
+    });
+
     proc.stderr.on("data", (data) => {
       if (logToChannel && outputChannel) {
         outputChannel.append(data.toString());
       }
     });
 
-    proc.on("close", () => resolve(stdout));
+    proc.on("close", () => {
+      if (onLine && lineBuffer) {
+        onLine(lineBuffer);
+      }
+      resolve(stdout);
+    });
     proc.on("error", (err) => {
       vscode.window.showErrorMessage(`KGSM: ${err.message}`);
       resolve(null);

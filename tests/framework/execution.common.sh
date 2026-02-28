@@ -218,8 +218,13 @@ function __capture_test_output() {
     exit_code=$?
   fi
 
-  local output=$(<"$output_file")
-  rm -f "$output_file"
+  local output
+  if [[ -f "$output_file" ]]; then
+    output=$(tr -d '\0' < "$output_file")
+    rm -f "$output_file"
+  else
+    output="No output captured (output file missing)"
+  fi
 
   echo "$output"
   return $exit_code
