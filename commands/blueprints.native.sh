@@ -147,10 +147,12 @@ function _list_custom_native_blueprints() {
     return $exit_code
   fi
 
-  if [[ -z "$json_format" ]]; then
-    echo "$blueprint_list"
-  else
-    echo "$blueprint_list" | jq -R . | jq -s .
+  if [[ -n "$blueprint_list" ]]; then
+    if [[ -z "$json_format" ]]; then
+      echo "$blueprint_list"
+    else
+      echo "$blueprint_list" | jq -R . | jq -s .
+    fi
   fi
 
   return $exit_code
@@ -167,10 +169,12 @@ function _list_default_native_blueprints() {
     return $exit_code
   fi
 
-  if [[ -z "$json_format" ]]; then
-    echo "$blueprint_list"
-  else
-    echo "$blueprint_list" | jq -R . | jq -s .
+  if [[ -n "$blueprint_list" ]]; then
+    if [[ -z "$json_format" ]]; then
+      echo "$blueprint_list"
+    else
+      echo "$blueprint_list" | jq -R . | jq -s .
+    fi
   fi
 
   return $exit_code
@@ -187,10 +191,12 @@ function _list_native_blueprints() {
     return $exit_code
   fi
 
-  if [[ -z "$json_format" ]]; then
-    echo "$blueprint_list"
-  else
-    echo "$blueprint_list" | jq -R . | jq -s .
+  if [[ -n "$blueprint_list" ]]; then
+    if [[ -z "$json_format" ]]; then
+      echo "$blueprint_list"
+    else
+      echo "$blueprint_list" | jq -R . | jq -s .
+    fi
   fi
 
   return $exit_code
