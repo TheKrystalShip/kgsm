@@ -82,12 +82,6 @@ function __setup_test_environment() {
   # Debug: verify environment is set
   log_debug "Environment setup complete: KGSM_TEST_SANDBOX=$KGSM_TEST_SANDBOX KGSM_ROOT=$original_kgsm_root"
 
-  # Enable debug mode if configured
-  if [[ "${TEST_DEBUG:-false}" == "true" ]]; then
-    export KGSM_DEBUG="true"
-    set -x
-  fi
-
   return $EC_SUCCESS
 }
 export -f __setup_test_environment
@@ -122,11 +116,6 @@ function __restore_test_environment() {
   export KGSM_COMMON_LOADED
   export KGSM_LOADER_LOADED
   export KGSM_CONFIG_LOADED
-
-  # Restore debug state
-  if [[ "${TEST_DEBUG:-false}" == "true" ]]; then
-    set +x
-  fi
 
   return $EC_SUCCESS
 }
@@ -236,6 +225,65 @@ function __capture_test_output() {
   return $exit_code
 }
 export -f __capture_test_output
+
+# ------------------------------------------------------------------------------
+# Execute test file inline (no subshell) for interactive debugging
+# ------------------------------------------------------------------------------
+# This function runs the same test lifecycle as __capture_test_output but
+# without wrapping it in a subshell or background process. This allows
+# debuggers like bashdb to step through the test code line by line.
+#
+# Arguments:
+#   $1 - test_file: Absolute path to test file
+# Returns:
+#   Exit code: 0 if all assertions passed, 1 otherwise
+# ------------------------------------------------------------------------------
+function __execute_test_inline() {
+  local test_file="$1"
+
+  # Source the test file — defines functions
+  # shellcheck disable=SC1090
+  source "$test_file"
+
+  # Run setup_test if defined
+  if declare -f setup_test >/dev/null 2>&1; then
+    setup_test
+  fi
+
+  # Run target function(s)
+  if [[ -n "${KGSM_TEST_FUNCTION_FILTER:-}" ]]; then
+    if declare -f "$KGSM_TEST_FUNCTION_FILTER" >/dev/null 2>&1; then
+      "$KGSM_TEST_FUNCTION_FILTER"
+    else
+      echo "ERROR: Function not found: $KGSM_TEST_FUNCTION_FILTER" >&2
+      echo "Available test functions in $(basename "$test_file"):" >&2
+      grep -oP '^function \Ktest_\w+' "$test_file" >&2
+      return 1
+    fi
+  else
+    local -a _test_functions
+    mapfile -t _test_functions < <(grep -oP '^function \Ktest_\w+' "$test_file")
+    for _fn in "${_test_functions[@]}"; do
+      if declare -f "$_fn" >/dev/null 2>&1; then
+        "$_fn"
+      fi
+    done
+  fi
+
+  # Print assertion summary
+  local _test_exit=0
+  if declare -f print_assert_summary >/dev/null 2>&1; then
+    print_assert_summary "${TEST_NAME:-}" || _test_exit=$?
+  fi
+
+  # Run cleanup_test if defined (must not affect test result)
+  if declare -f cleanup_test >/dev/null 2>&1; then
+    cleanup_test
+  fi
+
+  return $_test_exit
+}
+export -f __execute_test_inline
 
 # ------------------------------------------------------------------------------
 # Parse assertion statistics from test log

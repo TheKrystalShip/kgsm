@@ -60,9 +60,7 @@ function log_info() {
 export -f log_info
 
 function log_debug() {
-  if [[ "${TEST_DEBUG:-false}" == "true" ]]; then
-    __log_to_file "DEBUG" "$1"
-  fi
+  __log_to_file "DEBUG" "$1"
 }
 
 export -f log_debug

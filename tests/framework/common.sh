@@ -115,25 +115,6 @@ __load_module "kgsm.wrapper.sh" "KGSM Wrapper Module" || return 1
 # Instead, each test wrapper script loads KGSM bootstrap AFTER setting up
 # the sandbox environment, ensuring modules are loaded with correct paths.
 
-# ============================================================================
-# Debug Mode Output
-# ============================================================================
-
-# If debug mode is enabled, show module load status
-if [[ "${TEST_DEBUG:-false}" == "true" ]]; then
-  echo "[DEBUG] Testing Framework modules loaded:" >&2
-  echo "  - loader.sh:              ${TEST_LOADER_LOADED:-not loaded}" >&2
-  echo "  - logging.sh:             ${TEST_LOGGING_LOADED:-not loaded}" >&2
-  echo "  - config.sh:              ${TEST_CONFIG_LOADED:-not loaded}" >&2
-  echo "  - reporting.tap.sh:       ${TEST_REPORTING_TAP_LOADED:-not loaded}" >&2
-  echo "  - discovery.sh:           ${TEST_DISCOVERY_LOADED:-not loaded}" >&2
-  echo "  - sandbox.sh:             ${TEST_SANDBOX_LOADED:-not loaded}" >&2
-  echo "  - assert.sh:              ${TEST_ASSERT_LOADED:-not loaded}" >&2
-  echo "  - kgsm.wrapper.sh:        ${TEST_KGSM_WRAPPER_LOADED:-not loaded}" >&2
-  echo "  - execution.common.sh:    ${TEST_EXECUTION_COMMON_LOADED:-not loaded}" >&2
-  echo "[DEBUG] KGSM core loaded: ${KGSM_COMMON_LOADED:-not loaded}" >&2
-fi
-
 # Mark test as passed
 function pass_test() {
   local message="${1:-Test passed}"

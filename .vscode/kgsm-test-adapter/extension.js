@@ -481,9 +481,9 @@ async function debugTests(request) {
   }
 
   // Build args for the debug wrapper
-  const wrapperArgs = [testFilePath];
+  const debugArgs = ["--debug-run", testFilePath];
   if (functionName) {
-    wrapperArgs.push(functionName);
+    debugArgs.push("--function", functionName);
   }
 
   // Launch a bashdb debug session
@@ -491,8 +491,8 @@ async function debugTests(request) {
     type: "bashdb",
     request: "launch",
     name: `Debug: ${debugLabel}`,
-    program: path.join(workspaceRoot, "tests/framework/debug-wrapper.sh"),
-    args: wrapperArgs,
+    program: path.join(workspaceRoot, "tests/run.sh"),
+    args: debugArgs,
     cwd: workspaceRoot,
     terminalKind: "integrated",
     env: {

@@ -32,14 +32,6 @@ fi
 # Returns: 0 (always succeeds)
 function __apply_config_defaults() {
   # Framework Control
-
-  # TEST_DEBUG is unique, it gets set by starting tests with the "--debug" flag
-  # So we verify first if it's already been set, that way we don't override the
-  # value
-  if [[ -z "${TEST_DEBUG}" ]]; then
-    declare -g TEST_DEBUG=false
-  fi
-
   declare -g TEST_VERBOSE=false
   declare -g TEST_QUIET=false
 
@@ -251,7 +243,6 @@ function __normalize_test_parallel() {
 # Returns: 0 (always succeeds)
 function __export_config_variables() {
   # Framework Control
-  export TEST_DEBUG
   export TEST_VERBOSE
   export TEST_QUIET
   export TEST_PARALLEL

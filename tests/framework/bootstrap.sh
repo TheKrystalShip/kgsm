@@ -17,7 +17,6 @@
 # Environment Variables (exported):
 #   TEST_ROOT            - Absolute path to tests/ directory
 #   KGSM_ROOT           - Absolute path to KGSM project root
-#   TEST_DEBUG          - Set to 'true' if debug mode enabled
 #   TEST_BOOTSTRAP_LOADED - Set to '1' when this module loads
 
 # Disabling SC2086 globally (exit codes safe for unquoted use)
@@ -31,41 +30,6 @@
 if [[ -n "${TEST_BOOTSTRAP_LOADED:-}" ]]; then
   return 0
 fi
-
-# =============================================================================
-# DEBUG MODE HANDLING
-# =============================================================================
-
-# Function to enable debug tracing
-__enable_test_debug() {
-  export PS4='+(\033[0;33m${BASH_SOURCE}:${LINENO}\033[0m): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
-  set -x
-}
-
-# Check for --debug flag in arguments
-# shellcheck disable=SC2199
-if [[ $@ =~ "--debug" ]]; then
-  declare -g TEST_DEBUG=true
-  export TEST_DEBUG
-
-  # Remove --debug from arguments to prevent downstream parsing errors
-  _new_args=()
-  for _arg in "$@"; do
-    if [[ "$_arg" != "--debug" ]]; then
-      _new_args+=("$_arg")
-    fi
-  done
-  set -- "${_new_args[@]}"
-  unset _new_args _arg
-fi
-
-# Enable debug mode if environment variable is set
-if [[ "${TEST_DEBUG:-false}" == "true" ]]; then
-  __enable_test_debug
-fi
-
-# Clean up helper function
-unset -f __enable_test_debug
 
 # =============================================================================
 # PATH DETECTION

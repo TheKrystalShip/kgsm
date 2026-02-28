@@ -249,41 +249,11 @@ function test_cleanup_result_files_valid() {
   mkdir -p "$results_dir"
   touch "$results_dir/test.result"
 
-  # Ensure we're not in debug mode for this test
-  local original_debug="${TEST_DEBUG:-false}"
-  TEST_DEBUG=false
-
   __cleanup_result_files "$results_dir"
   local exit_code=$?
-
-  TEST_DEBUG="$original_debug"
 
   assert_equals "$exit_code" "0" "Cleanup should succeed"
   assert_dir_not_exists "$results_dir" ".results directory should be removed"
-}
-
-function test_cleanup_result_files_debug_preserve() {
-  log_test_step "Testing __cleanup_result_files preserves in debug mode"
-
-  # Create a .results directory
-  local results_dir="$TEST_TEMP_DIR/debug.results"
-  mkdir -p "$results_dir"
-  touch "$results_dir/test.result"
-
-  # Enable debug mode
-  local original_debug="${TEST_DEBUG:-false}"
-  TEST_DEBUG=true
-
-  __cleanup_result_files "$results_dir"
-  local exit_code=$?
-
-  TEST_DEBUG="$original_debug"
-
-  assert_equals "$exit_code" "0" "Cleanup should succeed"
-  assert_dir_exists "$results_dir" ".results directory should be preserved in debug mode"
-
-  # Manual cleanup
-  rm -rf "$results_dir"
 }
 
 # =============================================================================

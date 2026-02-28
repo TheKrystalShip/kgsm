@@ -9,7 +9,6 @@ Modular, sandboxed testing framework for KGSM. Follows **bootstrap â†’ loader â†
 ./tests/run.sh unit               # Unit tests only (fast)
 ./tests/run.sh --pattern "config" # Filter by name
 ./tests/run.sh --parallel 4       # 4 concurrent tests
-./tests/run.sh --debug            # Preserve sandboxes
 ./tests/run.sh --failed           # Re-run tests that failed last time
 ```
 
@@ -40,7 +39,6 @@ SKIP_<TEST_NAME>=false            # Skip specific test
 | **logging.sh**     | Structured logging (DEBUG/INFO/WARN/ERROR) | log_debug/info/warn/error()         |
 | **assert.sh**      | 50+ assertion functions                    | assert_equals(), assert_true()      |
 | **kgsm.wrapper.sh** | Test instance management                   | create_test_instance(), remove_test_instance() |
-| **runner.sh**      | Main orchestrator                          | Coordinate all phases               |
 
 ### Loading Order
 
@@ -149,17 +147,15 @@ test_id=$(generate_test_id "custom") # Custom prefix: "custom"
 
 ## Debugging
 
-### Debug Mode
+### Interactive Debugging (VS Code)
 
-```bash
-./tests/run.sh --debug unit
-```
+Use the KGSM Test Adapter extension with `rogalmic.bash-debug` to interactively debug test functions:
 
-**Provides:**
-- Preserved sandboxes (not deleted)
-- Verbose output (all log levels)
-- Module load status
-- Execution trace (file:line:function)
+1. Open a test file in VS Code
+2. Click "Debug" above any `test_*` function
+3. Set breakpoints and step through code with bashdb
+
+The framework's `--debug-run` flag supports this by running tests inline (no subshell) so bashdb can trace execution.
 
 ### Logs
 
@@ -171,7 +167,7 @@ grep ERROR tests/logs/2025-12-22_14-30-45/*.log
 
 **Log format:** `[TIMESTAMP] [LEVEL] [SOURCE:LINE in function()] message`
 
-**Levels:** DEBUG (TEST_DEBUG=true only), INFO (default), WARN, ERROR
+**Levels:** DEBUG, INFO (default), WARN, ERROR
 
 ### Failed Test Re-runs
 
@@ -189,7 +185,7 @@ The framework automatically tracks test results and allows re-running only faile
 - After each test run, a `tests/logs/latest` symlink points to the most recent results
 - The `--failed` flag reads the `results.csv` file and filters for tests with non-zero exit codes
 - If no tests failed, prints success message and exits
-- Compatible with other flags: `./tests/run.sh --failed --debug --parallel 4`
+- Compatible with other flags: `./tests/run.sh --failed --parallel 4`
 
 **Use cases:**
 - Quick iteration when fixing failing tests
@@ -199,7 +195,7 @@ The framework automatically tracks test results and allows re-running only faile
 ### Sandbox Inspection
 
 ```bash
-./tests/run.sh --debug --pattern "my_test"
+./tests/run.sh --pattern "my_test"
 # Sandbox path shown in output:
 # /tmp/kgsm-test-sandboxes/unit_my_test_1734890445_1234
 
@@ -215,7 +211,7 @@ ls -la
 ./tests/run.sh --help
 
 # Framework module loading
-./tests/run.sh --debug --pattern "simple" 2>&1 | grep "loaded"
+./tests/run.sh --pattern "simple" 2>&1 | grep "loaded"
 
 # Verify sandbox paths
 # Add to test: log_debug "KGSM_ROOT: $KGSM_ROOT"
@@ -272,7 +268,7 @@ echo "SKIP_STEAMCMD_TESTS=true" >> tests/config.test.ini
 2. Create file: `tests/unit/test_feature.sh`
 3. Copy template: `cp tests/templates/test.template.sh tests/unit/test_feature.sh`
 4. Follow structure (see Writing Tests section)
-5. Test with debug: `./tests/run.sh --debug --pattern "feature"`
+5. Test: `./tests/run.sh --pattern "feature"`
 
 ### Improving Framework
 

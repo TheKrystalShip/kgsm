@@ -4,7 +4,7 @@
 # ==============================================================================
 # Version: 2.0
 # Description: Provides TAP v14 failure detail extraction for VS Code integration.
-#              The main TAP generation is handled by runner.sh's
+#              The main TAP generation is handled by run.sh's
 #              generate_tap_from_results(). This module provides the helper
 #              that parses log files to extract per-assertion failure details.
 # Dependencies: None (standalone parsing functions)

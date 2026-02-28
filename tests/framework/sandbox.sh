@@ -17,7 +17,7 @@ fi
 # Dependency Verification
 # ============================================================================
 
-# Note: TEST_SANDBOX_ROOT is set dynamically by runner.sh
+# Note: TEST_SANDBOX_ROOT is set dynamically by run.sh
 # We use TEST_SANDBOX_ROOT_BASE from config.sh as fallback
 
 # ============================================================================
