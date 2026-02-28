@@ -127,7 +127,7 @@ function __logic_start_standalone_instance() {
   fi
 
   # Start standalone process - suppress output since this is pure logic
-  if ! "$management_file" --start --background > /dev/null 2>&1; then
+  if ! "$management_file" start -d > /dev/null 2>&1; then
     return $EC_ERROR
   fi
 
@@ -219,7 +219,7 @@ function __logic_stop_standalone_instance() {
   fi
 
   # Stop standalone process - suppress output since this is pure logic
-  if ! "$management_file" --stop > /dev/null 2>&1; then
+  if ! "$management_file" stop > /dev/null 2>&1; then
     return $EC_ERROR
   fi
 
