@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
 
-# KGSM Test Framework - Main Entry Point & Runner
+# KGSM Test Framework - VS Code Test Runner Integration
 #
 # Author: The Krystal Ship Team
-# Version: 5.0
+# Version: 6.0
 #
-# This is the single entry point for running KGSM tests.
-# It discovers tests, executes them in sandboxed environments,
-# and outputs results in TAP v14 format (the only output format).
-#
-# Designed to integrate with VS Code's Test Explorer via the
-# KGSM Test Adapter extension.
+# VS Code Test Adapter entry point. Discovers tests, executes them
+# in sandboxed environments, and outputs results in TAP v14 format.
+# Not intended for standalone CLI use.
 
 # =============================================================================
 # SCRIPT SETUP
@@ -26,138 +23,6 @@ source "$FRAMEWORK_DIR/bootstrap.sh" || {
   echo "Bail out! Failed to source bootstrap.sh" >&2
   exit 1
 }
-
-# =============================================================================
-# UTILITY FUNCTIONS
-# =============================================================================
-
-# Status messages go to stderr so they don't pollute TAP output on stdout
-function print_status() {
-  if [[ "$TEST_QUIET" != "true" ]]; then
-    echo "$*" >&2
-  fi
-}
-
-function print_error() { echo "[ERROR] $*" >&2; }
-
-export -f print_status
-export -f print_error
-
-function show_usage() {
-  local self
-  self="$(basename "$0")"
-
-  cat << EOF
-KGSM Test Framework
-
-Usage: ${self} [OPTIONS] [TEST_TYPES...]
-
-OPTIONS:
-    -h, --help          Show this help message
-    -v, --verbose       Enable verbose output
-    -q, --quiet         Suppress non-essential output (stderr)
-    -l, --list          List available tests without running them
-    --list-json         List tests as JSON array (machine-readable)
-    -c, --config FILE   Use specific test configuration file
-    --clean-logs        Remove old test logs (keeps last 10)
-
-FILTERING:
-    --pattern REGEX     Only run tests matching pattern
-    --exclude REGEX     Exclude tests matching pattern
-    --function NAME     Run only the specified function within matched tests
-                        (setup_test is always called first)
-
-PARALLELISM:
-    --parallel N        Run up to N tests concurrently (default: 1)
-                        Use 'auto' to detect based on CPU cores
-
-DEBUGGING:
-    --debug-run FILE    Run a test file inline (no subshell) for interactive
-                        debugging with bashdb. Combine with --function to
-                        debug a single test function.
-
-TEST TYPES:
-    unit                Run unit tests (fast, no dependencies)
-    integration         Run integration tests (medium speed)
-    e2e                 Run end-to-end tests (slow, requires network)
-    all                 Run all test types (default)
-
-EXAMPLES:
-    ${self}                              # Run all tests (TAP output on stdout)
-    ${self} unit                         # Run only unit tests
-    ${self} --list                       # List all tests with status
-    ${self} --pattern "instance"         # Run tests matching "instance"
-    ${self} --verbose --exclude "long"   # Verbose mode, exclude long tests
-    ${self} --parallel 4 unit            # Run unit tests with 4 concurrent jobs
-    ${self} --clean-logs                 # Clean up old test logs
-
-CONFIGURATION:
-    Test behavior can be customized by editing:
-    ${TESTS_ROOT}/config.test.ini
-
-    Individual tests can be skipped by setting:
-    SKIP_<TEST_NAME>=true
-
-OUTPUT:
-    - Results are output in TAP version 14 format on stdout
-    - Status messages go to stderr
-    - Detailed logs are saved to tests/logs/ with timestamps
-    - Use --clean-logs to manage old log directories
-
-For more information, see: ${TESTS_ROOT}/README.md
-
-EOF
-}
-
-export -f show_usage
-
-function check_dependencies() {
-  local missing_deps=()
-
-  local required_commands=("bash" "grep" "find" "mktemp" "date")
-
-  for cmd in "${required_commands[@]}"; do
-    if ! command -v "$cmd" > /dev/null 2>&1; then
-      missing_deps+=("$cmd")
-    fi
-  done
-
-  if [[ ${#missing_deps[@]} -gt 0 ]]; then
-    print_error "Missing required dependencies: ${missing_deps[*]}"
-    echo "Bail out! Missing required dependencies" >&2
-    exit 1
-  fi
-}
-
-function validate_test_environment() {
-  # Check that we're in the right directory structure
-  if [[ ! -f "$KGSM_ROOT/kgsm.sh" ]]; then
-    print_error "KGSM directory not found."
-    print_error "Tests must be run from within the KGSM project directory."
-    exit 1
-  fi
-
-  # Check that essential test framework files exist
-  local essential_files=(
-    "$FRAMEWORK_DIR/bootstrap.sh"
-    "$FRAMEWORK_DIR/sandbox.sh"
-    "$FRAMEWORK_DIR/execution.common.sh"
-    "$FRAMEWORK_DIR/discovery.sh"
-    "$FRAMEWORK_DIR/reporting.tap.sh"
-    "$FRAMEWORK_DIR/common.sh"
-    "$FRAMEWORK_DIR/assert.sh"
-    "$FRAMEWORK_DIR/logging.sh"
-  )
-
-  for file in "${essential_files[@]}"; do
-    if [[ ! -f "$file" ]]; then
-      print_error "Essential test file missing: $file"
-      exit 1
-    fi
-  done
-}
-
-export -f validate_test_environment
 
 # =============================================================================
 # TAP OUTPUT (streaming — results emitted immediately as tests complete)
@@ -193,12 +58,9 @@ function _emit_tap_result() {
     fi
 
     local test_file=""
-    for type_dir in unit integration e2e; do
-      if [[ -f "$TESTS_ROOT/${type_dir}/${test_name}.sh" ]]; then
-        test_file="tests/${type_dir}/${test_name}.sh"
-        break
-      fi
-    done
+    if [[ -f "$TESTS_ROOT/${test_type}/${test_name}.sh" ]]; then
+      test_file="tests/${test_type}/${test_name}.sh"
+    fi
     if [[ -n "$test_file" ]]; then
       echo "  file: \"${test_file}\""
     fi
@@ -255,7 +117,7 @@ function run_test_suite() {
     return 0
   fi
 
-  print_status "Running ${#filtered_tests[@]} ${test_type} test(s)"
+  echo "Running ${#filtered_tests[@]} ${test_type} test(s)" >&2
 
   # Delegate to parallel or sequential execution
   if [[ "${TEST_PARALLEL:-1}" -gt 1 && ${#filtered_tests[@]} -gt 1 ]]; then
@@ -410,39 +272,6 @@ function _run_tests_parallel() {
 export -f _run_tests_parallel
 
 # =============================================================================
-# LOG MANAGEMENT
-# =============================================================================
-
-function clean_old_logs() {
-  local logs_dir="$TESTS_ROOT/logs"
-
-  if [[ ! -d "$logs_dir" ]]; then
-    print_status "No logs directory found"
-    return 0
-  fi
-
-  print_status "Cleaning old test logs..."
-  local log_count=$(find "$logs_dir" -maxdepth 1 -type d -name "20*-*-*_*-*-*" | wc -l)
-
-  if [[ $log_count -le 10 ]]; then
-    print_status "Found $log_count log directories (keeping all, threshold is 10)"
-    return 0
-  fi
-
-  find "$logs_dir" -maxdepth 1 -type d -name "20*-*-*_*-*-*" -printf '%T@ %p\n' \
-    | sort -n | head -n -10 | cut -d' ' -f2- \
-    | while IFS= read -r dir; do
-      print_status "Removing old log directory: $(basename "$dir")"
-      rm -rf "$dir"
-    done
-
-  local remaining=$(find "$logs_dir" -maxdepth 1 -type d -name "20*-*-*_*-*-*" | wc -l)
-  print_status "Log cleanup complete. $remaining directories remaining."
-}
-
-export -f clean_old_logs
-
-# =============================================================================
 # DEBUG EXECUTION (inline, for interactive debuggers like bashdb)
 # =============================================================================
 
@@ -455,7 +284,7 @@ function debug_run_test() {
   fi
 
   if [[ ! -f "$test_file" ]]; then
-    print_error "Test file not found: $test_file"
+    echo "[ERROR] Test file not found: $test_file" >&2
     return 1
   fi
 
@@ -476,7 +305,7 @@ function debug_run_test() {
 
   local sandbox_path
   if ! sandbox_path=$(create_sandbox "$test_name" 2>&1); then
-    print_error "Failed to create sandbox for: $test_name"
+    echo "[ERROR] Failed to create sandbox for: $test_name" >&2
     rm -rf "$TEST_SANDBOX_ROOT" 2>/dev/null || true
     return 1
   fi
@@ -521,28 +350,6 @@ function main() {
   # Parse command line arguments
   while [[ $# -gt 0 ]]; do
     case $1 in
-      -h | --help)
-        show_usage
-        exit 0
-        ;;
-      -v | --verbose)
-        TEST_VERBOSE=true
-        ;;
-      -q | --quiet)
-        TEST_QUIET=true
-        ;;
-      --tap)
-        # No-op: TAP is now the only output format. Kept for backward compatibility.
-        ;;
-      --clean-logs)
-        clean_old_logs
-        exit 0
-        ;;
-      -l | --list)
-        shift
-        list_tests "$@"
-        exit 0
-        ;;
       --list-json)
         shift
         list_tests_json "$@"
@@ -552,10 +359,6 @@ function main() {
         shift
         TEST_PATTERNS+=("$1")
         ;;
-      --exclude)
-        shift
-        TEST_EXCLUDE+=("$1")
-        ;;
       --function)
         shift
         export KGSM_TEST_FUNCTION_FILTER="$1"
@@ -564,19 +367,11 @@ function main() {
         shift
         DEBUG_RUN_FILE="$1"
         ;;
-      --parallel)
-        shift
-        TEST_PARALLEL="$1"
-        ;;
       unit | integration | e2e)
         TEST_TYPES+=("$1")
         ;;
-      all)
-        TEST_TYPES=("unit" "integration" "e2e")
-        ;;
       *)
-        print_error "Unknown option: $1"
-        show_usage
+        echo "[ERROR] Unknown option: $1" >&2
         exit 1
         ;;
     esac
@@ -588,10 +383,6 @@ function main() {
     debug_run_test "$DEBUG_RUN_FILE"
     return $?
   fi
-
-  # Check environment
-  check_dependencies
-  validate_test_environment
 
   # Default to all tests if none specified
   if [[ ${#TEST_TYPES[@]} -eq 0 ]]; then
@@ -611,9 +402,9 @@ function main() {
   mkdir -p "$TEST_LOG_DIR"
 
   # Log environment info to stderr
-  print_status "Sandbox: $TEST_SANDBOX_ROOT"
-  print_status "Parallel: $TEST_PARALLEL"
-  print_status "Logs: $TEST_LOG_DIR"
+  echo "Sandbox: $TEST_SANDBOX_ROOT" >&2
+  echo "Parallel: $TEST_PARALLEL" >&2
+  echo "Logs: $TEST_LOG_DIR" >&2
 
   # Set up signal handlers for cleanup
   trap 'cleanup_all' EXIT INT TERM

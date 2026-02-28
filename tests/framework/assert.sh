@@ -34,11 +34,6 @@ if [[ -z "${RED:-}" ]]; then
   readonly RED='\033[0;31m'
   readonly GREEN='\033[0;32m'
   readonly YELLOW='\033[1;33m'
-  readonly BLUE='\033[0;34m'
-  readonly PURPLE='\033[0;35m'
-  readonly CYAN='\033[0;36m'
-  readonly WHITE='\033[1;37m'
-  readonly GRAY='\033[0;37m'
   readonly NC='\033[0m'
   readonly BOLD='\033[1m'
 fi
@@ -312,102 +307,8 @@ function assert_ends_with() {
 export -f assert_ends_with
 
 # =============================================================================
-# EXACT MATCH ASSERTIONS
-# =============================================================================
-
-# Assert that a multi-line string contains an exact line match
-function assert_contains_line() {
-  local haystack="$1"
-  local needle="$2"
-  local message="${3:-Assertion failed}"
-  local caller_info="$(get_caller_info)"
-
-  if echo "$haystack" | grep -Fxq "$needle"; then
-    print_assert_result "PASS" "$message: text contains exact line '$needle'" "$caller_info"
-    return $ASSERT_SUCCESS
-  else
-    print_assert_result "FAIL" "$message: text does not contain exact line '$needle'" "$caller_info"
-    return $ASSERT_FAILURE
-  fi
-}
-
-export -f assert_contains_line
-
-# Assert that a multi-line string does not contain an exact line match
-function assert_not_contains_line() {
-  local haystack="$1"
-  local needle="$2"
-  local message="${3:-Assertion failed}"
-  local caller_info="$(get_caller_info)"
-
-  if echo "$haystack" | grep -Fxq "$needle"; then
-    print_assert_result "FAIL" "$message: text should not contain exact line '$needle'" "$caller_info"
-    return $ASSERT_FAILURE
-  else
-    print_assert_result "PASS" "$message: text does not contain exact line '$needle'" "$caller_info"
-    return $ASSERT_SUCCESS
-  fi
-}
-
-export -f assert_not_contains_line
-
-# Assert that a list (newline-separated) contains a specific item exactly
-function assert_list_contains() {
-  local list_output="$1"
-  local expected_item="$2"
-  local message="${3:-Assertion failed}"
-  local caller_info="$(get_caller_info)"
-
-  if printf '%s\n' "$list_output" | grep -Fxq "$expected_item"; then
-    print_assert_result "PASS" "$message: list contains item '$expected_item'" "$caller_info"
-    return $ASSERT_SUCCESS
-  else
-    print_assert_result "FAIL" "$message: list does not contain item '$expected_item'" "$caller_info"
-    return $ASSERT_FAILURE
-  fi
-}
-
-export -f assert_list_contains
-
-# Assert that a list (newline-separated) does not contain a specific item exactly
-function assert_list_not_contains() {
-  local list_output="$1"
-  local expected_item="$2"
-  local message="${3:-Assertion failed}"
-  local caller_info="$(get_caller_info)"
-
-  if printf '%s\n' "$list_output" | grep -Fxq "$expected_item"; then
-    print_assert_result "FAIL" "$message: list should not contain item '$expected_item'" "$caller_info"
-    return $ASSERT_FAILURE
-  else
-    print_assert_result "PASS" "$message: list does not contain item '$expected_item'" "$caller_info"
-    return $ASSERT_SUCCESS
-  fi
-}
-
-export -f assert_list_not_contains
-
-# =============================================================================
 # NUMERIC ASSERTIONS
 # =============================================================================
-
-# Assert that two numbers are equal
-function assert_numeric_equals() {
-  local expected="$1"
-  local actual="$2"
-  local message="${3:-Assertion failed}"
-  local caller_info="$(get_caller_info)"
-
-  if ((expected == actual)); then
-    print_assert_result "PASS" "$message: $actual equals $expected" "$caller_info"
-    return $ASSERT_SUCCESS
-  else
-    print_assert_result "FAIL" "$message: expected $expected, got $actual" "$caller_info"
-    return $ASSERT_FAILURE
-  fi
-}
-
-export -f assert_numeric_equals
 
 # Assert that first number is greater than second
 function assert_greater_than() {
@@ -556,74 +457,6 @@ function assert_file_contains() {
 }
 
 export -f assert_file_contains
-
-# Assert that a socket file exists
-function assert_socket_exists() {
-  local socket_path="$1"
-  local message="${2:-Assertion failed}"
-  local caller_info="$(get_caller_info)"
-
-  if [[ -S "$socket_path" ]]; then
-    print_assert_result "PASS" "$message: socket file '$socket_path' exists" "$caller_info"
-    return $ASSERT_SUCCESS
-  else
-    print_assert_result "FAIL" "$message: socket file '$socket_path' does not exist" "$caller_info"
-    return $ASSERT_FAILURE
-  fi
-}
-
-export -f assert_socket_exists
-
-# Assert that a socket file does not exist
-function assert_socket_not_exists() {
-  local socket_path="$1"
-  local message="${2:-Assertion failed}"
-  local caller_info="$(get_caller_info)"
-
-  if [[ ! -S "$socket_path" ]]; then
-    print_assert_result "PASS" "$message: socket file '$socket_path' does not exist" "$caller_info"
-    return $ASSERT_SUCCESS
-  else
-    print_assert_result "FAIL" "$message: socket file '$socket_path' should not exist" "$caller_info"
-    return $ASSERT_FAILURE
-  fi
-}
-
-export -f assert_socket_not_exists
-
-# Assert that a command is available in PATH
-function assert_command_available() {
-  local command_name="$1"
-  local message="${2:-Assertion failed}"
-  local caller_info="$(get_caller_info)"
-
-  if command -v "$command_name" >/dev/null 2>&1; then
-    print_assert_result "PASS" "$message: command '$command_name' is available" "$caller_info"
-    return $ASSERT_SUCCESS
-  else
-    print_assert_result "FAIL" "$message: command '$command_name' is not available" "$caller_info"
-    return $ASSERT_FAILURE
-  fi
-}
-
-export -f assert_command_available
-
-# Assert that a command is not available in PATH
-function assert_command_not_available() {
-  local command_name="$1"
-  local message="${2:-Assertion failed}"
-  local caller_info="$(get_caller_info)"
-
-  if ! command -v "$command_name" >/dev/null 2>&1; then
-    print_assert_result "PASS" "$message: command '$command_name' is not available" "$caller_info"
-    return $ASSERT_SUCCESS
-  else
-    print_assert_result "FAIL" "$message: command '$command_name' should not be available" "$caller_info"
-    return $ASSERT_FAILURE
-  fi
-}
-
-export -f assert_command_not_available
 
 # =============================================================================
 # COMMAND EXECUTION ASSERTIONS

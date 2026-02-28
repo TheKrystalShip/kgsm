@@ -32,14 +32,10 @@ fi
 # Returns: 0 (always succeeds)
 function __apply_config_defaults() {
   # Framework Control
-  declare -g TEST_VERBOSE=false
-  declare -g TEST_QUIET=false
-
   # TEST_PARALLEL: Only set default if not already set (allows env var override)
   if [[ -z "${TEST_PARALLEL:-}" ]]; then
     declare -g TEST_PARALLEL=1  # Default: sequential execution
   fi
-  declare -g TEST_MAX_PARALLEL=4  # Legacy, kept for backward compatibility
 
   # Sandbox Configuration
   declare -g TEST_SANDBOX_ROOT_BASE="/tmp"
@@ -54,10 +50,6 @@ function __apply_config_defaults() {
   declare -g TEST_DATA_DIR="${TEST_ROOT}/data"
   declare -g TEST_TEMP_BASE="/tmp"
 
-  # Logging Configuration
-  declare -g TEST_VERBOSE_LOGGING=false
-  declare -g TEST_MAX_LOG_SIZE=10240
-
   # Skip Controls (defaults to false, test.conf overrides)
   declare -g SKIP_NETWORK_TESTS=false
   declare -g SKIP_LONG_DOWNLOAD_TESTS=false
@@ -66,19 +58,12 @@ function __apply_config_defaults() {
   declare -g SKIP_PERFORMANCE_TESTS=true
   declare -g SKIP_STRESS_TESTS=true
 
-  # Game Selection
-  declare -g TEST_GAMES="factorio necesse vrising"
-  declare -g SKIP_FACTORIO_TESTS=false
-  declare -g SKIP_NECESSE_TESTS=false
-  declare -g SKIP_VRISING_TESTS=false
-
   # Runtime Variables (set by runner, not config file)
   declare -g TEST_SANDBOX_ROOT=""
   declare -g TEST_LOG_DIR=""
   declare -g TEST_RESULTS_FILE=""
   declare -ga TEST_TYPES=()
   declare -ga TEST_PATTERNS=()
-  declare -ga TEST_EXCLUDE=()
 
   # Test Counters (runtime only)
   declare -g TESTS_TOTAL=0
@@ -153,12 +138,6 @@ function __validate_config_basics() {
     validation_failed=true
   fi
 
-  # Validate max log size is positive integer
-  if ! [[ "$TEST_MAX_LOG_SIZE" =~ ^[0-9]+$ ]] || [[ "$TEST_MAX_LOG_SIZE" -le 0 ]]; then
-    log_error "TEST_MAX_LOG_SIZE must be positive integer, got: $TEST_MAX_LOG_SIZE"
-    validation_failed=true
-  fi
-
   # Validate TEST_SANDBOX_ROOT_BASE exists (not created yet, but base should be valid)
   if [[ ! -d "$TEST_SANDBOX_ROOT_BASE" ]]; then
     log_warning "TEST_SANDBOX_ROOT_BASE does not exist: $TEST_SANDBOX_ROOT_BASE"
@@ -183,21 +162,11 @@ function __validate_config_basics() {
 # ============================================================================
 
 # Normalize TEST_PARALLEL to an integer value
-# Handles backward compatibility with boolean values (true/false)
 # Handles "auto" detection based on CPU cores
 # Usage: __normalize_test_parallel
 # Returns: 0 (always succeeds, invalid values default to 1)
 function __normalize_test_parallel() {
   local original_value="${TEST_PARALLEL}"
-
-  # Handle legacy boolean values (backward compatibility)
-  if [[ "${TEST_PARALLEL}" == "true" ]]; then
-    log_warning "TEST_PARALLEL=true is deprecated, using TEST_PARALLEL=${TEST_MAX_PARALLEL:-4}"
-    TEST_PARALLEL="${TEST_MAX_PARALLEL:-4}"
-  elif [[ "${TEST_PARALLEL}" == "false" ]]; then
-    # false means sequential (1 job at a time)
-    TEST_PARALLEL=1
-  fi
 
   # Handle auto-detection
   if [[ "${TEST_PARALLEL}" == "auto" ]]; then
@@ -243,10 +212,7 @@ function __normalize_test_parallel() {
 # Returns: 0 (always succeeds)
 function __export_config_variables() {
   # Framework Control
-  export TEST_VERBOSE
-  export TEST_QUIET
   export TEST_PARALLEL
-  export TEST_MAX_PARALLEL
 
   # Sandbox Configuration
   export TEST_SANDBOX_ROOT_BASE
@@ -261,10 +227,6 @@ function __export_config_variables() {
   export TEST_DATA_DIR
   export TEST_TEMP_BASE
 
-  # Logging Configuration
-  export TEST_VERBOSE_LOGGING
-  export TEST_MAX_LOG_SIZE
-
   # Skip Controls (all SKIP_* variables)
   export SKIP_NETWORK_TESTS
   export SKIP_LONG_DOWNLOAD_TESTS
@@ -272,12 +234,6 @@ function __export_config_variables() {
   export SKIP_STEAMCMD_TESTS
   export SKIP_PERFORMANCE_TESTS
   export SKIP_STRESS_TESTS
-  export SKIP_FACTORIO_TESTS
-  export SKIP_NECESSE_TESTS
-  export SKIP_VRISING_TESTS
-
-  # Game Selection
-  export TEST_GAMES
 
   # Runtime Variables (exported for consistency)
   export TEST_SANDBOX_ROOT
@@ -285,7 +241,6 @@ function __export_config_variables() {
   export TEST_RESULTS_FILE
   export TEST_TYPES
   export TEST_PATTERNS
-  export TEST_EXCLUDE
 
   # Test Counters (exported for reporting)
   export TESTS_TOTAL

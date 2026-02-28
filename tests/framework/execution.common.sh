@@ -374,50 +374,6 @@ function __calculate_duration() {
 }
 export -f __calculate_duration
 
-# ------------------------------------------------------------------------------
-# Format duration for human-readable display
-# ------------------------------------------------------------------------------
-# Arguments:
-#   $1 - duration_ms: Duration in milliseconds
-# Returns:
-#   Stdout: Formatted duration string (e.g., "250ms", "1.5s", "12s")
-# ------------------------------------------------------------------------------
-function __format_duration() {
-  local duration_ms="$1"
-
-  if [[ $duration_ms -lt 1000 ]]; then
-    # Less than 1 second: show milliseconds
-    echo "${duration_ms}ms"
-  elif [[ $duration_ms -lt 10000 ]]; then
-    # 1-10 seconds: show one decimal place
-    local seconds=$((duration_ms / 1000))
-    local decimal=$(((duration_ms % 1000) / 100))
-    echo "${seconds}.${decimal}s"
-  else
-    # 10+ seconds: show whole seconds
-    local seconds=$((duration_ms / 1000))
-    echo "${seconds}s"
-  fi
-}
-export -f __format_duration
-
-# ------------------------------------------------------------------------------
-# Strip ANSI color codes from text
-# ------------------------------------------------------------------------------
-# Arguments:
-#   $1 - text: Text potentially containing ANSI codes
-# Returns:
-#   Exit code: EC_SUCCESS (0)
-#   Stdout: Text with ANSI codes removed
-# ------------------------------------------------------------------------------
-function __strip_ansi_codes() {
-  local text="$1"
-
-  # Remove ANSI escape sequences: ESC[...m
-  echo "$text" | sed 's/\x1b\[[0-9;]*m//g'
-}
-export -f __strip_ansi_codes
-
 # ==============================================================================
 # RESULT SERIALIZATION (for parallel IPC)
 # ==============================================================================
@@ -537,52 +493,6 @@ function __read_result_from_file() {
   return $EC_SUCCESS
 }
 export -f __read_result_from_file
-
-# ==============================================================================
-# RESULT TRANSFORMATION
-# ==============================================================================
-
-# ------------------------------------------------------------------------------
-# Flatten single test result to compound keys in main results array
-# ------------------------------------------------------------------------------
-# Arguments:
-#   $1 - test_name: Test name (used as prefix)
-#   $2 - result_array_name: Name of source associative array
-#   $3 - results_array_name: Name of destination associative array
-# Returns:
-#   Exit code: EC_SUCCESS (0) or EC_FAILURE (1)
-# Result:
-#   Converts result[key] -> results[test_name__key]
-# ------------------------------------------------------------------------------
-function __flatten_result_to_compound_keys() {
-  local test_name="$1"
-  local result_array_name="$2"
-  local results_array_name="$3"
-
-  # Validate inputs
-  if [[ -z "$test_name" ]]; then
-    log_error "__flatten_result_to_compound_keys: test_name is required"
-    return $EC_FAILURE
-  fi
-
-  if [[ -z "$result_array_name" || -z "$results_array_name" ]]; then
-    log_error "__flatten_result_to_compound_keys: array names are required"
-    return $EC_FAILURE
-  fi
-
-  # Get namerefs to arrays (use distinct names to avoid circular reference)
-  local -n _flatten_src="$result_array_name"
-  local -n _flatten_dst="$results_array_name"
-
-  # Copy all keys with test_name prefix
-  for key in "${!_flatten_src[@]}"; do
-    _flatten_dst["${test_name}__${key}"]="${_flatten_src[$key]}"
-  done
-
-  log_debug "Flattened ${#_flatten_src[@]} fields for test: $test_name"
-  return $EC_SUCCESS
-}
-export -f __flatten_result_to_compound_keys
 
 # ==============================================================================
 # Core Execution Function (Used by both Sequential and Parallel executors)

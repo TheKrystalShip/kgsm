@@ -40,8 +40,6 @@ function setup_test() {
   # Verify serialization functions exist
   assert_function_exists "__write_result_to_file" "Write function should be available"
   assert_function_exists "__read_result_from_file" "Read function should be available"
-  assert_function_exists "__flatten_result_to_compound_keys" "Flatten function should be available"
-
   log_test_step "Test environment validated"
 }
 
@@ -295,68 +293,6 @@ function test_round_trip_with_spaces() {
   # Assert paths with spaces preserved
   assert_equals "${restored[test_log_path]}" "${original[test_log_path]}" "Path with spaces preserved"
   assert_equals "${restored[sandbox_path]}" "${original[sandbox_path]}" "Another path with spaces preserved"
-}
-
-# =============================================================================
-# FLATTEN TO COMPOUND KEYS TESTS
-# =============================================================================
-
-function test_flatten_result_basic() {
-  log_step "Testing __flatten_result_to_compound_keys"
-
-  # Setup - single test result
-  declare -A single_result=(
-    [test_name]="test_flatten"
-    [test_type]="unit"
-    [exit_code]="0"
-    [assertions_passed]="10"
-    [assertions_failed]="0"
-    [assertions_total]="10"
-    [duration_seconds]="4"
-    [test_log_path]="/tmp/flatten.log"
-    [sandbox_path]="/tmp/flatten-sandbox"
-    [timestamp]="2024-12-21T19:00:00+0000"
-  )
-
-  declare -A flattened
-
-  # Execute - signature is (test_name, result_array_name, results_array_name)
-  __flatten_result_to_compound_keys "test_flatten" single_result flattened
-
-  # Assert compound keys created
-  assert_equals "${flattened[test_flatten__test_name]}" "test_flatten" "Compound key for test_name"
-  assert_equals "${flattened[test_flatten__exit_code]}" "0" "Compound key for exit_code"
-  assert_equals "${flattened[test_flatten__assertions_passed]}" "10" "Compound key for assertions_passed"
-  assert_equals "${flattened[test_flatten__duration_seconds]}" "4" "Compound key for duration_seconds"
-}
-
-function test_flatten_multiple_results() {
-  log_test_step "Testing __flatten_result_to_compound_keys with multiple tests"
-
-  # Setup - multiple test results
-  declare -A result1=(
-    [test_name]="test_one"
-    [exit_code]="0"
-    [assertions_passed]="5"
-  )
-
-  declare -A result2=(
-    [test_name]="test_two"
-    [exit_code]="1"
-    [assertions_passed]="3"
-  )
-
-  declare -A combined
-
-  # Flatten both - signature is (test_name, result_array_name, results_array_name)
-  __flatten_result_to_compound_keys "test_one" result1 combined
-  __flatten_result_to_compound_keys "test_two" result2 combined
-
-  # Assert both sets of keys exist without collision
-  assert_equals "${combined[test_one__test_name]}" "test_one" "First test's name"
-  assert_equals "${combined[test_one__exit_code]}" "0" "First test's exit_code"
-  assert_equals "${combined[test_two__test_name]}" "test_two" "Second test's name"
-  assert_equals "${combined[test_two__exit_code]}" "1" "Second test's exit_code"
 }
 
 # =============================================================================

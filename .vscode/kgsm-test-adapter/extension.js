@@ -201,7 +201,7 @@ async function discoverTests() {
 
 function updateFunctionRanges(doc) {
   const text = doc.getText();
-  const funcPattern = /^function (test_\w+|setup_test)/gm;
+  const funcPattern = /^function (test_\w+)/gm;
 
   // Find all test items associated with this file
   controller.items.forEach((group) => {
@@ -617,7 +617,6 @@ class TapStreamParser {
 
     let currentFailure = null;
     for (const yl of this.yamlLines) {
-      const msgMatch = yl.match(/^\s+message:\s+"(.+)"$/);
       const durMatch = yl.match(/^\s+duration_ms:\s+(\d+)$/);
       const failStart = yl.match(/^\s+failures:\s*$/);
       const failLine = yl.match(/^\s+- line:\s+(\d+)$/);
@@ -647,8 +646,8 @@ class TapStreamParser {
         currentFailure.expected = failExpected[1];
       } else if (currentFailure && failActual) {
         currentFailure.actual = failActual[1];
-      } else if (msgMatch && !currentFailure) {
-        this.currentResult.message = msgMatch[1];
+      } else if (failMsg && !currentFailure) {
+        this.currentResult.message = failMsg[1];
       } else if (durMatch) {
         this.currentResult.duration = parseInt(durMatch[1], 10);
       }
