@@ -673,7 +673,7 @@ function _print_logs() {
     return 0
   fi
 
-  tail --pid=$$ -n "$line_count" "$instance_log_file" ${follow:+-F}
+  exec tail --pid=$$ -n "$line_count" "$instance_log_file" ${follow:+-F}
 }
 
 function _update() {
