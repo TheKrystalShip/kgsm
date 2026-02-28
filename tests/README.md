@@ -1,21 +1,92 @@
 # KGSM Test Framework
 
-Modular, sandboxed testing framework for KGSM. Follows **bootstrap → loader → common → specialized modules** pattern.
+Modular, sandboxed testing framework for KGSM with **TAP v14** output and **VS Code Test Explorer** integration. Follows the **bootstrap → loader → common → specialized modules** pattern.
 
 ## Quick Start
 
+### VS Code (Primary)
+
+The recommended way to run and debug tests is through VS Code with the **KGSM Test Adapter** extension (`.vscode/kgsm-test-adapter/`):
+
+1. Open the KGSM workspace in VS Code
+2. Open the **Test Explorer** sidebar — tests appear in a three-level tree: **type → file → function**
+3. Click **Run** or **Debug** (CodeLens) above any `test_*` function
+4. Results appear inline with TAP v14 diagnostics on failure
+
+The extension requires [`rogalmic.bash-debug`](https://marketplace.visualstudio.com/items?itemName=rogalmic.bash-debug) for interactive debugging with bashdb.
+
+### CLI (CI / One-off)
+
+`tests/run.sh` is the VS Code Test Adapter entry point but can also be invoked directly:
+
 ```bash
-./tests/run.sh                    # All tests
-./tests/run.sh unit               # Unit tests only (fast)
-./tests/run.sh --pattern "config" # Filter by name
-./tests/run.sh --parallel 4       # 4 concurrent tests
-./tests/run.sh --failed           # Re-run tests that failed last time
+./tests/run.sh                           # All tests
+./tests/run.sh unit                      # Unit tests only
+./tests/run.sh integration e2e           # Multiple types
+./tests/run.sh --pattern "config"        # Filter by name (repeatable)
+./tests/run.sh --function "test_merge"   # Run a single test function
+TEST_PARALLEL=auto ./tests/run.sh unit   # Parallel execution (CPU cores / 2)
 ```
+
+**CLI flags:**
+
+| Flag                     | Description                                         |
+| ------------------------ | --------------------------------------------------- |
+| `--list-json [types...]` | JSON test discovery for VS Code                     |
+| `--pattern <regex>`      | Filter tests by name (repeatable)                   |
+| `--function <name>`      | Run only a specific test function                   |
+| `--debug-run <file>`     | Inline execution for interactive debuggers (bashdb) |
+| `unit\|integration\|e2e` | Test type selectors (combinable)                    |
+
+**Environment variables:**
+
+| Variable                   | Description                                              |
+| -------------------------- | -------------------------------------------------------- |
+| `TEST_PARALLEL=N\|auto`    | Concurrency level (default: `1`, `auto` = CPU cores / 2) |
+| `SKIP_NETWORK_TESTS=true`  | Skip network-dependent tests                             |
+| `SKIP_STEAMCMD_TESTS=true` | Skip SteamCMD tests                                      |
+| `SKIP_<TEST_NAME>=true`    | Skip a specific test                                     |
+
+## TAP v14 Output
+
+All test output follows the [Test Anything Protocol v14](https://testanything.org/). This enables machine-readable results for VS Code, CI systems, and TAP consumers.
+
+```
+TAP version 14
+1..3
+ok 1 - test_config [unit] # 5 assertions in 142ms
+not ok 2 - test_paths [unit]
+  ---
+  severity: fail
+  message: "1/2 assertions failed"
+  exit_code: 1
+  duration_ms: 89
+  assertions_passed: 1
+  assertions_failed: 1
+  assertions_total: 2
+  file: "tests/unit/test_paths.sh"
+  failures:
+    - line: 42
+      function: "test_xdg_compliance"
+      message: "Expected /home/user/.config/kgsm to exist"
+      file: "tests/unit/test_paths.sh"
+      expected: "directory exists"
+      actual: "directory missing"
+  ...
+ok 3 - test_lifecycle [integration] # SKIP not implemented
+```
+
+Assertions write structured lines to `KGSM_TEST_LOG`:
+- `PASS:` / `FAIL:` lines with `[file:LINE in func()]` format
+- `ASSERT_DETAIL: expected=X actual=Y` on failures
+- `KGSM_ASSERT_STATS: passed/failed/total/skipped` summary marker
+
+These are parsed by `reporting.tap.sh` to produce the YAML diagnostic blocks shown above.
 
 ## Configuration (`tests/config.test.ini`)
 
 ```ini
-TEST_PARALLEL=8                   # Parallel count (1=sequential)
+TEST_PARALLEL=8                   # Parallel count (1=sequential, auto=cores/2)
 TEST_DEFAULT_TIMEOUT=300          # Test timeout (seconds)
 SKIP_NETWORK_TESTS=false          # Skip network tests
 SKIP_STEAMCMD_TESTS=false         # Skip SteamCMD tests
@@ -26,26 +97,26 @@ SKIP_<TEST_NAME>=false            # Skip specific test
 
 ### Modules
 
-| Module           | Purpose                                    | Key Functions                       |
-| ---------------- | ------------------------------------------ | ----------------------------------- |
-| **bootstrap.sh** | Init TEST_ROOT, KGSM_ROOT                  | Auto-sources common.sh              |
-| **loader.sh**    | Constants (paths, colors, exit codes)      | 40+ exports                         |
-| **common.sh**    | Module orchestrator                        | __load_module()                     |
-| **config.sh**    | Load config.test.ini                       | load_test_config()                  |
-| **sandbox.sh**   | Isolated KGSM copies                       | create_sandbox(), cleanup_sandbox() |
-| **discovery.sh** | Find/filter tests                          | discover_tests(), should_run_test() |
-| **execution.sh** | Sequential/parallel delegation             | execute_tests()                     |
-| **reporting.sh** | Results and summaries                      | generate_summary()                  |
-| **logging.sh**     | Structured logging (DEBUG/INFO/WARN/ERROR) | log_debug/info/warn/error()         |
-| **assert.sh**      | 50+ assertion functions                    | assert_equals(), assert_true()      |
-| **kgsm.wrapper.sh** | Test instance management                   | create_test_instance(), remove_test_instance() |
+| Module                  | Purpose                                    | Key Functions                                          |
+| ----------------------- | ------------------------------------------ | ------------------------------------------------------ |
+| **bootstrap.sh**        | Init TEST_ROOT, KGSM_ROOT                  | Auto-sources common.sh                                 |
+| **loader.sh**           | Constants (paths, colors, exit codes)      | 40+ exports                                            |
+| **common.sh**           | Module orchestrator                        | `__load_module()`                                      |
+| **logging.sh**          | Structured logging (DEBUG/INFO/WARN/ERROR) | `log_debug/info/warn/error()`                          |
+| **config.sh**           | Load config.test.ini                       | `load_test_config()`                                   |
+| **reporting.tap.sh**    | TAP v14 result formatting                  | `__tap_emit_failure_details()`                         |
+| **discovery.sh**        | Find/filter tests                          | `discover_tests()`, `should_run_test()`                |
+| **sandbox.sh**          | Isolated KGSM copies                       | `create_sandbox()`, `cleanup_sandbox()`                |
+| **execution.common.sh** | Test execution engine                      | `execute_test_in_sandbox()`, `__execute_test_inline()` |
+| **assert.sh**           | 50+ assertion functions                    | `assert_equals()`, `assert_true()`                     |
+| **kgsm.wrapper.sh**     | Test instance management                   | `create_test_instance()`, `remove_test_instance()`     |
 
 ### Loading Order
 
 ```
 bootstrap.sh → loader.sh → common.sh → [
-    logging.sh, config.sh, reporting.sh,
-    discovery.sh, sandbox.sh, execution.sh,
+    logging.sh, config.sh, reporting.tap.sh,
+    discovery.sh, sandbox.sh, execution.common.sh,
     assert.sh, kgsm.wrapper.sh
 ]
 ```
@@ -74,7 +145,29 @@ Framework unsets KGSM module load flags before context switch, forcing reload wi
 
 ### Test File Structure
 
-**Check `tests/templates/test.template.sh` for an exact structure of a test file.**
+The framework **auto-discovers** `test_*` functions — there is **no `main()` function**. Copy `tests/templates/test.template.sh` for the canonical structure:
+
+```bash
+#!/usr/bin/env bash
+readonly TEST_NAME="<test_name>"
+
+function setup_test() {
+  log_test_step "Setting up tests"
+  assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
+}
+
+function test_something() {
+  log_test_step "Testing something"
+  assert_equals "expected" "$actual" "Values should match"
+}
+
+# Optional cleanup
+# function cleanup_test() { ... }
+
+# NO main() — framework auto-discovers test_* functions
+```
+
+> **Important:** Do NOT add `main()` or `main "$@"`. The framework calls `setup_test()` before tests and `print_assert_summary()` after automatically.
 
 ### Available Assertions
 
@@ -145,17 +238,40 @@ test_id=$(generate_test_id "custom") # Custom prefix: "custom"
 - `setup_instance_prereqs <blueprint> <name> [dir]` - Manual working dir + symlink setup
 - `generate_test_id [prefix]` - Generate unique instance name
 
+## VS Code Integration
+
+The KGSM Test Adapter extension (`.vscode/kgsm-test-adapter/`) provides deep integration with VS Code:
+
+- **Test Explorer** — Three-level tree: test type → file → function
+- **CodeLens** — "Run" and "Debug" buttons above each `test_*` function
+- **Debugging** — Interactive bashdb sessions via `rogalmic.bash-debug`
+- **Live updates** — Function ranges update on file save
+- **File watching** — Auto-discovery when test files are created or deleted
+
+Under the hood, the extension invokes `tests/run.sh --list-json` for discovery and `tests/run.sh --debug-run <file>` for debugging.
+
 ## Debugging
 
-### Interactive Debugging (VS Code)
-
-Use the KGSM Test Adapter extension with `rogalmic.bash-debug` to interactively debug test functions:
+### Interactive Debugging (VS Code — Primary)
 
 1. Open a test file in VS Code
-2. Click "Debug" above any `test_*` function
+2. Click **Debug** (CodeLens) above any `test_*` function
 3. Set breakpoints and step through code with bashdb
 
-The framework's `--debug-run` flag supports this by running tests inline (no subshell) so bashdb can trace execution.
+The `--debug-run <file>` flag runs the test inline (no subshell) so bashdb can trace execution.
+
+### CLI Debugging
+
+```bash
+# Run sequentially for easier output reading
+TEST_PARALLEL=1 ./tests/run.sh unit
+
+# Run a single function in isolation
+./tests/run.sh --function "test_config_merge" --pattern "config"
+
+# Inline execution for manual bashdb attachment
+./tests/run.sh --debug-run tests/unit/test_config_merge_logic.sh
+```
 
 ### Logs
 
@@ -168,29 +284,6 @@ grep ERROR tests/logs/2025-12-22_14-30-45/*.log
 **Log format:** `[TIMESTAMP] [LEVEL] [SOURCE:LINE in function()] message`
 
 **Levels:** DEBUG, INFO (default), WARN, ERROR
-
-### Failed Test Re-runs
-
-The framework automatically tracks test results and allows re-running only failed tests:
-
-```bash
-# Re-run tests that failed in the most recent run
-./tests/run.sh --failed
-
-# Re-run failed tests from a specific results file
-./tests/run.sh --failed tests/logs/2026-01-30_16-26-11/results.csv
-```
-
-**How it works:**
-- After each test run, a `tests/logs/latest` symlink points to the most recent results
-- The `--failed` flag reads the `results.csv` file and filters for tests with non-zero exit codes
-- If no tests failed, prints success message and exits
-- Compatible with other flags: `./tests/run.sh --failed --parallel 4`
-
-**Use cases:**
-- Quick iteration when fixing failing tests
-- CI/CD pipelines for flaky test detection
-- Performance optimization (skip passing tests during development)
 
 ### Sandbox Inspection
 
@@ -207,24 +300,12 @@ ls -la
 ### Common Issues
 
 ```bash
-# Check dependencies
-./tests/run.sh --help
-
-# Framework module loading
-./tests/run.sh --pattern "simple" 2>&1 | grep "loaded"
-
 # Verify sandbox paths
 # Add to test: log_debug "KGSM_ROOT: $KGSM_ROOT"
 # Should show sandbox path during execution
 
 # Run sequentially for debugging
 TEST_PARALLEL=1 ./tests/run.sh unit
-
-# Re-run only failed tests from last run
-./tests/run.sh --failed
-
-# Re-run failed tests from specific results file
-./tests/run.sh --failed tests/logs/2026-01-30_16-26-11/results.csv
 
 # Skip unavailable dependencies
 echo "SKIP_STEAMCMD_TESTS=true" >> tests/config.test.ini
@@ -242,7 +323,7 @@ echo "SKIP_STEAMCMD_TESTS=true" >> tests/config.test.ini
 ### Performance
 
 1. **Unit tests first**: Fast feedback (<10s total)
-2. **Parallel execution**: `TEST_PARALLEL=8` or `--parallel 8`
+2. **Parallel execution**: `TEST_PARALLEL=auto` or `TEST_PARALLEL=8`
 3. **Skip expensive tests**: Set `SKIP_LONG_DOWNLOAD_TESTS=true` in CI
 
 ### Reliability
@@ -257,7 +338,7 @@ echo "SKIP_STEAMCMD_TESTS=true" >> tests/config.test.ini
 1. **Separation of Concerns**: Each module has one job
 2. **Dependency Management**: Downward only, no circular, explicit
 3. **Context Isolation**: Host vs sandbox contexts clearly separated
-4. **Configuration Over Code**: Behavior controlled via config file
+4. **Configuration Over Code**: Behavior controlled via config file and env vars
 5. **Fail-Safe Design**: Graceful error handling, no resource leaks
 
 ## Contributing
@@ -267,7 +348,7 @@ echo "SKIP_STEAMCMD_TESTS=true" >> tests/config.test.ini
 1. Choose type: unit (<1s), integration (<60s), e2e (minutes)
 2. Create file: `tests/unit/test_feature.sh`
 3. Copy template: `cp tests/templates/test.template.sh tests/unit/test_feature.sh`
-4. Follow structure (see Writing Tests section)
+4. Implement `setup_test()` and `test_*` functions (no `main()`)
 5. Test: `./tests/run.sh --pattern "feature"`
 
 ### Improving Framework
@@ -291,10 +372,10 @@ echo "SKIP_STEAMCMD_TESTS=true" >> tests/config.test.ini
 
 ## Resources
 
-- **Testing Specification**: `docs/testing_specification.md` (required reading)
-- **Architecture Spec**: `docs/testing_framework_refactoring_specification.md`
+- **Testing Specification**: `docs/specs/testing_specification.md` (required reading)
 - **Test Template**: `tests/templates/test.template.sh`
 - **Example Tests**: `tests/unit/test_config_merge_logic.sh`
+- **VS Code Extension**: `.vscode/kgsm-test-adapter/README.md`
 
 ---
 
