@@ -2,7 +2,7 @@
   "name": "kgsm-test-adapter",
   "displayName": "KGSM Test Adapter",
   "description": "Test adapter for KGSM's Bash testing framework",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "TheKrystalShip",
   "engines": {
     "vscode": "^1.80.0"
@@ -17,6 +17,10 @@
       {
         "command": "kgsm.runTestFunction",
         "title": "KGSM: Run Test Function"
+      },
+      {
+        "command": "kgsm.debugTestFunction",
+        "title": "KGSM: Debug Test Function"
       }
     ]
   },

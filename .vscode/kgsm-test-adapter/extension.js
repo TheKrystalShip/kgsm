@@ -44,6 +44,14 @@ function activate(context) {
     true
   );
 
+  // Debug profile (uses rogalmic.bash-debug / bashdb)
+  controller.createRunProfile(
+    "Debug",
+    vscode.TestRunProfileKind.Debug,
+    debugTests,
+    false
+  );
+
   // Watch for test file changes
   const watcher = vscode.workspace.createFileSystemWatcher(
     new vscode.RelativePattern(workspaceRoot, "tests/{unit,integration,e2e}/test_*.sh")
@@ -66,7 +74,7 @@ function activate(context) {
   outputChannel = vscode.window.createOutputChannel("KGSM Tests");
   context.subscriptions.push(outputChannel);
 
-  // CodeLens provider for "▶ Run Test" above test functions
+  // CodeLens provider
   const codeLensSelector = {
     language: "shellscript",
     pattern: new vscode.RelativePattern(workspaceRoot, "tests/{unit,integration,e2e}/test_*.sh"),
@@ -75,7 +83,7 @@ function activate(context) {
     vscode.languages.registerCodeLensProvider(codeLensSelector, new KgsmTestCodeLensProvider())
   );
 
-  // Command triggered by CodeLens click
+  // Command triggered by Run CodeLens click
   context.subscriptions.push(
     vscode.commands.registerCommand("kgsm.runTestFunction", async (testId, fnId) => {
       const testItem = findTestItem(testId);
@@ -88,6 +96,22 @@ function activate(context) {
 
       const request = new vscode.TestRunRequest([fnItem]);
       await runTests(request);
+    })
+  );
+
+  // Command triggered by Debug CodeLens click
+  context.subscriptions.push(
+    vscode.commands.registerCommand("kgsm.debugTestFunction", async (testId, fnId) => {
+      const testItem = findTestItem(testId);
+      if (!testItem) return;
+      let fnItem = null;
+      testItem.children.forEach((child) => {
+        if (child.id === fnId) fnItem = child;
+      });
+      if (!fnItem) return;
+
+      const request = new vscode.TestRunRequest([fnItem]);
+      await debugTests(request);
     })
   );
 }
@@ -412,6 +436,83 @@ async function runTests(request, token) {
 }
 
 // ---------------------------------------------------------------------------
+// Test Debugging (launches bashdb via rogalmic.bash-debug)
+// ---------------------------------------------------------------------------
+
+async function debugTests(request) {
+  // Collect what to debug — only a single test function is meaningful
+  let testFilePath = "";
+  let functionName = "";
+  let debugLabel = "";
+
+  if (request.include && request.include.length > 0) {
+    const item = request.include[0];
+
+    if (item.id.includes("::")) {
+      // Function-level: "test_config::test_parse_key"
+      functionName = item.label;
+      const parentId = item.id.split("::")[0];
+      const parentItem = item.parent || findTestItem(parentId);
+      if (parentItem && parentItem.uri) {
+        testFilePath = parentItem.uri.fsPath;
+      }
+      debugLabel = `${parentId}::${functionName}`;
+    } else if (item.uri) {
+      // File-level item
+      testFilePath = item.uri.fsPath;
+      debugLabel = item.id;
+    } else {
+      // Group-level — can't debug an entire group
+      vscode.window.showWarningMessage(
+        "KGSM: Select a specific test file or function to debug"
+      );
+      return;
+    }
+  } else {
+    vscode.window.showWarningMessage(
+      "KGSM: Select a specific test to debug"
+    );
+    return;
+  }
+
+  if (!testFilePath) {
+    vscode.window.showErrorMessage("KGSM: Could not determine test file path");
+    return;
+  }
+
+  // Build args for the debug wrapper
+  const wrapperArgs = [testFilePath];
+  if (functionName) {
+    wrapperArgs.push(functionName);
+  }
+
+  // Launch a bashdb debug session
+  const debugConfig = {
+    type: "bashdb",
+    request: "launch",
+    name: `Debug: ${debugLabel}`,
+    program: path.join(workspaceRoot, "tests/framework/debug-wrapper.sh"),
+    args: wrapperArgs,
+    cwd: workspaceRoot,
+    terminalKind: "integrated",
+    env: {
+      NO_COLOR: "1",
+    },
+  };
+
+  const started = await vscode.debug.startDebugging(
+    vscode.workspace.workspaceFolders[0],
+    debugConfig
+  );
+
+  if (!started) {
+    vscode.window.showErrorMessage(
+      "KGSM: Failed to start debug session. Is the Bash Debug extension (rogalmic.bash-debug) installed?"
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // TAP Parser
 // ---------------------------------------------------------------------------
 
@@ -585,8 +686,16 @@ class KgsmTestCodeLensProvider {
 
       lenses.push(
         new vscode.CodeLens(range, {
-          title: "▶ Run Test",
+          title: "Run",
           command: "kgsm.runTestFunction",
+          arguments: [parentTestItem.id, `${parentTestItem.id}::${fnName}`],
+        })
+      );
+
+      lenses.push(
+        new vscode.CodeLens(range, {
+          title: "Debug",
+          command: "kgsm.debugTestFunction",
           arguments: [parentTestItem.id, `${parentTestItem.id}::${fnName}`],
         })
       );
