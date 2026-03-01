@@ -120,7 +120,7 @@ interface PendingStepping {
   steppingId: string;
   resolve: () => void;
   reject: (err: Error) => void;
-  timer: ReturnType<typeof setTimeout>;
+  timer?: ReturnType<typeof setTimeout>;
 }
 
 // ---------------------------------------------------------------------------
@@ -931,12 +931,18 @@ export class BashdbRuntime extends EventEmitter {
       // naturally since bashdb is already processing it.
       this._flushQueuedCommands();
 
-      const timer = setTimeout(() => {
-        if (this._pendingStepping) {
-          this._pendingStepping = null;
-          reject(new Error(`Stepping command timed out: ${command}`));
-        }
-      }, COMMAND_TIMEOUT_MS);
+      // `continue` has no timeout — the script may run for any duration
+      // before hitting the next breakpoint.  Other stepping commands
+      // (step, next, finish) complete within one line so a timeout is useful.
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      if (command !== 'continue') {
+        timer = setTimeout(() => {
+          if (this._pendingStepping) {
+            this._pendingStepping = null;
+            reject(new Error(`Stepping command timed out: ${command}`));
+          }
+        }, COMMAND_TIMEOUT_MS);
+      }
 
       this._pendingStepping = { steppingId, resolve, reject, timer };
 
@@ -1076,8 +1082,26 @@ export class BashdbRuntime extends EventEmitter {
 
     // 1b. Stepping sentinel — stepping command completed
     const stepMatch = STEP_DONE_RE.exec(line);
-    if (stepMatch && this._pendingStepping && stepMatch[1] === this._pendingStepping.steppingId) {
-      this._onSteppingComplete();
+    if (stepMatch) {
+      if (this._pendingStepping && stepMatch[1] === this._pendingStepping.steppingId) {
+        this._onSteppingComplete();
+        return;
+      }
+      // Fallback: STEP_DONE arrived but _pendingStepping was already cleared
+      // (e.g. a timeout fired before the script reached the breakpoint).
+      // If we have a current position and we're still nominally running,
+      // emit a stopped event so the UI updates.
+      if (!this._pendingStepping && this._state === 'running' && this._currentPosition) {
+        this._state = 'stopped';
+        this._stopVersion++;
+        let reason: StopReason = 'step';
+        if (this._lastBreakpointHitId !== null) {
+          reason = 'breakpoint';
+          this._lastBreakpointHitId = null;
+        }
+        this.emit('stopped', reason, this._currentPosition);
+        return;
+      }
       return;
     }
 
@@ -1212,7 +1236,7 @@ export class BashdbRuntime extends EventEmitter {
     if (this._pendingStepping && this._currentPosition) {
       const stepping = this._pendingStepping;
       this._pendingStepping = null;
-      clearTimeout(stepping.timer);
+      clearTimeout(stepping.timer!);
 
       this._state = 'stopped';
       this._stopVersion++;

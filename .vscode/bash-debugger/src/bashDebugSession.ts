@@ -289,65 +289,37 @@ export class BashDebugSession extends LoggingDebugSession {
     response: DebugProtocol.ContinueResponse,
     _args: DebugProtocol.ContinueArguments,
   ): void {
-    this._runtime
-      .continue()
-      .then(() => {
-        response.body = { allThreadsContinued: true };
-        this.sendResponse(response);
-      })
-      .catch((err) => {
-        response.success = false;
-        response.message = err.message;
-        this.sendResponse(response);
-      });
+    // Send the response immediately per DAP protocol — the StoppedEvent
+    // will be sent later when execution actually pauses at the next breakpoint.
+    response.body = { allThreadsContinued: true };
+    this.sendResponse(response);
+    this._runtime.continue().catch(() => {
+      // Errors surface via terminated/error events
+    });
   }
 
   protected nextRequest(
     response: DebugProtocol.NextResponse,
     _args: DebugProtocol.NextArguments,
   ): void {
-    this._runtime
-      .next()
-      .then(() => {
-        this.sendResponse(response);
-      })
-      .catch((err) => {
-        response.success = false;
-        response.message = err.message;
-        this.sendResponse(response);
-      });
+    this.sendResponse(response);
+    this._runtime.next().catch(() => {});
   }
 
   protected stepInRequest(
     response: DebugProtocol.StepInResponse,
     _args: DebugProtocol.StepInArguments,
   ): void {
-    this._runtime
-      .step()
-      .then(() => {
-        this.sendResponse(response);
-      })
-      .catch((err) => {
-        response.success = false;
-        response.message = err.message;
-        this.sendResponse(response);
-      });
+    this.sendResponse(response);
+    this._runtime.step().catch(() => {});
   }
 
   protected stepOutRequest(
     response: DebugProtocol.StepOutResponse,
     _args: DebugProtocol.StepOutArguments,
   ): void {
-    this._runtime
-      .stepOut()
-      .then(() => {
-        this.sendResponse(response);
-      })
-      .catch((err) => {
-        response.success = false;
-        response.message = err.message;
-        this.sendResponse(response);
-      });
+    this.sendResponse(response);
+    this._runtime.stepOut().catch(() => {});
   }
 
   protected pauseRequest(
