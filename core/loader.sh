@@ -17,7 +17,7 @@ function __find_or_fail() {
   local source=${2:-$KGSM_ROOT}
 
   local file_path
-  file_path="$(find "$source" \( -type f -o -type l \) -name "$file_name" -print -quit)"
+  file_path="$(find -L "$source" \( -type f -o -type l \) -name "$file_name*" -print -quit)"
 
   if [[ -z "$file_path" ]]; then
     __print_debug "Could not find $file_name in $source"
@@ -185,23 +185,15 @@ export -f __find_command_handler
 function __find_instance_config() {
   local instance=$1
 
-  # Ensure the instance name has the .config.ini extension for exact matching.
-  local config_filename="${instance}.config.ini"
-  [[ "$instance" == *.config.ini ]] && config_filename="$instance"
-
   # Find config files in the instance directories (through symlinks)
   # The structure is: $KGSM_INSTANCES_DIR/<blueprint>/<instance>/<instance>.config.ini
   # where <instance> is a symlink to the actual working directory
   # Use -L to follow symbolic links during traversal
   local config_file
-  config_file="$(find -L "$KGSM_INSTANCES_DIR" -maxdepth 3 -mindepth 1 -type f -name "$config_filename" -print -quit)"
-
-  __print_debug "KGSM_INSTANCES_DIR: $KGSM_INSTANCES_DIR"
-  __print_debug "Looking for instance config '$config_filename' in $KGSM_INSTANCES_DIR..."
-  __print_debug "Found instance config at: $config_file"
+  config_file="$(__find_or_fail "${instance}.config.ini" "$KGSM_INSTANCES_DIR")"
 
   if [[ -z "$config_file" ]]; then
-    __print_debug "Could not find instance config '$config_filename' in $KGSM_INSTANCES_DIR"
+    __print_debug "Could not find instance config '$instance' in $KGSM_INSTANCES_DIR"
     exit $EC_FILE_NOT_FOUND
   fi
 
