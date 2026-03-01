@@ -394,15 +394,7 @@ function __logic_instance_status() {
   fi
 
   # Call the management script's status function with appropriate flags
-  if [[ -n "$json_format" && -n "$fast_mode" ]]; then
-    "$management_file" --status --json --fast
-  elif [[ -n "$json_format" ]]; then
-    "$management_file" --status --json
-  elif [[ -n "$fast_mode" ]]; then
-    "$management_file" --status --fast
-  else
-    "$management_file" --status
-  fi
+  "$management_file" --status ${json_format:+--json} ${fast_mode:+--fast}
 
   return $?
 }
