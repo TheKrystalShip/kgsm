@@ -2,6 +2,6 @@
   "recommendations": [
     "mads-hartmann.bash-ide-vscode",
     "timonwong.shellcheck",
-    "rogalmic.bash-debug"
+    "thekrystalship.vscode-bashdb",
   ]
 }

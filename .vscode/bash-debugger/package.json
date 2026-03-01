@@ -1,0 +1,142 @@
+{
+  "name": "vscode-bashdb",
+  "displayName": "Bash Debug (bashdb)",
+  "version": "0.1.0",
+  "publisher": "TheKrystalShip",
+  "description": "A modern VS Code debugger extension for Bash scripts, powered by bashdb via the Debug Adapter Protocol.",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Debuggers"
+  ],
+  "keywords": [
+    "bash",
+    "shell",
+    "debug",
+    "bashdb",
+    "debugger"
+  ],
+  "activationEvents": [
+    "onDebugResolve:bashdb"
+  ],
+  "main": "./out/extension.js",
+  "scripts": {
+    "build": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "lint": "eslint src --ext ts",
+    "clean": "rm -rf out",
+    "test": "mocha --require ts-node/register 'test/**/*.test.ts' --timeout 10000",
+    "test:unit": "mocha --require ts-node/register 'test/unit/**/*.test.ts' --timeout 5000",
+    "test:integration": "mocha --require ts-node/register 'test/integration/**/*.test.ts' --timeout 30000",
+    "pretest": "npm run build"
+  },
+  "dependencies": {
+    "@vscode/debugadapter": "^1.68.0",
+    "@vscode/debugprotocol": "^1.68.0"
+  },
+  "devDependencies": {
+    "@types/chai": "^5.2.3",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.80.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "chai": "^4.5.0",
+    "eslint": "^8.57.0",
+    "mocha": "^11.7.5",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.0"
+  },
+  "contributes": {
+    "breakpoints": [
+      {
+        "language": "shellscript"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "bashdb",
+        "languages": [
+          "shellscript"
+        ],
+        "label": "Bash Debug (bashdb)",
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Absolute path to the bash script to debug.",
+                "default": "${file}"
+              },
+              "args": {
+                "type": "array",
+                "description": "Command-line arguments passed to the script.",
+                "items": {
+                  "type": "string"
+                },
+                "default": []
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Working directory for the script.",
+                "default": "${workspaceFolder}"
+              },
+              "env": {
+                "type": "object",
+                "description": "Environment variables to set for the script.",
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "default": {}
+              },
+              "pathBash": {
+                "type": "string",
+                "description": "Path to the bash executable. If not set, 'bash' from PATH is used.",
+                "default": ""
+              },
+              "pathBashdb": {
+                "type": "string",
+                "description": "Path to the bashdb executable. If not set, 'bashdb' from PATH is used.",
+                "default": ""
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Stop at the first line of the script.",
+                "default": true
+              },
+              "terminalKind": {
+                "type": "string",
+                "description": "Where to run the debug target.",
+                "enum": [
+                  "integrated",
+                  "external",
+                  "debugConsole"
+                ],
+                "default": "debugConsole"
+              }
+            }
+          }
+        },
+        "configurationSnippets": [
+          {
+            "label": "Bash Debug: Launch Script",
+            "description": "Launch a bash script with bashdb debugger.",
+            "body": {
+              "type": "bashdb",
+              "request": "launch",
+              "name": "Debug Bash Script",
+              "program": "^\"${2:\\${file\\}}\"",
+              "stopOnEntry": true,
+              "cwd": "${workspaceFolder}"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

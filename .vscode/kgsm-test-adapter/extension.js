@@ -317,23 +317,82 @@ async function runTests(request, token) {
   const testMap = new Map(testsToRun.map((t) => [t.id, t]));
   const emittedTests = new Set();
   let hasFailures = false;
+  let bailedOut = false;
 
   const parser = new TapStreamParser((r) => {
+    // Handle Bail out!
+    if (r.status === "bail") {
+      bailedOut = true;
+      // Mark all remaining tests as errored
+      for (const t of testsToRun) {
+        if (!emittedTests.has(t.id)) {
+          emittedTests.add(t.id);
+          const bailMsg = new vscode.TestMessage(`Bail out! ${r.message}`);
+          run.errored(t, bailMsg);
+          t.children.forEach((fn) => {
+            if (requestedFnIds.size === 0 || requestedFnIds.has(fn.id)) {
+              run.errored(fn, bailMsg);
+            }
+          });
+        }
+      }
+      return;
+    }
+
     emittedTests.add(r.name);
     const testItem = testMap.get(r.name);
     if (!testItem) return;
 
+    // Build subtest lookup for per-function mapping
+    const subtestMap = new Map();
+    if (r.subtests && r.subtests.length > 0) {
+      for (const sub of r.subtests) {
+        subtestMap.set(sub.name, sub);
+      }
+    }
+
     if (r.status === "pass") {
       run.passed(testItem, r.duration);
       testItem.children.forEach((fn) => {
-        if (requestedFnIds.size === 0 || requestedFnIds.has(fn.id)) {
+        if (requestedFnIds.size > 0 && !requestedFnIds.has(fn.id)) return;
+        const sub = subtestMap.get(fn.label);
+        if (sub) {
+          if (sub.status === "skip") {
+            run.skipped(fn);
+            if (sub.reason) {
+              run.appendOutput(`SKIP: ${sub.reason}\r\n`, undefined, fn);
+            }
+          } else {
+            run.passed(fn, r.duration);
+          }
+        } else {
           run.passed(fn, r.duration);
         }
       });
     } else if (r.status === "skip") {
       run.skipped(testItem);
+      if (r.skipReason) {
+        run.appendOutput(`SKIP: ${r.skipReason}\r\n`, undefined, testItem);
+      }
       testItem.children.forEach((fn) => {
         if (requestedFnIds.size === 0 || requestedFnIds.has(fn.id)) {
+          run.skipped(fn);
+        }
+      });
+    } else if (r.status === "todo") {
+      // TODO tests: not a real failure — mark as skipped with reason
+      run.skipped(testItem);
+      const reason = r.todoReason || "TODO";
+      run.appendOutput(`TODO: ${reason}\r\n`, undefined, testItem);
+      testItem.children.forEach((fn) => {
+        if (requestedFnIds.size > 0 && !requestedFnIds.has(fn.id)) return;
+        const sub = subtestMap.get(fn.label);
+        if (sub && sub.status === "todo") {
+          run.skipped(fn);
+          run.appendOutput(`TODO: ${sub.reason || reason}\r\n`, undefined, fn);
+        } else if (sub && sub.status === "skip") {
+          run.skipped(fn);
+        } else {
           run.skipped(fn);
         }
       });
@@ -375,10 +434,33 @@ async function runTests(request, token) {
 
       run.failed(testItem, messages, r.duration);
 
+      // Per-function results: prefer subtests over YAML inference
       testItem.children.forEach((fn) => {
         if (requestedFnIds.size > 0 && !requestedFnIds.has(fn.id)) return;
         const fnName = fn.label;
-        if (failedFunctions.has(fnName)) {
+        const sub = subtestMap.get(fnName);
+
+        if (sub) {
+          // Use subtest result
+          if (sub.status === "pass") {
+            run.passed(fn, r.duration);
+          } else if (sub.status === "skip") {
+            run.skipped(fn);
+            if (sub.reason) {
+              run.appendOutput(`SKIP: ${sub.reason}\r\n`, undefined, fn);
+            }
+          } else if (sub.status === "todo") {
+            run.skipped(fn);
+            run.appendOutput(`TODO: ${sub.reason || "TODO"}\r\n`, undefined, fn);
+          } else {
+            // Failed — find matching failure messages
+            const fnMsgs = messages.filter((m) =>
+              m.message?.toString().startsWith(`${fnName}()`)
+            );
+            run.failed(fn, fnMsgs.length > 0 ? fnMsgs : messages, r.duration);
+          }
+        } else if (failedFunctions.has(fnName)) {
+          // Fallback: YAML inference
           const fnMsgs = messages.filter((m) =>
             m.message?.toString().startsWith(`${fnName}()`)
           );
@@ -506,7 +588,7 @@ async function debugTests(request) {
 
   if (!started) {
     vscode.window.showErrorMessage(
-      "KGSM: Failed to start debug session. Is the Bash Debug extension (rogalmic.bash-debug) installed?"
+      "KGSM: Failed to start debug session."
     );
   }
 }
@@ -527,11 +609,31 @@ class TapStreamParser {
     this.currentResult = null;
     this.inYaml = false;
     this.yamlLines = [];
+    this.inSubtest = false;
+    this.subtestResults = [];
+    this.subtestName = null;
   }
 
   addLine(line) {
     // TAP header lines — skip
     if (line.match(/^TAP version/) || line.match(/^1\.\.\d+/)) return;
+
+    // Bail out! — immediately emit and signal abort
+    const bailMatch = line.match(/^Bail out!\s*(.*)$/);
+    if (bailMatch) {
+      this._emitCurrent();
+      if (this.onResult) {
+        this.onResult({
+          name: "__bail_out__",
+          status: "bail",
+          message: bailMatch[1] || "Test run aborted",
+          duration: undefined,
+          failures: [],
+          subtests: [],
+        });
+      }
+      return;
+    }
 
     // Inside a YAML diagnostic block
     if (this.inYaml) {
@@ -542,6 +644,57 @@ class TapStreamParser {
       } else {
         this.yamlLines.push(line);
       }
+      return;
+    }
+
+    // Inside a subtest block (4-space indented lines)
+    if (this.inSubtest) {
+      // Indented subtest plan line (e.g., "    1..3")
+      if (line.match(/^\s{4}1\.\.\d+/)) return;
+
+      // Indented TAP result line
+      const subMatch = line.match(
+        /^\s{4}(ok|not ok)\s+\d+\s+-\s+(\S+)(.*)$/
+      );
+      if (subMatch) {
+        const [, subStatus, subName, subRest] = subMatch;
+        const subResult = { name: subName, status: "pass" };
+
+        if (subStatus === "ok") {
+          const skipMatch = subRest.match(/# SKIP\s*(.*)/i);
+          const todoMatch = subRest.match(/# TODO\s*(.*)/i);
+          if (skipMatch) {
+            subResult.status = "skip";
+            subResult.reason = skipMatch[1] || "";
+          } else if (todoMatch) {
+            subResult.status = "todo";
+            subResult.reason = todoMatch[1] || "";
+          }
+        } else {
+          const todoMatch = subRest.match(/# TODO\s*(.*)/i);
+          if (todoMatch) {
+            subResult.status = "todo";
+            subResult.reason = todoMatch[1] || "";
+          } else {
+            subResult.status = "fail";
+          }
+        }
+
+        this.subtestResults.push(subResult);
+        return;
+      }
+
+      // Non-indented line — end of subtest, process as parent line
+      this.inSubtest = false;
+      // Fall through to process the line as a normal TAP line
+    }
+
+    // Subtest header comment (e.g., "# Subtest: test_config")
+    const subtestHeader = line.match(/^# Subtest:\s+(\S+)/);
+    if (subtestHeader) {
+      this.subtestName = subtestHeader[1];
+      this.inSubtest = true;
+      this.subtestResults = [];
       return;
     }
 
@@ -562,22 +715,42 @@ class TapStreamParser {
         message: "",
         duration: undefined,
         failures: [],
+        subtests: this.subtestResults.length > 0 ? [...this.subtestResults] : [],
       };
+      // Reset subtest state
+      this.subtestResults = [];
+      this.subtestName = null;
 
       if (status === "ok") {
+        const todoMatch = rest.match(/# TODO\s*(.*)/i);
         if (rest.includes("# SKIP")) {
           this.currentResult.status = "skip";
+          const skipReasonMatch = rest.match(/# SKIP\s*(.*)/i);
+          if (skipReasonMatch) {
+            this.currentResult.skipReason = skipReasonMatch[1] || "";
+          }
+        } else if (todoMatch) {
+          this.currentResult.status = "todo";
+          this.currentResult.todoReason = todoMatch[1] || "";
         } else {
           this.currentResult.status = "pass";
           const durMatch = rest.match(/(\d+)ms/);
           if (durMatch)
             this.currentResult.duration = parseInt(durMatch[1], 10);
         }
-        // Passing/skip tests have no YAML block — emit immediately
+        // Passing/skip/todo tests have no YAML block — emit immediately
         this._emitCurrent();
       } else {
-        // "not ok" — may be followed by YAML block on next line(s)
-        this.currentResult.status = "fail";
+        // "not ok" — check for TODO directive
+        const todoMatch = rest.match(/# TODO\s*(.*)/i);
+        if (todoMatch) {
+          this.currentResult.status = "todo";
+          this.currentResult.todoReason = todoMatch[1] || "";
+          this._emitCurrent();
+        } else {
+          // May be followed by YAML block on next line(s)
+          this.currentResult.status = "fail";
+        }
       }
       return;
     }

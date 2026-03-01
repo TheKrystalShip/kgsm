@@ -1,5 +1,12 @@
 # KGSM .gitignore
 
+# Ignore node_modules directory
+node_modules/
+
+# Ignore build output
+dist/
+out/
+
 # User defined config.ini
 config.ini
 
