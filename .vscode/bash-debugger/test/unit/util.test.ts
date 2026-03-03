@@ -8,6 +8,7 @@ import {
   checkBashVersion,
   getBashVersion,
   resolveScriptPath,
+  shellEscape,
 } from '../../src/util';
 
 describe('util', () => {
@@ -138,6 +139,43 @@ describe('util', () => {
     it('should resolve a relative path against process.cwd() when no cwd is given', () => {
       const result = resolveScriptPath('test.sh');
       expect(result).to.equal(path.resolve(process.cwd(), 'test.sh'));
+    });
+  });
+
+  describe('shellEscape', () => {
+    it('should wrap a simple string in single quotes', () => {
+      expect(shellEscape('hello')).to.equal("'hello'");
+    });
+
+    it('should handle an empty string', () => {
+      expect(shellEscape('')).to.equal("''");
+    });
+
+    it('should escape embedded single quotes', () => {
+      expect(shellEscape("it's")).to.equal("'it'\\''s'");
+    });
+
+    it('should pass through double quotes without modification', () => {
+      expect(shellEscape('say "hello"')).to.equal("'say \"hello\"'");
+    });
+
+    it('should pass through backticks without modification', () => {
+      expect(shellEscape('`cmd`')).to.equal("'`cmd`'");
+    });
+
+    it('should pass through dollar signs without modification', () => {
+      expect(shellEscape('$HOME')).to.equal("'$HOME'");
+    });
+
+    it('should handle multiple single quotes', () => {
+      expect(shellEscape("a'b'c")).to.equal("'a'\\''b'\\''c'");
+    });
+
+    it('should handle mixed special characters', () => {
+      const input = 'val="hello\'s $world"';
+      const result = shellEscape(input);
+      // Should only escape single quotes; everything else is literal inside single quotes
+      expect(result).to.equal("'val=\"hello'\\''s $world\"'");
     });
   });
 });

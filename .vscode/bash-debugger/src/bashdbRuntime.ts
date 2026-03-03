@@ -49,6 +49,7 @@ import {
   parseWatchpointHit,
   parseInfoWatchpoints,
 } from './parsers/watchpointParser';
+import { shellEscape } from './util';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -452,8 +453,10 @@ export class BashdbRuntime extends EventEmitter {
     if (names.length === 0) return [];
 
     // Batch all names into a single typeset -p call
+    // Redirect stderr to suppress bashdb internal eval noise when variable
+    // values contain special characters (quotes, backticks, etc.)
     const nameList = names.join(' ');
-    const resp = await this.sendCommand(`eval typeset -p ${nameList}`);
+    const resp = await this.sendCommand(`eval typeset -p ${nameList} 2>/dev/null`);
     return parseExamineOutput(resp.output);
   }
 
@@ -464,13 +467,33 @@ export class BashdbRuntime extends EventEmitter {
    */
   async evaluate(expression: string, context: string): Promise<{ result: string; type?: string; variablesReference?: BashdbVariable }> {
     if (context === 'repl') {
-      // For REPL (debug console), use eval to execute arbitrary bash
-      const resp = await this.sendCommand(`eval ${expression}`);
+      // For REPL (debug console), use eval to execute arbitrary bash.
+      // REPL expressions are intentional user input — pass through as-is
+      // but suppress stderr to avoid bashdb internal eval noise.
+      const resp = await this.sendCommand(`eval ${expression} 2>/dev/null`);
       return { result: resp.output.trim() || '(no output)' };
     }
 
+    // For hover and watch contexts, sanitize the expression.
+    // VS Code's word selection often includes a leading quote but not the
+    // trailing one (e.g. hovering over "$instance_name" selects `"$instance_name`).
+    // Strip surrounding/dangling quotes so we send a clean variable reference.
+    let expr = expression.trim();
+    expr = expr.replace(/^["']+|["']+$/g, '');
+    expr = expr.trim();
+
+    if (!expr) {
+      return { result: '' };
+    }
+
+    // Extract the bare variable name for bashdb's examine command.
+    // Bash variable references come in as $name or ${name} — examine expects
+    // the bare identifier without $ or braces.
+    const bareNameMatch = expr.match(/^\$\{([A-Za-z_][A-Za-z0-9_]*)\}$|^\$([A-Za-z_][A-Za-z0-9_]*)$/);
+    const bareName = bareNameMatch ? (bareNameMatch[1] || bareNameMatch[2]) : expr;
+
     // For hover and watch, try examine first (works for variables)
-    const resp = await this.sendCommand(`x ${expression}`);
+    const resp = await this.sendCommand(`x ${bareName}`);
     const vars = parseExamineOutput(resp.output);
     if (vars.length > 0) {
       const v = vars[0];
@@ -482,7 +505,10 @@ export class BashdbRuntime extends EventEmitter {
     }
 
     // If examine fails, try eval (works for expressions like $((1+2)))
-    const evalResp = await this.sendCommand(`eval echo ${expression}`);
+    // Don't shell-escape here — the expression has already been sanitized
+    // (quotes stripped) and needs to be evaluated by bash (e.g. variable
+    // expansion). Stderr is suppressed to silence bashdb internal noise.
+    const evalResp = await this.sendCommand(`eval echo ${expr} 2>/dev/null`);
     const evalOutput = evalResp.output.trim();
     if (evalOutput) {
       return { result: evalOutput };
@@ -496,8 +522,8 @@ export class BashdbRuntime extends EventEmitter {
    * Uses bashdb eval to perform assignment, then re-examines for verification.
    */
   async setVariable(name: string, value: string): Promise<BashdbVariable> {
-    // Perform the assignment
-    await this.sendCommand(`eval ${name}=${value}`);
+    // Perform the assignment — shell-escape the value to handle special chars
+    await this.sendCommand(`eval ${name}=${shellEscape(value)}`);
 
     // Re-examine to get the actual new value
     const updated = await this.getVariable(name);
@@ -512,9 +538,9 @@ export class BashdbRuntime extends EventEmitter {
    * Used for setExpression DAP request.
    */
   async setExpression(expression: string, value: string): Promise<string> {
-    await this.sendCommand(`eval ${expression}=${value}`);
+    await this.sendCommand(`eval ${expression}=${shellEscape(value)}`);
     // Try to read back the result
-    const resp = await this.sendCommand(`eval echo ${expression}`);
+    const resp = await this.sendCommand(`eval echo ${shellEscape(expression)} 2>/dev/null`);
     return resp.output.trim();
   }
 

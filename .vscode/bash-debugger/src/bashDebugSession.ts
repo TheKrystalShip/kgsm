@@ -18,6 +18,7 @@ import { DebugProtocol } from '@vscode/debugprotocol';
 
 import { LaunchRequestArguments, StopReason, BashdbPosition, BashdbVariable } from './types';
 import { BashdbRuntime } from './bashdbRuntime';
+import { shellEscape } from './util';
 
 const THREAD_ID = 1;
 
@@ -500,12 +501,12 @@ export class BashDebugSession extends LoggingDebugSession {
             // Check if this is a logpoint
             if (sbp.logMessage) {
               // Logpoints use bashdb actions — they print without stopping
-              // Shell-escape the message: wrap in single quotes, escape embedded single quotes
-              const escaped = sbp.logMessage.replace(/'/g, "'\\''");
+              // Shell-escape the message to handle embedded quotes safely
+              const escaped = shellEscape(sbp.logMessage);
               const action = await this._runtime.setAction(
                 sourcePath,
                 sbp.line,
-                `printf '%s\\n' '${escaped}'`,
+                `printf '%s\\n' ${escaped}`,
               );
               const bp = new Breakpoint(true, sbp.line);
               bp.setId(action.id);

@@ -171,6 +171,17 @@ export function getBashdbVersion(): string | null {
 }
 
 /**
+ * Shell-escape a string for safe use inside bash eval commands.
+ * Wraps in single quotes and escapes any embedded single quotes
+ * using the '\'' pattern (end quote, escaped quote, start quote).
+ *
+ * Example: hello'world → 'hello'\''world'
+ */
+export function shellEscape(str: string): string {
+  return "'" + str.replace(/'/g, "'\\''") + "'";
+}
+
+/**
  * Get detailed prerequisite status for display.
  */
 export function getPrerequisiteStatus(bashOverride?: string): {
