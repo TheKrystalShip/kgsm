@@ -1,0 +1,31 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "bashdb",
+      "request": "launch",
+      "name": "Debug Bash Script",
+      "program": "${file}",
+      "stopOnEntry": false,
+      "cwd": "${workspaceFolder:kgsm}",
+      "args": [
+        "${input:scriptArgs}"
+      ],
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder:kgsm}",
+          "remoteRoot": "${env:KGSM_TEST_SANDBOX}"
+        }
+      ]
+    }
+  ],
+  "inputs": [
+    {
+      "id": "scriptArgs",
+      "type": "promptString",
+      "description": "Arguments for the script",
+      "default": "",
+    }
+  ],
+  "compounds": []
+}
