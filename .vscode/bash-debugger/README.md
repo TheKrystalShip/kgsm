@@ -24,6 +24,7 @@
 | **Completions** | Tab-autocomplete in the debug console |
 | **Exception Breakpoints** | Break on `ERR`, `SIGINT`, or `SIGTERM` signals |
 | **Loaded Sources** | View every file sourced during the session |
+| **Path Mappings** | Map local source paths to remote execution paths for sandboxes, containers, and remote debugging |
 | **Restart** | Restart the debug session without re-launching the terminal |
 | **Prerequisite Detection** | Validates that `bash` and `bashdb` are available at launch, with actionable error messages |
 
@@ -184,6 +185,43 @@ Where the script's standard I/O is shown. Accepted values:
 
 ---
 
+### `pathMappings`
+
+```json
+"pathMappings": [
+  {
+    "localRoot": "${workspaceFolder}",
+    "remoteRoot": "/tmp/sandbox/project"
+  }
+]
+```
+
+Map local source paths to remote execution paths. Used when scripts run in a different filesystem location than the source code — for example, test sandboxes, Docker containers, or CI build directories.
+
+Each entry maps a `localRoot` (the path VS Code knows) to a `remoteRoot` (the path where the script actually executes). The debugger translates paths in both directions:
+
+- **Breakpoints**: local paths are converted to remote paths before sending to bashdb
+- **Stack traces**: remote paths are converted back to local paths for display
+
+Mappings are evaluated in order — the first match wins. Defaults to `[]` (no mapping, paths pass through unchanged).
+
+#### Environment variable placeholders
+
+Both `localRoot` and `remoteRoot` support `${env:VAR_NAME}` placeholders that are resolved at runtime from the **debuggee's** environment. This is useful when execution paths are created dynamically (e.g., test sandboxes with random directory names).
+
+```json
+"pathMappings": [
+  {
+    "localRoot": "${workspaceFolder}",
+    "remoteRoot": "${env:KGSM_TEST_SANDBOX}"
+  }
+]
+```
+
+The debugger resolves these placeholders after the debuggee starts, so env vars set during script initialization (before the first breakpoint) are available. If a variable cannot be resolved, the raw placeholder is preserved.
+
+---
+
 ### Full example `launch.json`
 
 ```json
@@ -203,7 +241,8 @@ Where the script's standard I/O is shown. Accepted values:
       "pathBash": "",
       "pathBashdb": "",
       "stopOnEntry": true,
-      "terminalKind": "debugConsole"
+      "terminalKind": "debugConsole",
+      "pathMappings": []
     }
   ]
 }

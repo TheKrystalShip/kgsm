@@ -118,6 +118,28 @@
                   "debugConsole"
                 ],
                 "default": "debugConsole"
+              },
+              "pathMappings": {
+                "type": "array",
+                "description": "Map local source paths to remote execution paths. Used when scripts run in a different location than the source (e.g., sandboxes, containers, Docker volumes). Supports ${env:VAR_NAME} placeholders that resolve from the debuggee's environment at runtime.",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "localRoot": {
+                      "type": "string",
+                      "description": "The local source path (where your code lives in VS Code)."
+                    },
+                    "remoteRoot": {
+                      "type": "string",
+                      "description": "The remote execution path (where the script actually runs)."
+                    }
+                  },
+                  "required": [
+                    "localRoot",
+                    "remoteRoot"
+                  ]
+                },
+                "default": []
               }
             }
           }

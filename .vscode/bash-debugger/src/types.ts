@@ -13,6 +13,7 @@ export interface LaunchRequestArguments extends DebugProtocol.LaunchRequestArgum
   pathBashdb?: string;    // Override bashdb path
   stopOnEntry?: boolean;  // Stop at first line (default true)
   terminalKind?: 'integrated' | 'external' | 'debugConsole';
+  pathMappings?: Array<{ localRoot: string; remoteRoot: string }>;
 }
 
 /**

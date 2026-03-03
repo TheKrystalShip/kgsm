@@ -19,6 +19,7 @@ import { DebugProtocol } from '@vscode/debugprotocol';
 import { LaunchRequestArguments, StopReason, BashdbPosition, BashdbVariable } from './types';
 import { BashdbRuntime } from './bashdbRuntime';
 import { shellEscape } from './util';
+import { PathMapper } from './pathMapper';
 
 const THREAD_ID = 1;
 
@@ -33,6 +34,7 @@ export class BashDebugSession extends LoggingDebugSession {
   private _runtime: BashdbRuntime;
   private _variableHandles = new Handles<VariableReference>();
   private _stopOnEntry = true;
+  private _pathMapper: PathMapper = new PathMapper();
 
   public constructor() {
     super('bashdb-debug.txt');
@@ -142,9 +144,26 @@ export class BashDebugSession extends LoggingDebugSession {
 
     this._stopOnEntry = launchArgs.stopOnEntry !== false;
 
+    // Initialize path mapper from launch configuration
+    this._pathMapper = new PathMapper(launchArgs.pathMappings);
+
     this._runtime
       .launch(launchArgs)
-      .then(() => {
+      .then(async () => {
+        // Resolve ${env:VAR} placeholders in path mappings from the debuggee's
+        // environment. This allows dynamic paths (e.g., sandbox directories
+        // created at runtime) to be referenced in pathMappings.
+        if (this._pathMapper.hasMappings && !this._pathMapper.isResolved) {
+          try {
+            await this._pathMapper.resolveEnvVars(async (varName) => {
+              const resp = await this._runtime.evaluate(`\${${varName}}`, 'repl');
+              const val = resp.result.trim();
+              return val && val !== `\${${varName}}` ? val : undefined;
+            });
+          } catch {
+            // Non-fatal — mappings will use unresolved values
+          }
+        }
         this.sendResponse(response);
       })
       .catch((err) => {
@@ -195,13 +214,15 @@ export class BashDebugSession extends LoggingDebugSession {
       .then((frames) => {
         response.body = {
           stackFrames: frames.map(
-            (f, i) =>
-              new StackFrame(
+            (f, i) => {
+              const localFile = this._pathMapper.toLocal(f.file);
+              return new StackFrame(
                 i,
                 f.functionName || '<global>',
-                new Source(path.basename(f.file), f.file),
+                new Source(path.basename(localFile), localFile),
                 f.line,
-              ),
+              );
+            },
           ),
           totalFrames: frames.length,
         };
@@ -488,11 +509,13 @@ export class BashDebugSession extends LoggingDebugSession {
       return;
     }
 
+    // Translate local source path to remote path for bashdb
+    const runtimePath = this._pathMapper.toRemote(sourcePath);
     const clientBreakpoints = args.breakpoints || [];
 
     // Clear existing breakpoints for this file, then set new ones
     this._runtime
-      .clearFileBreakpoints(sourcePath)
+      .clearFileBreakpoints(runtimePath)
       .then(async () => {
         const resultBreakpoints: DebugProtocol.Breakpoint[] = [];
 
@@ -504,7 +527,7 @@ export class BashDebugSession extends LoggingDebugSession {
               // Shell-escape the message to handle embedded quotes safely
               const escaped = shellEscape(sbp.logMessage);
               const action = await this._runtime.setAction(
-                sourcePath,
+                runtimePath,
                 sbp.line,
                 `printf '%s\\n' ${escaped}`,
               );
@@ -514,7 +537,7 @@ export class BashDebugSession extends LoggingDebugSession {
             } else {
               // Regular breakpoint (with optional condition and hit condition)
               const bashdbBp = await this._runtime.setBreakpoint(
-                sourcePath,
+                runtimePath,
                 sbp.line,
                 sbp.condition,
                 sbp.hitCondition,
@@ -561,7 +584,7 @@ export class BashDebugSession extends LoggingDebugSession {
             );
             const bp = new Breakpoint(true, bashdbBp.line);
             bp.setId(bashdbBp.id);
-            (bp as DebugProtocol.Breakpoint).message = `${fbp.name} → ${path.basename(bashdbBp.file)}:${bashdbBp.line}`;
+            (bp as DebugProtocol.Breakpoint).message = `${fbp.name} → ${path.basename(this._pathMapper.toLocal(bashdbBp.file))}:${bashdbBp.line}`;
             resultBreakpoints.push(bp);
           } catch (err) {
             const bp = new Breakpoint(false);
@@ -719,7 +742,10 @@ export class BashDebugSession extends LoggingDebugSession {
       .getLoadedSources()
       .then((sources) => {
         response.body = {
-          sources: sources.map((s) => new Source(path.basename(s.file), s.file)),
+          sources: sources.map((s) => {
+            const localFile = this._pathMapper.toLocal(s.file);
+            return new Source(path.basename(localFile), localFile);
+          }),
         };
         this.sendResponse(response);
       })
