@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "bashdb",
+      "request": "launch",
+      "name": "Debug Bash Script",
+      "pathBash": "",
+      "pathBashdb": "",
+      "cwd": "${workspaceFolder}",
+      "program": "${file}",
+      "args": [
+        "${input:scriptArgs}"
+      ],
+      "env": {
+        "TEST_ENV_VAR": "test_value",
+      },
+      "pathMappings": [
+        {
+          "localRoot": "${workspaceFolder}",
+          "remoteRoot": "${env:TEST_SANDBOX}"
+        },
+        {
+          "localRoot": "${workspaceFolder}",
+          "remoteRoot": "/tmp/test-sandbox"
+        }
+      ],
+      "stopOnEntry": true,
+      "terminalKind": "debugConsole",
+    }
+  ],
+  "inputs": [
+    {
+      "id": "scriptArgs",
+      "type": "promptString",
+      "description": "Arguments for the script",
+      "default": "",
+    }
+  ],
+}
