@@ -47,6 +47,8 @@ declare -gi ASSERT_PASSED=0
 declare -gi ASSERT_FAILED=0
 declare -gi ASSERT_FUNCTIONS_SKIPPED=0
 declare -ga ASSERT_SKIPPED_FUNCTION_NAMES=()
+declare -gi ASSERT_FUNCTIONS_TODO=0
+declare -ga ASSERT_TODO_FUNCTION_NAMES=()
 
 # =============================================================================
 # UTILITY FUNCTIONS
@@ -500,11 +502,8 @@ function assert_command_fails() {
   local output
   local exit_code
 
-  if output=$(eval "$command" 2>&1); then
-    exit_code=0
-  else
-    exit_code=$?
-  fi
+  output=$($command 2>&1)
+  exit_code=$?
 
   if [[ $exit_code -ne 0 ]]; then
     print_assert_result "PASS" "$message: command '$command' failed as expected (exit code $exit_code)" "$caller_info"
@@ -584,6 +583,8 @@ function reset_assert_stats() {
   ASSERT_FAILED=0
   ASSERT_FUNCTIONS_SKIPPED=0
   ASSERT_SKIPPED_FUNCTION_NAMES=()
+  ASSERT_FUNCTIONS_TODO=0
+  ASSERT_TODO_FUNCTION_NAMES=()
 
   # Also reset in case they were exported from parent shell
   declare -gi ASSERT_COUNT=0
@@ -591,6 +592,8 @@ function reset_assert_stats() {
   declare -gi ASSERT_FAILED=0
   declare -gi ASSERT_FUNCTIONS_SKIPPED=0
   declare -ga ASSERT_SKIPPED_FUNCTION_NAMES=()
+  declare -gi ASSERT_FUNCTIONS_TODO=0
+  declare -ga ASSERT_TODO_FUNCTION_NAMES=()
 }
 
 export -f reset_assert_stats
@@ -604,6 +607,7 @@ function print_assert_summary() {
   local assert_passed=$ASSERT_PASSED
   local assert_failed=$ASSERT_FAILED
   local functions_skipped=$ASSERT_FUNCTIONS_SKIPPED
+  local functions_todo=$ASSERT_FUNCTIONS_TODO
 
   # Reset counters for next test
   reset_assert_stats
@@ -617,9 +621,13 @@ function print_assert_summary() {
     printf "${YELLOW}Test functions skipped: %d${NC}\n" "$functions_skipped"
   fi
 
+  if [[ $functions_todo -gt 0 ]]; then
+    printf "${YELLOW}Test functions TODO: %d${NC}\n" "$functions_todo"
+  fi
+
   # Write assertion stats marker to test log for runner to parse
   if [[ -n "${KGSM_TEST_LOG:-}" ]]; then
-    echo "KGSM_ASSERT_STATS: ${assert_passed}/${assert_failed}/${assert_count}/${functions_skipped}" >>"$KGSM_TEST_LOG" 2>/dev/null || true
+    echo "KGSM_ASSERT_STATS: ${assert_passed}/${assert_failed}/${assert_count}/${functions_skipped}/${functions_todo}" >>"$KGSM_TEST_LOG" 2>/dev/null || true
   fi
 
   if [[ $assert_failed -gt 0 ]]; then

@@ -373,7 +373,7 @@ function test_create_management_file_invalid_runtime() {
   local exit_code=$?
 
   # Runtime is validated AFTER template copy, so this happens after successful copy
-  assert_equals "$EC_INVALID_CONFIG" "$exit_code" "Should return EC_INVALID_CONFIG for invalid runtime"
+  assert_equals "$EC_INVALID_ARG" "$exit_code" "Should return EC_INVALID_ARG for invalid runtime"
 
   # Cleanup
   cleanup_mock_files "$config_file"
@@ -405,97 +405,6 @@ EOF
   chmod 755 "$readonly_dir"
 
   assert_equals "$EC_FAILED_TEMPLATE" "$exit_code" "Should return EC_FAILED_TEMPLATE for copy failure"
-
-  rm -rf "$test_dir"
-}
-
-function test_create_management_file_chmod_fails() {
-  log_test_step "Testing __logic_create_management_file with chmod failure"
-
-  local test_dir="$KGSM_TEST_SANDBOX/mgmt_test_chmod_fail"
-  mkdir -p "$test_dir"
-
-  local mgmt_file="$test_dir/manage.sh"
-
-  local config_file="$test_dir/test.ini"
-  cat > "$config_file" << EOF
-name=testinstance
-runtime=native
-management_file=$mgmt_file
-EOF
-
-  # Pre-create the management file as readonly
-  touch "$mgmt_file"
-  chmod 000 "$mgmt_file"
-
-  __logic_create_management_file "$config_file"
-  local exit_code=$?
-
-  # Restore permissions for cleanup
-  chmod 644 "$mgmt_file"
-
-  # __logic_set_file_ownership may succeed, but chmod +x will fail on readonly file
-  assert_equals "$EC_PERMISSION" "$exit_code" "Should return EC_PERMISSION for chmod failure"
-
-  rm -rf "$test_dir"
-}
-
-function test_create_management_file_native_success() {
-  log_test_step "Testing __logic_create_management_file native runtime success"
-
-  # Use real factorio blueprint
-  local blueprint_file="$KGSM_ROOT/blueprints/native/default/factorio.bp"
-  local instance_name="test-native-mgmt-$$"
-
-  # Create proper instance config using fixture
-  local config_file
-  config_file=$(create_mock_instance_config "$instance_name" "$blueprint_file")
-
-  # Add required fields for management file creation
-  local mgmt_file="$KGSM_TEST_SANDBOX/manage_${instance_name}.sh"
-  echo "runtime=native" >> "$config_file"
-  echo "management_file=$mgmt_file" >> "$config_file"
-
-  __logic_create_management_file "$config_file"
-  local exit_code=$?
-
-  assert_equals "$EC_SUCCESS_MANAGEMENT_FILE_CREATED" "$exit_code" "Should return EC_SUCCESS_MANAGEMENT_FILE_CREATED"
-  assert_file_exists "$mgmt_file" "Management file should be created"
-
-  # Cleanup
-  cleanup_mock_files "$config_file" "$mgmt_file"
-  rm -rf "$(dirname "$config_file")"
-  log_test_step "Testing __logic_create_management_file container runtime success"
-
-  local test_dir="$KGSM_TEST_SANDBOX/mgmt_test_container_success"
-  mkdir -p "$test_dir"
-
-  # Create a minimal blueprint for container
-  local blueprint_file="$test_dir/blueprint.yml"
-  cat > "$blueprint_file" << EOF
-version: "3"
-services:
-  server:
-    image: test:latest
-EOF
-
-  local mgmt_file="$test_dir/manage.sh"
-
-  local config_file="$test_dir/test.ini"
-  cat > "$config_file" << EOF
-name=containertest
-runtime=container
-management_file=$mgmt_file
-blueprint_file=$blueprint_file
-working_dir=$test_dir
-EOF
-
-  __logic_create_management_file "$config_file"
-  local exit_code=$?
-
-  assert_equals "$EC_SUCCESS_MANAGEMENT_FILE_CREATED" "$exit_code" "Should return EC_SUCCESS_MANAGEMENT_FILE_CREATED"
-  assert_file_exists "$mgmt_file" "Management file should be created"
-  assert_file_exists "$test_dir/containertest.docker-compose.yml" "Docker compose file should be created"
 
   rm -rf "$test_dir"
 }

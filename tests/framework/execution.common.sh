@@ -177,15 +177,62 @@ function __capture_test_output() {
     fi
 
     if [[ -n "${KGSM_TEST_FUNCTION_FILTER:-}" ]]; then
-      # Run only the specified function
+      # Run only the specified function (with per-function tracking)
+      local _before_passed=${ASSERT_PASSED:-0}
+      local _before_failed=${ASSERT_FAILED:-0}
+      local _before_count=${ASSERT_COUNT:-0}
+      local _before_skip_len=${#ASSERT_SKIPPED_FUNCTION_NAMES[@]}
+      local _before_todo_len=${#ASSERT_TODO_FUNCTION_NAMES[@]}
+
       "${KGSM_TEST_FUNCTION_FILTER}"
+
+      local _fn_passed=$(( ${ASSERT_PASSED:-0} - _before_passed ))
+      local _fn_failed=$(( ${ASSERT_FAILED:-0} - _before_failed ))
+      local _fn_total=$(( ${ASSERT_COUNT:-0} - _before_count ))
+      local _fn_status="pass"
+
+      if [[ ${#ASSERT_SKIPPED_FUNCTION_NAMES[@]} -gt $_before_skip_len ]]; then
+        _fn_status="skip"
+      elif [[ ${#ASSERT_TODO_FUNCTION_NAMES[@]} -gt $_before_todo_len ]]; then
+        _fn_status="todo"
+      elif [[ $_fn_failed -gt 0 ]]; then
+        _fn_status="fail"
+      fi
+
+      if [[ -n "${KGSM_TEST_LOG:-}" ]]; then
+        echo "KGSM_FUNC_RESULT: ${KGSM_TEST_FUNCTION_FILTER}|${_fn_passed}|${_fn_failed}|${_fn_total}|${_fn_status}" >> "$KGSM_TEST_LOG"
+      fi
     else
       # Auto-discover and run all test_* functions in file order
       local -a _test_functions
       mapfile -t _test_functions < <(grep -oP '^function \Ktest_\w+' "$test_file")
       for _fn in "${_test_functions[@]}"; do
         if declare -f "$_fn" >/dev/null 2>&1; then
+          # Track per-function assertion deltas
+          local _before_passed=${ASSERT_PASSED:-0}
+          local _before_failed=${ASSERT_FAILED:-0}
+          local _before_count=${ASSERT_COUNT:-0}
+          local _before_skip_len=${#ASSERT_SKIPPED_FUNCTION_NAMES[@]}
+          local _before_todo_len=${#ASSERT_TODO_FUNCTION_NAMES[@]}
+
           "$_fn"
+
+          local _fn_passed=$(( ${ASSERT_PASSED:-0} - _before_passed ))
+          local _fn_failed=$(( ${ASSERT_FAILED:-0} - _before_failed ))
+          local _fn_total=$(( ${ASSERT_COUNT:-0} - _before_count ))
+          local _fn_status="pass"
+
+          if [[ ${#ASSERT_SKIPPED_FUNCTION_NAMES[@]} -gt $_before_skip_len ]]; then
+            _fn_status="skip"
+          elif [[ ${#ASSERT_TODO_FUNCTION_NAMES[@]} -gt $_before_todo_len ]]; then
+            _fn_status="todo"
+          elif [[ $_fn_failed -gt 0 ]]; then
+            _fn_status="fail"
+          fi
+
+          if [[ -n "${KGSM_TEST_LOG:-}" ]]; then
+            echo "KGSM_FUNC_RESULT: ${_fn}|${_fn_passed}|${_fn_failed}|${_fn_total}|${_fn_status}" >> "$KGSM_TEST_LOG"
+          fi
         fi
       done
     fi
@@ -297,14 +344,14 @@ export -f __execute_test_inline
 #   $1 - test_log: Absolute path to test log file
 # Returns:
 #   Exit code: EC_SUCCESS (0)
-#   Stdout: Three integers separated by spaces: "passed failed total"
+#   Stdout: Five integers separated by spaces: "passed failed total skipped todo"
 # ------------------------------------------------------------------------------
 function __parse_assertion_stats() {
   local test_log="$1"
 
   # Check if log file exists
   if [[ ! -f "$test_log" ]]; then
-    echo "0 0 0 0"
+    echo "0 0 0 0 0"
     return $EC_SUCCESS
   fi
 
@@ -313,44 +360,48 @@ function __parse_assertion_stats() {
   stats_line=$(grep "^KGSM_ASSERT_STATS:" "$test_log" 2>/dev/null | tail -1 || echo "")
 
   if [[ -n "$stats_line" ]]; then
-    # Extract "passed/failed/total/skipped" from marker
+    # Extract "passed/failed/total/skipped[/todo]" from marker
     local stats_value
     stats_value=$(echo "$stats_line" | sed 's/^KGSM_ASSERT_STATS: *//' | tr -d '[:space:]')
 
-    # Parse format: 133/0/133/2 (passed/failed/total/skipped)
-    local passed failed total skipped
-    IFS='/' read -r passed failed total skipped <<< "$stats_value"
+    # Parse format: 133/0/133/2/0 (passed/failed/total/skipped/todo)
+    local passed failed total skipped todo
+    IFS='/' read -r passed failed total skipped todo <<< "$stats_value"
 
-    # If skipped is not present, default to 0 (backward compatibility)
+    # If skipped/todo are not present, default to 0 (backward compatibility)
     [[ -z "$skipped" ]] && skipped=0
+    [[ -z "$todo" ]] && todo=0
 
     # Validate extracted values are numbers
-    if [[ "$passed" =~ ^[0-9]+$ ]] && [[ "$failed" =~ ^[0-9]+$ ]] && [[ "$total" =~ ^[0-9]+$ ]] && [[ "$skipped" =~ ^[0-9]+$ ]]; then
-      echo "$passed $failed $total $skipped"
+    if [[ "$passed" =~ ^[0-9]+$ ]] && [[ "$failed" =~ ^[0-9]+$ ]] && [[ "$total" =~ ^[0-9]+$ ]] && [[ "$skipped" =~ ^[0-9]+$ ]] && [[ "$todo" =~ ^[0-9]+$ ]]; then
+      echo "$passed $failed $total $skipped $todo"
       return $EC_SUCCESS
     fi
   fi
 
   # Fallback method: Count PASS: and FAIL: markers
-  local passed failed total skipped
+  local passed failed total skipped todo
   # Look for PASS: anywhere in the line (not just at beginning) to handle bash tracing output
   passed=$(grep -c "PASS:" "$test_log" 2>/dev/null || echo "0")
   failed=$(grep -c "FAIL:" "$test_log" 2>/dev/null || echo "0")
   skipped=$(grep -c "^\[SKIP\]" "$test_log" 2>/dev/null || echo "0")
+  todo=$(grep -c "^\[TODO\]" "$test_log" 2>/dev/null || echo "0")
 
   # Ensure we have clean numeric values (strip whitespace)
   passed=$(echo "$passed" | tr -d '[:space:]')
   failed=$(echo "$failed" | tr -d '[:space:]')
   skipped=$(echo "$skipped" | tr -d '[:space:]')
+  todo=$(echo "$todo" | tr -d '[:space:]')
 
   # Validate they are numbers
   [[ ! "$passed" =~ ^[0-9]+$ ]] && passed=0
   [[ ! "$failed" =~ ^[0-9]+$ ]] && failed=0
   [[ ! "$skipped" =~ ^[0-9]+$ ]] && skipped=0
+  [[ ! "$todo" =~ ^[0-9]+$ ]] && todo=0
 
   total=$((passed + failed))
 
-  echo "$passed $failed $total $skipped"
+  echo "$passed $failed $total $skipped $todo"
   return $EC_SUCCESS
 }
 export -f __parse_assertion_stats
@@ -537,6 +588,7 @@ function execute_test_in_sandbox() {
   result_array[assertions_failed]="0"
   result_array[assertions_total]="0"
   result_array[functions_skipped]="0"
+  result_array[functions_todo]="0"
   result_array[duration_seconds]="0"
   result_array[test_log_path]="$test_log"
   result_array[sandbox_path]="$sandbox_path"
@@ -583,7 +635,7 @@ function execute_test_in_sandbox() {
   # Parse assertion statistics from log
   local stats
   stats=$(__parse_assertion_stats "$test_log")
-  read -r passed failed total skipped <<< "$stats"
+  read -r passed failed total skipped todo <<< "$stats"
 
   # Calculate duration (in milliseconds)
   duration=$(__calculate_duration "$start_time" "$end_time")
@@ -594,6 +646,7 @@ function execute_test_in_sandbox() {
   result_array[assertions_failed]="$failed"
   result_array[assertions_total]="$total"
   result_array[functions_skipped]="$skipped"
+  result_array[functions_todo]="$todo"
   result_array[duration_seconds]="$duration"
 
   # Restore environment (also happens via trap)

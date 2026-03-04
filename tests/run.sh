@@ -31,6 +31,7 @@ source "$FRAMEWORK_DIR/bootstrap.sh" || {
 # Global state for incremental TAP emission
 declare -g TAP_TEST_NUM=0
 declare -g TAP_HAS_FAILURES=0
+declare -g TAP_BAIL_OUT=0
 
 # Emit a single TAP result line to stdout immediately.
 # Called inline after each test completes (sequential or parallel).
@@ -38,9 +39,41 @@ function _emit_tap_result() {
   local result_line="$1"
   ((TAP_TEST_NUM++))
 
-  IFS='|' read -r test_name test_type exit_code duration passed failed total_asserts skipped log_path <<< "$result_line"
+  IFS='|' read -r test_name test_type exit_code duration passed failed total_asserts skipped log_path todo <<< "$result_line"
 
-  if [[ "$exit_code" -eq 0 ]]; then
+  # Default todo to 0 if not provided (backward compatibility)
+  [[ -z "$todo" ]] && todo=0
+
+  # Handle Bail out!
+  if [[ "$exit_code" -eq 99 ]]; then
+    local bail_reason=""
+    if [[ -n "$log_path" && -f "$log_path" ]]; then
+      bail_reason=$(grep "^KGSM_BAIL_OUT:" "$log_path" 2>/dev/null | sed 's/^KGSM_BAIL_OUT: //' | head -1 || true)
+    fi
+    echo "Bail out! ${bail_reason}"
+    TAP_BAIL_OUT=1
+    return 0
+  fi
+
+  # Emit subtests before parent line (TAP v14)
+  if [[ -n "$log_path" && -f "$log_path" ]]; then
+    local has_subtests
+    has_subtests=$(grep -c "^KGSM_FUNC_RESULT:" "$log_path" 2>/dev/null || echo "0")
+    if [[ "$has_subtests" -gt 0 ]]; then
+      echo "# Subtest: ${test_name}"
+      __tap_emit_subtests "$log_path"
+    fi
+  fi
+
+  # Determine if failures are TODO-only (not real test failures)
+  local is_todo_only=0
+  if [[ "$exit_code" -ne 0 && "$todo" -gt 0 && -n "$log_path" && -f "$log_path" ]]; then
+    local real_fail_count
+    real_fail_count=$(grep -c "^KGSM_FUNC_RESULT:.*|fail$" "$log_path" 2>/dev/null || echo "0")
+    [[ "$real_fail_count" == "0" ]] && is_todo_only=1
+  fi
+
+  if [[ "$exit_code" -eq 0 ]] || [[ "$is_todo_only" -eq 1 ]]; then
     echo "ok ${TAP_TEST_NUM} - ${test_name} [${test_type}] # ${total_asserts} assertions in ${duration}ms"
   else
     TAP_HAS_FAILURES=1
@@ -55,6 +88,9 @@ function _emit_tap_result() {
     echo "  assertions_total: ${total_asserts}"
     if [[ "$skipped" -gt 0 ]]; then
       echo "  functions_skipped: ${skipped}"
+    fi
+    if [[ "$todo" -gt 0 ]]; then
+      echo "  functions_todo: ${todo}"
     fi
 
     local test_file=""
@@ -117,8 +153,6 @@ function run_test_suite() {
     return 0
   fi
 
-  echo "Running ${#filtered_tests[@]} ${test_type} test(s)" >&2
-
   # Delegate to parallel or sequential execution
   if [[ "${TEST_PARALLEL:-1}" -gt 1 && ${#filtered_tests[@]} -gt 1 ]]; then
     _run_tests_parallel "$test_type" "${filtered_tests[@]}"
@@ -141,7 +175,7 @@ function _run_tests_sequential() {
     local sandbox_path
     if ! sandbox_path=$(create_sandbox "$test_name" 2>&1); then
       log_error "Failed to create sandbox for test: $test_name"
-      _emit_tap_result "${test_name}|${test_type}|2|0|0|0|0|0|"
+      _emit_tap_result "${test_name}|${test_type}|2|0|0|0|0|0||0"
       continue
     fi
 
@@ -151,7 +185,12 @@ function _run_tests_sequential() {
     execute_test_in_sandbox "$test_file" "$test_type" "$sandbox_path" "$test_log" test_result
 
     # Emit TAP result immediately
-    _emit_tap_result "${test_result[test_name]}|${test_result[test_type]}|${test_result[exit_code]}|${test_result[duration_seconds]}|${test_result[assertions_passed]}|${test_result[assertions_failed]}|${test_result[assertions_total]}|${test_result[functions_skipped]}|${test_result[test_log_path]}"
+    _emit_tap_result "${test_result[test_name]}|${test_result[test_type]}|${test_result[exit_code]}|${test_result[duration_seconds]}|${test_result[assertions_passed]}|${test_result[assertions_failed]}|${test_result[assertions_total]}|${test_result[functions_skipped]}|${test_result[test_log_path]}|${test_result[functions_todo]}"
+
+    # Stop on bail out
+    if [[ "$TAP_BAIL_OUT" -eq 1 ]]; then
+      break
+    fi
 
     if [[ "${test_result[exit_code]}" -eq 0 ]]; then
       cleanup_sandbox "$sandbox_path" >/dev/null 2>&1 || true
@@ -190,7 +229,7 @@ function _run_tests_parallel() {
       if [[ -z "${emitted[$name]:-}" && -f "${result_dir}/${name}.result" ]]; then
         declare -A _r=()
         __read_result_from_file "${result_dir}/${name}.result" "_r"
-        _emit_tap_result "${_r[test_name]:-$name}|${_r[test_type]:-$test_type}|${_r[exit_code]:-2}|${_r[duration_seconds]:-0}|${_r[assertions_passed]:-0}|${_r[assertions_failed]:-0}|${_r[assertions_total]:-0}|${_r[functions_skipped]:-0}|${_r[test_log_path]:-}"
+        _emit_tap_result "${_r[test_name]:-$name}|${_r[test_type]:-$test_type}|${_r[exit_code]:-2}|${_r[duration_seconds]:-0}|${_r[assertions_passed]:-0}|${_r[assertions_failed]:-0}|${_r[assertions_total]:-0}|${_r[functions_skipped]:-0}|${_r[test_log_path]:-}|${_r[functions_todo]:-0}"
         unset _r
         emitted[$name]=1
       fi
@@ -225,6 +264,7 @@ function _run_tests_parallel() {
             echo "assertions_failed=0"
             echo "assertions_total=0"
             echo "functions_skipped=0"
+            echo "functions_todo=0"
             echo "test_log_path="
           } > "${result_file}.tmp"
           mv "${result_file}.tmp" "$result_file"
@@ -252,7 +292,7 @@ function _run_tests_parallel() {
     if [[ ${#active_pids[@]} -eq 0 && $launch_idx -ge $num_tests && ${#emitted[@]} -lt $num_tests ]]; then
       for name in "${all_names[@]}"; do
         if [[ -z "${emitted[$name]:-}" ]]; then
-          _emit_tap_result "${name}|${test_type}|2|0|0|0|0|0|"
+          _emit_tap_result "${name}|${test_type}|2|0|0|0|0|0||0"
           emitted[$name]=1
         fi
       done
@@ -401,11 +441,6 @@ function main() {
   TEST_LOG_DIR="$TESTS_ROOT/logs/$timestamp"
   mkdir -p "$TEST_LOG_DIR"
 
-  # Log environment info to stderr
-  echo "Sandbox: $TEST_SANDBOX_ROOT" >&2
-  echo "Parallel: $TEST_PARALLEL" >&2
-  echo "Logs: $TEST_LOG_DIR" >&2
-
   # Set up signal handlers for cleanup
   trap 'cleanup_all' EXIT INT TERM
 
@@ -422,10 +457,13 @@ function main() {
   # Initialize streaming TAP state
   TAP_TEST_NUM=0
   TAP_HAS_FAILURES=0
+  TAP_BAIL_OUT=0
 
   # Run test suites (TAP results emitted inline as tests complete)
   for test_type in "${TEST_TYPES[@]}"; do
     run_test_suite "$test_type"
+    # Stop all suites on bail out
+    [[ "$TAP_BAIL_OUT" -eq 1 ]] && break
   done
 
   # Create/update 'latest' symlink

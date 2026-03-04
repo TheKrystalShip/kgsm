@@ -290,19 +290,19 @@ function _cmd_remove() {
   if [[ -z "$instance_name" ]]; then
     __print_error "Missing required option: -i, --instance"
     __print_error "Use '${self} remove --help' for usage information"
-    exit $EC_MISSING_ARG
+    return $EC_MISSING_ARG
   fi
 
   # Validate instance name and get config file
   local instance_config_file
   if ! instance_config_file=$(validate_instance_name "$instance_name"); then
-    exit $?
+    return $?
   fi
 
   # Validate working directory configuration
   local instance_working_dir
   if ! instance_working_dir=$(validate_working_directory "$instance_config_file"); then
-    exit $?
+    return $?
   fi
 
   # Call pure logic function
@@ -317,11 +317,11 @@ function _cmd_remove() {
       __print_success "Directories removed successfully for instance $instance_name"
       # Dispatch event
       __dispatch_event_from_exit_code "$exit_code" "$instance_name"
-      exit 0
+      return 0
       ;;
     *)
       __print_error "Failed to remove directories for instance $instance_name"
-      exit $exit_code
+      return $exit_code
       ;;
   esac
 }

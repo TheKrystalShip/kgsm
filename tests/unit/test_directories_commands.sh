@@ -161,7 +161,7 @@ function test_create_directories_success() {
   log_test_step "Testing 'create' creates directory structure for a valid instance"
 
   local instance_name
-  instance_name=$(create_test_instance "$TEST_BLUEPRINT" "$(generate_test_id)" "$TEST_INSTALL_DIR" 2>/dev/null)
+  instance_name=$(create_test_instance "$TEST_BLUEPRINT" 2>/dev/null)
 
   if [[ -z "$instance_name" ]]; then
     skip_test "Instance creation failed - skipping test"
@@ -172,10 +172,8 @@ function test_create_directories_success() {
     "create should succeed for a valid instance"
 
   # Retrieve working_dir from the instance config to verify directories
-  local config_file
-  config_file=$(validate_instance_name "$instance_name" 2>/dev/null)
   local working_dir
-  working_dir=$(grep "working_dir=" "$config_file" | head -1 | cut -d= -f2)
+  working_dir=$(__get_instance_config_value "$instance_name" "working_dir" 2>/dev/null)
 
   assert_dir_exists "$working_dir" "working_dir should exist after create"
   assert_dir_exists "$working_dir/backups" "backups dir should exist after create"
@@ -213,7 +211,7 @@ function test_remove_directories_success() {
   log_test_step "Testing 'remove' removes directory structure for a valid instance"
 
   local instance_name
-  instance_name=$(create_test_instance "$TEST_BLUEPRINT" "$(generate_test_id)" "$TEST_INSTALL_DIR" 2>/dev/null)
+  instance_name=$(create_test_instance "$TEST_BLUEPRINT" 2>/dev/null)
 
   if [[ -z "$instance_name" ]]; then
     skip_test "Instance creation failed - skipping test"
@@ -223,10 +221,8 @@ function test_remove_directories_success() {
   # Create directories first
   "$MODULE" create "$instance_name"
 
-  local config_file
-  config_file=$(validate_instance_name "$instance_name" 2>/dev/null)
   local working_dir
-  working_dir=$(grep "working_dir=" "$config_file" | head -1 | cut -d= -f2)
+  working_dir=$(__get_instance_config_value "$instance_name" "working_dir" 2>/dev/null)
 
   assert_dir_exists "$working_dir" "working_dir should exist before remove"
 

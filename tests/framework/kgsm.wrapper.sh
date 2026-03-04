@@ -135,12 +135,15 @@ function create_test_instance() {
   # Setup prerequisites (working dir + symlink)
   __setup_instance_prereqs "$blueprint" "$instance_name" "$install_dir" || return 1
 
-  # Create instance config
-  "$KGSM_MAIN_SCRIPT" instances create "$blueprint" --name "$instance_name" --install-dir "$install_dir" || return 1
+  local generated_instance_name
 
-  # Echo instance name for capture
-  echo "$instance_name"
-  return 0
+  # Create instance config
+  generated_instance_name=$("$KGSM_ROOT/kgsm.sh" instances create "$blueprint" --name "$instance_name" --install-dir "$install_dir" 2>/dev/null) || return 1
+
+  # Create instance management script
+  "$KGSM_ROOT/kgsm.sh" files management create "$instance_name" 1>/dev/null 2>&1 || return 1
+
+  echo "$generated_instance_name"
 }
 
 export -f create_test_instance
@@ -173,7 +176,7 @@ function remove_test_instance() {
   local install_dir="${3:-${TEST_INSTALL_DIR:-$TEST_SANDBOX_INSTANCES_INSTALL_DIR}}"
 
   # Remove instance config
-  "$KGSM_MAIN_SCRIPT" instances remove "$instance_name" || return 1
+  "$KGSM_ROOT/kgsm.sh" instances remove "$instance_name" || return 1
 
   # Cleanup directory structures
   __cleanup_instance "$blueprint" "$instance_name" "$install_dir"
@@ -230,7 +233,7 @@ export -f setup_instance_prereqs
 function generate_test_id() {
   local blueprint="${1:-test_blueprint}"
 
-  "$KGSM_MAIN_SCRIPT" instances generate-id "$blueprint"
+  "$KGSM_ROOT/kgsm.sh" instances generate-id "$blueprint"
   return $?
 }
 

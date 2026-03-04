@@ -49,6 +49,44 @@ EOF
   return 0
 }
 
+function setup_test() {
+  log_test_step "Setting up files.systemd logic tests"
+
+  assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
+  assert_dir_exists "$KGSM_ROOT" "KGSM_ROOT directory should exist"
+  assert_file_exists "$HANDLER" "Handler file should exist"
+
+  # Source the handler
+  # shellcheck disable=SC1090
+  source "$HANDLER"
+
+  assert_not_null "${KGSM_LOGIC_FILES_SYSTEMD_LOADED:-}" "Handler should be loaded after sourcing"
+
+  # Verify required error codes
+  assert_not_null "$EC_INVALID_ARG" "EC_INVALID_ARG should be defined"
+  assert_not_null "$EC_FILE_NOT_FOUND" "EC_FILE_NOT_FOUND should be defined"
+  assert_not_null "$EC_INVALID_CONFIG" "EC_INVALID_CONFIG should be defined"
+  assert_not_null "$EC_FAILED_LN" "EC_FAILED_LN should be defined"
+  assert_not_null "$EC_FAILED_RM" "EC_FAILED_RM should be defined"
+  assert_not_null "$EC_FAILED_UPDATE_CONFIG" "EC_FAILED_UPDATE_CONFIG should be defined"
+  assert_not_null "$EC_SUCCESS_SYMLINK_CREATED" "EC_SUCCESS_SYMLINK_CREATED should be defined"
+  assert_not_null "$EC_SUCCESS_SYMLINK_REMOVED" "EC_SUCCESS_SYMLINK_REMOVED should be defined"
+
+  # Verify handler functions are exported
+  assert_function_exists "__logic_enable_systemd_integration" \
+    "__logic_enable_systemd_integration should be exported"
+  assert_function_exists "__logic_disable_systemd_integration" \
+    "__logic_disable_systemd_integration should be exported"
+
+  # Create temp shortcuts directory
+  _TEST_SHORTCUTS_DIR="$KGSM_TEST_SANDBOX/test_shortcuts_$$"
+  mkdir -p "$_TEST_SHORTCUTS_DIR"
+
+  assert_dir_exists "$_TEST_SHORTCUTS_DIR" "Test shortcuts directory should be created"
+
+  log_test_step "Environment validated"
+}
+
 # =============================================================================
 # TEST FUNCTIONS - __logic_enable_systemd_integration()
 # =============================================================================

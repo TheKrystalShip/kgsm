@@ -350,9 +350,16 @@ function __logic_remove_instance() {
   fi
 
   # Remove blueprint directory if empty
+  # The directory will be a symlink, expect to be broken after removing the
+  # instance, so check if it's a symlink or empty directory before removing.
   local instances_dir="${KGSM_INSTANCES_DIR}/${blueprint_name}"
-  if [[ -d "$instances_dir" ]] && [[ -z "$(ls -A "$instances_dir" 2>/dev/null)" ]]; then
-    rmdir "$instances_dir" 2>/dev/null || true  # Don't fail if this fails
+
+  # Broken symlink means safe to remove
+  if [[ ! -e "$instances_dir" ]]; then
+    rm "$instances_dir" 2>/dev/null || true
+  # If it's a directory, only remove if empty
+  elif [[ -d "$instances_dir" && -z "$(ls -A "$instances_dir")" ]]; then
+    rmdir "$instances_dir" 2>/dev/null || true
   fi
 
   return $EC_SUCCESS_INSTANCE_REMOVED

@@ -198,7 +198,7 @@ function test_info_instance() {
 
   assert_equals 0 "$exit_code" "info should succeed"
   assert_not_null "$output" "info should produce output"
-  assert_contains "$output" "instance_name" "info output should contain instance_name key"
+  assert_contains "$output" "name=" "info output should contain name key"
 
   remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 }

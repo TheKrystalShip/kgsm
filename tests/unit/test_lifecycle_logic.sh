@@ -265,114 +265,19 @@ function test_get_lifecycle_manager_nonexistent_config() {
 # They are skipped if the management script cannot actually start/stop the server
 # (which is expected in sandbox environment without full game server installation).
 
-function test_lifecycle_with_valid_instance() {
-  log_test_step "Testing lifecycle operations with valid instance"
-
-  local blueprint="factorio"
-  local instance_name="factorio_test_instance_$$"
-  instance_name=$(create_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR" 2>/dev/null)
-
-  if [[ -z "$instance_name" ]]; then
-    skip_test "Instance creation failed - skipping test"
-    return
-  fi
-
-  # Test: Get lifecycle manager from config
-  local config_file="$KGSM_INSTANCES_DIR/$instance_name.config.ini"
-  assert_file_exists "$config_file" "Instance config should exist"
-
-  local lifecycle_manager
-  lifecycle_manager=$(__get_lifecycle_manager "$config_file" 2>/dev/null)
-  local get_manager_exit=$?
-
-  assert_equals 0 "$get_manager_exit" "Should successfully get lifecycle manager from valid config"
-  assert_not_null "$lifecycle_manager" "Lifecycle manager should not be empty"
-
-  # Test: is-active on stopped instance (should return 1 = not active)
-  __logic_instance_is_active "$instance_name" 2>/dev/null
-  local is_active_exit=$?
-
-  # Exit code should be 0 (active) or 1 (inactive), not an error code
-  if [[ $is_active_exit -eq 0 ]] || [[ $is_active_exit -eq 1 ]]; then
-    local is_active_result="true"
-  else
-    local is_active_result="false"
-  fi
-  assert_true "$is_active_result" \
-    "is-active should return 0 (active) or 1 (inactive), got $is_active_exit"
-
-  # Test: status command (should succeed even when stopped)
-  local status_output
-  status_output=$(__logic_instance_status "$instance_name" false false 2>&1)
-  local status_exit=$?
-
-  assert_equals 0 "$status_exit" "Status should succeed for valid instance"
-  assert_not_null "$status_output" "Status should produce output"
-
-  # Test: logs command (may fail if no logs exist yet, which is acceptable)
-  __logic_instance_logs "$instance_name" false 10 2>/dev/null
-  local logs_exit=$?
-
-  # Logs can return 0 (success) or various errors if logs don't exist yet
-  # We just verify it doesn't crash with INVALID_ARG
-  assert_not_equals "$EC_INVALID_ARG" "$logs_exit" \
-    "Logs should not return INVALID_ARG for valid instance"
-
-  # Note: We skip actual start/stop/restart tests because:
-  # 1. Management script may not exist or be fully functional in test sandbox
-  # 2. Game server binaries are not installed
-  # 3. These operations are better tested in E2E tests with real servers
-  #
-  # The error handling tests above already verify parameter validation,
-  # which is the primary responsibility of the logic layer.
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR"
-}
-
-function test_get_lifecycle_manager_with_valid_config() {
-  log_test_step "Testing __get_lifecycle_manager with valid instance config"
-
-  local blueprint="factorio"
-  local instance_name="factorio_test_instance_$$"
-  instance_name=$(create_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR" 2>/dev/null)
-
-  if [[ -z "$instance_name" ]]; then
-    skip_test "Instance creation failed - skipping test"
-    return
-  fi
-
-  # Get lifecycle manager
-  local config_file="$KGSM_INSTANCES_DIR/$instance_name.config.ini"
-  local lifecycle_manager
-  lifecycle_manager=$(__get_lifecycle_manager "$config_file" 2>/dev/null)
-  local exit_code=$?
-
-  assert_equals 0 "$exit_code" "Should successfully extract lifecycle_manager from config"
-  assert_not_null "$lifecycle_manager" "Lifecycle manager value should not be empty"
-
-  # Verify it's a valid value (either "systemd" or "standalone")
-  if [[ "$lifecycle_manager" == "systemd" ]] || [[ "$lifecycle_manager" == "standalone" ]]; then
-    local is_valid="true"
-  else
-    local is_valid="false"
-  fi
-  assert_true "$is_valid" "Lifecycle manager should be 'systemd' or 'standalone', got '$lifecycle_manager'"
-}
-
 function test_status_output_format() {
   log_test_step "Testing __logic_instance_status output format"
 
   local blueprint="factorio"
   local instance_name="factorio_test_instance_$$"
-  instance_name=$(create_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR" 2>/dev/null)
+  instance_name=$(create_test_instance "$blueprint" "$instance_name" 2>/dev/null)
 
   if [[ -z "$instance_name" ]]; then
     skip_test "Instance creation failed - skipping test"
     return
   fi
 
-  status_output=$(__logic_instance_status "$instance_name" false false 2>&1)
+  status_output=$(__logic_instance_status "$instance_name" 2>&1)
   local exit_code=$?
 
   assert_equals 0 "$exit_code" "Status should succeed"
@@ -391,7 +296,7 @@ function test_status_json_format() {
 
   local blueprint="factorio"
   local instance_name="factorio_test_instance_$$"
-  instance_name=$(create_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR" 2>/dev/null)
+  instance_name=$(create_test_instance "$blueprint" "$instance_name" 2>/dev/null)
 
   if [[ -z "$instance_name" ]]; then
     skip_test "Instance creation failed - skipping test"

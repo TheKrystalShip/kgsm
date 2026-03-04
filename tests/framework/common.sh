@@ -20,6 +20,8 @@ declare -g -r EC_TEST_FAILURE=1
 export EC_TEST_FAILURE
 declare -g -r EC_TEST_SKIP=33
 export EC_TEST_SKIP
+declare -g -r EC_BAIL_OUT=99
+export EC_BAIL_OUT
 
 # ============================================================================
 # Dependency Verification
@@ -167,6 +169,52 @@ function skip_test() {
 }
 
 export -f skip_test
+
+# Mark current test function as TODO (expected failure)
+# NOTE: Unlike skip_test, the function continues executing. Assertion failures
+# within a TODO function are recorded but NOT counted as test suite failures.
+# Usage: todo_test "known bug #123" (at the beginning of a test function)
+function todo_test() {
+  local reason="${1:-TODO}"
+  local func_name="${FUNCNAME[1]:-unknown}"
+
+  # Track TODO function (if assert.sh is loaded)
+  if declare -p ASSERT_FUNCTIONS_TODO &>/dev/null; then
+    ((ASSERT_FUNCTIONS_TODO++))
+    ASSERT_TODO_FUNCTION_NAMES+=("$func_name")
+  fi
+
+  # Print TODO message to stderr
+  if [[ "${KGSM_LOG_CONSOLE_ENABLED:-true}" == "true" ]]; then
+    printf "${YELLOW}[TODO]${NC} %s: %s\n" "$func_name" "$reason" >&2
+  fi
+
+  # Write TODO marker to test log for reporting
+  if [[ -n "${KGSM_TEST_LOG:-}" ]]; then
+    echo "[TODO] $func_name: $reason" >>"$KGSM_TEST_LOG"
+  fi
+
+  return 0
+}
+
+export -f todo_test
+
+# Immediately abort the entire test run (TAP v14 Bail out!)
+# Emits "Bail out! reason" to stdout and exits with EC_BAIL_OUT.
+# Usage: bail_out "Database connection lost" (in setup_test or test functions)
+function bail_out() {
+  local reason="${1:-}"
+
+  echo "Bail out! ${reason}"
+
+  if [[ -n "${KGSM_TEST_LOG:-}" ]]; then
+    echo "KGSM_BAIL_OUT: ${reason}" >>"$KGSM_TEST_LOG"
+  fi
+
+  exit $EC_BAIL_OUT
+}
+
+export -f bail_out
 
 # ============================================================================
 # Module Initialization Complete

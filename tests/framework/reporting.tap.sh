@@ -111,6 +111,75 @@ function __tap_emit_failure_details() {
 }
 export -f __tap_emit_failure_details
 
+# ------------------------------------------------------------------------------
+# Emit TAP v14 subtest lines from per-function result markers
+# ------------------------------------------------------------------------------
+# Parses KGSM_FUNC_RESULT markers from the test log and emits a TAP v14
+# subtest block (4-space indented) for each function. Includes SKIP/TODO
+# directives with reasons extracted from [SKIP]/[TODO] log markers.
+#
+# Arguments:
+#   $1 - log_path: Absolute path to the test log file
+# Returns:
+#   Exit code: 0
+# Output:
+#   Indented TAP subtest lines to stdout
+# ------------------------------------------------------------------------------
+function __tap_emit_subtests() {
+  local log_path="$1"
+
+  if [[ -z "$log_path" || ! -f "$log_path" ]]; then
+    return 0
+  fi
+
+  # Parse KGSM_FUNC_RESULT markers
+  local -a func_results
+  mapfile -t func_results < <(grep "^KGSM_FUNC_RESULT:" "$log_path" 2>/dev/null || true)
+
+  if [[ ${#func_results[@]} -eq 0 ]]; then
+    return 0
+  fi
+
+  local num_funcs=${#func_results[@]}
+
+  # Emit subtest plan
+  echo "    1..${num_funcs}"
+
+  local subtest_num=0
+  for result_line in "${func_results[@]}"; do
+    ((subtest_num++))
+    local data="${result_line#KGSM_FUNC_RESULT: }"
+    local fn_name fn_passed fn_failed fn_total fn_status
+    IFS='|' read -r fn_name fn_passed fn_failed fn_total fn_status <<< "$data"
+
+    case "$fn_status" in
+      pass)
+        echo "    ok ${subtest_num} - ${fn_name}"
+        ;;
+      fail)
+        echo "    not ok ${subtest_num} - ${fn_name}"
+        ;;
+      skip)
+        local skip_reason=""
+        skip_reason=$(grep "^\[SKIP\] ${fn_name}:" "$log_path" 2>/dev/null | sed "s/^\[SKIP\] ${fn_name}: //" | head -1 || true)
+        echo "    ok ${subtest_num} - ${fn_name} # SKIP ${skip_reason}"
+        ;;
+      todo)
+        local todo_reason=""
+        todo_reason=$(grep "^\[TODO\] ${fn_name}:" "$log_path" 2>/dev/null | sed "s/^\[TODO\] ${fn_name}: //" | head -1 || true)
+        if [[ "$fn_failed" -gt 0 ]]; then
+          echo "    not ok ${subtest_num} - ${fn_name} # TODO ${todo_reason}"
+        else
+          echo "    ok ${subtest_num} - ${fn_name} # TODO ${todo_reason}"
+        fi
+        ;;
+    esac
+  done
+
+  return 0
+}
+export -f __tap_emit_subtests
+
 # ==============================================================================
 # Module Initialization
 # ==============================================================================
