@@ -347,7 +347,7 @@ function __logic_is_active_standalone_instance() {
   fi
 
   # Check standalone process status - suppress stderr since this is pure logic
-  "$management_file" --is-active > /dev/null 2>&1
+  "$management_file" is-active > /dev/null 2>&1
   return $?
 }
 
@@ -394,7 +394,7 @@ function __logic_instance_status() {
   fi
 
   # Call the management script's status function with appropriate flags
-  "$management_file" --status ${json_format:+--json} ${fast_mode:+--fast}
+  "$management_file" status ${json_format:+--json} ${fast_mode:+--fast}
 
   return $?
 }
@@ -496,9 +496,9 @@ function __logic_logs_standalone_instance() {
 
   # Display logs using management script with appropriate parameters
   if [[ "$follow_flag" == "true" ]]; then
-    "$management_file" --logs --follow --tail "$line_count"
+    "$management_file" logs --follow --tail "$line_count"
   else
-    "$management_file" --logs --tail "$line_count"
+    "$management_file" logs --tail "$line_count"
   fi
 
   return $?

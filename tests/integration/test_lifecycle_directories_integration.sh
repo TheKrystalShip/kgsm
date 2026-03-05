@@ -273,10 +273,10 @@ function test_lifecycle_fails_after_directories_remove() {
   cat > "$manage_file" << 'STUB_EOF'
 #!/usr/bin/env bash
 case "$1" in
-  --is-active) exit 1 ;;  # Report as inactive
-  --status) echo '{"running": false}'; exit 0 ;;
-  --start) exit 0 ;;
-  --stop) exit 0 ;;
+  is-active) exit 1 ;;  # Report as inactive
+  status) echo '{"running": false}'; exit 0 ;;
+  start) exit 0 ;;
+  stop) exit 0 ;;
   *) exit 1 ;;
 esac
 STUB_EOF
@@ -337,21 +337,17 @@ function test_lifecycle_with_stub_manage_script() {
   cat > "$manage_file" << 'STUB_EOF'
 #!/usr/bin/env bash
 case "$1" in
-  --is-active)
+  is-active)
     exit 1  # Stopped
     ;;
-  --status)
+  status)
     echo '{"name":"'$0'","running":false,"version":"1.0.0"}'
     exit 0
     ;;
-  --status\ --json\ --fast|--status\ --json|--status\ --fast)
-    echo '{"running":false}'
+  start)
     exit 0
     ;;
-  --start|--start\ --background)
-    exit 0
-    ;;
-  --stop)
+  stop)
     exit 0
     ;;
   *)

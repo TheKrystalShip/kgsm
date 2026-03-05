@@ -181,12 +181,12 @@ function _cmd_install() {
   # Determine version
   if [[ "$version" == 0 ]]; then
     # shellcheck disable=SC2154
-    version=$("$instance_management_file" --version --latest)
+    version=$("$instance_management_file" version --latest)
   fi
 
   # Download game files
   events.sh emit instance-download-started "${instance}"
-  "$instance_management_file" --download "${version}" || {
+  "$instance_management_file" download "${version}" || {
     __print_error "Failed to download game files"
     events.sh emit instance-download-failed "${instance}"
     return $EC_FAILED_DOWNLOAD
@@ -196,7 +196,7 @@ function _cmd_install() {
 
   # Deploy the instance
   events.sh emit instance-deploy-started "${instance}"
-  "$instance_management_file" --deploy || {
+  "$instance_management_file" deploy || {
     __print_error "Failed to deploy instance"
     events.sh emit instance-deploy-failed "${instance}"
     return $EC_FAILED_DEPLOY
@@ -205,7 +205,7 @@ function _cmd_install() {
   events.sh emit instance-deployed "${instance}"
 
   # Save version
-  "$instance_management_file" --version --save "$version" || {
+  "$instance_management_file" version --save "$version" || {
     __print_error "Failed to save version information"
     return $EC_FAILED_VERSION_SAVE
   }

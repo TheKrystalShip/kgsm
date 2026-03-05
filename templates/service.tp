@@ -7,8 +7,8 @@ Type=exec
 PIDFile=$instance_pid_file
 User=$INSTANCE_USER
 WorkingDirectory=$instance_working_dir
-ExecStart=$instance_management_file --start
-ExecStop=$instance_management_file --stop
+ExecStart=$instance_management_file start --detached
+ExecStop=$instance_management_file stop
 NonBlocking=true
 
 Restart=on-failure

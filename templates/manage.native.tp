@@ -28,11 +28,21 @@ if [[ $@ =~ "--debug" ]]; then
   done
 fi
 
+# Local exit code constants (mirrors core/errors.sh for standalone use)
+readonly EC_SUCCESS=0
+readonly EC_ERROR=1
+readonly EC_MISSING_ARG=7
+readonly EC_INVALID_ARG=8
+
 # Get the directory where this script is located
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 
 # Security function to validate configuration keys
 # Prevents code injection through malicious config files by ensuring
+
+# =============================================================================
+# CONFIGURATION AND INITIALIZATION
+# =============================================================================
 # only safe variable names can be exported to the environment
 function __validate_config_key() {
   local key="$1"
@@ -53,7 +63,7 @@ function __source_instance_config() {
 
   if [[ ! -f "$config_file" ]]; then
     echo "ERROR: Instance configuration file not found: $config_file"
-    exit 1
+    exit $EC_ERROR
   fi
 
   # Source the configuration file and prefix all variables with "instance_"
@@ -73,7 +83,7 @@ function __source_instance_config() {
       echo "ERROR: Invalid configuration key '$key' in $config_file"
       echo "Configuration keys must contain only alphanumeric characters and underscores,"
       echo "and must start with a letter or underscore."
-      exit 1
+      exit $EC_ERROR
     fi
 
     # Remove quotes from value
@@ -99,225 +109,436 @@ CONFIG_FILE="$SCRIPT_DIR/${INSTANCE_NAME}.config.ini"
 
 if [[ ! -f "$CONFIG_FILE" ]]; then
   __print_error "Configuration file not found: $CONFIG_FILE"
-  exit 1
+  exit $EC_ERROR
 fi
 
 __source_instance_config "$CONFIG_FILE"
 
 self=$(basename "$0")
 
-function usage() {
-  echo "
-Usage:
-  $self OPTION
-
-Options:
-  -h, --help                Display this help message
-  start [-d, --detached]    Start the server in the current terminal
-  stop                      Stop the server
-  stop [--no-save]          Do not save on shutdown
-  stop [--no-graceful]      Kill the server process without sending it the
-                            stop command.
-  --kill                    Kill the server process
-  --save                    Save the current game state
-  --is-active               Prints if the server is active
-  --status                  Display comprehensive runtime status
-  --status --json           Output status information as JSON
-  --status --fast           Display status without update checking (faster)
-  --status --json --fast    Output fast status as JSON
-  --input <command>         Send an ad-hoc command to the server
-
-  --logs                    Print last 10 lines of the log (default)
-  --logs --tail <number>    Print last <number> lines of the log
-  --logs --lines <number>   Alias for --tail (Unix standard)
-  --logs -n <number>        Alias for --tail (short form)
-  --logs [-f, --follow]     Print live logs (starts with last 10 lines)
-  --logs --follow --tail <number>  Follow logs starting with last <number> lines
-  --enable-upnp             Enable UPnP ports
-  --disable-upnp            Disable UPnP ports
-
-  --download                Downloads the game server files
-  --download [version]      Downloads the game server files for a specific version
-  --deploy                  Deploys the game server files from the temporary directory
-  --update                  Updates the game server files to the latest version
-
-  --list-backups            Print a list of available backups
-  --create-backup           Create a backup of the game server files
-  --restore-backup <source> Restore a specified backup
-
-  --version                 Print the locally installed version
-  --version [--save <ver>]  Save a given version to file
-  --version [--latest]      Print the latest available version
-  --version [--compare]     Test the local version vs the latest available.
-                            If the latest is different, it will be printed to
-                            stdout
-
-Examples:
-  $self start --detached
-  $self attach
-  $self --input '/save'
-  $self stop
-  $self --logs --tail 50
-  $self --logs --follow --tail 100
-"
-}
-
-SUCCESS="SUCCESS"
-INFO="INFO"
-ERROR="ERROR"
-WARNING="WARNING"
-
-## Colored output
-# Check if stdout is tty
-if test -t 1; then
-  ncolors=0
-
-  # Check for availability of tput
-  if command -v tput >/dev/null 2>&1; then
-    ncolors="$(tput colors)"
-  fi
-
-  # More than 8 means it supports colors
-  if [[ $ncolors ]] && [[ "$ncolors" -gt 8 ]]; then
-    export COLOR_RED="\033[0;31m"
-    export COLOR_GREEN="\033[0;32m"
-    export COLOR_ORANGE="\033[0;33m"
-    export COLOR_BLUE="\033[0;34m"
-    export COLOR_END="\033[0m"
-
-    SUCCESS="${COLOR_GREEN}${SUCCESS}${COLOR_END}"
-    INFO="${COLOR_BLUE}${INFO}${COLOR_END}"
-    ERROR="${COLOR_RED}${ERROR}${COLOR_END}"
-    WARNING="${COLOR_ORANGE}${WARNING}${COLOR_END}"
+# Color output support
+COLOR_RED="" COLOR_GREEN="" COLOR_ORANGE="" COLOR_BLUE="" COLOR_END=""
+if test -t 1 && command -v tput >/dev/null 2>&1; then
+  if [[ "$(tput colors 2>/dev/null)" -gt 8 ]] 2>/dev/null; then
+    COLOR_RED="\033[0;31m"
+    COLOR_GREEN="\033[0;32m"
+    COLOR_ORANGE="\033[0;33m"
+    COLOR_BLUE="\033[0;34m"
+    COLOR_END="\033[0m"
   fi
 fi
 
 function __print_success() {
-  echo -e "[$SUCCESS] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1"
+  echo -e "[${COLOR_GREEN}SUCCESS${COLOR_END}] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1"
 }
 
 function __print_info() {
-  echo -e "[$INFO] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1"
+  echo -e "[${COLOR_BLUE}INFO${COLOR_END}] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1"
 }
 
 function __print_error() {
-  echo -e "[$ERROR] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1" >&2
+  echo -e "[${COLOR_RED}ERROR${COLOR_END}] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1" >&2
 }
 
 function __print_warning() {
-  echo -e "[$WARNING] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1" >&2
+  echo -e "[${COLOR_ORANGE}WARNING${COLOR_END}] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1" >&2
 }
 
 set -o pipefail
 
-if [[ $# -eq 0 ]]; then
-  __print_error "Missing arguments"
-  exit 1
-fi
+# =============================================================================
+# HELP SYSTEM
+# =============================================================================
 
-function _rotate_log_file() {
-  local log_file="$1"
+function show_usage() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+  local BOLD="\e[1m"
 
-  # Do nothing if the log file doesn't exist or is empty
-  if [[ ! -s "$log_file" ]]; then
-    return
-  fi
+  echo -e "${UNDERLINE}Instance Management - ${instance_name}${END}
 
-  # Create a timestamp for the new log file
-  local timestamp
-  timestamp=$(date +"%Y-%m-%dT%H:%M:%S")
+Manage this game server instance directly.
 
-  # Construct the new filename
-  local rotated_log_file="${instance_logs_dir}/${instance_name}.${timestamp}.log"
+${UNDERLINE}Usage:${END}
+  $self <command> [arguments] [options]
 
-  if mv "$log_file" "$rotated_log_file"; then
-    __print_success "Rotated log file $log_file to $rotated_log_file"
-  else
-    __print_error "Failed to rotate log file $log_file to $rotated_log_file"
-    return 1
-  fi
+${BOLD}${UNDERLINE}Lifecycle Commands:${END}
+  start [-d, --detached]      Start the server
+  stop [--no-save] [--no-graceful]  Stop the server
+  restart                     Restart the server (stop + start)
+  attach                      Attach to running server console
+  kill                        Kill the server process
+  is-active                   Check if the server is running
 
-  return 0
+${BOLD}${UNDERLINE}Server Commands:${END}
+  save                        Save the current game state
+  input <command>             Send a command to the server console
+  status [--json] [--fast]    Display comprehensive runtime status
+  logs [-f] [--tail N]        View server logs
+
+${BOLD}${UNDERLINE}Version & Update Commands:${END}
+  version [--latest|--compare|--save <ver>]  Version management
+  download [version]          Download game server files
+  deploy                      Deploy files from temp directory
+  update                      Update to latest version
+
+${BOLD}${UNDERLINE}Backup Commands:${END}
+  backup create               Create a backup
+  backup restore <source>     Restore a specified backup
+  backup list                 List available backups
+
+${BOLD}${UNDERLINE}Network Commands:${END}
+  upnp enable                 Enable UPnP port forwarding
+  upnp disable                Disable UPnP port forwarding
+
+${BOLD}${UNDERLINE}Other:${END}
+  help [command]              Display help information
+  -h, --help                  Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self start --detached
+  $self stop
+  $self logs --follow --tail 50
+  $self status --json
+  $self backup create
+  $self version --latest
+  $self help start
+"
 }
 
-function _enable_upnp() {
-  local output
+function show_usage_start() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
 
-  __print_info "Enabling UPnP..."
+  echo -e "${UNDERLINE}Start Command${END}
 
-  # Check if UPnP ports array is set and not empty
-  # This prevents command failures when the array is unset or empty
-  if [[ -z "${instance_upnp_ports[*]:-}" ]]; then
-    __print_error "No UPnP ports configured (instance_upnp_ports is empty or unset)"
-    return 1
-  fi
+Start the game server.
 
-  if ! output=$(upnpc -e "$instance_name" -r "${instance_upnp_ports[@]}" 2>&1); then
-    __print_error "Failed to enable UPnP ports"
-    __print_error "To stop these messages, set 'enable_port_forwarding' to 'false' in $CONFIG_FILE"
-    __print_error "${output}"
-    return 1
-  fi
+${UNDERLINE}Usage:${END}
+  $self start [options]
 
-  # Mark UPnP as enabled
-  touch "$instance_port_forwarding_state_file"
-  __print_success "UPnP enabled"
+${UNDERLINE}Options:${END}
+  -d, --detached              Start in background (detached) mode
+  -h, --help                  Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self start
+  $self start --detached
+"
 }
 
-function _disable_upnp() {
-  local output
+function show_usage_stop() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
 
-  __print_info "Disabling UPnP..."
+  echo -e "${UNDERLINE}Stop Command${END}
 
-  # Check if UPnP ports array is set and not empty
-  # This prevents command failures when the array is unset or empty
-  if [[ -z "${instance_upnp_ports[*]:-}" ]]; then
-    __print_error "No UPnP ports configured (instance_upnp_ports is empty or unset)"
-    return 1
-  fi
+Gracefully stop the running game server.
 
-  if ! output=$(upnpc -f "${instance_upnp_ports[@]}" 2>&1); then
-    __print_error "Failed to disable UPnP ports"
-    __print_error "To stop these messages, set 'enable_port_forwarding' to 'false' in $CONFIG_FILE"
-    __print_error "${output}"
-    return 1
-  fi
+${UNDERLINE}Usage:${END}
+  $self stop [options]
 
-  # Mark UPnP as disabled
-  rm -f "$instance_port_forwarding_state_file"
-  __print_success "UPnP disabled"
+${UNDERLINE}Options:${END}
+  --no-save                   Do not save game state before stopping
+  --no-graceful               Kill immediately without sending stop command
+  -h, --help                  Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self stop
+  $self stop --no-save
+  $self stop --no-graceful
+"
 }
 
-# Helper function to check if UPnP is currently enabled
-function _is_upnp_enabled() {
-  [[ -f "$instance_port_forwarding_state_file" ]]
+function show_usage_restart() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Restart Command${END}
+
+Stop and then start the game server.
+
+${UNDERLINE}Usage:${END}
+  $self restart
+
+${UNDERLINE}Options:${END}
+  -h, --help                  Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self restart
+"
 }
 
-# Cleanup function to run on script exit, removing the PID file and disabling UPnP
-# This function is called on INT, TERM, and EXIT signals, don't call it directly
-# shellcheck disable=SC2329
-function _cleanup_on_exit() {
-  __print_warning "Caught exit signal, performing cleanup..."
+function show_usage_attach() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
 
-  # Clean up PID file if it exists (foreground mode)
-  if [[ -f "$instance_pid_file" ]]; then
-    __print_info "Removing instance PID file $instance_pid_file on exit"
+  echo -e "${UNDERLINE}Attach Command${END}
+
+Attach to the running server console for interactive input.
+
+${UNDERLINE}Usage:${END}
+  $self attach
+
+${UNDERLINE}Examples:${END}
+  $self attach
+"
+}
+
+function show_usage_status() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Status Command${END}
+
+Display comprehensive runtime status information.
+
+${UNDERLINE}Usage:${END}
+  $self status [options]
+
+${UNDERLINE}Options:${END}
+  --json                      Output status information as JSON
+  --fast                      Skip update checking for faster response
+  -h, --help                  Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self status
+  $self status --json
+  $self status --fast
+  $self status --json --fast
+"
+}
+
+function show_usage_logs() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Logs Command${END}
+
+View server log entries.
+
+${UNDERLINE}Usage:${END}
+  $self logs [options]
+
+${UNDERLINE}Options:${END}
+  -f, --follow                Continuously follow log output in real-time
+  --tail, -n <number>         Display last <number> lines (default: 10)
+  -h, --help                  Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self logs
+  $self logs --follow
+  $self logs --tail 50
+  $self logs --follow --tail 100
+"
+}
+
+function show_usage_version() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Version Command${END}
+
+Manage version information for this instance.
+
+${UNDERLINE}Usage:${END}
+  $self version [options]
+
+${UNDERLINE}Options:${END}
+  --latest                    Print the latest available version
+  --compare                   Compare installed vs latest version
+  --save <version>            Save a version string to file
+  -h, --help                  Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self version
+  $self version --latest
+  $self version --compare
+  $self version --save 1.2.3
+"
+}
+
+function show_usage_backup() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Backup Command${END}
+
+Manage game server backups.
+
+${UNDERLINE}Usage:${END}
+  $self backup <subcommand>
+
+${UNDERLINE}Subcommands:${END}
+  create                      Create a backup of current server files
+  restore <source>            Restore from a specified backup
+  list                        List available backups
+
+${UNDERLINE}Examples:${END}
+  $self backup create
+  $self backup list
+  $self backup restore mybackup.tar.gz
+"
+}
+
+function show_usage_upnp() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}UPnP Command${END}
+
+Manage UPnP port forwarding.
+
+${UNDERLINE}Usage:${END}
+  $self upnp <subcommand>
+
+${UNDERLINE}Subcommands:${END}
+  enable                      Enable UPnP port forwarding
+  disable                     Disable UPnP port forwarding
+
+${UNDERLINE}Examples:${END}
+  $self upnp enable
+  $self upnp disable
+"
+}
+
+function show_usage_download() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Download Command${END}
+
+Download game server files.
+
+${UNDERLINE}Usage:${END}
+  $self download [version]
+
+${UNDERLINE}Arguments:${END}
+  version                     Specific version to download (optional)
+
+${UNDERLINE}Examples:${END}
+  $self download
+  $self download 1.2.3
+"
+}
+
+function show_usage_update() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Update Command${END}
+
+Update the game server to the latest version.
+
+${UNDERLINE}Usage:${END}
+  $self update
+
+${UNDERLINE}Examples:${END}
+  $self update
+"
+}
+
+function _cmd_help() {
+  if [[ -z "${1:-}" ]]; then
+    show_usage
+    return $EC_SUCCESS
+  fi
+
+  case "$1" in
+  start)
+    show_usage_start
+    ;;
+  stop)
+    show_usage_stop
+    ;;
+  restart)
+    show_usage_restart
+    ;;
+  attach)
+    show_usage_attach
+    ;;
+  status)
+    show_usage_status
+    ;;
+  logs)
+    show_usage_logs
+    ;;
+  version)
+    show_usage_version
+    ;;
+  backup)
+    show_usage_backup
+    ;;
+  upnp)
+    show_usage_upnp
+    ;;
+  download)
+    show_usage_download
+    ;;
+  deploy)
+    show_usage_download
+    ;;
+  update)
+    show_usage_update
+    ;;
+  kill | save | input | is-active)
+    show_usage
+    ;;
+  *)
+    __print_error "Unknown command: $1"
+    __print_error "Use '$self help' for available commands"
+    return $EC_INVALID_ARG
+    ;;
+  esac
+  return $EC_SUCCESS
+}
+
+# =============================================================================
+# PROCESS MANAGEMENT
+# =============================================================================
+
+# This function checks if the server is active by checking the PID file
+# and verifying if the process with that PID is still running
+# Fixed to prevent race conditions using atomic file operations
+function _is_active() {
+  local server_pid
+
+  # Atomic read operation: attempt to read PID file content directly
+  # This eliminates the TOCTOU (Time of Check, Time of Use) vulnerability
+  # where the file could be modified between checking existence and reading
+  if ! server_pid=$(cat "$instance_pid_file" 2>/dev/null); then
+    # File doesn't exist, is unreadable, or read failed
+    __print_info "Inactive" && return 1
+  fi
+
+  # Check if PID file content is empty or contains only whitespace
+  if [[ -z "${server_pid// /}" ]]; then
+    __print_error "Instance PID file present but empty, removing"
+    # Safe removal: only remove if file still exists and is empty
+    if [[ -f "$instance_pid_file" ]] && [[ ! -s "$instance_pid_file" ]]; then
+      rm -f "$instance_pid_file"
+    fi
+    __print_info "Inactive" && return 1
+  fi
+
+  # Validate that PID is numeric to prevent injection attacks
+  if [[ ! "$server_pid" =~ ^[0-9]+$ ]]; then
+    __print_error "Instance PID file contains invalid PID: '$server_pid', removing"
     rm -f "$instance_pid_file"
+    __print_info "Inactive" && return 1
   fi
 
-  # Disable UPnP if ALL conditions are met:
-  # 1. Port forwarding is enabled
-  # 2. UPnP state file exists (was enabled at some point)
-  # 3. Instance is NOT running
-  if [[ "${instance_enable_port_forwarding:-false}" == "true" ]] && \
-      [[ -f "$instance_port_forwarding_state_file" ]] && \
-      ! _is_active &>/dev/null; then
-      __print_info "Disabling UPnP ports on exit"
-      _disable_upnp
+  # Check if the process with that PID is running
+  # Using kill -0 which doesn't actually send a signal, just checks existence
+  if kill -0 "$server_pid" 2>/dev/null; then
+    __print_info "Active" && return 0
+  else
+    # Process is not running anymore, remove stale PID file
+    __print_error "Instance PID file references non-existent process (PID: $server_pid), removing"
+    rm -f "$instance_pid_file"
+    __print_info "Inactive" && return 1
   fi
 }
-
-trap _cleanup_on_exit INT TERM
 
 # Start the server in detachable mode (fake foreground)
 # Server runs in background but terminal is attached to logs and input
@@ -334,54 +555,6 @@ function _start() {
 
   # Attach to the running instance
   _attach_to_instance
-}
-
-# Attach to a running server instance
-# Provides interactive console with log output and command input
-function _attach_to_instance() {
-  if ! _is_active &>/dev/null; then
-    __print_error "Cannot attach: $instance_name is not running"
-    return 1
-  fi
-
-  __print_info "Attaching to $instance_name console"
-  __print_info "Type '.detach' to disconnect (server will continue running)"
-  __print_info "Press Ctrl+C to stop the server"
-
-  # Start log follower in background
-  # Using --pid=$$ ensures tail exits when this shell exits
-  _print_logs --follow -n 50 2>/dev/null &
-
-  # Trap Ctrl+C to stop server (expected behavior when attached)
-  trap '_stop_server && echo "" && return 0' INT
-
-  # Read loop with prompt
-  while IFS= read -r -e -p "[$instance_name]> " line; do
-    # Check if server is still running before processing input
-    if ! _is_active &>/dev/null; then
-      __print_info "$instance_name has stopped, returning to shell"
-      echo ""
-      return 0
-    fi
-
-    # Check for detach command
-    if [[ "$line" == ".detach" ]]; then
-      __print_info "Detaching from $instance_name (server continues running)"
-      __print_info "Use '${self} attach' to re-attach"
-      break
-    fi
-
-    # Skip empty input
-    [[ -z "$line" ]] && continue
-
-    # Send to socket
-    if [[ -p "$instance_socket_file" ]]; then
-      echo "$line" >"$instance_socket_file"
-    else
-      __print_error "Socket not available, server may have stopped"
-      break
-    fi
-  done
 }
 
 # Start the server in the background
@@ -459,6 +632,122 @@ function _start_background() {
   __print_success "Socket keepalive process started (auto-exit when server dies)"
 }
 
+# Attach to a running server instance
+# Provides interactive console with log output and command input
+function _attach_to_instance() {
+  if ! _is_active &>/dev/null; then
+    __print_error "Cannot attach: $instance_name is not running"
+    return 1
+  fi
+
+  __print_info "Attaching to $instance_name console"
+  __print_info "Type '.detach' to disconnect (server will continue running)"
+  __print_info "Press Ctrl+C to stop the server"
+
+  # Start log follower in background
+  # Using --pid=$$ ensures tail exits when this shell exits
+  _print_logs true 50 2>/dev/null &
+
+  # Trap Ctrl+C to stop server (expected behavior when attached)
+  trap '_stop_server && echo "" && return 0' INT
+
+  # Read loop with prompt
+  while IFS= read -r -e -p "[$instance_name]> " line; do
+    # Check if server is still running before processing input
+    if ! _is_active &>/dev/null; then
+      __print_info "$instance_name has stopped, returning to shell"
+      echo ""
+      return 0
+    fi
+
+    # Check for detach command
+    if [[ "$line" == ".detach" ]]; then
+      __print_info "Detaching from $instance_name (server continues running)"
+      __print_info "Use '${self} attach' to re-attach"
+      break
+    fi
+
+    # Skip empty input
+    [[ -z "$line" ]] && continue
+
+    # Send to socket
+    if [[ -p "$instance_socket_file" ]]; then
+      echo "$line" >"$instance_socket_file"
+    else
+      __print_error "Socket not available, server may have stopped"
+      break
+    fi
+  done
+}
+
+# Stop the server gracefully or forcefully
+# This function will also save the game state if requested
+# and remove the PID file and the named pipe
+function _stop_server() {
+  local no_save=0
+  local no_graceful=0
+
+  __print_info "Stopping $self"
+
+  if ! _is_active &>/dev/null; then
+    __print_error "Instance '$instance_name' is not running"
+    return 0
+  fi
+
+  # Process arguments without destroying them
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+    --no-save) no_save=1 ;;
+    --no-graceful) no_graceful=1 ;;
+      # Skip the special argument passed in some cases
+    "\@") continue ;;
+    *) continue ;;
+    esac
+  done
+
+  if [[ "$no_save" -eq 0 ]]; then
+    _send_save_command
+  fi
+
+  if [[ "$no_graceful" -eq 0 ]]; then
+    # Send stop command to socket
+    if [[ -p "$instance_socket_file" ]]; then
+      if [[ -n "$instance_stop_command" ]]; then
+        echo "$instance_stop_command" >"$instance_socket_file"
+      fi
+    fi
+  fi
+
+  _kill_all_processes
+
+  [[ -f "$instance_pid_file" ]] && rm -f "$instance_pid_file"
+  [[ -p "$instance_socket_file" ]] && rm -f "$instance_socket_file"
+
+  if [[ "$instance_enable_port_forwarding" == "true" ]]; then
+    _disable_upnp
+  fi
+
+  __print_success "Instance '$instance_name' stopped"
+}
+
+# This function is used to stop the server gracefully with a timeout
+# If the server does not stop within the timeout, it will be killed forcefully
+function _timed_stop() {
+  local no_save=$1
+  local no_graceful=$2
+
+  # Export functions needed by _stop_server in the timeout subshell
+  export -f _stop_server _kill_all_processes _is_active _send_save_command
+  export -f _disable_upnp _is_upnp_enabled
+  export -f __print_info __print_error __print_success __print_warning
+
+  if ! timeout "$instance_stop_command_timeout_seconds" bash -c '_stop_server "$@"' _ ${no_save:+--no-save} ${no_graceful:+--no-graceful}; then
+    __print_error "Timeout reached, killing instance"
+    _kill_all_processes
+  fi
+}
+
 # Kill the server process and all its children
 # This function will also remove the PID file and the named pipe
 # Fixed to prevent race conditions and properly handle child process arrays
@@ -512,67 +801,44 @@ function _kill_all_processes() {
   fi
 }
 
-# Stop the server gracefully or forcefully
-# This function will also save the game state if requested
-# and remove the PID file and the named pipe
-function _stop_server() {
-  local no_save=0
-  local no_graceful=0
+# Cleanup function to run on script exit, removing the PID file and disabling UPnP
+# This function is called on INT, TERM, and EXIT signals, don't call it directly
+# shellcheck disable=SC2329
+function _cleanup_on_exit() {
+  __print_warning "Caught exit signal, performing cleanup..."
 
-  __print_info "Stopping $self"
-
-  if ! _is_active &>/dev/null; then
-    __print_error "Instance '$instance_name' is not running"
-    return 0
+  # Clean up PID file if it exists (foreground mode)
+  if [[ -f "$instance_pid_file" ]]; then
+    __print_info "Removing instance PID file $instance_pid_file on exit"
+    rm -f "$instance_pid_file"
   fi
 
-  # Process arguments without destroying them
-  local arg
-  for arg in "$@"; do
-    case "$arg" in
-    --no-save) no_save=1 ;;
-    --no-graceful) no_graceful=1 ;;
-      # Skip the special argument passed in some cases
-    "\@") continue ;;
-    *) continue ;;
-    esac
-  done
-
-  if [[ ! "$no_save" ]]; then
-    _send_save_command
-  fi
-
-  if [[ ! "$no_graceful" ]]; then
-    # Send stop command to socket
-    if [[ -p "$instance_socket_file" ]]; then
-      if [[ -n "$instance_stop_command" ]]; then
-        echo "$instance_stop_command" >"$instance_socket_file"
-      fi
-    fi
-  fi
-
-  _kill_all_processes
-
-  [[ -f "$instance_pid_file" ]] && rm -f "$instance_pid_file"
-  [[ -p "$instance_socket_file" ]] && rm -f "$instance_socket_file"
-
-  if [[ "$instance_enable_port_forwarding" == "true" ]]; then
+  # Disable UPnP if ALL conditions are met:
+  # 1. Port forwarding is enabled
+  # 2. UPnP state file exists (was enabled at some point)
+  # 3. Instance is NOT running
+  if [[ "${instance_enable_port_forwarding:-false}" == "true" ]] &&
+    [[ -f "$instance_port_forwarding_state_file" ]] &&
+    ! _is_active &>/dev/null; then
+    __print_info "Disabling UPnP ports on exit"
     _disable_upnp
   fi
-
-  __print_success "Instance '$instance_name' stopped"
 }
 
-# This function is used to stop the server gracefully with a timeout
-# If the server does not stop within the timeout, it will be killed forcefully
-function _timed_stop() {
-  local no_save=$1
-  local no_graceful=$2
+trap _cleanup_on_exit INT TERM
 
-  # UPnP can take a few seconds, so to avoid preemptive timeout we wait longer
-  if ! timeout "$instance_stop_command_timeout_seconds" "$0" --internal-stop ${no_save:+--no-save} ${no_graceful:+--no-graceful} $debug; then
-    __print_error "Timeout reached, killing instance"
-    exec "$0" --kill $debug
+# =============================================================================
+# SERVER I/O
+# =============================================================================
+
+# This function is used to send input commands to the server through
+# the named pipe
+function _send_input() {
+  if [[ -p "$instance_socket_file" ]]; then
+    echo "$1" >>"$instance_socket_file"
+  else
+    __print_error "Input failed: No active server found."
+    return 1
   fi
 }
 
@@ -594,86 +860,168 @@ function _send_save_command() {
   fi
 }
 
-# This function is used to send input commands to the server through
-# the named pipe
-function _send_input() {
-  if [[ -p "$instance_socket_file" ]]; then
-    echo "$1" >>"$instance_socket_file"
-  else
-    __print_error "Input failed: No active server found."
+# =============================================================================
+# VERSION MANAGEMENT
+# =============================================================================
+
+function _get_installed_version() {
+  # shellcheck disable=SC2154
+  # $instance_version_file is set dynamically from the config file
+  # check "__source_instance_config"
+  cat "$instance_version_file" 2>/dev/null || echo "unknown"
+}
+
+function _get_latest_version() {
+  # Build login arguments based on authentication requirement
+  local login_args="anonymous"
+  if [[ "$instance_is_steam_account_required" == "true" ]]; then
+    if [[ -z "$STEAM_USERNAME" ]]; then
+      __print_error "STEAM_USERNAME is expected but it's not set"
+      return 1
+    fi
+
+    if [[ -z "$STEAM_PASSWORD" ]]; then
+      __print_error "STEAM_PASSWORD is expected but it's not set"
+      return 1
+    fi
+
+    # Authenticated login: pass username and password as separate arguments
+    login_args="$STEAM_USERNAME $STEAM_PASSWORD"
+  fi
+
+  local latest_version
+  latest_version=$(
+    steamcmd \
+      +login $login_args \
+      +app_info_update 1 \
+      +app_info_print $instance_steam_app_id \
+      +quit |
+      tr '\n' ' ' |
+      grep --color=NEVER \
+        -Po '"branches"\s*{\s*"public"\s*{\s*"buildid"\s*"\K(\d*)'
+  )
+
+  if [[ -z "$latest_version" ]]; then
+    __print_error "Failed to retrieve latest version, got empty response from SteamCMD"
     return 1
   fi
+
+  echo "$latest_version"
 }
 
-# This function checks if the server is active by checking the PID file
-# and verifying if the process with that PID is still running
-# Fixed to prevent race conditions using atomic file operations
-function _is_active() {
-  local server_pid
+function _compare_versions() {
+  local installed_version
+  installed_version=$(_get_installed_version)
 
-  # Atomic read operation: attempt to read PID file content directly
-  # This eliminates the TOCTOU (Time of Check, Time of Use) vulnerability
-  # where the file could be modified between checking existence and reading
-  if ! server_pid=$(cat "$instance_pid_file" 2>/dev/null); then
-    # File doesn't exist, is unreadable, or read failed
-    __print_info "Inactive" && return 1
+  local latest_version
+  latest_version=$(_get_latest_version)
+
+  if [[ -z "$latest_version" ]]; then
+    __print_error "No version information was returned from remote"
+    return 1
   fi
 
-  # Check if PID file content is empty or contains only whitespace
-  if [[ -z "${server_pid// /}" ]]; then
-    __print_error "Instance PID file present but empty, removing"
-    # Safe removal: only remove if file still exists and is empty
-    if [[ -f "$instance_pid_file" ]] && [[ ! -s "$instance_pid_file" ]]; then
-      rm -f "$instance_pid_file"
+  if [[ "$latest_version" == "$installed_version" ]]; then
+    __print_info "Local version is the same as remote version"
+    return 1
+  fi
+
+  echo "$latest_version"
+}
+
+function _save_version() {
+  local version=$1
+
+  __print_info "Saving version ${version}..."
+
+  echo "$version" >"$instance_version_file"
+
+  __print_success "Version saved"
+  return 0
+}
+
+# =============================================================================
+# DOWNLOAD AND DEPLOYMENT
+# =============================================================================
+
+function _download() {
+  local version=$1
+  local dest=${2:-$instance_temp_dir}
+  local app_id=${3:-$instance_steam_app_id}
+
+  __print_info "Downloading..."
+
+  # Warn users if they specify a version for Steam games
+  if [[ -n "$version" ]] && [[ "$version" != "0" ]] && [[ "$version" != "latest" ]]; then
+    __print_warning "Version parameter '$version' will be ignored for Steam games."
+    __print_warning "Steam only supports downloading the latest version. For non-Steam games like Factorio or Minecraft, version selection may be supported."
+  fi
+
+  if [[ -z "$instance_steam_app_id" ]]; then
+    __print_error "'instance_steam_app_id' is expected but it's not set"
+    return 1
+  fi
+
+  if [[ -z "$instance_is_steam_account_required" ]]; then
+    __print_error "'instance_is_steam_account_required' is expected but it's not set"
+    return 1
+  fi
+
+  # Build login arguments based on authentication requirement
+  local login_args="anonymous"
+  if [[ $instance_is_steam_account_required -ne 0 ]]; then
+    if [[ -z "$STEAM_USERNAME" ]]; then
+      __print_error "'STEAM_USERNAME' is expected but it's not set"
+      return 1
     fi
-    __print_info "Inactive" && return 1
+
+    if [[ -z "$STEAM_PASSWORD" ]]; then
+      __print_error "'STEAM_PASSWORD' is expected but it's not set"
+      return 1
+    fi
+
+    # Authenticated login: pass username and password as separate arguments
+    login_args="$STEAM_USERNAME $STEAM_PASSWORD"
   fi
 
-  # Validate that PID is numeric to prevent injection attacks
-  if [[ ! "$server_pid" =~ ^[0-9]+$ ]]; then
-    __print_error "Instance PID file contains invalid PID: '$server_pid', removing"
-    rm -f "$instance_pid_file"
-    __print_info "Inactive" && return 1
-  fi
+  # shellcheck disable=SC2086
+  steamcmd \
+    +@sSteamCmdForcePlatformType "${instance_platform:-linux}" \
+    +force_install_dir "${dest}" \
+    +login ${login_args} \
+    +app_update "${app_id}" ${instance_steamcmd_arguments:-} \
+    validate \
+    +quit
 
-  # Check if the process with that PID is running
-  # Using kill -0 which doesn't actually send a signal, just checks existence
-  if kill -0 "$server_pid" 2>/dev/null; then
-    __print_info "Active" && return 0
-  else
-    # Process is not running anymore, remove stale PID file
-    __print_error "Instance PID file references non-existent process (PID: $server_pid), removing"
-    rm -f "$instance_pid_file"
-    __print_info "Inactive" && return 1
-  fi
+  __print_success "Download complete"
+  return 0
 }
 
-function _print_logs() {
-  local follow=false
-  local line_count=10
+function _deploy() {
+  local source=$instance_temp_dir
+  local dest=$instance_install_dir
 
-  while [[ $# -gt 0 ]]; do
-    case $1 in
-    -f | --follow)
-      follow=true
-      ;;
-    -n | --tail | --lines)
-      shift
-      line_count="$1"
-      ;;
-    *)
-      shift
-      ;;
-    esac
-    shift
-  done
+  __print_info "Deploying..."
 
-  if [[ ! -f "$instance_log_file" ]]; then
-    __print_info "No log file found at '$instance_log_file'"
-    return 0
+  # Check if $source is empty
+  if [[ -z "$(ls -A "$source")" ]]; then
+    __print_error "$source is empty, nothing to deploy. Exiting"
+    return 1
   fi
 
-  exec tail --pid=$$ -n "$line_count" "$instance_log_file" ${follow:+-F}
+  # Copy everything from $source into $dest
+  if ! cp -rf "$source"/* "$dest"; then
+    __print_error "Failed to copy contents from $source into $dest"
+    return 1
+  fi
+
+  if ! rm -rf "${source:?}"/*; then
+    __print_error "Failed to clear $source"
+    return 1
+  fi
+
+  __print_success "Deploy complete"
+  return 0
 }
 
 function _update() {
@@ -705,13 +1053,13 @@ function _update() {
   fi
 
   # Download the latest version
-  if ! _download_wrapper "$latest_version"; then
+  if ! _download "$latest_version"; then
     __print_error "Failed to download latest version $latest_version"
     return 1
   fi
 
   # Deploy the downloaded files
-  if ! _deploy_wrapper; then
+  if ! _deploy; then
     __print_error "Failed to deploy new files"
     return 1
   fi
@@ -726,6 +1074,10 @@ function _update() {
 
   return 0
 }
+
+# =============================================================================
+# BACKUP MANAGEMENT
+# =============================================================================
 
 function _create_backup() {
   __print_info "Creating backup..."
@@ -903,195 +1255,111 @@ function _list_backups() {
   echo "${backups_array[@]}"
 }
 
-function _get_installed_version() {
-  # shellcheck disable=SC2154
-  # $instance_version_file is set dynamically from the config file
-  # check "__source_instance_config"
-  cat "$instance_version_file" 2>/dev/null || echo "unknown"
-}
+# =============================================================================
+# NETWORK (UPnP)
+# =============================================================================
 
-function _get_latest_version() {
+function _enable_upnp() {
+  local output
 
-  # Build login arguments based on authentication requirement
-  local login_args="anonymous"
-  if [[ "$instance_is_steam_account_required" == "true" ]]; then
-    if [[ -z "$STEAM_USERNAME" ]]; then
-      __print_error "STEAM_USERNAME is expected but it's not set"
-      return 1
-    fi
+  __print_info "Enabling UPnP..."
 
-    if [[ -z "$STEAM_PASSWORD" ]]; then
-      __print_error "STEAM_PASSWORD is expected but it's not set"
-      return 1
-    fi
-
-    # Authenticated login: pass username and password as separate arguments
-    login_args="$STEAM_USERNAME $STEAM_PASSWORD"
-  fi
-
-  local latest_version
-  latest_version=$(
-    steamcmd \
-      +login $login_args \
-      +app_info_update 1 \
-      +app_info_print $instance_steam_app_id \
-      +quit |
-      tr '\n' ' ' |
-      grep --color=NEVER \
-        -Po '"branches"\s*{\s*"public"\s*{\s*"buildid"\s*"\K(\d*)'
-  )
-
-  if [[ -z "$latest_version" ]]; then
-    __print_error "Failed to retrieve latest version, got empty response from SteamCMD"
+  # Check if UPnP ports array is set and not empty
+  # This prevents command failures when the array is unset or empty
+  if [[ -z "${instance_upnp_ports[*]:-}" ]]; then
+    __print_error "No UPnP ports configured (instance_upnp_ports is empty or unset)"
     return 1
   fi
 
-  echo "$latest_version"
-}
-
-function _compare_versions() {
-  local installed_version
-  installed_version=$(_get_installed_version)
-
-  local latest_version
-  latest_version=$(_get_latest_version)
-
-  if [[ -z "$latest_version" ]]; then
-    __print_error "No version information was returned from remote"
+  if ! output=$(upnpc -e "$instance_name" -r "${instance_upnp_ports[@]}" 2>&1); then
+    __print_error "Failed to enable UPnP ports"
+    __print_error "To stop these messages, set 'enable_port_forwarding' to 'false' in $CONFIG_FILE"
+    __print_error "${output}"
     return 1
   fi
 
-  if [[ "$latest_version" == "$installed_version" ]]; then
-    __print_info "Local version is the same as remote version"
+  # Mark UPnP as enabled
+  touch "$instance_port_forwarding_state_file"
+  __print_success "UPnP enabled"
+}
+
+function _disable_upnp() {
+  local output
+
+  __print_info "Disabling UPnP..."
+
+  # Check if UPnP ports array is set and not empty
+  # This prevents command failures when the array is unset or empty
+  if [[ -z "${instance_upnp_ports[*]:-}" ]]; then
+    __print_error "No UPnP ports configured (instance_upnp_ports is empty or unset)"
     return 1
   fi
 
-  echo "$latest_version"
+  if ! output=$(upnpc -f "${instance_upnp_ports[@]}" 2>&1); then
+    __print_error "Failed to disable UPnP ports"
+    __print_error "To stop these messages, set 'enable_port_forwarding' to 'false' in $CONFIG_FILE"
+    __print_error "${output}"
+    return 1
+  fi
+
+  # Mark UPnP as disabled
+  rm -f "$instance_port_forwarding_state_file"
+  __print_success "UPnP disabled"
 }
 
-function _save_version() {
-  local version=$1
+# Helper function to check if UPnP is currently enabled
+function _is_upnp_enabled() {
+  [[ -f "$instance_port_forwarding_state_file" ]]
+}
 
-  __print_info "Saving version ${version}..."
+# =============================================================================
+# LOGGING
+# =============================================================================
 
-  echo "$version" >"$instance_version_file"
+function _rotate_log_file() {
+  local log_file="$1"
 
-  __print_success "Version saved"
+  # Do nothing if the log file doesn't exist or is empty
+  if [[ ! -s "$log_file" ]]; then
+    return
+  fi
+
+  # Create a timestamp for the new log file
+  local timestamp
+  timestamp=$(date +"%Y-%m-%dT%H:%M:%S")
+
+  # Construct the new filename
+  local rotated_log_file="${instance_logs_dir}/${instance_name}.${timestamp}.log"
+
+  if mv "$log_file" "$rotated_log_file"; then
+    __print_success "Rotated log file $log_file to $rotated_log_file"
+  else
+    __print_error "Failed to rotate log file $log_file to $rotated_log_file"
+    return 1
+  fi
+
   return 0
 }
 
-function _download() {
-  local version=$1
-  local dest=${2:-$instance_temp_dir}
-  local app_id=${3:-$instance_steam_app_id}
+function _print_logs() {
+  local follow=${1:-false}
+  local line_count=${2:-10}
 
-  __print_info "Downloading..."
-
-  # Warn users if they specify a version for Steam games
-  if [[ -n "$version" ]] && [[ "$version" != "0" ]] && [[ "$version" != "latest" ]]; then
-    __print_warning "Version parameter '$version' will be ignored for Steam games."
-    __print_warning "Steam only supports downloading the latest version. For non-Steam games like Factorio or Minecraft, version selection may be supported."
+  if [[ ! -f "$instance_log_file" ]]; then
+    __print_info "No log file found at '$instance_log_file'"
+    return 0
   fi
 
-  if [[ -z "$instance_steam_app_id" ]]; then
-    __print_error "'instance_steam_app_id' is expected but it's not set"
-    return 1
+  if [[ "$follow" == "true" ]]; then
+    exec tail --pid=$$ -n "$line_count" -F "$instance_log_file"
+  else
+    exec tail --pid=$$ -n "$line_count" "$instance_log_file"
   fi
-
-  if [[ -z "$instance_is_steam_account_required" ]]; then
-    __print_error "'instance_is_steam_account_required' is expected but it's not set"
-    return 1
-  fi
-
-  # Build login arguments based on authentication requirement
-  local login_args="anonymous"
-  if [[ $instance_is_steam_account_required -ne 0 ]]; then
-    if [[ -z "$STEAM_USERNAME" ]]; then
-      __print_error "'STEAM_USERNAME' is expected but it's not set"
-      return 1
-    fi
-
-    if [[ -z "$STEAM_PASSWORD" ]]; then
-      __print_error "'STEAM_PASSWORD' is expected but it's not set"
-      return 1
-    fi
-
-    # Authenticated login: pass username and password as separate arguments
-    login_args="$STEAM_USERNAME $STEAM_PASSWORD"
-  fi
-
-  # shellcheck disable=SC2086
-  steamcmd \
-    +@sSteamCmdForcePlatformType "${instance_platform:-linux}" \
-    +force_install_dir "${dest}" \
-    +login ${login_args} \
-    +app_update "${app_id}" ${instance_steamcmd_arguments:-} \
-    validate \
-    +quit
-
-  __print_success "Download complete"
-  return 0
 }
 
-# Wrapper function for download with automatic progress reporting
-function _download_wrapper() {
-  local version=$1
-  local dest=${2:-$instance_temp_dir}
-  local app_id=${3:-$instance_steam_app_id}
-
-  __print_info "Starting download process..."
-  sleep 1
-
-  # Call the actual download function
-  if ! _download "$version" "$dest" "$app_id"; then
-    __print_error "Download process failed"
-    return 1
-  fi
-
-  __print_success "Download process completed successfully"
-  return 0
-}
-
-function _deploy() {
-  local source=$instance_temp_dir
-  local dest=$instance_install_dir
-
-  __print_info "Deploying..."
-
-  # Check if $source is empty
-  if [[ -z "$(ls -A "$source")" ]]; then
-    __print_error "$source is empty, nothing to deploy. Exiting"
-    return 1
-  fi
-
-  # Copy everything from $source into $dest
-  if ! cp -rf "$source"/* "$dest"; then
-    __print_error "Failed to copy contents from $source into $dest"
-    return 1
-  fi
-
-  if ! rm -rf "${source:?}"/*; then
-    __print_error "Failed to clear $source"
-    return 1
-  fi
-
-  __print_success "Deploy complete"
-  return 0
-}
-
-# Wrapper function for deploy with automatic progress reporting
-function _deploy_wrapper() {
-  __print_info "Starting deployment process..."
-
-  # Call the actual deploy function
-  if ! _deploy; then
-    __print_error "Deployment process failed"
-    return 1
-  fi
-
-  __print_success "Deployment process completed successfully"
-  return 0
-}
+# =============================================================================
+# STATUS
+# =============================================================================
 
 function _get_status() {
   local json_format="$1"
@@ -1288,246 +1556,395 @@ function _get_status() {
   fi
 }
 
-# Main execution starts here - process command line arguments
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-  -h | --help)
-    usage && exit 0
-    ;;
-  start)
-    shift
-    if [[ -z "$1" ]]; then
-      _start
-      exit $?
-    fi
-    case "$1" in
+# =============================================================================
+# COMMAND HANDLERS
+# =============================================================================
+
+function _cmd_start() {
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+    -h | --help | help)
+      show_usage_start
+      return 0
+      ;;
     -d | --detached)
       _start_background
-      exit $?
+      return $?
+      ;;
+    -*)
+      __print_error "Invalid option: $1"
+      return $EC_INVALID_ARG
       ;;
     *)
-      __print_error "Invalid argument $1"
-      exit 1
+      __print_error "Invalid argument: $1"
+      return $EC_INVALID_ARG
       ;;
     esac
-    ;;
-  attach)
-    _attach_to_instance
-    exit $?
-    ;;
-  stop)
     shift
-    # Initialize variables to prevent state pollution
-    no_save=0
-    no_graceful=0
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-      --no-save)
-        no_save=1
-        ;;
-      --no-graceful)
-        no_graceful=1
-        ;;
-      *)
-        __print_error "Invalid argument $1"
-        exit 1
-        ;;
-      esac
+  done
+  # No flags = interactive (detachable) mode
+  _start
+}
+
+function _cmd_stop() {
+  local no_save=0
+  local no_graceful=0
+
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+    -h | --help | help)
+      show_usage_stop
+      return 0
+      ;;
+    --no-save) no_save=1 ;;
+    --no-graceful) no_graceful=1 ;;
+    -*)
+      __print_error "Invalid option: $1"
+      return $EC_INVALID_ARG
+      ;;
+    *)
+      __print_error "Invalid argument: $1"
+      return $EC_INVALID_ARG
+      ;;
+    esac
+    shift
+  done
+
+  _timed_stop "$no_save" "$no_graceful"
+}
+
+function _cmd_restart() {
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+    -h | --help | help)
+      show_usage_restart
+      return 0
+      ;;
+    *)
+      __print_error "Invalid argument: $1"
+      return $EC_INVALID_ARG
+      ;;
+    esac
+    shift
+  done
+
+  _timed_stop 0 0
+  _start_background
+}
+
+function _cmd_attach() {
+  _attach_to_instance
+}
+
+function _cmd_kill() {
+  _kill_all_processes
+}
+
+function _cmd_save() {
+  _send_save_command
+}
+
+function _cmd_input() {
+  if [[ -z "${1:-}" ]]; then
+    __print_error "Missing argument: <command>"
+    return $EC_MISSING_ARG
+  fi
+  _send_input "$1"
+}
+
+function _cmd_is_active() {
+  _is_active
+}
+
+function _cmd_status() {
+  local json_format=""
+  local fast_mode=""
+
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+    -h | --help | help)
+      show_usage_status
+      return 0
+      ;;
+    --json) json_format="1" ;;
+    --fast) fast_mode="1" ;;
+    -*)
+      __print_error "Invalid option: $1"
+      return $EC_INVALID_ARG
+      ;;
+    *)
+      __print_error "Invalid argument: $1"
+      return $EC_INVALID_ARG
+      ;;
+    esac
+    shift
+  done
+
+  _get_status "$json_format" "$fast_mode"
+}
+
+function _cmd_logs() {
+  local follow="false"
+  local line_count=10
+
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+    -h | --help | help)
+      show_usage_logs
+      return 0
+      ;;
+    -f | --follow) follow="true" ;;
+    -n | --tail | --lines)
       shift
-    done
-    _timed_stop "$no_save" "$no_graceful"
-    exit $?
-    ;;
-  --internal-stop)
+      if [[ -z "${1:-}" ]] || [[ ! "$1" =~ ^[0-9]+$ ]]; then
+        __print_error "Missing or invalid number for --tail"
+        return $EC_INVALID_ARG
+      fi
+      line_count="$1"
+      ;;
+    -*)
+      __print_error "Invalid option: $1"
+      return $EC_INVALID_ARG
+      ;;
+    *)
+      __print_error "Invalid argument: $1"
+      return $EC_INVALID_ARG
+      ;;
+    esac
     shift
-    # Initialize variables to prevent state pollution
-    no_save=0
-    no_graceful=0
-    if [[ -z "$1" ]]; then
-      _stop_server "\@"
-      exit $?
-    else
-      while [[ $# -gt 0 ]]; do
-        case "$1" in
-        --no-save)
-          no_save=1
-          ;;
-        --no-graceful)
-          no_graceful=1
-          ;;
-        *)
-          __print_error "Invalid argument $1"
-          exit 1
-          ;;
-        esac
-        shift
-      done
-    fi
-    _stop_server ${no_save:+--no-save} ${no_graceful:+--no-graceful}
-    exit $?
-    ;;
-  --kill)
-    _kill_all_processes
-    exit $?
-    ;;
-  --save)
-    _send_save_command
-    exit $?
-    ;;
-  --is-active)
-    _is_active
-    exit $?
-    ;;
-  --status)
-    shift
-    json_format=""
-    fast_mode=""
+  done
 
-    # Parse status options
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-      --json)
-        json_format="1"
-        shift
-        ;;
-      --fast)
-        fast_mode="1"
-        shift
-        ;;
-      *)
-        break
-        ;;
-      esac
-    done
+  _print_logs "$follow" "$line_count"
+}
 
-    _get_status "$json_format" "$fast_mode"
-    exit $?
-    ;;
-  --input)
-    shift
-    if [[ -z "$1" ]]; then
-      __print_error "Missing argument <command>"
-      exit 1
-    fi
-    _send_input "$1"
-    exit $?
-    ;;
-  --logs)
-    shift
-    follow="false"
-    line_count=10
+function _cmd_version() {
+  if [[ "$#" -eq 0 ]]; then
+    _get_installed_version
+    return $?
+  fi
 
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-      -f | --follow)
-        follow="true"
-        shift
-        ;;
-      --tail | --lines)
-        shift
-        if [[ -z "$1" ]] || [[ ! "$1" =~ ^[0-9]+$ ]]; then
-          __print_error "Missing or invalid number for --tail/--lines argument"
-          exit 1
-        fi
-        line_count="$1"
-        shift
-        ;;
-      -n)
-        shift
-        if [[ -z "$1" ]] || [[ ! "$1" =~ ^[0-9]+$ ]]; then
-          __print_error "Missing or invalid number for -n argument"
-          exit 1
-        fi
-        line_count="$1"
-        shift
-        ;;
-      *)
-        break
-        ;;
-      esac
-    done
-
-    _print_logs "$follow" "$line_count"
-    exit $?
-    ;;
-  --version)
-    shift
-    if [[ -z "$1" ]]; then
-      _get_installed_version
-      exit $?
-    fi
-    case "$1" in
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+    -h | --help | help)
+      show_usage_version
+      return 0
+      ;;
     --compare)
       _compare_versions
-      exit $?
+      return $?
       ;;
     --latest)
       _get_latest_version
-      exit $?
+      return $?
       ;;
     --save)
       shift
-      if [[ -z "$1" ]]; then
-        __print_error "Missing argument <version>"
-        exit 1
+      if [[ -z "${1:-}" ]]; then
+        __print_error "Missing argument: <version>"
+        return $EC_MISSING_ARG
       fi
       _save_version "$1"
-      exit $?
+      return $?
+      ;;
+    -*)
+      __print_error "Invalid option: $1"
+      return $EC_INVALID_ARG
       ;;
     *)
-      __print_error "Invalid argument $1"
-      exit 1
+      __print_error "Invalid argument: $1"
+      return $EC_INVALID_ARG
       ;;
     esac
-    ;;
-  --create-backup)
-    _create_backup
-    exit $?
-    ;;
-  --restore-backup)
     shift
-    if [[ -z "$1" ]]; then
-      __print_error "Missing argument <backup>"
-      exit 1
+  done
+}
+
+function _cmd_download() {
+  local version=0
+
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+    -h | --help | help)
+      show_usage_download
+      return 0
+      ;;
+    -*)
+      __print_error "Invalid option: $1"
+      return $EC_INVALID_ARG
+      ;;
+    *) version="$1" ;;
+    esac
+    shift
+  done
+
+  __print_info "Starting download process..."
+  if ! _download "$version"; then
+    __print_error "Download process failed"
+    return $EC_ERROR
+  fi
+  __print_success "Download process completed successfully"
+}
+
+function _cmd_deploy() {
+  __print_info "Starting deployment process..."
+  if ! _deploy; then
+    __print_error "Deployment process failed"
+    return $EC_ERROR
+  fi
+  __print_success "Deployment process completed successfully"
+}
+
+function _cmd_update() {
+  _update
+}
+
+function _cmd_backup() {
+  local subcommand="${1:-}"
+  shift 2>/dev/null || true
+
+  case "$subcommand" in
+  -h | --help | help)
+    show_usage_backup
+    return 0
+    ;;
+  create) _create_backup ;;
+  restore)
+    if [[ -z "${1:-}" ]]; then
+      __print_error "Missing argument: <backup>"
+      return $EC_MISSING_ARG
     fi
     _restore_backup "$1"
-    exit $?
     ;;
-  --list-backups)
-    _list_backups
-    exit $?
-    ;;
-  --download)
-    version=0
-    shift
-    if [[ -n "$1" ]]; then
-      version="$1"
-    fi
-    _download_wrapper "$version"
-    exit $?
-    ;;
-  --deploy)
-    _deploy_wrapper
-    exit $?
-    ;;
-  --update)
-    _update
-    exit $?
-    ;;
-  --enable-upnp)
-    _enable_upnp
-    exit $?
-    ;;
-  --disable-upnp)
-    _disable_upnp
-    exit $?
+  list) _list_backups ;;
+  "")
+    __print_error "Missing subcommand for backup"
+    __print_error "Use '$self help backup' for usage information"
+    return $EC_MISSING_ARG
     ;;
   *)
-    __print_error "Unknown argument $1"
-    exit 1
+    __print_error "Unknown backup subcommand: $subcommand"
+    return $EC_INVALID_ARG
     ;;
   esac
-  shift
-done
+}
 
-exit $?
+function _cmd_upnp() {
+  local subcommand="${1:-}"
+
+  case "$subcommand" in
+  -h | --help | help)
+    show_usage_upnp
+    return 0
+    ;;
+  enable) _enable_upnp ;;
+  disable) _disable_upnp ;;
+  "")
+    __print_error "Missing subcommand for upnp"
+    __print_error "Use '$self help upnp' for usage information"
+    return $EC_MISSING_ARG
+    ;;
+  *)
+    __print_error "Unknown upnp subcommand: $subcommand"
+    return $EC_INVALID_ARG
+    ;;
+  esac
+}
+
+# =============================================================================
+# MAIN DISPATCH
+# =============================================================================
+
+# Parse command
+command="${1:-}"
+shift 2>/dev/null || true
+
+case "$command" in
+"")
+  show_usage
+  exit $EC_ERROR
+  ;;
+-h | --help | help)
+  _cmd_help "$@"
+  exit $?
+  ;;
+
+# Lifecycle commands
+start)
+  _cmd_start "$@"
+  exit $?
+  ;;
+stop)
+  _cmd_stop "$@"
+  exit $?
+  ;;
+restart)
+  _cmd_restart "$@"
+  exit $?
+  ;;
+attach)
+  _cmd_attach "$@"
+  exit $?
+  ;;
+kill)
+  _cmd_kill "$@"
+  exit $?
+  ;;
+is-active)
+  _cmd_is_active "$@"
+  exit $?
+  ;;
+
+# Server commands
+save)
+  _cmd_save "$@"
+  exit $?
+  ;;
+input)
+  _cmd_input "$@"
+  exit $?
+  ;;
+status)
+  _cmd_status "$@"
+  exit $?
+  ;;
+logs)
+  _cmd_logs "$@"
+  exit $?
+  ;;
+
+# Version & deployment
+version)
+  _cmd_version "$@"
+  exit $?
+  ;;
+download)
+  _cmd_download "$@"
+  exit $?
+  ;;
+deploy)
+  _cmd_deploy "$@"
+  exit $?
+  ;;
+update)
+  _cmd_update "$@"
+  exit $?
+  ;;
+
+# Backup management
+backup)
+  _cmd_backup "$@"
+  exit $?
+  ;;
+
+# Network
+upnp)
+  _cmd_upnp "$@"
+  exit $?
+  ;;
+
+*)
+  __print_error "Unknown command: $command"
+  __print_error "Use '$self help' for available commands"
+  exit $EC_INVALID_ARG
+  ;;
+esac

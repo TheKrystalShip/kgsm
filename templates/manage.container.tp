@@ -8,6 +8,11 @@
 # can be manually used to regenerate the file in case something breaks:
 # > $KGSM_ROOT/commands/files.sh --instance <instance> --create --manage
 
+# Disabling SC2154 globally:
+# $instance_* variables are set dynamically from the config file
+# check "__source_instance_config"
+# shellcheck disable=SC2154
+
 debug=
 # shellcheck disable=SC2199
 if [[ $@ =~ "--debug" ]]; then
@@ -22,6 +27,16 @@ if [[ $@ =~ "--debug" ]]; then
     esac
   done
 fi
+
+# =============================================================================
+# CONFIGURATION AND INITIALIZATION
+# =============================================================================
+
+# Local exit code constants (mirrors core/errors.sh for standalone use)
+readonly EC_SUCCESS=0
+readonly EC_ERROR=1
+readonly EC_MISSING_ARG=7
+readonly EC_INVALID_ARG=8
 
 # Get the directory where this script is located
 SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
@@ -48,7 +63,7 @@ function __source_instance_config() {
 
   if [[ ! -f "$config_file" ]]; then
     echo "ERROR: Instance configuration file not found: $config_file"
-    exit 1
+    exit $EC_ERROR
   fi
 
   # Source the configuration file and prefix all variables with "instance_"
@@ -68,7 +83,7 @@ function __source_instance_config() {
       echo "ERROR: Invalid configuration key '$key' in $config_file"
       echo "Configuration keys must contain only alphanumeric characters and underscores,"
       echo "and must start with a letter or underscore."
-      exit 1
+      exit $EC_ERROR
     fi
 
     # Remove quotes from value
@@ -93,207 +108,455 @@ INSTANCE_NAME="$(basename "$SCRIPT_DIR")"
 CONFIG_FILE="$SCRIPT_DIR/${INSTANCE_NAME}.config.ini"
 __source_instance_config "$CONFIG_FILE"
 
+# Check if docker and docker-compose are installed
+if ! command -v docker &>/dev/null; then
+  __print_error "Docker is not installed. Please install Docker to use this script."
+  exit $EC_ERROR
+fi
+
+if ! command -v docker compose &>/dev/null; then
+  __print_error "Docker Compose is not installed. Please install Docker Compose to use this script."
+  exit $EC_ERROR
+fi
+
 self=$(basename "$0")
 
-function usage() {
-  echo "
-Usage:
-  $self OPTION
-
-Options:
-  -h, --help                Display this help message
-  --start                   Start the server in the current terminal
-  --start [--background]    Start the server in the background
-  --stop                    Stop the server
-  --kill                    Force kill the server (use when --stop fails)
-  --is-active               Prints if the server is active
-  --status                  Display comprehensive runtime status
-  --status --json           Output status information as JSON
-  --status --fast           Display status without update checking (faster)
-  --status --json --fast    Output fast status as JSON
-  --input <command>         Send an ad-hoc command to the server
-  --logs                    Print last 10 lines of the log (default)
-  --logs --tail <number>    Print last <number> lines of the log
-  --logs --lines <number>   Alias for --tail (Unix standard)
-  --logs -n <number>        Alias for --tail (short form)
-  --logs [-f, --follow]     Read live logs (starts with last 10 lines)
-  --logs --follow --tail <number>  Follow logs starting with last <number> lines
-  --enable-upnp             Enable UPnP ports
-  --disable-upnp            Disable UPnP ports
-
-  --download                Downloads the game server files
-  --download [version]      Downloads the game server files for a specific version
-  --deploy                  Deploys the game server files from the temporary directory
-  --update                  Updates the game server files to the latest version
-
-  --list-backups            Print a list of available backups
-  --create-backup           Create a backup of the game server files
-  --restore-backup <source> Restore a specified backup
-
-  --version                 Print the locally installed version
-  --version [--save <ver>]  Save a given version to file
-  --version [--latest]      Print the latest available version
-  --version [--compare]     Test the local version vs the latest available.
-
-Examples:
-  $self --start --background
-  $self --input '/save'
-  $self --stop
-  $self --logs --tail 50
-  $self --logs --follow --tail 100
-"
-}
-
-SUCCESS="SUCCESS"
-INFO="INFO"
-ERROR="ERROR"
-WARNING="WARNING"
-
-## Colored output
-# Check if stdout is tty
-if test -t 1; then
-  ncolors=0
-
-  # Check for availability of tput
-  if command -v tput >/dev/null 2>&1; then
-    ncolors="$(tput colors)"
-  fi
-
-  # More than 8 means it supports colors
-  if [[ $ncolors ]] && [[ "$ncolors" -gt 8 ]]; then
-    export COLOR_RED="\033[0;31m"
-    export COLOR_GREEN="\033[0;32m"
-    export COLOR_ORANGE="\033[0;33m"
-    export COLOR_BLUE="\033[0;34m"
-    export COLOR_END="\033[0m"
-
-    SUCCESS="${COLOR_GREEN}${SUCCESS}${COLOR_END}"
-    INFO="${COLOR_BLUE}${INFO}${COLOR_END}"
-    ERROR="${COLOR_RED}${ERROR}${COLOR_END}"
-    WARNING="${COLOR_ORANGE}${WARNING}${COLOR_END}"
+# Color output support
+COLOR_RED="" COLOR_GREEN="" COLOR_ORANGE="" COLOR_BLUE="" COLOR_END=""
+if test -t 1 && command -v tput >/dev/null 2>&1; then
+  if [[ "$(tput colors 2>/dev/null)" -gt 8 ]] 2>/dev/null; then
+    COLOR_RED="\033[0;31m"
+    COLOR_GREEN="\033[0;32m"
+    COLOR_ORANGE="\033[0;33m"
+    COLOR_BLUE="\033[0;34m"
+    COLOR_END="\033[0m"
   fi
 fi
 
 function __print_success() {
-  echo -e "[$SUCCESS] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1"
+  echo -e "[${COLOR_GREEN}SUCCESS${COLOR_END}] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1"
 }
 
 function __print_info() {
-  echo -e "[$INFO] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1"
+  echo -e "[${COLOR_BLUE}INFO${COLOR_END}] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1"
 }
 
 function __print_error() {
-  echo -e "[$ERROR] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1" >&2
+  echo -e "[${COLOR_RED}ERROR${COLOR_END}] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1" >&2
 }
 
 function __print_warning() {
-  echo -e "[$WARNING] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1" >&2
+  echo -e "[${COLOR_ORANGE}WARNING${COLOR_END}] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1" >&2
 }
 
 set -o pipefail
 
-if [[ $# -eq 0 ]]; then
-  __print_error "Missing arguments"
-  exit 1
-fi
+# =============================================================================
+# HELP SYSTEM
+# =============================================================================
 
-function _rotate_log_file() {
-  local log_file="$1"
+function show_usage() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+  local BOLD="\e[1m"
 
-  # Do nothing if the log file doesn't exist or is empty
-  if [[ ! -s "$log_file" ]]; then
-    return
-  fi
+  echo -e "${UNDERLINE}Instance Management - ${instance_name}${END}
 
-  # Create a timestamp for the new log file
-  local timestamp
-  timestamp=$(date +"%Y-%m-%dT%H:%M:%S")
+Manage this game server instance directly.
 
-  # Construct the new filename
-  local rotated_log_file="${instance_logs_dir}/${instance_name}.${timestamp}.log"
+${UNDERLINE}Usage:${END}
+  $self <command> [arguments] [options]
 
-  if mv "$log_file" "$rotated_log_file"; then
-    __print_success "Rotated log file $log_file to $rotated_log_file"
-  else
-    __print_error "Failed to rotate log file $log_file to $rotated_log_file"
-    return 1
-  fi
+${BOLD}${UNDERLINE}Lifecycle Commands:${END}
+  start [-d, --detached]      Start the server
+  stop [--no-save] [--no-graceful]  Stop the server
+  restart                     Restart the server (stop + start)
+  attach                      Attach to running server console
+  kill                        Kill the server process
+  is-active                   Check if the server is running
 
-  return 0
+${BOLD}${UNDERLINE}Server Commands:${END}
+  save                        Save the current game state
+  input <command>             Send a command to the server console
+  status [--json] [--fast]    Display comprehensive runtime status
+  logs [-f] [--tail N]        View server logs
+
+${BOLD}${UNDERLINE}Version & Update Commands:${END}
+  version [--latest|--compare|--save <ver>]  Version management
+  download [version]          Download game server files
+  deploy                      Deploy files from temp directory
+  update                      Update to latest version
+
+${BOLD}${UNDERLINE}Backup Commands:${END}
+  backup create               Create a backup
+  backup restore <source>     Restore a specified backup
+  backup list                 List available backups
+
+${BOLD}${UNDERLINE}Network Commands:${END}
+  upnp enable                 Enable UPnP port forwarding
+  upnp disable                Disable UPnP port forwarding
+
+${BOLD}${UNDERLINE}Other:${END}
+  help [command]              Display help information
+  -h, --help                  Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self start --detached
+  $self stop
+  $self logs --follow --tail 50
+  $self status --json
+  $self backup create
+  $self version --latest
+  $self help start
+"
 }
 
-function _enable_upnp() {
-  local output
+function show_usage_start() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
 
-  __print_info "Enabling UPnP..."
+  echo -e "${UNDERLINE}Start Command${END}
 
-  # Check if UPnP ports array is set and not empty
-  # This prevents command failures when the array is unset or empty
-  if [[ -z "${instance_upnp_ports[*]:-}" ]]; then
-    __print_error "No UPnP ports configured (instance_upnp_ports is empty or unset)"
-    return 1
-  fi
+Start the game server container via docker compose.
 
-  if ! output=$(upnpc -e "$instance_name" -r "${instance_upnp_ports[@]}" 2>&1); then
-    __print_error "Failed to enable UPnP ports"
-    __print_info "To stop these message, set 'enable_port_forwarding' to 0 in $0"
-    __print_error "${output}"
-    return 1
-  fi
+${UNDERLINE}Usage:${END}
+  $self start [options]
 
-  # Mark UPnP as enabled
-  touch "$instance_port_forwarding_state_file"
-  __print_success "UPnP enabled"
+${UNDERLINE}Options:${END}
+  -d, --detached              Start container in background (detached) mode
+  -h, --help                  Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self start
+  $self start --detached
+"
 }
 
-function _disable_upnp() {
-  local output
+function show_usage_stop() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
 
-  if ! _is_upnp_enabled; then
-    return 0
-  fi
+  echo -e "${UNDERLINE}Stop Command${END}
 
-  __print_info "Disabling UPnP..."
+Gracefully stop the running game server container via docker compose down.
 
-  # Check if UPnP ports array is set and not empty
-  # This prevents command failures when the array is unset or empty
-  if [[ -z "${instance_upnp_ports[*]:-}" ]]; then
-    __print_error "No UPnP ports configured (instance_upnp_ports is empty or unset)"
-    return 1
-  fi
+${UNDERLINE}Usage:${END}
+  $self stop [options]
 
-  if ! output=$(upnpc -f "${instance_upnp_ports[@]}" 2>&1); then
-    __print_error "Failed to disable UPnP ports"
-    __print_info "To stop these message, set 'instance_enable_port_forwarding' to 'false' in $0"
-    __print_error "${output}"
-    return 1
-  fi
+${UNDERLINE}Options:${END}
+  --no-save                   Do not save game state before stopping
+  --no-graceful               Kill immediately without sending stop command
+  -h, --help                  Display this help information
 
-  # Mark UPnP as disabled
-  rm -f "$instance_port_forwarding_state_file"
-  __print_success "UPnP disabled"
+${UNDERLINE}Examples:${END}
+  $self stop
+  $self stop --no-save
+  $self stop --no-graceful
+"
 }
 
-# Helper function to check if UPnP is currently enabled
-function _is_upnp_enabled() {
-  [[ -f "$instance_port_forwarding_state_file" ]]
+function show_usage_restart() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Restart Command${END}
+
+Stop and then start the game server.
+
+${UNDERLINE}Usage:${END}
+  $self restart
+
+${UNDERLINE}Options:${END}
+  -h, --help                  Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self restart
+"
 }
 
-# Cleanup function for SIGINT, SIGTERM, and EXIT
-function _term_cleanup() {
-  # Only disable UPnP if it was actually enabled AND the instance is not running
-  if [[ -f "$instance_port_forwarding_state_file" ]] &&
-    [[ "${instance_enable_port_forwarding:-false}" == "true" ]] &&
-    ! _is_active &>/dev/null; then
+function show_usage_attach() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
 
-      _disable_upnp
+  echo -e "${UNDERLINE}Attach Command${END}
+
+Attach to the running container for interactive shell access via docker compose exec.
+
+${UNDERLINE}Usage:${END}
+  $self attach
+
+${UNDERLINE}Examples:${END}
+  $self attach
+"
+}
+
+function show_usage_status() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Status Command${END}
+
+Display comprehensive runtime status information.
+
+${UNDERLINE}Usage:${END}
+  $self status [options]
+
+${UNDERLINE}Options:${END}
+  --json                      Output status information as JSON
+  --fast                      Skip update checking for faster response
+  -h, --help                  Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self status
+  $self status --json
+  $self status --fast
+  $self status --json --fast
+"
+}
+
+function show_usage_logs() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Logs Command${END}
+
+View server log entries via docker compose logs.
+
+${UNDERLINE}Usage:${END}
+  $self logs [options]
+
+${UNDERLINE}Options:${END}
+  -f, --follow                Continuously follow log output in real-time
+  --tail, -n <number>         Display last <number> lines (default: 10)
+  -h, --help                  Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self logs
+  $self logs --follow
+  $self logs --tail 50
+  $self logs --follow --tail 100
+"
+}
+
+function show_usage_version() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Version Command${END}
+
+Manage version information for this instance.
+
+${UNDERLINE}Usage:${END}
+  $self version [options]
+
+${UNDERLINE}Options:${END}
+  --latest                    Print the latest available version
+  --compare                   Compare installed vs latest version
+  --save <version>            Save a version string to file
+  -h, --help                  Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self version
+  $self version --latest
+  $self version --compare
+  $self version --save 1.2.3
+"
+}
+
+function show_usage_backup() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Backup Command${END}
+
+Manage game server backups.
+
+${UNDERLINE}Usage:${END}
+  $self backup <subcommand>
+
+${UNDERLINE}Subcommands:${END}
+  create                      Create a backup of current server files
+  restore <source>            Restore from a specified backup
+  list                        List available backups
+
+${UNDERLINE}Examples:${END}
+  $self backup create
+  $self backup list
+  $self backup restore mybackup.tar.gz
+"
+}
+
+function show_usage_upnp() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}UPnP Command${END}
+
+Manage UPnP port forwarding.
+
+${UNDERLINE}Usage:${END}
+  $self upnp <subcommand>
+
+${UNDERLINE}Subcommands:${END}
+  enable                      Enable UPnP port forwarding
+  disable                     Disable UPnP port forwarding
+
+${UNDERLINE}Examples:${END}
+  $self upnp enable
+  $self upnp disable
+"
+}
+
+function show_usage_download() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Download Command${END}
+
+Download game server files (pulls docker images if applicable).
+
+${UNDERLINE}Usage:${END}
+  $self download [version]
+
+${UNDERLINE}Arguments:${END}
+  version                     Specific version to download (optional)
+
+${UNDERLINE}Examples:${END}
+  $self download
+  $self download 1.2.3
+"
+}
+
+function show_usage_update() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Update Command${END}
+
+Update the game server to the latest version (pulls updated docker images).
+
+${UNDERLINE}Usage:${END}
+  $self update
+
+${UNDERLINE}Examples:${END}
+  $self update
+"
+}
+
+function _cmd_help() {
+  if [[ -z "${1:-}" ]]; then
+    show_usage
+    return $EC_SUCCESS
   fi
+
+  case "$1" in
+  start)
+    show_usage_start
+    ;;
+  stop)
+    show_usage_stop
+    ;;
+  restart)
+    show_usage_restart
+    ;;
+  attach)
+    show_usage_attach
+    ;;
+  status)
+    show_usage_status
+    ;;
+  logs)
+    show_usage_logs
+    ;;
+  version)
+    show_usage_version
+    ;;
+  backup)
+    show_usage_backup
+    ;;
+  upnp)
+    show_usage_upnp
+    ;;
+  download)
+    show_usage_download
+    ;;
+  deploy)
+    show_usage_download
+    ;;
+  update)
+    show_usage_update
+    ;;
+  kill | save | input | is-active)
+    show_usage
+    ;;
+  *)
+    __print_error "Unknown command: $1"
+    __print_error "Use '$self help' for available commands"
+    return $EC_INVALID_ARG
+    ;;
+  esac
+  return $EC_SUCCESS
 }
 
-# Make sure to disable UPnP if it was enabled
-# This is done to prevent leaving UPnP ports open
-# when the script is interrupted
-trap '_term_cleanup' INT TERM EXIT
+# =============================================================================
+# PROCESS MANAGEMENT
+# =============================================================================
+
+# This function checks if the server is active by checking the PID file
+# and verifying if the process with that PID is still running
+# For containers, we also verify the container is actually running
+# Fixed to prevent race conditions using atomic file operations
+function _is_active() {
+  local server_pid
+
+  # Atomic read operation: attempt to read PID file content directly
+  # This eliminates the TOCTOU (Time of Check, Time of Use) vulnerability
+  # where the file could be modified between checking existence and reading
+  if ! server_pid=$(cat "$instance_pid_file" 2>/dev/null); then
+    # File doesn't exist, is unreadable, or read failed
+    __print_info "Inactive" && return 1
+  fi
+
+  # Check if PID file content is empty or contains only whitespace
+  if [[ -z "${server_pid// /}" ]]; then
+    __print_error "Instance PID file present but empty, removing"
+    # Safe removal: only remove if file still exists and is empty
+    if [[ -f "$instance_pid_file" ]] && [[ ! -s "$instance_pid_file" ]]; then
+      rm -f "$instance_pid_file"
+    fi
+    __print_info "Inactive" && return 1
+  fi
+
+  # For containers, the PID file may contain container ID instead of numeric PID
+  # Validate that PID is either numeric (for process PID) or alphanumeric (for container ID)
+  if [[ ! "$server_pid" =~ ^[a-zA-Z0-9]+$ ]]; then
+    __print_error "Instance PID file contains invalid PID/Container ID: '$server_pid', removing"
+    rm -f "$instance_pid_file"
+    __print_info "Inactive" && return 1
+  fi
+
+  # For containers, check if it's a container ID (longer than typical PID)
+  if [[ ${#server_pid} -gt 10 ]]; then
+    # This looks like a container ID, check if container is running
+    if ! docker ps --filter "id=$server_pid" --format "{{.ID}}" | grep -q "$server_pid"; then
+      # Container is not running anymore, remove stale PID file
+      __print_error "Instance PID file references non-existent container (ID: $server_pid), removing"
+      rm -f "$instance_pid_file"
+      __print_info "Inactive" && return 1
+    fi
+    __print_info "Active" && return 0
+  fi
+
+  # This looks like a numeric PID, check if process is running
+  if [[ ! "$server_pid" =~ ^[0-9]+$ ]] || ! kill -0 "$server_pid" 2>/dev/null; then
+    # Process is not running anymore, remove stale PID file
+    __print_error "Instance PID file references non-existent process (PID: $server_pid), removing"
+    rm -f "$instance_pid_file"
+    __print_info "Inactive" && return 1
+  fi
+
+  __print_info "Active" && return 0
+}
 
 # Start the server in the current terminal
 function _start() {
@@ -365,250 +628,6 @@ function _start_background() {
   __print_success "Server started in background"
 }
 
-function _send_save_command() {
-  __print_info "Saving game state..."
-
-  # Check if save command is configured
-  if [[ -z "${instance_save_command}" ]]; then
-    __print_warning "No save command configured (instance_save_command is not set)"
-    __print_info "Save command skipped - game may not support save commands or save command not configured"
-    return 0
-  fi
-
-  # Check if the container is running
-  if ! _is_active &>/dev/null; then
-    __print_error "Container '$instance_name' is not running"
-    return 1
-  fi
-
-  # Send the save command to the container using the existing input infrastructure
-  if ! _send_input "${instance_save_command}"; then
-    __print_error "Failed to send save command to container"
-    return 1
-  fi
-
-  # Wait a moment for the save to complete (similar to native template)
-  local save_timeout="${instance_save_command_timeout_seconds:-5}"
-  __print_info "Waiting ${save_timeout} seconds for save to complete..."
-  sleep "${save_timeout}"
-
-  __print_success "Save command sent to container"
-  return 0
-}
-
-# Get detailed container process information
-# This function provides container-specific process monitoring equivalent to native template
-function _get_container_process_info() {
-  local container_id="$1"
-  local process_info=""
-
-  if [[ -z "$container_id" ]]; then
-    return 1
-  fi
-
-  # Check if this is a container ID (longer than typical PID)
-  if [[ ${#container_id} -gt 10 ]]; then
-    # Get container process information
-    if ! docker ps --filter "id=$container_id" --format "table {{.ID}}\t{{.Status}}\t{{.Names}}" | grep -q "$container_id"; then
-      return 1
-    fi
-    # Get detailed container stats
-    process_info=$(docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.PIDs}}" "$container_id" 2>/dev/null)
-    echo "$process_info"
-    return 0
-  fi
-
-  # This looks like a numeric PID, get process info
-  if [[ ! "$container_id" =~ ^[0-9]+$ ]] || ! kill -0 "$container_id" 2>/dev/null; then
-    return 1
-  fi
-
-  process_info=$(ps -p "$container_id" -o pid,ppid,state,pcpu,pmem,cmd --no-headers 2>/dev/null)
-  echo "$process_info"
-  return 0
-}
-
-# Enhanced container monitoring function
-# Provides detailed container state and resource usage information
-function _monitor_container_state() {
-  local container_id="$1"
-
-  if [[ -z "$container_id" ]]; then
-    return 1
-  fi
-
-  # Check if this is a container ID
-  if [[ ${#container_id} -le 10 ]]; then
-    return 1
-  fi
-
-  # Get container state details
-  local container_state
-  container_state=$(docker inspect "$container_id" --format '{{.State.Status}}' 2>/dev/null)
-
-  if [[ -z "$container_state" ]]; then
-    return 1
-  fi
-
-  echo "Container State: $container_state"
-
-  # Get additional details if container is running
-  if [[ "$container_state" != "running" ]]; then
-    return 0
-  fi
-
-  local start_time
-  start_time=$(docker inspect "$container_id" --format '{{.State.StartedAt}}' 2>/dev/null)
-  echo "Started At: $start_time"
-
-  # Get resource usage
-  local resources
-  resources=$(docker stats --no-stream --format "CPU: {{.CPUPerc}}, Memory: {{.MemUsage}} ({{.MemPerc}}), PIDs: {{.PIDs}}" "$container_id" 2>/dev/null)
-  echo "Resources: $resources"
-
-  return 0
-}
-
-# Security function to validate and sanitize input commands
-# Prevents command injection attacks through user-provided input
-function __sanitize_input_command() {
-  local command="$1"
-
-  # Check for empty command
-  if [[ -z "$command" ]]; then
-    echo "ERROR: Empty command provided"
-    return 1
-  fi
-
-  # Check command length to prevent buffer overflow attempts
-  if [[ ${#command} -gt 1000 ]]; then
-    echo "ERROR: Command too long (${#command} characters, max 1000)"
-    echo "Command: ${command:0:100}..."
-    return 1
-  fi
-
-  # Check for dangerous characters that could be used for command injection
-  # Using individual checks to avoid regex complexity issues
-  if [[ "$command" != *";"* ]] && [[ "$command" != *"&"* ]] && [[ "$command" != *"|"* ]] &&
-    [[ "$command" != *"\`"* ]] && [[ "$command" != *"\$("* ]] && [[ "$command" != *")"* ]] &&
-    [[ "$command" != *"{"* ]] && [[ "$command" != *"}"* ]] && [[ "$command" != *"["* ]] &&
-    [[ "$command" != *"]"* ]] && [[ "$command" != *"\\"* ]] && [[ "$command" != *"<"* ]] &&
-    [[ "$command" != *">"* ]] && [[ "$command" != *"*"* ]] && [[ "$command" != *"?"* ]] &&
-    [[ "$command" != *"~"* ]] && [[ "$command" != *"\$"* ]] && [[ "$command" != *"!"* ]]; then
-    return 0
-  fi
-
-  echo "ERROR: Input command contains potentially dangerous characters"
-  echo "Rejected characters: ; & | \` \$( ) { } [ ] \\ < > * ? ~ \$ !"
-  echo "Command: $command"
-  return 1
-}
-
-function _send_input() {
-  local command=$1
-  __print_info "Sending command: $command"
-
-  # Security check: Sanitize input to prevent command injection
-  if ! __sanitize_input_command "$command"; then
-    __print_error "Command rejected for security reasons"
-    return 1
-  fi
-
-  # Check if the container is running using the existing _is_active function
-  if ! _is_active &>/dev/null; then
-    __print_error "Container '$instance_name' is not running"
-    return 1
-  fi
-
-  # Get the management file path from the container's environment
-  local management_file
-  management_file=$(docker exec "$instance_name" bash -c 'echo $MANAGEMENT_FILE' 2>/dev/null)
-
-  if [[ -z "$management_file" ]]; then
-    __print_error "Could not determine management script path in container. \$MANAGEMENT_FILE not set."
-    return 1
-  fi
-
-  # Call the container's internal management script with the --input flag
-  # Using printf to safely pass the command without shell interpretation
-  if ! printf '%s\n' "$command" | docker exec -i "$instance_name" "$management_file" --input; then
-    __print_error "Failed to send command to container '$instance_name'"
-    return 1
-  fi
-
-  __print_success "Command sent to container"
-  return 0
-}
-
-# This function checks if the server is active by checking the PID file
-# and verifying if the process with that PID is still running
-# For containers, we also verify the container is actually running
-# Fixed to prevent race conditions using atomic file operations
-function _is_active() {
-  local server_pid
-
-  # Atomic read operation: attempt to read PID file content directly
-  # This eliminates the TOCTOU (Time of Check, Time of Use) vulnerability
-  # where the file could be modified between checking existence and reading
-  if ! server_pid=$(cat "$instance_pid_file" 2>/dev/null); then
-    # File doesn't exist, is unreadable, or read failed
-    __print_info "Inactive" && return 1
-  fi
-
-  # Check if PID file content is empty or contains only whitespace
-  if [[ -z "${server_pid// /}" ]]; then
-    __print_error "Instance PID file present but empty, removing"
-    # Safe removal: only remove if file still exists and is empty
-    if [[ -f "$instance_pid_file" ]] && [[ ! -s "$instance_pid_file" ]]; then
-      rm -f "$instance_pid_file"
-    fi
-    __print_info "Inactive" && return 1
-  fi
-
-  # For containers, the PID file may contain container ID instead of numeric PID
-  # Validate that PID is either numeric (for process PID) or alphanumeric (for container ID)
-  if [[ ! "$server_pid" =~ ^[a-zA-Z0-9]+$ ]]; then
-    __print_error "Instance PID file contains invalid PID/Container ID: '$server_pid', removing"
-    rm -f "$instance_pid_file"
-    __print_info "Inactive" && return 1
-  fi
-
-  # For containers, check if it's a container ID (longer than typical PID)
-  if [[ ${#server_pid} -gt 10 ]]; then
-    # This looks like a container ID, check if container is running
-    if ! docker ps --filter "id=$server_pid" --format "{{.ID}}" | grep -q "$server_pid"; then
-      # Container is not running anymore, remove stale PID file
-      __print_error "Instance PID file references non-existent container (ID: $server_pid), removing"
-      rm -f "$instance_pid_file"
-      __print_info "Inactive" && return 1
-    fi
-    __print_info "Active" && return 0
-  fi
-
-  # This looks like a numeric PID, check if process is running
-  if [[ ! "$server_pid" =~ ^[0-9]+$ ]] || ! kill -0 "$server_pid" 2>/dev/null; then
-    # Process is not running anymore, remove stale PID file
-    __print_error "Instance PID file references non-existent process (PID: $server_pid), removing"
-    rm -f "$instance_pid_file"
-    __print_info "Inactive" && return 1
-  fi
-
-  __print_info "Active" && return 0
-}
-
-function _print_logs() {
-  local follow=$1
-  local line_count=${2:-10}
-
-  if [[ "$follow" == "--follow" ]]; then
-    (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" logs --tail="$line_count" -f) &
-    tail_pid=$!
-    wait "$tail_pid"
-  else
-    (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" logs --tail="$line_count")
-  fi
-}
-
 function _stop_server() {
   local no_save=$1
   local no_graceful=$2
@@ -621,12 +640,12 @@ function _stop_server() {
   fi
 
   # Save game if requested
-  if [[ "$no_save" != "true" ]]; then
+  if [[ "$no_save" -eq 0 ]]; then
     _send_save_command
   fi
 
   # For graceful shutdown, try to send stop command if available
-  if [[ "$no_graceful" != "true" ]]; then
+  if [[ "$no_graceful" -eq 0 ]]; then
     if [[ -n "$instance_stop_command" ]]; then
       __print_info "Sending graceful stop command to container..."
       if ! _send_input "$instance_stop_command" 2>/dev/null; then
@@ -657,9 +676,16 @@ function _stop_server() {
   return 0
 }
 
+function _timed_stop() {
+  local no_save=$1
+  local no_graceful=$2
+
+  _stop_server "$no_save" "$no_graceful"
+}
+
 # Kill the container process and all its children
 # This function will also remove the PID file and clean up resources
-function _kill_container() {
+function _kill_all_processes() {
   local container_id
   local output
 
@@ -736,6 +762,203 @@ function _kill_container() {
   return 0
 }
 
+# Cleanup function for SIGINT, SIGTERM, and EXIT
+function _cleanup_on_exit() {
+  __print_warning "Caught exit signal, performing cleanup..."
+
+  # Clean up PID file if it exists (foreground mode)
+  if [[ -f "$instance_pid_file" ]]; then
+    __print_info "Removing instance PID file $instance_pid_file on exit"
+    rm -f "$instance_pid_file"
+  fi
+
+  # Disable UPnP if ALL conditions are met:
+  # 1. Port forwarding is enabled
+  # 2. UPnP state file exists (was enabled at some point)
+  # 3. Instance is NOT running
+  if [[ "${instance_enable_port_forwarding:-false}" == "true" ]] &&
+    [[ -f "$instance_port_forwarding_state_file" ]] &&
+    ! _is_active &>/dev/null; then
+    __print_info "Disabling UPnP ports on exit"
+    _disable_upnp
+  fi
+}
+
+trap _cleanup_on_exit INT TERM
+
+# =============================================================================
+# SERVER I/O
+# =============================================================================
+
+# Security function to validate and sanitize input commands
+# Prevents command injection attacks through user-provided input
+function __sanitize_input_command() {
+  local command="$1"
+
+  # Check for empty command
+  if [[ -z "$command" ]]; then
+    echo "ERROR: Empty command provided"
+    return 1
+  fi
+
+  # Check command length to prevent buffer overflow attempts
+  if [[ ${#command} -gt 1000 ]]; then
+    echo "ERROR: Command too long (${#command} characters, max 1000)"
+    echo "Command: ${command:0:100}..."
+    return 1
+  fi
+
+  # Check for dangerous characters that could be used for command injection
+  # Using individual checks to avoid regex complexity issues
+  if [[ "$command" != *";"* ]] && [[ "$command" != *"&"* ]] && [[ "$command" != *"|"* ]] &&
+    [[ "$command" != *"\`"* ]] && [[ "$command" != *"\$("* ]] && [[ "$command" != *")"* ]] &&
+    [[ "$command" != *"{"* ]] && [[ "$command" != *"}"* ]] && [[ "$command" != *"["* ]] &&
+    [[ "$command" != *"]"* ]] && [[ "$command" != *"\\"* ]] && [[ "$command" != *"<"* ]] &&
+    [[ "$command" != *">"* ]] && [[ "$command" != *"*"* ]] && [[ "$command" != *"?"* ]] &&
+    [[ "$command" != *"~"* ]] && [[ "$command" != *"\$"* ]] && [[ "$command" != *"!"* ]]; then
+    return 0
+  fi
+
+  echo "ERROR: Input command contains potentially dangerous characters"
+  echo "Rejected characters: ; & | \` \$( ) { } [ ] \\ < > * ? ~ \$ !"
+  echo "Command: $command"
+  return 1
+}
+
+function _send_input() {
+  local command=$1
+  __print_info "Sending command: $command"
+
+  # Security check: Sanitize input to prevent command injection
+  if ! __sanitize_input_command "$command"; then
+    __print_error "Command rejected for security reasons"
+    return 1
+  fi
+
+  # Check if the container is running using the existing _is_active function
+  if ! _is_active &>/dev/null; then
+    __print_error "Container '$instance_name' is not running"
+    return 1
+  fi
+
+  # Get the management file path from the container's environment
+  local management_file
+  management_file=$(docker exec "$instance_name" bash -c 'echo $MANAGEMENT_FILE' 2>/dev/null)
+
+  if [[ -z "$management_file" ]]; then
+    __print_error "Could not determine management script path in container. \$MANAGEMENT_FILE not set."
+    return 1
+  fi
+
+  # Call the container's internal management script with the --input flag
+  # Using printf to safely pass the command without shell interpretation
+  if ! printf '%s\n' "$command" | docker exec -i "$instance_name" "$management_file" --input; then
+    __print_error "Failed to send command to container '$instance_name'"
+    return 1
+  fi
+
+  __print_success "Command sent to container"
+  return 0
+}
+
+function _send_save_command() {
+  __print_info "Saving game state..."
+
+  # Check if save command is configured
+  if [[ -z "${instance_save_command}" ]]; then
+    __print_warning "No save command configured (instance_save_command is not set)"
+    __print_info "Save command skipped - game may not support save commands or save command not configured"
+    return 0
+  fi
+
+  # Check if the container is running
+  if ! _is_active &>/dev/null; then
+    __print_error "Container '$instance_name' is not running"
+    return 1
+  fi
+
+  # Send the save command to the container using the existing input infrastructure
+  if ! _send_input "${instance_save_command}"; then
+    __print_error "Failed to send save command to container"
+    return 1
+  fi
+
+  # Wait a moment for the save to complete (similar to native template)
+  local save_timeout="${instance_save_command_timeout_seconds:-5}"
+  __print_info "Waiting ${save_timeout} seconds for save to complete..."
+  sleep "${save_timeout}"
+
+  __print_success "Save command sent to container"
+  return 0
+}
+
+# =============================================================================
+# VERSION MANAGEMENT
+# =============================================================================
+
+function _get_installed_version() {
+  if [[ -f "$instance_version_file" ]]; then
+    cat "$instance_version_file"
+  else
+    echo "latest"
+  fi
+}
+
+function _get_latest_version() {
+  # For containers, we can use the Docker image tag or digest
+  # This example uses the 'latest' tag, but could be modified to check for
+  # updated images using Docker Hub API or other methods
+  echo "latest"
+}
+
+function _compare_versions() {
+  # For Docker containers, comparing versions is less relevant
+  # since we're working with images and not actual game files
+  # We can pull the latest image and check if it's different
+  echo "latest"
+  return 1 # Return non-zero to indicate no update needed
+}
+
+function _save_version() {
+  local version=$1
+
+  __print_info "Saving version ${version}..."
+
+  echo "$version" >"$instance_version_file"
+
+  __print_success "Version saved"
+  return 0
+}
+
+# =============================================================================
+# DOWNLOAD AND DEPLOYMENT
+# =============================================================================
+
+function _download() {
+  local version="${1:-latest}"
+
+  __print_info "Downloading Docker image version ${version}..."
+
+  # For container-based instances, downloading means pulling the images
+  # defined in the compose file
+  # This will pull all images defined in the docker-compose.yml file
+  # Run in the working directory where docker-compose.yml is located
+  (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" pull)
+
+  __print_success "Download complete"
+  return 0
+}
+
+function _deploy() {
+  # For Docker containers, deploying is a noop
+  # since the container is already defined in the docker-compose.yml file
+  __print_info "Deploying Docker container..."
+
+  # Return success
+  __print_success "Deploy complete"
+  return 0
+}
+
 function _update() {
   __print_info "Updating Docker container..."
 
@@ -764,6 +987,10 @@ function _update() {
   __print_success "Update complete"
   return 0
 }
+
+# =============================================================================
+# BACKUP MANAGEMENT
+# =============================================================================
 
 function _create_backup() {
   __print_info "Creating backup..."
@@ -941,62 +1168,183 @@ function _list_backups() {
   echo "${backups_array[@]}"
 }
 
-function _get_installed_version() {
-  if [[ -f "$instance_version_file" ]]; then
-    cat "$instance_version_file"
+# =============================================================================
+# NETWORK (UPnP)
+# =============================================================================
+
+function _enable_upnp() {
+  local output
+
+  __print_info "Enabling UPnP..."
+
+  # Check if UPnP ports array is set and not empty
+  # This prevents command failures when the array is unset or empty
+  if [[ -z "${instance_upnp_ports[*]:-}" ]]; then
+    __print_error "No UPnP ports configured (instance_upnp_ports is empty or unset)"
+    return 1
+  fi
+
+  if ! output=$(upnpc -e "$instance_name" -r "${instance_upnp_ports[@]}" 2>&1); then
+    __print_error "Failed to enable UPnP ports"
+    __print_info "To stop these message, set 'enable_port_forwarding' to 0 in $0"
+    __print_error "${output}"
+    return 1
+  fi
+
+  # Mark UPnP as enabled
+  touch "$instance_port_forwarding_state_file"
+  __print_success "UPnP enabled"
+}
+
+function _disable_upnp() {
+  local output
+
+  if ! _is_upnp_enabled; then
+    return 0
+  fi
+
+  __print_info "Disabling UPnP..."
+
+  # Check if UPnP ports array is set and not empty
+  # This prevents command failures when the array is unset or empty
+  if [[ -z "${instance_upnp_ports[*]:-}" ]]; then
+    __print_error "No UPnP ports configured (instance_upnp_ports is empty or unset)"
+    return 1
+  fi
+
+  if ! output=$(upnpc -f "${instance_upnp_ports[@]}" 2>&1); then
+    __print_error "Failed to disable UPnP ports"
+    __print_info "To stop these message, set 'instance_enable_port_forwarding' to 'false' in $0"
+    __print_error "${output}"
+    return 1
+  fi
+
+  # Mark UPnP as disabled
+  rm -f "$instance_port_forwarding_state_file"
+  __print_success "UPnP disabled"
+}
+
+# Helper function to check if UPnP is currently enabled
+function _is_upnp_enabled() {
+  [[ -f "$instance_port_forwarding_state_file" ]]
+}
+
+# =============================================================================
+# LOGGING
+# =============================================================================
+
+function _rotate_log_file() {
+  local log_file="$1"
+
+  # Do nothing if the log file doesn't exist or is empty
+  if [[ ! -s "$log_file" ]]; then
+    return
+  fi
+
+  # Create a timestamp for the new log file
+  local timestamp
+  timestamp=$(date +"%Y-%m-%dT%H:%M:%S")
+
+  # Construct the new filename
+  local rotated_log_file="${instance_logs_dir}/${instance_name}.${timestamp}.log"
+
+  if mv "$log_file" "$rotated_log_file"; then
+    __print_success "Rotated log file $log_file to $rotated_log_file"
   else
-    echo "latest"
+    __print_error "Failed to rotate log file $log_file to $rotated_log_file"
+    return 1
+  fi
+
+  return 0
+}
+
+function _print_logs() {
+  local follow=$1
+  local line_count=${2:-10}
+
+  if [[ "$follow" == "--follow" ]]; then
+    (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" logs --tail="$line_count" -f) &
+    tail_pid=$!
+    wait "$tail_pid"
+  else
+    (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" logs --tail="$line_count")
   fi
 }
 
-function _get_latest_version() {
-  # For containers, we can use the Docker image tag or digest
-  # This example uses the 'latest' tag, but could be modified to check for
-  # updated images using Docker Hub API or other methods
-  echo "latest"
-}
+# =============================================================================
+# STATUS
+# =============================================================================
 
-function _compare_versions() {
-  # For Docker containers, comparing versions is less relevant
-  # since we're working with images and not actual game files
-  # We can pull the latest image and check if it's different
-  echo "latest"
-  return 1 # Return non-zero to indicate no update needed
-}
+# Get detailed container process information
+# This function provides container-specific process monitoring equivalent to native template
+function _get_container_process_info() {
+  local container_id="$1"
+  local process_info=""
 
-function _save_version() {
-  local version=$1
+  if [[ -z "$container_id" ]]; then
+    return 1
+  fi
 
-  __print_info "Saving version ${version}..."
+  # Check if this is a container ID (longer than typical PID)
+  if [[ ${#container_id} -gt 10 ]]; then
+    # Get container process information
+    if ! docker ps --filter "id=$container_id" --format "table {{.ID}}\t{{.Status}}\t{{.Names}}" | grep -q "$container_id"; then
+      return 1
+    fi
+    # Get detailed container stats
+    process_info=$(docker stats --no-stream --format "table {{.Container}}\t{{.CPUPerc}}\t{{.MemUsage}}\t{{.MemPerc}}\t{{.PIDs}}" "$container_id" 2>/dev/null)
+    echo "$process_info"
+    return 0
+  fi
 
-  echo "$version" >"$instance_version_file"
+  # This looks like a numeric PID, get process info
+  if [[ ! "$container_id" =~ ^[0-9]+$ ]] || ! kill -0 "$container_id" 2>/dev/null; then
+    return 1
+  fi
 
-  __print_success "Version saved"
+  process_info=$(ps -p "$container_id" -o pid,ppid,state,pcpu,pmem,cmd --no-headers 2>/dev/null)
+  echo "$process_info"
   return 0
 }
 
-function _download() {
-  local version="${1:-latest}"
+# Enhanced container monitoring function
+# Provides detailed container state and resource usage information
+function _monitor_container_state() {
+  local container_id="$1"
 
-  __print_info "Downloading Docker image version ${version}..."
+  if [[ -z "$container_id" ]]; then
+    return 1
+  fi
 
-  # For container-based instances, downloading means pulling the images
-  # defined in the compose file
-  # This will pull all images defined in the docker-compose.yml file
-  # Run in the working directory where docker-compose.yml is located
-  (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" pull)
+  # Check if this is a container ID
+  if [[ ${#container_id} -le 10 ]]; then
+    return 1
+  fi
 
-  __print_success "Download complete"
-  return 0
-}
+  # Get container state details
+  local container_state
+  container_state=$(docker inspect "$container_id" --format '{{.State.Status}}' 2>/dev/null)
 
-function _deploy() {
-  # For Docker containers, deploying is a noop
-  # since the container is already defined in the docker-compose.yml file
-  __print_info "Deploying Docker container..."
+  if [[ -z "$container_state" ]]; then
+    return 1
+  fi
 
-  # Return success
-  __print_success "Deploy complete"
+  echo "Container State: $container_state"
+
+  # Get additional details if container is running
+  if [[ "$container_state" != "running" ]]; then
+    return 0
+  fi
+
+  local start_time
+  start_time=$(docker inspect "$container_id" --format '{{.State.StartedAt}}' 2>/dev/null)
+  echo "Started At: $start_time"
+
+  # Get resource usage
+  local resources
+  resources=$(docker stats --no-stream --format "CPU: {{.CPUPerc}}, Memory: {{.MemUsage}} ({{.MemPerc}}), PIDs: {{.PIDs}}" "$container_id" 2>/dev/null)
+  echo "Resources: $resources"
+
   return 0
 }
 
@@ -1271,221 +1619,413 @@ function _get_status() {
   fi
 }
 
-# Check if docker and docker-compose are installed
-if ! command -v docker &>/dev/null; then
-  __print_error "Docker is not installed. Please install Docker to use this script."
-  exit 1
-fi
+# =============================================================================
+# COMMAND HANDLERS
+# =============================================================================
 
-if ! command -v docker compose &>/dev/null; then
-  __print_error "Docker Compose is not installed. Please install Docker Compose to use this script."
-  exit 1
-fi
-
-# Main execution starts here - process command line arguments
-while [[ $# -gt 0 ]]; do
-  case "$1" in
-  -h | --help)
-    usage && exit 0
-    ;;
-  --start)
-    shift
-    if [[ -z "$1" ]]; then
-      _start
-      exit $?
-    fi
-    case "$1" in
-    --background)
+function _cmd_start() {
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+    -h | --help | help)
+      show_usage_start
+      return 0
+      ;;
+    -d | --detached)
       _start_background
-      exit $?
+      return $?
+      ;;
+    -*)
+      __print_error "Invalid option: $1"
+      return $EC_INVALID_ARG
       ;;
     *)
-      __print_error "Invalid argument $1"
-      exit 1
+      __print_error "Invalid argument: $1"
+      return $EC_INVALID_ARG
       ;;
     esac
-    ;;
-  --stop)
     shift
-    no_save=false
-    no_graceful=false
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-      --no-save)
-        no_save=true
-        shift
-        ;;
-      --no-graceful)
-        no_graceful=true
-        shift
-        ;;
-      *)
-        break
-        ;;
-      esac
-    done
-    _stop_server "$no_save" "$no_graceful"
-    exit $?
-    ;;
-  --save)
-    _send_save_command
-    exit $?
-    ;;
-  --kill)
-    _kill_container
-    exit $?
-    ;;
-  --is-active)
-    _is_active
-    exit $?
-    ;;
-  --status)
-    shift
-    json_format=""
-    fast_mode=""
+  done
+  # No flags = interactive mode
+  _start
+}
 
-    # Parse status options
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-      --json)
-        json_format="1"
-        shift
-        ;;
-      --fast)
-        fast_mode="1"
-        shift
-        ;;
-      *)
-        break
-        ;;
-      esac
-    done
+function _cmd_stop() {
+  local no_save=0
+  local no_graceful=0
 
-    _get_status "$json_format" "$fast_mode"
-    exit $?
-    ;;
-  --input)
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+    -h | --help | help)
+      show_usage_stop
+      return 0
+      ;;
+    --no-save) no_save=1 ;;
+    --no-graceful) no_graceful=1 ;;
+    -*)
+      __print_error "Invalid option: $1"
+      return $EC_INVALID_ARG
+      ;;
+    *)
+      __print_error "Invalid argument: $1"
+      return $EC_INVALID_ARG
+      ;;
+    esac
     shift
-    [[ -z "$1" ]] && __print_error "Missing argument <command>" && exit 1
-    _send_input "$1"
-    exit $?
-    ;;
-  --logs)
-    shift
-    follow=""
-    line_count=10
+  done
 
-    while [[ $# -gt 0 ]]; do
-      case "$1" in
-      -f | --follow)
-        follow="--follow"
-        shift
-        ;;
-      --tail | --lines)
-        shift
-        if [[ -z "$1" ]] || [[ ! "$1" =~ ^[0-9]+$ ]]; then
-          __print_error "Missing or invalid number for --tail/--lines argument"
-          exit 1
-        fi
-        line_count="$1"
-        shift
-        ;;
-      -n)
-        shift
-        if [[ -z "$1" ]] || [[ ! "$1" =~ ^[0-9]+$ ]]; then
-          __print_error "Missing or invalid number for -n argument"
-          exit 1
-        fi
-        line_count="$1"
-        shift
-        ;;
-      *)
-        break
-        ;;
-      esac
-    done
+  _timed_stop "$no_save" "$no_graceful"
+}
 
-    _print_logs "$follow" "$line_count"
-    exit $?
-    ;;
-  --enable-upnp)
-    _enable_upnp
-    exit $?
-    ;;
-  --disable-upnp)
-    _disable_upnp
-    exit $?
-    ;;
-  --version)
+function _cmd_restart() {
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+    -h | --help | help)
+      show_usage_restart
+      return 0
+      ;;
+    *)
+      __print_error "Invalid argument: $1"
+      return $EC_INVALID_ARG
+      ;;
+    esac
     shift
-    if [[ -z "$1" ]]; then
-      _get_installed_version
-      exit $?
-    fi
-    case "$1" in
+  done
+
+  _timed_stop 0 0
+  _start_background
+}
+
+function _cmd_attach() {
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+    -h | --help | help)
+      show_usage_attach
+      return 0
+      ;;
+    *)
+      __print_error "Invalid argument: $1"
+      return $EC_INVALID_ARG
+      ;;
+    esac
+    shift
+  done
+
+  if ! _is_active; then
+    __print_error "Server is not running"
+    return $EC_ERROR
+  fi
+  (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" exec "${instance_name}" /bin/sh)
+}
+
+function _cmd_kill() {
+  _kill_all_processes
+}
+
+function _cmd_save() {
+  _send_save_command
+}
+
+function _cmd_input() {
+  if [[ -z "${1:-}" ]]; then
+    __print_error "Missing argument: <command>"
+    return $EC_MISSING_ARG
+  fi
+  _send_input "$1"
+}
+
+function _cmd_is_active() {
+  _is_active
+}
+
+function _cmd_status() {
+  local json_format=""
+  local fast_mode=""
+
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+    -h | --help | help)
+      show_usage_status
+      return 0
+      ;;
+    --json) json_format="1" ;;
+    --fast) fast_mode="1" ;;
+    -*)
+      __print_error "Invalid option: $1"
+      return $EC_INVALID_ARG
+      ;;
+    *)
+      __print_error "Invalid argument: $1"
+      return $EC_INVALID_ARG
+      ;;
+    esac
+    shift
+  done
+
+  _get_status "$json_format" "$fast_mode"
+}
+
+function _cmd_logs() {
+  local follow="false"
+  local line_count=10
+
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+    -h | --help | help)
+      show_usage_logs
+      return 0
+      ;;
+    -f | --follow) follow="true" ;;
+    -n | --tail | --lines)
+      shift
+      if [[ -z "${1:-}" ]] || [[ ! "$1" =~ ^[0-9]+$ ]]; then
+        __print_error "Missing or invalid number for --tail"
+        return $EC_INVALID_ARG
+      fi
+      line_count="$1"
+      ;;
+    -*)
+      __print_error "Invalid option: $1"
+      return $EC_INVALID_ARG
+      ;;
+    *)
+      __print_error "Invalid argument: $1"
+      return $EC_INVALID_ARG
+      ;;
+    esac
+    shift
+  done
+
+  _print_logs "$follow" "$line_count"
+}
+
+function _cmd_version() {
+  if [[ "$#" -eq 0 ]]; then
+    _get_installed_version
+    return $?
+  fi
+
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+    -h | --help | help)
+      show_usage_version
+      return 0
+      ;;
     --compare)
       _compare_versions
-      exit $?
+      return $?
       ;;
     --latest)
       _get_latest_version
-      exit $?
+      return $?
       ;;
     --save)
       shift
-      if [[ -z "$1" ]]; then
-        __print_error "Missing argument <version>"
-        exit 1
+      if [[ -z "${1:-}" ]]; then
+        __print_error "Missing argument: <version>"
+        return $EC_MISSING_ARG
       fi
       _save_version "$1"
-      exit $?
+      return $?
+      ;;
+    -*)
+      __print_error "Invalid option: $1"
+      return $EC_INVALID_ARG
       ;;
     *)
-      __print_error "Invalid argument $1"
-      exit 1
+      __print_error "Invalid argument: $1"
+      return $EC_INVALID_ARG
       ;;
     esac
-    ;;
-  --download)
     shift
-    version=
-    if [[ -n "$1" && "$1" != --* ]]; then
-      version="$1"
-    fi
-    _download "$version"
-    exit $?
-    ;;
-  --deploy)
-    _deploy
-    exit $?
-    ;;
-  --update)
-    _update
-    exit $?
-    ;;
-  --create-backup)
-    _create_backup
-    exit $?
-    ;;
-  --restore-backup)
+  done
+}
+
+function _cmd_download() {
+  local version=0
+
+  while [[ "$#" -gt 0 ]]; do
+    case $1 in
+    -h | --help | help)
+      show_usage_download
+      return 0
+      ;;
+    -*)
+      __print_error "Invalid option: $1"
+      return $EC_INVALID_ARG
+      ;;
+    *) version="$1" ;;
+    esac
     shift
-    if [[ -z "$1" ]]; then
-      __print_error "Missing argument <backup>"
-      exit 1
+  done
+
+  __print_info "Starting download process..."
+  if ! _download "$version"; then
+    __print_error "Download process failed"
+    return $EC_ERROR
+  fi
+  __print_success "Download process completed successfully"
+}
+
+function _cmd_deploy() {
+  __print_info "Starting deployment process..."
+  if ! _deploy; then
+    __print_error "Deployment process failed"
+    return $EC_ERROR
+  fi
+  __print_success "Deployment process completed successfully"
+}
+
+function _cmd_update() {
+  _update
+}
+
+function _cmd_backup() {
+  local subcommand="${1:-}"
+  shift 2>/dev/null || true
+
+  case "$subcommand" in
+  -h | --help | help)
+    show_usage_backup
+    return 0
+    ;;
+  create) _create_backup ;;
+  restore)
+    if [[ -z "${1:-}" ]]; then
+      __print_error "Missing argument: <backup>"
+      return $EC_MISSING_ARG
     fi
     _restore_backup "$1"
-    exit $?
     ;;
-  --list-backups)
-    _list_backups
-    exit $?
+  list) _list_backups ;;
+  "")
+    __print_error "Missing subcommand for backup"
+    __print_error "Use '$self help backup' for usage information"
+    return $EC_MISSING_ARG
     ;;
   *)
-    __print_error "Unknown argument $1"
-    exit 1
+    __print_error "Unknown backup subcommand: $subcommand"
+    return $EC_INVALID_ARG
     ;;
   esac
-  shift
-done
+}
 
-exit 0
+function _cmd_upnp() {
+  local subcommand="${1:-}"
+
+  case "$subcommand" in
+  -h | --help | help)
+    show_usage_upnp
+    return 0
+    ;;
+  enable) _enable_upnp ;;
+  disable) _disable_upnp ;;
+  "")
+    __print_error "Missing subcommand for upnp"
+    __print_error "Use '$self help upnp' for usage information"
+    return $EC_MISSING_ARG
+    ;;
+  *)
+    __print_error "Unknown upnp subcommand: $subcommand"
+    return $EC_INVALID_ARG
+    ;;
+  esac
+}
+
+# =============================================================================
+# MAIN DISPATCH
+# =============================================================================
+
+# Parse command
+command="${1:-}"
+shift 2>/dev/null || true
+
+case "$command" in
+"")
+  show_usage
+  exit $EC_ERROR
+  ;;
+-h | --help | help)
+  _cmd_help "$@"
+  exit $?
+  ;;
+
+# Lifecycle commands
+start)
+  _cmd_start "$@"
+  exit $?
+  ;;
+stop)
+  _cmd_stop "$@"
+  exit $?
+  ;;
+restart)
+  _cmd_restart "$@"
+  exit $?
+  ;;
+attach)
+  _cmd_attach "$@"
+  exit $?
+  ;;
+kill)
+  _cmd_kill "$@"
+  exit $?
+  ;;
+is-active)
+  _cmd_is_active "$@"
+  exit $?
+  ;;
+
+# Server commands
+save)
+  _cmd_save "$@"
+  exit $?
+  ;;
+input)
+  _cmd_input "$@"
+  exit $?
+  ;;
+status)
+  _cmd_status "$@"
+  exit $?
+  ;;
+logs)
+  _cmd_logs "$@"
+  exit $?
+  ;;
+
+# Version & deployment
+version)
+  _cmd_version "$@"
+  exit $?
+  ;;
+download)
+  _cmd_download "$@"
+  exit $?
+  ;;
+deploy)
+  _cmd_deploy "$@"
+  exit $?
+  ;;
+update)
+  _cmd_update "$@"
+  exit $?
+  ;;
+
+# Backup management
+backup)
+  _cmd_backup "$@"
+  exit $?
+  ;;
+
+# Network
+upnp)
+  _cmd_upnp "$@"
+  exit $?
+  ;;
+
+*)
+  __print_error "Unknown command: $command"
+  __print_error "Use '$self help' for available commands"
+  exit $EC_INVALID_ARG
+  ;;
+esac

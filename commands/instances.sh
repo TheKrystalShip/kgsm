@@ -453,8 +453,8 @@ function _check_management_file_status_support() {
     return 1
   fi
 
-  # Check if the management file supports --status by looking for it in help output
-  if "$management_file" --help 2> /dev/null | grep -q -- "--status"; then
+  # Check if the management file supports status by looking for it in help output
+  if "$management_file" --help 2> /dev/null | grep -q "status"; then
     return 0
   fi
 
@@ -477,7 +477,7 @@ function _get_instance_status() {
       status_args="$status_args --fast"
     fi
 
-    "$instance_management_file" --status $status_args
+    "$instance_management_file" status $status_args
   else
     # Fallback for older management files that don't support --status
     __print_warning "Instance '$instance' uses an older management file that doesn't support the --status command."
@@ -507,7 +507,7 @@ function _get_instance_status_json() {
       status_args="$status_args --fast"
     fi
 
-    "$instance_management_file" --status $status_args
+    "$instance_management_file" status $status_args
   else
     # Fallback for older management files that don't support --status
     __print_warning "Instance '$instance' uses an older management file that doesn't support the --status command."
@@ -875,7 +875,7 @@ function _cmd_save() {
   fi
 
   __source_instance "$instance"
-  "$instance_management_file" --save
+  "$instance_management_file" save
 }
 
 function _cmd_input() {
@@ -921,7 +921,7 @@ function _cmd_input() {
   fi
 
   __source_instance "$instance"
-  "$instance_management_file" --input "$command"
+  "$instance_management_file" input "$command"
 }
 
 function _cmd_help() {

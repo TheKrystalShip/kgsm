@@ -411,7 +411,7 @@ function __logic_get_instance_backups() {
     return $EC_FILE_NOT_FOUND
   fi
 
-  "$instance_management_file" --list-backups 2>/dev/null
+  "$instance_management_file" backup list 2>/dev/null
   return $?
 }
 export -f __logic_get_instance_backups
