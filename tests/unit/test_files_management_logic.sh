@@ -31,9 +31,9 @@ function setup_test() {
   # Verify module loaded
   assert_not_null "$KGSM_LOGIC_FILES_MANAGEMENT_LOADED" "Handler should be loaded"
 
-  # Verify required templates exist
-  assert_file_exists "$KGSM_ROOT/templates/manage.native.tp" "Native management template should exist"
-  assert_file_exists "$KGSM_ROOT/templates/manage.container.tp" "Container management template should exist"
+  # Verify required template module directories exist
+  assert_dir_exists "$KGSM_ROOT/templates/manage.native.d" "Native management template directory should exist"
+  assert_dir_exists "$KGSM_ROOT/templates/manage.container.d" "Container management template directory should exist"
 
   log_test_step "Environment validated"
 }
@@ -357,26 +357,25 @@ EOF
 function test_create_management_file_invalid_runtime() {
   log_test_step "Testing __logic_create_management_file with invalid runtime"
 
-  # Use real factorio blueprint
-  local blueprint_file="$KGSM_ROOT/blueprints/native/default/factorio.bp"
-  local instance_name="test-native-mgmt-$$"
+  local test_dir="$KGSM_TEST_SANDBOX/mgmt_test_invalid_runtime_$$"
+  mkdir -p "$test_dir"
 
-  # Create proper instance config using fixture
-  local config_file
-  config_file=$(create_mock_instance_config "$instance_name" "$blueprint_file")
-  {
-    echo "runtime=invalid_runtime"
-    echo "management_file=$KGSM_TEST_SANDBOX/manage_${instance_name}.sh"
-  } >> "$config_file"
+  local blueprint_file="$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/factorio.bp"
+  local config_file="$test_dir/test.ini"
+  cat > "$config_file" << EOF
+name=testinstance
+blueprint_file=$blueprint_file
+runtime=invalid_runtime
+management_file=$test_dir/manage.sh
+EOF
 
   __logic_create_management_file "$config_file"
   local exit_code=$?
 
-  # Runtime is validated AFTER template copy, so this happens after successful copy
-  assert_equals "$EC_INVALID_ARG" "$exit_code" "Should return EC_INVALID_ARG for invalid runtime"
+  # invalid_runtime has no module directory → __logic_assemble_management_file
+  # fails with EC_FILE_NOT_FOUND → __logic_create_management_file wraps as EC_FAILED_TEMPLATE
+  assert_equals "$EC_FAILED_TEMPLATE" "$exit_code" "Should return EC_FAILED_TEMPLATE for invalid runtime"
 
-  # Cleanup
-  cleanup_mock_files "$config_file"
   rm -rf "$test_dir"
 }
 
@@ -412,21 +411,22 @@ EOF
 function test_create_management_file_replaces_existing() {
   log_test_step "Testing __logic_create_management_file replaces existing file"
 
-  # Use real factorio blueprint
-  local blueprint_file="$KGSM_ROOT/blueprints/native/default/factorio.bp"
-  local instance_name="test-replace-mgmt-$$"
+  local test_dir="$KGSM_TEST_SANDBOX/mgmt_test_replace_$$"
+  mkdir -p "$test_dir"
 
-  # Create proper instance config using fixture
-  local config_file
-  config_file=$(create_mock_instance_config "$instance_name" "$blueprint_file")
-
-  local mgmt_file="$KGSM_TEST_SANDBOX/manage_${instance_name}.sh"
+  local blueprint_file="$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/factorio.bp"
+  local mgmt_file="$test_dir/manage.sh"
+  local config_file="$test_dir/test.ini"
 
   # Create existing management file with marker
   echo "# OLD MANAGEMENT FILE" > "$mgmt_file"
 
-  echo "runtime=native" >> "$config_file"
-  echo "management_file=$mgmt_file" >> "$config_file"
+  cat > "$config_file" << EOF
+name=testinstance
+blueprint_file=$blueprint_file
+runtime=native
+management_file=$mgmt_file
+EOF
 
   __logic_create_management_file "$config_file"
   local exit_code=$?
@@ -434,75 +434,81 @@ function test_create_management_file_replaces_existing() {
   assert_equals "$EC_SUCCESS_MANAGEMENT_FILE_CREATED" "$exit_code" "Should return EC_SUCCESS_MANAGEMENT_FILE_CREATED"
   assert_file_exists "$mgmt_file" "Management file should exist"
 
-  # Verify old content was replaced
+  # Verify old content was replaced (truncated and reassembled from modules)
   if grep -q "OLD MANAGEMENT FILE" "$mgmt_file" 2>/dev/null; then
     fail_test "Management file should be replaced, not appended"
   fi
 
-  # Cleanup
-  cleanup_mock_files "$config_file" "$mgmt_file"
-  rm -rf "$(dirname "$config_file")"
-  log_test_step "Testing __logic_create_management_file without override file"
+  rm -rf "$test_dir"
+}
 
-  # Use necesse blueprint (has no override file)
-  local blueprint_file="$KGSM_ROOT/blueprints/native/default/necesse.bp"
-  local instance_name="test-no-overrides-$$"
+function test_create_management_file_native_success() {
+  log_test_step "Testing __logic_create_management_file creates native management file"
 
-  # Create proper instance config using fixture
-  local config_file
-  config_file=$(create_mock_instance_config "$instance_name" "$blueprint_file")
+  local test_dir="$KGSM_TEST_SANDBOX/mgmt_test_native_$$"
+  mkdir -p "$test_dir"
 
-  local mgmt_file="$KGSM_TEST_SANDBOX/manage_${instance_name}.sh"
+  # Use necesse blueprint (no module overrides)
+  local blueprint_file="$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/necesse.bp"
+  local mgmt_file="$test_dir/manage.sh"
+  local config_file="$test_dir/test.ini"
 
-  echo "runtime=native" >> "$config_file"
-  echo "management_file=$mgmt_file" >> "$config_file"
-
-  __logic_create_management_file "$config_file"
-  local exit_code=$?
-
-  # Should succeed even without overrides
-  assert_equals "$EC_SUCCESS_MANAGEMENT_FILE_CREATED" "$exit_code" "Should return EC_SUCCESS_MANAGEMENT_FILE_CREATED"
-  assert_file_exists "$mgmt_file" "Management file should be created"
-
-  # Cleanup
-  cleanup_mock_files "$config_file" "$mgmt_file"
-  rm -rf "$(dirname "$config_file")"
-  log_test_step "Testing __logic_create_management_file with override file"
-
-  # Use factorio blueprint (has override file)
-  local blueprint_file="$KGSM_ROOT/blueprints/native/default/factorio.bp"
-  local instance_name="test-with-overrides-$$"
-
-  # Create proper instance config using fixture
-  local config_file
-  config_file=$(create_mock_instance_config "$instance_name" "$blueprint_file")
-
-  local mgmt_file="$KGSM_TEST_SANDBOX/manage_${instance_name}.sh"
-  # Create placeholder management script
-  create_mock_management_script "$mgmt_file" "_get_latest_version"
-
-  echo "runtime=native" >> "$config_file"
-  echo "management_file=$mgmt_file" >> "$config_file"
+  cat > "$config_file" << EOF
+name=testinstance
+blueprint_file=$blueprint_file
+runtime=native
+management_file=$mgmt_file
+EOF
 
   __logic_create_management_file "$config_file"
   local exit_code=$?
 
   assert_equals "$EC_SUCCESS_MANAGEMENT_FILE_CREATED" "$exit_code" "Should return EC_SUCCESS_MANAGEMENT_FILE_CREATED"
   assert_file_exists "$mgmt_file" "Management file should be created"
-  # Factorio overrides should be injected
-  assert_file_contains "$mgmt_file" "function _" "Should contain override functions"
+  assert_file_executable "$mgmt_file" "Management file should be executable"
+  assert_file_contains "$mgmt_file" "#!/usr/bin/env bash" "Management file should have bash shebang"
 
-  # Cleanup
-  cleanup_mock_files "$config_file" "$mgmt_file"
-  rm -rf "$(dirname "$config_file")"
-  log_test_step "Testing __logic_create_management_file with container compose failure"
+  rm -rf "$test_dir"
+}
 
-  local test_dir="$KGSM_TEST_SANDBOX/mgmt_test_compose_fail"
+function test_create_management_file_native_with_module_overrides() {
+  log_test_step "Testing __logic_create_management_file assembles factorio module overrides"
+
+  local test_dir="$KGSM_TEST_SANDBOX/mgmt_test_factorio_$$"
+  mkdir -p "$test_dir"
+
+  # Use factorio blueprint which has module overrides (05-version.sh, 06-download.sh, 07-deploy.sh)
+  local blueprint_file="$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/factorio.bp"
+  local mgmt_file="$test_dir/manage.sh"
+  local config_file="$test_dir/test.ini"
+
+  cat > "$config_file" << EOF
+name=testinstance
+blueprint_file=$blueprint_file
+runtime=native
+management_file=$mgmt_file
+EOF
+
+  __logic_create_management_file "$config_file"
+  local exit_code=$?
+
+  assert_equals "$EC_SUCCESS_MANAGEMENT_FILE_CREATED" "$exit_code" "Should return EC_SUCCESS_MANAGEMENT_FILE_CREATED"
+  assert_file_exists "$mgmt_file" "Management file should be created"
+  # Factorio overrides 05-version.sh uses factorio.com API
+  assert_file_contains "$mgmt_file" "factorio.com" "Should contain factorio-specific version logic"
+
+  rm -rf "$test_dir"
+}
+
+function test_create_management_file_container_compose_failure() {
+  log_test_step "Testing __logic_create_management_file fails when container compose is missing blueprint_file"
+
+  local test_dir="$KGSM_TEST_SANDBOX/mgmt_test_compose_fail_$$"
   mkdir -p "$test_dir"
 
   local mgmt_file="$test_dir/manage.sh"
 
-  # Config missing blueprint_file needed for container
+  # Config missing blueprint_file needed for container compose file creation
   local config_file="$test_dir/test.ini"
   cat > "$config_file" << EOF
 name=containertest
@@ -515,6 +521,37 @@ EOF
   local exit_code=$?
 
   assert_equals "$EC_FAILED_TEMPLATE" "$exit_code" "Should return EC_FAILED_TEMPLATE when container compose fails"
+
+  rm -rf "$test_dir"
+}
+
+function test_create_management_file_assembles_all_modules() {
+  log_test_step "Testing __logic_create_management_file assembles all 14 modules in order"
+
+  local test_dir="$KGSM_TEST_SANDBOX/mgmt_test_modules_$$"
+  mkdir -p "$test_dir"
+
+  local blueprint_file="$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/factorio.bp"
+  local mgmt_file="$test_dir/manage.sh"
+  local config_file="$test_dir/test.ini"
+
+  cat > "$config_file" << EOF
+name=testinstance
+blueprint_file=$blueprint_file
+runtime=native
+management_file=$mgmt_file
+EOF
+
+  __logic_create_management_file "$config_file"
+  local exit_code=$?
+
+  assert_equals "$EC_SUCCESS_MANAGEMENT_FILE_CREATED" "$exit_code" "Should succeed"
+
+  # Verify assembled file contains content from key modules
+  assert_file_contains "$mgmt_file" "#!/usr/bin/env bash" "Should contain header (00-header.sh)"
+  assert_file_contains "$mgmt_file" "function _get_installed_version" "Should contain version functions (05-version.sh)"
+  assert_file_contains "$mgmt_file" "function _download" "Should contain download function (06-download.sh)"
+  assert_file_contains "$mgmt_file" "function _deploy" "Should contain deploy function (07-deploy.sh)"
 
   rm -rf "$test_dir"
 }

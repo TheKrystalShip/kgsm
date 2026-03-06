@@ -343,7 +343,7 @@ function test_is_active_on_stopped_instance() {
 
   local blueprint="factorio"
   local instance_name
-  instance_name=$(create_test_instance "$blueprint" "$(generate_test_id)" "$TEST_INSTALL_DIR" 2>/dev/null)
+  instance_name=$(create_test_instance "$blueprint" 2>/dev/null)
 
   if [[ -z "$instance_name" ]]; then
     skip_test "Instance creation failed - skipping test"
@@ -364,7 +364,7 @@ function test_status_on_stopped_instance() {
 
   local blueprint="factorio"
   local instance_name
-  instance_name=$(create_test_instance "$blueprint" "$(generate_test_id)" "$TEST_INSTALL_DIR" 2>/dev/null)
+  instance_name=$(create_test_instance "$blueprint" 2>/dev/null)
 
   if [[ -z "$instance_name" ]]; then
     skip_test "Instance creation failed - skipping test"
@@ -387,7 +387,7 @@ function test_status_json_on_stopped_instance() {
 
   local blueprint="factorio"
   local instance_name
-  instance_name=$(create_test_instance "$blueprint" "$(generate_test_id)" "$TEST_INSTALL_DIR" 2>/dev/null)
+  instance_name=$(create_test_instance "$blueprint" 2>/dev/null)
 
   if [[ -z "$instance_name" ]]; then
     skip_test "Instance creation failed - skipping test"

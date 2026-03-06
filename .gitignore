@@ -31,3 +31,4 @@ tests/logs/*
 
 # Spec documents
 docs/specs/*.md
+docs/specs/**/*.md

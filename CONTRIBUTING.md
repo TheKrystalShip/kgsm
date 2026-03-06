@@ -20,6 +20,14 @@ The most valuable contribution is adding support for new game servers:
 - Use the existing blueprints in the `blueprints/default` directory as templates
 - Follow the guidelines in `docs/blueprints.md`
 
+### Game Server Overrides
+For games that need custom install/update/version logic, contribute module-based overrides:
+- Create a directory `overrides/{blueprint_name}/` containing numbered module files (e.g., `05-version.sh`, `06-download.sh`, `07-deploy.sh`)
+- Each override module is a copy of the corresponding default module in `templates/manage.native.d/` with only the necessary functions modified
+- Only modules 03–11 may be overridden
+- All functions from the default module must be preserved in the override
+- See `docs/overrides.md` for full details and real-world examples
+
 ### System Compatibility
 - Test KGSM on different Linux distributions and report compatibility
 - Add support for alternative system components:

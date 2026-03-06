@@ -8,8 +8,8 @@ Templates in KGSM are standardized files that provide consistent structure for g
 - [Template Reference](#template-reference)
   - [blueprint.tp](#blueprinttp)
   - [instance.tp](#instancetp)
-  - [manage.native.tp](#managenativetp)
-  - [manage.container.tp](#managecontainertp)
+  - [manage.native.d/](#managenativedd)
+  - [manage.container.d/](#managecontainerd)
   - [service.tp](#servicetp)
   - [socket.tp](#sockettp)
   - [ufw.tp](#ufwtp)
@@ -91,23 +91,42 @@ The low-level file discovery is handled by `__find_template` in `core/loader.sh`
 
 ---
 
-### manage.native.tp
+### manage.native.d/
 
-**Purpose:** Template for the per-instance management script used by **native** (non-containerized) game servers. KGSM expands this template and writes the result to the instance directory. The resulting script is the primary interface for starting, stopping, restarting, updating, backing up, and otherwise controlling a running game server.
+**Purpose:** Directory of numbered module files that are concatenated during instance creation to produce the per-instance management script for **native** (non-containerized) game servers. Each module handles one concern (lifecycle, I/O, version management, download, deploy, backup, network, logging, status).
 
-**Used by:** `commands/handlers/files.management.sh` when `instance_runtime=native`. Can be manually regenerated with:
+**Modules:**
+
+| File | Responsibility |
+|------|----------------|
+| `00-header.sh` | Shebang, global flags, bootstrap |
+| `01-config.sh` | Instance config loading (`__source_instance_config`) |
+| `02-help.sh` | `--help` output |
+| `03-lifecycle.sh` | Start / stop / restart logic |
+| `04-io.sh` | Input / output helpers |
+| `05-version.sh` | Version retrieval and comparison |
+| `06-download.sh` | File download |
+| `07-deploy.sh` | File deployment |
+| `08-backup.sh` | Backup management |
+| `09-network.sh` | UPnP port management |
+| `10-logging.sh` | Log printing and rotation |
+| `11-status.sh` | Server status reporting |
+| `12-commands.sh` | CLI argument dispatch |
+| `13-dispatch.sh` | Main entry point / argument parsing |
+
+**Used by:** `commands/handlers/files.management.sh` (`__logic_create_management_file`) when `instance_runtime=native`. Modules 03–11 may be replaced by per-game override modules from `overrides/{blueprint_name}/`. Can be manually regenerated with:
 
 ```bash
 ./kgsm.sh files --instance <instance_name> --create --manage
 ```
 
-**Format:** Bash script (`#!/usr/bin/env bash`). Contains `__source_instance_config` to load the instance config at runtime, plus all lifecycle functions. Supports `--debug` flag propagation.
+**Format:** Each module is a self-contained bash fragment. They are concatenated in numerical order into a single `#!/usr/bin/env bash` script.
 
 ---
 
-### manage.container.tp
+### manage.container.d/
 
-**Purpose:** Template for the per-instance management script used by **containerized** game servers. Structurally similar to `manage.native.tp`, but all lifecycle operations (`--start`, `--stop`, `--restart`, `--update`) are implemented via `docker compose` rather than direct process management.
+**Purpose:** Equivalent to `manage.native.d/` for **containerized** game servers. All lifecycle operations (`--start`, `--stop`, `--restart`, `--update`) are implemented via `docker compose` rather than direct process management.
 
 **Used by:** `commands/handlers/files.management.sh` when `instance_runtime=container`. Can be manually regenerated with:
 
@@ -115,7 +134,7 @@ The low-level file discovery is handled by `__find_template` in `core/loader.sh`
 ./kgsm.sh files --instance <instance_name> --create --manage
 ```
 
-**Format:** Bash script (`#!/usr/bin/env bash`). Reads `$instance_compose_file` and delegates all container operations to Docker Compose.
+**Format:** Same numbered module structure as `manage.native.d/`. Reads `$instance_compose_file` and delegates container operations to Docker Compose.
 
 ---
 
@@ -195,11 +214,11 @@ ports=$instance_ports
 
 ### overrides.tp
 
-**Purpose:** A comprehensive reference template for creating game-specific override files. It documents every overridable function with its expected input/output contract, available global variables, and example implementations. Users copy this file to `overrides/<blueprint_name>.overrides.sh` and uncomment only the functions they need to customize.
+**Purpose:** A reference file documenting the module-based override system and available variables. Documents which modules can be overridden (03–11), the copy-and-modify workflow, helper function naming conventions, and the full list of `$instance_*` and `$config_*` variables available to override modules.
 
-**Used by:** Not expanded programmatically. Serves as a starting point and API reference for authors writing override files.
+**Used by:** Not expanded programmatically. Serves as a starting point and API reference for authors writing override modules.
 
-**Format:** Bash script with all function bodies commented out. Includes detailed inline documentation for each overridable function and the full list of available `$instance_*` and `$config_*` variables.
+**Format:** Bash script with inline documentation comments. Describes the override directory structure and workflow.
 
 For a detailed explanation of overrides and the override system, see [Overrides 101](overrides.md).
 
@@ -328,9 +347,9 @@ These `$config_*` variables reflect KGSM-wide settings and are also available in
 
 - **Never modify files in `templates/`**. These are internal KGSM files and may be overwritten during updates.
 - To create a new blueprint, copy `templates/blueprint.tp` to `blueprints/custom/native/your_game.bp` and fill in the fields.
-- To add game-specific logic, copy `templates/overrides.tp` to `overrides/your_game.overrides.sh` and implement only the functions you need.
+- To add game-specific logic, create a directory `overrides/{blueprint_name}/`, copy the relevant default modules from `templates/manage.native.d/`, and modify only the functions you need. See `docs/overrides.md` for details.
 - If a management script becomes corrupted or needs to be regenerated, use:
   ```bash
   ./kgsm.sh files --instance <instance_name> --create --manage
   ```
-- Management script templates (`manage.native.tp`, `manage.container.tp`) are selected automatically based on the instance's `runtime` field (`native` or `container`).
+- The management script is assembled from numbered modules in `templates/manage.{runtime}.d/`, with per-game overrides from `overrides/{blueprint_name}/` substituted for modules 03–11 where they exist.

@@ -86,25 +86,24 @@ function __logic_create_management_file() {
   fi
 
   # Get required variables from instance config
-  local _instance_name _instance_runtime _instance_management_file
+  local _instance_name _instance_runtime _instance_management_file _instance_blueprint_file
   _instance_name=$(__get_config_value "$instance_config_file" "name" 2>/dev/null)
   _instance_runtime=$(__get_config_value "$instance_config_file" "runtime" 2>/dev/null)
   _instance_management_file=$(__get_config_value "$instance_config_file" "management_file" 2>/dev/null)
+  _instance_blueprint_file=$(__get_config_value "$instance_config_file" "blueprint_file" 2>/dev/null)
 
   if [[ -z "$_instance_name" ]] || [[ -z "$_instance_runtime" ]] || [[ -z "$_instance_management_file" ]]; then
     return $EC_INVALID_CONFIG
   fi
 
-  # Find appropriate template based on runtime
-  local manage_template_file
-  manage_template_file=$(__find_template "manage.${_instance_runtime}" 2>/dev/null)
-
-  if [[ ! -f "$manage_template_file" ]]; then
-    return $EC_FILE_NOT_FOUND
+  # Extract blueprint_name from the blueprint file's 'name' field (not the filename)
+  local blueprint_name=""
+  if [[ -n "$_instance_blueprint_file" && -f "$_instance_blueprint_file" ]]; then
+    blueprint_name=$(__get_config_value "$_instance_blueprint_file" "name" 2>/dev/null)
   fi
 
-  # Create the new management file from template
-  if ! cp -f "$manage_template_file" "$_instance_management_file" 2>/dev/null; then
+  # Assemble management file from modules, resolving overrides per module
+  if ! __logic_assemble_management_file "$_instance_runtime" "$blueprint_name" "$_instance_management_file"; then
     return $EC_FAILED_TEMPLATE
   fi
 
@@ -123,11 +122,6 @@ function __logic_create_management_file() {
       return $EC_INVALID_CONFIG
       ;;
   esac
-
-  # Inject overrides into management file
-  if ! __logic_inject_overrides "$_instance_name" "$_instance_management_file"; then
-    return $EC_FAILED_TEMPLATE
-  fi
 
   # Set proper ownership
   if ! __logic_set_file_ownership "$_instance_management_file"; then

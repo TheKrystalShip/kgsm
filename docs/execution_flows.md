@@ -228,7 +228,7 @@ graph TD
     H --> EVT1["events.sh emit instance-installation-started"]
 
     EVT1 --> I["directories.sh create INSTANCE<br/>(install, saves, backups, temp, logs)"]
-    I --> J["files.sh create INSTANCE<br/>(management script, config files, integrations)"]
+    I --> J["files.sh create INSTANCE<br/>(assemble management script from modules,<br/>config files, integrations)"]
     J --> K["__source_instance INSTANCE<br/>(load instance_* variables)"]
 
     K --> L{"version == 0<br/>(latest)?"}
@@ -259,7 +259,7 @@ graph TD
 1. **Directory bootstrap**: The target `install_dir` is created or validated, then a per-instance subdirectory (`install_dir/BLUEPRINT/INSTANCE`) is created and symlinked into `KGSM_INSTANCES_DIR`.
 2. **Instance config**: `instances.sh create` writes `INSTANCE.config.ini` through the symlink into the working directory.
 3. **Directory structure**: `directories.sh create` creates the full runtime directory set (install, saves, backups, temp, logs).
-4. **File generation**: `files.sh create` writes the management script, optional systemd unit, UFW rules, and UPnP configuration.
+4. **Management script assembly**: `files.sh create` assembles the management script by concatenating numbered modules from `templates/manage.{runtime}.d/`, substituting per-game override modules from `overrides/{blueprint_name}/` for modules 03–11 where they exist. The assembled script, plus optional systemd unit, UFW rules, and UPnP configuration, are written to the instance directory.
 5. **Download**: The generated management script is called with `--download` to fetch game files via the override's `_download()` function.
 6. **Deploy**: `--deploy` moves files from the temp directory to the install directory via `_deploy()`.
 7. **Version record**: The resolved version string is persisted to the instance config.

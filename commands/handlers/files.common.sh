@@ -17,104 +17,103 @@ if [[ -n "${KGSM_LOGIC_FILES_COMMON_LOADED:-}" ]]; then
   return 0
 fi
 
-# Inject override functions into a management file
-# Args: $1 = _instance_name, $2 = _instance_management_file
-# Returns: 0 on success, error code on failure
+# Override injection is now handled during module assembly.
+# This function is retained for backward compatibility and is a no-op.
 function __logic_inject_overrides() {
-  local _instance_name="$1"
-  local _instance_management_file="$2"
-
-  # Validate input
-  if [[ -z "$_instance_name" ]]; then
-    return $EC_INVALID_ARG
-  fi
-
-  if [[ -z "$_instance_management_file" ]]; then
-    return $EC_INVALID_ARG
-  fi
-
-  if [[ ! -f "$_instance_management_file" ]]; then
-    return $EC_FILE_NOT_FOUND
-  fi
-
-  # Get blueprint name from instance config
-  local instance_config_file
-  instance_config_file=$(__find_instance_config "$_instance_name" 2> /dev/null)
-
-  if [[ ! -f "$instance_config_file" ]]; then
-    return $EC_INVALID_INSTANCE
-  fi
-
-  local blueprint_file
-  blueprint_file=$(__get_config_value "$instance_config_file" "blueprint_file" 2> /dev/null)
-
-  if [[ -z "$blueprint_file" ]]; then
-    return $EC_INVALID_CONFIG
-  fi
-
-  # If it's a container blueprint, overrides are not supported
-  if [[ "$blueprint_file" == *.docker-compose.yml ]]; then
-    return 0
-  fi
-
-  # Get blueprint name from the blueprint file's 'name' field
-  local blueprint_name
-  blueprint_name=$(__get_config_value "$blueprint_file" "name" 2> /dev/null)
-
-  if [[ -z "$blueprint_name" ]]; then
-    return $EC_INVALID_CONFIG
-  fi
-
-  local instance_overrides_file="${KGSM_SYSTEM_OVERRIDES_DIR}/${blueprint_name}.overrides.sh"
-
-  # If no overrides file exists, nothing to inject (this is valid)
-  if [[ ! -f "$instance_overrides_file" ]]; then
-    return 0
-  fi
-
-  # Source the overrides file to get function definitions
-  # shellcheck disable=SC1090
-  source "$instance_overrides_file" 2> /dev/null || return $EC_FAILED_SOURCE
-
-  # For each function name declared in the overrides file…
-  grep -Po '^function \K[[:alnum:]_]+' "${instance_overrides_file}" | while read -r fn; do
-
-    # Check if the function is defined in the overrides file
-    # Since the overrides file is sourced, we can check if the function exists
-    if ! declare -F "${fn}" &>/dev/null; then
-      continue
-    fi
-
-    func_def=$(declare -f "${fn}")
-
-    # Create a temporary file to hold the new function body
-    tmp=$(mktemp)
-    printf '%s\n' "${func_def}" | sed '1 s|^|function |' >"${tmp}"
-
-    # In-place sed:
-    #   1. On the "function NAME" line, `r tmp` will read/insert the new body *below* that line.
-    #   2. Then the range delete `/^function NAME.../,/^}/ d` removes the entire old block,
-    #      including that matched "function" line and its closing `}`.
-    #   The net effect is that the new body (from the tmp file) ends up in place of the old.
-    sed -i \
-      -e "/^function ${fn}[[:space:]]*(/ r ${tmp}" \
-      -e "/^function ${fn}[[:space:]]*(/,/^}/ d" \
-      "${_instance_management_file}"
-
-    # shellcheck disable=SC2181
-    if [[ $? -ne 0 ]]; then
-      rm -f "${tmp}" # Clean up the temporary file
-      return $EC_FAILED_TEMPLATE
-    fi
-
-    # Clean up the temporary file
-    rm -f "${tmp}"
-  done
-
   return 0
 }
 
 export -f __logic_inject_overrides
+
+# Resolve which file to use for a given module, applying override priority.
+# Non-overridable modules (00, 01, 02, 12, 13) always use the default template.
+# For overridable modules (03-11): user overrides dir > system overrides dir > default.
+# Args: $1 = blueprint_name, $2 = runtime (native|container), $3 = module_basename (e.g. 05-version.sh)
+# Returns: absolute path to resolved module file via echo, EC_FILE_NOT_FOUND if no file found
+function __resolve_module() {
+  local blueprint_name="$1"
+  local runtime="$2"
+  local module_basename="$3"
+
+  local default_path="${KGSM_TEMPLATES_DIR}/manage.${runtime}.d/${module_basename}"
+
+  # Extract the numeric prefix to determine if this module is overridable
+  local module_num="${module_basename%%-*}"
+
+  # Non-overridable modules: 00, 01, 02, 12, 13
+  case "$module_num" in
+    00|01|02|12|13)
+      if [[ ! -f "$default_path" ]]; then
+        return $EC_FILE_NOT_FOUND
+      fi
+
+      echo "$default_path"
+      return 0
+      ;;
+  esac
+
+  # Overridable: check user dir first, then system dir, then default
+  if [[ -n "$blueprint_name" ]]; then
+    local user_override="${KGSM_USER_OVERRIDES_DIR}/${blueprint_name}/${module_basename}"
+    local system_override="${KGSM_SYSTEM_OVERRIDES_DIR}/${blueprint_name}/${module_basename}"
+
+    if [[ -f "$user_override" ]]; then
+      echo "$user_override"
+      return 0
+    elif [[ -f "$system_override" ]]; then
+      echo "$system_override"
+      return 0
+    fi
+  fi
+
+  if [[ ! -f "$default_path" ]]; then
+    return $EC_FILE_NOT_FOUND
+  fi
+
+  echo "$default_path"
+  return 0
+}
+
+export -f __resolve_module
+
+# Assemble a management file by concatenating modules in sorted order, resolving
+# overrides for each module before concatenation.
+# Args: $1 = runtime (native|container), $2 = blueprint_name, $3 = output_file
+# Returns: 0 on success, error code on failure
+function __logic_assemble_management_file() {
+  local runtime="$1"
+  local blueprint_name="$2"
+  local output_file="$3"
+
+  if [[ -z "$runtime" || -z "$output_file" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  local module_dir
+  module_dir=$(__find_manage_module_dir "$runtime") || return $EC_FILE_NOT_FOUND
+
+  # Truncate (or create) the output file
+  : >"$output_file" || return $EC_FAILED_TEMPLATE
+
+  # Iterate modules in sorted order
+  local module_file module_basename resolved
+  while IFS= read -r -d '' module_file; do
+    module_basename=$(basename "$module_file")
+
+    resolved=$(__resolve_module "$blueprint_name" "$runtime" "$module_basename") || return $EC_FILE_NOT_FOUND
+
+    cat "$resolved" >>"$output_file" || return $EC_FAILED_TEMPLATE
+  done < <(find "$module_dir" -maxdepth 1 -type f -name '*.sh' -print0 | sort -z)
+
+  # Check if output file is non-empty after assembly
+  if [[ ! -s "$output_file" ]]; then
+    return $EC_FAILED_TEMPLATE
+  fi
+
+  return 0
+}
+
+export -f __logic_assemble_management_file
 
 # Set file ownership to the appropriate user
 # Args: $1 = file_path

@@ -333,8 +333,8 @@ function test_list_filter_by_blueprint() {
 function test_remove_instance() {
   log_test_step "Testing 'remove' command removes instance"
 
-  local instance_name="test-remove-$$"
-  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  local instance_name="test_remove_instance"
+  create_test_instance "factorio" "$instance_name" >/dev/null 2>&1
   assert_equals 0 "$?" "Instance should be created for remove test"
 
   local output

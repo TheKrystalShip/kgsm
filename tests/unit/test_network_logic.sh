@@ -268,8 +268,7 @@ function test_find_port_conflicts_with_instance() {
   log_test_step "Testing __logic_find_port_conflicts with a single instance (no conflicts)"
 
   local blueprint="factorio"
-  local instance_name
-  instance_name=$(generate_test_id "nettest")
+  local instance_name="nettest"
 
   local instance_created
   instance_created=$(create_test_instance "$blueprint" "$instance_name") || {

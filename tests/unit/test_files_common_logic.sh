@@ -60,67 +60,6 @@ MGMT_EOF
   return 0
 }
 
-# Create a minimal test instance manually (bypassing broken create_test_instance)
-# Args: $1 = blueprint_name (e.g., "factorio", "necesse", "vrising")
-# Returns: echoes instance_name, returns 0 on success
-function __create_minimal_test_instance() {
-  local blueprint_name="$1"
-  local instance_name="test_${blueprint_name}_$$"
-
-  # Determine blueprint file path and type
-  local blueprint_file=""
-  local runtime="native"
-
-  if [[ -f "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/${blueprint_name}.bp" ]]; then
-    blueprint_file="$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/${blueprint_name}.bp"
-    runtime="native"
-  elif [[ -f "$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR/${blueprint_name}.docker-compose.yml" ]]; then
-    blueprint_file="$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR/${blueprint_name}.docker-compose.yml"
-    runtime="container"
-  else
-    return 1
-  fi
-
-  # Create instance directory structure
-  local instance_base_dir="$KGSM_INSTANCES_DIR/$blueprint_name"
-  local instance_dir="$instance_base_dir/$instance_name"
-  local working_dir="$KGSM_TEST_SANDBOX/instances_working/${instance_name}"
-
-  mkdir -p "$instance_base_dir"
-  mkdir -p "$working_dir"
-
-  # Create symlink from instances dir to working dir
-  ln -sf "$working_dir" "$instance_dir"
-
-  # Create instance config file
-  local config_file="$instance_dir/${instance_name}.config.ini"
-  cat > "$config_file" << EOF
-# KGSM Test Instance Configuration
-name=${instance_name}
-blueprint_file=${blueprint_file}
-runtime=${runtime}
-working_dir=${working_dir}
-install_dir=${working_dir}/install
-management_file=${working_dir}/${instance_name}.manage.sh
-EOF
-
-  echo "$instance_name"
-  return 0
-}
-
-# Remove a minimal test instance
-# Args: $1 = instance_name, $2 = blueprint_name
-function __remove_minimal_test_instance() {
-  local instance_name="$1"
-  local blueprint_name="$2"
-
-  local instance_dir="$KGSM_INSTANCES_DIR/$blueprint_name/$instance_name"
-  local working_dir="$KGSM_TEST_SANDBOX/instances_working/${instance_name}"
-
-  rm -rf "$instance_dir" 2>/dev/null
-  rm -rf "$working_dir" 2>/dev/null
-}
-
 # =============================================================================
 # TEST FUNCTIONS
 # =============================================================================
@@ -152,7 +91,9 @@ function setup_test() {
   assert_not_null "$EC_PERMISSION" "EC_PERMISSION should be defined"
 
   # Verify functions are exported
-  assert_function_exists "__logic_inject_overrides" "__logic_inject_overrides should be exported"
+  assert_function_exists "__logic_inject_overrides" "__logic_inject_overrides should be exported (no-op for backward compat)"
+  assert_function_exists "__logic_assemble_management_file" "__logic_assemble_management_file should be exported"
+  assert_function_exists "__resolve_module" "__resolve_module should be exported"
   assert_function_exists "__logic_set_file_ownership" "__logic_set_file_ownership should be exported"
 
   # Verify test blueprints exist
@@ -161,22 +102,24 @@ function setup_test() {
   assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/necesse.bp" "Necesse blueprint should exist"
   assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR/vrising.docker-compose.yml" "VRising blueprint should exist"
 
-  # Verify override files for testing
-  assert_file_exists "$KGSM_SYSTEM_OVERRIDES_DIR/factorio.overrides.sh" "Factorio overrides should exist"
-  assert_file_exists "$KGSM_SYSTEM_OVERRIDES_DIR/terraria.overrides.sh" "Terraria overrides should exist"
+  # Verify module override directories for testing (new directory-based structure)
+  assert_dir_exists "$KGSM_SYSTEM_OVERRIDES_DIR/factorio" "Factorio override directory should exist"
+  assert_dir_exists "$KGSM_SYSTEM_OVERRIDES_DIR/terraria" "Terraria override directory should exist"
 
-  # Verify necesse does NOT have overrides (for no-override testing)
-  assert_file_not_exists "$KGSM_SYSTEM_OVERRIDES_DIR/necesse.overrides.sh" "Necesse should NOT have overrides"
+  # Verify necesse does NOT have an override directory (for no-override testing)
+  assert_dir_not_exists "$KGSM_SYSTEM_OVERRIDES_DIR/necesse" "Necesse should NOT have override directory"
 
   log_test_step "Environment validated"
 }
 
 # =============================================================================
 # __logic_inject_overrides() TESTS
+# (This function is now a no-op retained for backward compatibility.)
+# All calls return 0 regardless of arguments.
 # =============================================================================
 
 function test_inject_overrides_empty_instance_name() {
-  log_test_step "Testing __logic_inject_overrides with empty instance name"
+  log_test_step "Testing __logic_inject_overrides is a no-op with empty instance name"
 
   local temp_file="$KGSM_TEST_SANDBOX/temp_manage_empty_instance_$$.sh"
   __create_temp_management_file "$temp_file"
@@ -184,31 +127,31 @@ function test_inject_overrides_empty_instance_name() {
   __logic_inject_overrides "" "$temp_file" 2>/dev/null
   local exit_code=$?
 
-  assert_equals "$EC_INVALID_ARG" "$exit_code" "Should return EC_INVALID_ARG for empty instance name"
+  assert_equals "0" "$exit_code" "No-op should return 0 for any input"
 
   rm -f "$temp_file"
 }
 
 function test_inject_overrides_empty_management_file() {
-  log_test_step "Testing __logic_inject_overrides with empty management file path"
+  log_test_step "Testing __logic_inject_overrides is a no-op with empty management file path"
 
   __logic_inject_overrides "some-instance" "" 2>/dev/null
   local exit_code=$?
 
-  assert_equals "$EC_INVALID_ARG" "$exit_code" "Should return EC_INVALID_ARG for empty management file"
+  assert_equals "0" "$exit_code" "No-op should return 0 for any input"
 }
 
 function test_inject_overrides_management_file_not_found() {
-  log_test_step "Testing __logic_inject_overrides with non-existent management file"
+  log_test_step "Testing __logic_inject_overrides is a no-op with non-existent management file"
 
   __logic_inject_overrides "some-instance" "/nonexistent/path/manage.sh" 2>/dev/null
   local exit_code=$?
 
-  assert_equals "$EC_FILE_NOT_FOUND" "$exit_code" "Should return EC_FILE_NOT_FOUND for missing management file"
+  assert_equals "0" "$exit_code" "No-op should return 0 for any input"
 }
 
 function test_inject_overrides_instance_not_found() {
-  log_test_step "Testing __logic_inject_overrides with non-existent instance"
+  log_test_step "Testing __logic_inject_overrides is a no-op with non-existent instance"
 
   local temp_file="$KGSM_TEST_SANDBOX/temp_manage_instance_notfound_$$.sh"
   __create_temp_management_file "$temp_file"
@@ -216,278 +159,317 @@ function test_inject_overrides_instance_not_found() {
   __logic_inject_overrides "nonexistent-instance-xyz-12345" "$temp_file" 2>/dev/null
   local exit_code=$?
 
-  assert_equals "$EC_INVALID_INSTANCE" "$exit_code" "Should return EC_INVALID_INSTANCE for non-existent instance"
+  assert_equals "0" "$exit_code" "No-op should return 0 for any input"
 
   rm -f "$temp_file"
 }
 
 function test_inject_overrides_missing_blueprint_file_config() {
-  log_test_step "Testing __logic_inject_overrides with missing blueprint_file in instance config"
+  log_test_step "Testing __logic_inject_overrides is a no-op regardless of missing blueprint_file"
 
-  # Create a minimal test instance
-  local instance
-  instance=$(__create_minimal_test_instance "factorio")
-
-  if [[ -z "$instance" ]]; then
-    fail_test "Failed to create minimal test instance"
-    return 1
-  fi
-
-  # Get instance config path
-  local instance_config
-  instance_config=$(__find_instance_config "$instance" 2>/dev/null)
-
-  if [[ ! -f "$instance_config" ]]; then
-    __remove_minimal_test_instance "$instance" "factorio"
-    fail_test "Failed to find instance config"
-    return 1
-  fi
-
-  # Backup the config
-  local config_backup="${instance_config}.bak"
-  cp "$instance_config" "$config_backup"
-
-  # Remove blueprint_file line from config
-  sed -i '/^blueprint_file=/d' "$instance_config"
-
-  # Create a temp management file
   local temp_manage="$KGSM_TEST_SANDBOX/temp_manage_missing_bp_$$.sh"
   __create_temp_management_file "$temp_manage"
 
-  # Test
-  __logic_inject_overrides "$instance" "$temp_manage" 2>/dev/null
+  __logic_inject_overrides "any-instance" "$temp_manage" 2>/dev/null
   local exit_code=$?
 
-  # Restore config
-  mv "$config_backup" "$instance_config"
+  assert_equals "0" "$exit_code" "No-op should return 0 for any input"
 
-  assert_equals "$EC_INVALID_CONFIG" "$exit_code" "Should return EC_INVALID_CONFIG for missing blueprint_file"
-
-  # Cleanup
   rm -f "$temp_manage"
-  __remove_minimal_test_instance "$instance" "factorio"
 }
 
 function test_inject_overrides_missing_blueprint_name() {
-  log_test_step "Testing __logic_inject_overrides with missing name field in blueprint"
+  log_test_step "Testing __logic_inject_overrides is a no-op regardless of missing blueprint name"
 
-  # Create a minimal test instance
-  local instance
-  instance=$(__create_minimal_test_instance "factorio")
-
-  if [[ -z "$instance" ]]; then
-    fail_test "Failed to create minimal test instance"
-    return 1
-  fi
-
-  # Get instance config path
-  local instance_config
-  instance_config=$(__find_instance_config "$instance" 2>/dev/null)
-
-  if [[ ! -f "$instance_config" ]]; then
-    __remove_minimal_test_instance "$instance" "factorio"
-    fail_test "Failed to find instance config"
-    return 1
-  fi
-
-  # Get blueprint file path from instance config
-  local blueprint_file
-  blueprint_file=$(__get_config_value "$instance_config" "blueprint_file" 2>/dev/null)
-
-  if [[ ! -f "$blueprint_file" ]]; then
-    __remove_minimal_test_instance "$instance" "factorio"
-    fail_test "Blueprint file not found: $blueprint_file"
-    return 1
-  fi
-
-  # Backup the blueprint
-  local blueprint_backup="${blueprint_file}.bak"
-  cp "$blueprint_file" "$blueprint_backup"
-
-  # Remove name line from blueprint
-  sed -i '/^name=/d' "$blueprint_file"
-
-  # Create a temp management file
   local temp_manage="$KGSM_TEST_SANDBOX/temp_manage_missing_name_$$.sh"
   __create_temp_management_file "$temp_manage"
 
-  # Test
-  __logic_inject_overrides "$instance" "$temp_manage" 2>/dev/null
+  __logic_inject_overrides "any-instance" "$temp_manage" 2>/dev/null
   local exit_code=$?
 
-  # Restore blueprint
-  mv "$blueprint_backup" "$blueprint_file"
+  assert_equals "0" "$exit_code" "No-op should return 0 for any input"
 
-  assert_equals "$EC_INVALID_CONFIG" "$exit_code" "Should return EC_INVALID_CONFIG for missing blueprint name"
-
-  # Cleanup
   rm -f "$temp_manage"
-  __remove_minimal_test_instance "$instance" "factorio"
 }
 
 function test_inject_overrides_container_blueprint_skips() {
-  log_test_step "Testing __logic_inject_overrides skips container blueprints"
+  log_test_step "Testing __logic_inject_overrides is a no-op (container or otherwise)"
 
-  # Create a minimal container instance (vrising)
-  local instance
-  instance=$(__create_minimal_test_instance "vrising")
-
-  if [[ -z "$instance" ]]; then
-    fail_test "Failed to create vrising minimal test instance"
-    return 1
-  fi
-
-  # Create a temp management file
   local temp_manage="$KGSM_TEST_SANDBOX/temp_manage_container_$$.sh"
   __create_temp_management_file "$temp_manage"
-
-  # Capture original content
   local original_content
   original_content=$(cat "$temp_manage")
 
-  # Test - should succeed and not modify the file
-  __logic_inject_overrides "$instance" "$temp_manage" 2>/dev/null
+  __logic_inject_overrides "any-instance" "$temp_manage" 2>/dev/null
   local exit_code=$?
 
-  # Check content unchanged (container blueprints skip injection)
   local new_content
   new_content=$(cat "$temp_manage")
 
-  assert_equals "0" "$exit_code" "Should return 0 for container blueprint (skip injection)"
-  assert_equals "$original_content" "$new_content" "Management file should be unchanged for container blueprint"
+  assert_equals "0" "$exit_code" "No-op should return 0"
+  assert_equals "$original_content" "$new_content" "No-op should not modify the management file"
 
-  # Cleanup
   rm -f "$temp_manage"
-  __remove_minimal_test_instance "$instance" "vrising"
 }
 
 function test_inject_overrides_no_override_file_exists() {
-  log_test_step "Testing __logic_inject_overrides with blueprint that has no overrides"
+  log_test_step "Testing __logic_inject_overrides is a no-op (does not modify file)"
 
-  # Create a minimal necesse instance (has no override file)
-  local instance
-  instance=$(__create_minimal_test_instance "necesse")
-
-  if [[ -z "$instance" ]]; then
-    fail_test "Failed to create necesse minimal test instance"
-    return 1
-  fi
-
-  # Create a temp management file
   local temp_manage="$KGSM_TEST_SANDBOX/temp_manage_no_override_$$.sh"
   __create_temp_management_file "$temp_manage"
-
-  # Capture original content
   local original_content
   original_content=$(cat "$temp_manage")
 
-  # Test - should succeed without modifying file (no overrides to inject)
-  __logic_inject_overrides "$instance" "$temp_manage" 2>/dev/null
+  __logic_inject_overrides "any-instance" "$temp_manage" 2>/dev/null
   local exit_code=$?
 
-  # Check content unchanged
   local new_content
   new_content=$(cat "$temp_manage")
 
-  assert_equals "0" "$exit_code" "Should return 0 when no override file exists"
-  assert_equals "$original_content" "$new_content" "Management file should be unchanged when no overrides exist"
+  assert_equals "0" "$exit_code" "No-op should return 0"
+  assert_equals "$original_content" "$new_content" "No-op should not modify the management file"
 
-  # Cleanup
   rm -f "$temp_manage"
-  __remove_minimal_test_instance "$instance" "necesse"
 }
 
 function test_inject_overrides_success_with_overrides() {
-  log_test_step "Testing __logic_inject_overrides successfully injects override functions"
+  log_test_step "Testing __logic_inject_overrides is a no-op even when override directories exist"
 
-  # Create a minimal factorio instance (has overrides)
-  local instance
-  instance=$(__create_minimal_test_instance "factorio")
-
-  if [[ -z "$instance" ]]; then
-    fail_test "Failed to create factorio minimal test instance"
-    return 1
-  fi
-
-  # Create a temp management file with placeholder functions
   local temp_manage="$KGSM_TEST_SANDBOX/temp_manage_success_$$.sh"
   __create_temp_management_file "$temp_manage"
+  local original_content
+  original_content=$(cat "$temp_manage")
 
-  # Capture original _get_latest_version function
-  local original_func
-  original_func=$(grep -A5 "function _get_latest_version" "$temp_manage" | head -6)
-
-  # Test
-  __logic_inject_overrides "$instance" "$temp_manage" 2>/dev/null
+  __logic_inject_overrides "any-instance" "$temp_manage" 2>/dev/null
   local exit_code=$?
 
-  assert_equals "0" "$exit_code" "Should return 0 on successful injection"
+  local new_content
+  new_content=$(cat "$temp_manage")
 
-  # Verify function was replaced - the new function should contain factorio-specific code
-  # (factorio.overrides.sh uses wget to query factorio.com API)
-  local new_func
-  new_func=$(grep -A10 "function _get_latest_version" "$temp_manage" | head -11)
+  assert_equals "0" "$exit_code" "No-op should return 0"
+  assert_equals "$original_content" "$new_content" "No-op should not modify the management file"
 
-  assert_not_equals "$original_func" "$new_func" "Function should be replaced with override"
-
-  # Check for factorio-specific content in the injected function
-  if grep -q "factorio.com" "$temp_manage"; then
-    pass_test "Override function contains factorio.com reference"
-  else
-    # Alternative check - the function should at least be different
-    assert_not_equals "$original_func" "$new_func" "Function content should differ after injection"
-  fi
-
-  # Cleanup
   rm -f "$temp_manage"
-  __remove_minimal_test_instance "$instance" "factorio"
 }
 
 function test_inject_overrides_corrupt_override_file() {
-  log_test_step "Testing __logic_inject_overrides with corrupt/unparseable override file"
+  log_test_step "Testing __logic_inject_overrides is a no-op even with corrupt inputs"
 
-  # Create a minimal factorio instance
-  local instance
-  instance=$(__create_minimal_test_instance "factorio")
-
-  if [[ -z "$instance" ]]; then
-    fail_test "Failed to create factorio minimal test instance"
-    return 1
-  fi
-
-  # Backup the factorio overrides file
-  local override_file="$KGSM_SYSTEM_OVERRIDES_DIR/factorio.overrides.sh"
-  local override_backup="${override_file}.bak"
-  cp "$override_file" "$override_backup"
-
-  # Corrupt the override file with invalid bash syntax
-  cat > "$override_file" << 'CORRUPT_EOF'
-#!/usr/bin/env bash
-
-# Corrupt file for testing
-function _get_latest_version( {
-  # Missing closing parenthesis - syntax error
-  echo "broken
-}
-
-CORRUPT_EOF
-
-  # Create a temp management file
   local temp_manage="$KGSM_TEST_SANDBOX/temp_manage_corrupt_$$.sh"
   __create_temp_management_file "$temp_manage"
 
-  # Test
-  __logic_inject_overrides "$instance" "$temp_manage" 2>/dev/null
+  __logic_inject_overrides "any-instance" "$temp_manage" 2>/dev/null
   local exit_code=$?
 
-  # Restore override file immediately
-  mv "$override_backup" "$override_file"
+  assert_equals "0" "$exit_code" "No-op should return 0"
 
-  assert_equals "$EC_FAILED_SOURCE" "$exit_code" "Should return EC_FAILED_SOURCE for corrupt override file"
+  rm -f "$temp_manage"
+}
+
+# =============================================================================
+# __resolve_module() TESTS
+# =============================================================================
+
+function test_resolve_module_non_overridable_always_default() {
+  log_test_step "Testing __resolve_module returns default for non-overridable modules"
+
+  # Modules 00, 01, 02, 12, 13 are non-overridable
+  for module in "00-header.sh" "01-config.sh" "02-help.sh" "12-commands.sh" "13-dispatch.sh"; do
+    # Create user and system overrides for these modules (should be ignored)
+    mkdir -p "$KGSM_USER_OVERRIDES_DIR/fakegame"
+    echo "# fake user override" > "$KGSM_USER_OVERRIDES_DIR/fakegame/${module}"
+    mkdir -p "$KGSM_SYSTEM_OVERRIDES_DIR/fakegame"
+    echo "# fake system override" > "$KGSM_SYSTEM_OVERRIDES_DIR/fakegame/${module}"
+
+    local resolved
+    resolved=$(__resolve_module "fakegame" "native" "$module")
+    local exit_code=$?
+
+    local expected_default="${KGSM_TEMPLATES_DIR}/manage.native.d/${module}"
+    assert_equals "0" "$exit_code" "Should succeed for non-overridable module $module"
+    assert_equals "$expected_default" "$resolved" "Non-overridable $module should always use default"
+  done
 
   # Cleanup
-  rm -f "$temp_manage"
-  __remove_minimal_test_instance "$instance" "factorio"
+  rm -rf "$KGSM_USER_OVERRIDES_DIR/fakegame" "$KGSM_SYSTEM_OVERRIDES_DIR/fakegame"
+}
+
+function test_resolve_module_overridable_uses_default_when_no_override() {
+  log_test_step "Testing __resolve_module returns default for overridable module with no override"
+
+  # Module 05-version.sh is overridable; use a game with no overrides
+  local resolved
+  resolved=$(__resolve_module "necesse" "native" "05-version.sh")
+  local exit_code=$?
+
+  local expected_default="${KGSM_TEMPLATES_DIR}/manage.native.d/05-version.sh"
+  assert_equals "0" "$exit_code" "Should succeed when no override exists"
+  assert_equals "$expected_default" "$resolved" "Should fall back to default when no override"
+}
+
+function test_resolve_module_system_override() {
+  log_test_step "Testing __resolve_module uses system override directory"
+
+  # factorio has a system override for 05-version.sh
+  local resolved
+  resolved=$(__resolve_module "factorio" "native" "05-version.sh")
+  local exit_code=$?
+
+  local expected_system="${KGSM_SYSTEM_OVERRIDES_DIR}/factorio/05-version.sh"
+  assert_equals "0" "$exit_code" "Should succeed finding system override"
+  assert_equals "$expected_system" "$resolved" "Should use system override when present"
+}
+
+function test_resolve_module_user_override_priority() {
+  log_test_step "Testing __resolve_module: user override takes priority over system override"
+
+  # Create a user override for a module that also has a system override
+  mkdir -p "$KGSM_USER_OVERRIDES_DIR/factorio"
+  echo "# user version override" > "$KGSM_USER_OVERRIDES_DIR/factorio/05-version.sh"
+
+  local resolved
+  resolved=$(__resolve_module "factorio" "native" "05-version.sh")
+  local exit_code=$?
+
+  local expected_user="${KGSM_USER_OVERRIDES_DIR}/factorio/05-version.sh"
+  assert_equals "0" "$exit_code" "Should succeed finding user override"
+  assert_equals "$expected_user" "$resolved" "User override should take priority over system override"
+
+  # Cleanup
+  rm -f "$KGSM_USER_OVERRIDES_DIR/factorio/05-version.sh"
+  rmdir "$KGSM_USER_OVERRIDES_DIR/factorio" 2>/dev/null || true
+}
+
+function test_resolve_module_empty_blueprint_uses_default() {
+  log_test_step "Testing __resolve_module with empty blueprint_name uses default"
+
+  local resolved
+  resolved=$(__resolve_module "" "native" "05-version.sh")
+  local exit_code=$?
+
+  local expected_default="${KGSM_TEMPLATES_DIR}/manage.native.d/05-version.sh"
+  assert_equals "0" "$exit_code" "Should succeed with empty blueprint name"
+  assert_equals "$expected_default" "$resolved" "Empty blueprint name should use default module"
+}
+
+function test_resolve_module_invalid_module_not_found() {
+  log_test_step "Testing __resolve_module returns EC_FILE_NOT_FOUND for non-existent module"
+
+  __resolve_module "factorio" "native" "99-nonexistent.sh" 2>/dev/null
+  local exit_code=$?
+
+  assert_equals "$EC_FILE_NOT_FOUND" "$exit_code" "Should return EC_FILE_NOT_FOUND for missing module"
+}
+
+# =============================================================================
+# __logic_assemble_management_file() TESTS
+# =============================================================================
+
+function test_assemble_management_file_empty_runtime() {
+  log_test_step "Testing __logic_assemble_management_file with empty runtime"
+
+  local out_file="$KGSM_TEST_SANDBOX/assemble_test_$$.sh"
+
+  __logic_assemble_management_file "" "factorio" "$out_file" 2>/dev/null
+  local exit_code=$?
+
+  assert_equals "$EC_INVALID_ARG" "$exit_code" "Should return EC_INVALID_ARG for empty runtime"
+
+  rm -f "$out_file"
+}
+
+function test_assemble_management_file_empty_output_file() {
+  log_test_step "Testing __logic_assemble_management_file with empty output file"
+
+  __logic_assemble_management_file "native" "factorio" "" 2>/dev/null
+  local exit_code=$?
+
+  assert_equals "$EC_INVALID_ARG" "$exit_code" "Should return EC_INVALID_ARG for empty output file"
+}
+
+function test_assemble_management_file_invalid_runtime() {
+  log_test_step "Testing __logic_assemble_management_file with non-existent runtime"
+
+  local out_file="$KGSM_TEST_SANDBOX/assemble_invalid_runtime_$$.sh"
+
+  __logic_assemble_management_file "nonexistent_runtime" "factorio" "$out_file" 2>/dev/null
+  local exit_code=$?
+
+  assert_equals "$EC_FILE_NOT_FOUND" "$exit_code" "Should return EC_FILE_NOT_FOUND for invalid runtime"
+
+  rm -f "$out_file"
+}
+
+function test_assemble_management_file_native_success() {
+  log_test_step "Testing __logic_assemble_management_file succeeds for native runtime"
+
+  local out_file="$KGSM_TEST_SANDBOX/assemble_native_$$.sh"
+
+  __logic_assemble_management_file "native" "" "$out_file"
+  local exit_code=$?
+
+  assert_equals "0" "$exit_code" "Should return 0 for successful native assembly"
+  assert_file_exists "$out_file" "Output file should be created"
+  assert_file_contains "$out_file" "#!/usr/bin/env bash" "Assembled file should start with shebang"
+
+  rm -f "$out_file"
+}
+
+function test_assemble_management_file_container_success() {
+  log_test_step "Testing __logic_assemble_management_file succeeds for container runtime"
+
+  local out_file="$KGSM_TEST_SANDBOX/assemble_container_$$.sh"
+
+  __logic_assemble_management_file "container" "" "$out_file"
+  local exit_code=$?
+
+  assert_equals "0" "$exit_code" "Should return 0 for successful container assembly"
+  assert_file_exists "$out_file" "Output file should be created"
+  assert_file_contains "$out_file" "#!/usr/bin/env bash" "Assembled file should start with shebang"
+
+  rm -f "$out_file"
+}
+
+function test_assemble_management_file_applies_module_overrides() {
+  log_test_step "Testing __logic_assemble_management_file applies factorio module overrides"
+
+  local out_file="$KGSM_TEST_SANDBOX/assemble_factorio_$$.sh"
+
+  # factorio has system overrides for 05-version.sh, 06-download.sh, 07-deploy.sh
+  __logic_assemble_management_file "native" "factorio" "$out_file"
+  local exit_code=$?
+
+  assert_equals "0" "$exit_code" "Should return 0 for successful assembly with overrides"
+  assert_file_exists "$out_file" "Output file should be created"
+  # Factorio 05-version.sh override uses factorio.com API
+  assert_file_contains "$out_file" "factorio.com" "Should contain factorio-specific override content"
+
+  rm -f "$out_file"
+}
+
+function test_assemble_management_file_non_overridable_modules_immutable() {
+  log_test_step "Testing __logic_assemble_management_file keeps non-overridable modules unchanged"
+
+  # Create a user override for a non-overridable module
+  mkdir -p "$KGSM_USER_OVERRIDES_DIR/fakegame"
+  echo "# FAKE HEADER OVERRIDE" > "$KGSM_USER_OVERRIDES_DIR/fakegame/00-header.sh"
+
+  local out_file="$KGSM_TEST_SANDBOX/assemble_nonoverridable_$$.sh"
+
+  __logic_assemble_management_file "native" "fakegame" "$out_file"
+  local exit_code=$?
+
+  assert_equals "0" "$exit_code" "Should return 0 for successful assembly"
+
+  # The fake header should NOT appear; the real header (shebang) should
+  assert_file_contains "$out_file" "#!/usr/bin/env bash" "Should use real header, not fake override"
+  if grep -q "FAKE HEADER OVERRIDE" "$out_file" 2>/dev/null; then
+    fail_test "Non-overridable module should not be replaced by user override"
+  fi
+
+  # Cleanup
+  rm -rf "$KGSM_USER_OVERRIDES_DIR/fakegame"
+  rm -f "$out_file"
 }
 
 # =============================================================================

@@ -55,7 +55,7 @@ When KGSM resolves a blueprint by name, **user blueprints take precedence over s
 
 ### Blueprint to Override Relationship
 
-The `name` field in a blueprint connects it to a corresponding override file. For example, if a blueprint has `name=factorio`, KGSM will use `overrides/factorio.overrides.sh` for custom functions. Multiple blueprint variants can share the same `name`, allowing them to reuse the same override logic (e.g., `terraria-modded.bp` with `name=terraria`).
+The `name` field in a blueprint connects it to a corresponding override directory. For example, if a blueprint has `name=factorio`, KGSM will look for override modules in `overrides/factorio/` during management script assembly. Multiple blueprint variants can share the same `name`, allowing them to reuse the same override logic (e.g., `terraria-modded.bp` with `name=terraria` uses `overrides/terraria/`).
 
 For details about overrides and how they provide custom functionality for specific game servers, see [Overrides 101](overrides.md).
 

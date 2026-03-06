@@ -216,6 +216,21 @@ function __find_template() {
 
 export -f __find_template
 
+# Locate the manage module directory for a given runtime.
+# Args: $1 = runtime (native|container)
+# Returns: path to the module directory via echo, EC_FILE_NOT_FOUND if missing
+function __find_manage_module_dir() {
+  local runtime="$1"
+  local module_dir="${KGSM_TEMPLATES_DIR}/manage.${runtime}.d"
+  if [[ -d "$module_dir" ]]; then
+    echo "$module_dir"
+    return 0
+  fi
+  return $EC_FILE_NOT_FOUND
+}
+
+export -f __find_manage_module_dir
+
 # Find the overrides file for a specific instance.
 # Searches in user overrides directory first, then system overrides directory.
 function __find_override() {
