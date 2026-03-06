@@ -12,21 +12,41 @@
 # $instance_* variables are set dynamically from the config file
 # check "__source_instance_config"
 # shellcheck disable=SC2154
+# Disabling SC2086 globally:
+# Exit code variables (EC_SUCCESS, EC_ERROR, etc.) are plain integers;
+# word-splitting is not a concern for return/exit statements
 
-debug=
-# shellcheck disable=SC2199
-if [[ $@ =~ "--debug" ]]; then
-  debug=" --debug"
-  export PS4='+(\033[0;33m${BASH_SOURCE}:${LINENO}\033[0m): ${FUNCNAME[0]:+${FUNCNAME[0]}(): }'
-  set -x
-  for a; do
-    shift
-    case $a in
-    --debug) continue ;;
-    *) set -- "$@" "$a" ;;
-    esac
-  done
+# =============================================================================
+# CONFIGURATION AND INITIALIZATION
+# =============================================================================
+
+# Color output support
+COLOR_RED="" COLOR_GREEN="" COLOR_ORANGE="" COLOR_BLUE="" COLOR_END=""
+if test -t 1 && command -v tput >/dev/null 2>&1; then
+  if [[ "$(tput colors 2>/dev/null)" -gt 8 ]] 2>/dev/null; then
+    COLOR_RED="\033[0;31m"
+    COLOR_GREEN="\033[0;32m"
+    COLOR_ORANGE="\033[0;33m"
+    COLOR_BLUE="\033[0;34m"
+    COLOR_END="\033[0m"
+  fi
 fi
+
+function __print_success() {
+  echo -e "[${COLOR_GREEN}SUCCESS${COLOR_END}] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1"
+}
+
+function __print_info() {
+  echo -e "[${COLOR_BLUE}INFO${COLOR_END}] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1"
+}
+
+function __print_error() {
+  echo -e "[${COLOR_RED}ERROR${COLOR_END}] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1" >&2
+}
+
+function __print_warning() {
+  echo -e "[${COLOR_ORANGE}WARNING${COLOR_END}] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1" >&2
+}
 
 # Local exit code constants (mirrors core/errors.sh for standalone use)
 readonly EC_SUCCESS=0
@@ -40,9 +60,6 @@ SCRIPT_DIR="$(dirname "$(readlink -f "$0")")"
 # Security function to validate configuration keys
 # Prevents code injection through malicious config files by ensuring
 
-# =============================================================================
-# CONFIGURATION AND INITIALIZATION
-# =============================================================================
 # only safe variable names can be exported to the environment
 function __validate_config_key() {
   local key="$1"
@@ -51,9 +68,9 @@ function __validate_config_key() {
   # Key must start with letter or underscore
   # This prevents injection of special shell variables or commands
   if [[ "$key" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
-    return 0
+    return $EC_SUCCESS
   else
-    return 1
+    return $EC_ERROR
   fi
 }
 
@@ -115,34 +132,6 @@ fi
 __source_instance_config "$CONFIG_FILE"
 
 self=$(basename "$0")
-
-# Color output support
-COLOR_RED="" COLOR_GREEN="" COLOR_ORANGE="" COLOR_BLUE="" COLOR_END=""
-if test -t 1 && command -v tput >/dev/null 2>&1; then
-  if [[ "$(tput colors 2>/dev/null)" -gt 8 ]] 2>/dev/null; then
-    COLOR_RED="\033[0;31m"
-    COLOR_GREEN="\033[0;32m"
-    COLOR_ORANGE="\033[0;33m"
-    COLOR_BLUE="\033[0;34m"
-    COLOR_END="\033[0m"
-  fi
-fi
-
-function __print_success() {
-  echo -e "[${COLOR_GREEN}SUCCESS${COLOR_END}] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1"
-}
-
-function __print_info() {
-  echo -e "[${COLOR_BLUE}INFO${COLOR_END}] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1"
-}
-
-function __print_error() {
-  echo -e "[${COLOR_RED}ERROR${COLOR_END}] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1" >&2
-}
-
-function __print_warning() {
-  echo -e "[${COLOR_ORANGE}WARNING${COLOR_END}] ${BASH_SOURCE[-1]##*/}:${BASH_LINENO[0]} $1" >&2
-}
 
 set -o pipefail
 
@@ -508,7 +497,7 @@ function _is_active() {
   # where the file could be modified between checking existence and reading
   if ! server_pid=$(cat "$instance_pid_file" 2>/dev/null); then
     # File doesn't exist, is unreadable, or read failed
-    __print_info "Inactive" && return 1
+    echo "Inactive" && return $EC_ERROR
   fi
 
   # Check if PID file content is empty or contains only whitespace
@@ -518,25 +507,25 @@ function _is_active() {
     if [[ -f "$instance_pid_file" ]] && [[ ! -s "$instance_pid_file" ]]; then
       rm -f "$instance_pid_file"
     fi
-    __print_info "Inactive" && return 1
+    echo "Inactive" && return $EC_ERROR
   fi
 
   # Validate that PID is numeric to prevent injection attacks
   if [[ ! "$server_pid" =~ ^[0-9]+$ ]]; then
     __print_error "Instance PID file contains invalid PID: '$server_pid', removing"
     rm -f "$instance_pid_file"
-    __print_info "Inactive" && return 1
+    echo "Inactive" && return $EC_ERROR
   fi
 
   # Check if the process with that PID is running
   # Using kill -0 which doesn't actually send a signal, just checks existence
   if kill -0 "$server_pid" 2>/dev/null; then
-    __print_info "Active" && return 0
+    echo "Active" && return $EC_SUCCESS
   else
     # Process is not running anymore, remove stale PID file
     __print_error "Instance PID file references non-existent process (PID: $server_pid), removing"
     rm -f "$instance_pid_file"
-    __print_info "Inactive" && return 1
+    echo "Inactive" && return $EC_ERROR
   fi
 }
 
@@ -547,7 +536,7 @@ function _start() {
 
   # Start server in background mode first
   if ! _start_background; then
-    return 1
+    return $EC_ERROR
   fi
 
   # Small delay to ensure server process is fully initialized
@@ -564,7 +553,7 @@ function _start_background() {
   # Rotate the latest log file
   if ! _rotate_log_file "$instance_log_file"; then
     __print_error "Failed to rotate latest log file. Aborting to prevent data loss."
-    return 1
+    return $EC_ERROR
   fi
 
   if [[ "$instance_enable_port_forwarding" == "true" ]]; then
@@ -577,13 +566,13 @@ function _start_background() {
   if [[ "$instance_auto_update" == "true" ]]; then
     if ! _update; then
       __print_error "Failed to update $self, exiting"
-      return 1
+      return $EC_ERROR
     fi
   fi
 
   cd "$instance_launch_dir" || {
     __print_error "Failed to move into $instance_launch_dir, exiting"
-    return 1
+    return $EC_ERROR
   }
 
   # Clean up any existing socket file
@@ -594,6 +583,13 @@ function _start_background() {
 
   # stdin: redirected from socket for command input
   # stdout/stderr: redirected to logs
+  # Validate executable arguments for dangerous command substitution patterns
+  # SC2016: single quotes are intentional — we are matching literal '$(' and '`'
+  # shellcheck disable=SC2016
+  if [[ "$instance_executable_arguments" == *'$('* ]] || [[ "$instance_executable_arguments" == *'`'* ]]; then
+    __print_error "instance_executable_arguments contains dangerous command substitution patterns"
+    return $EC_ERROR
+  fi
   # Safely expand variables within executable_arguments before execution
   local expanded_args
   expanded_args=$(echo "$instance_executable_arguments" | envsubst)
@@ -609,14 +605,14 @@ function _start_background() {
   if [[ -z "$server_pid" ]] || [[ ! "$server_pid" =~ ^[0-9]+$ ]]; then
     __print_error "Failed to start server process - invalid PID: '$server_pid'"
     [[ -p "$instance_socket_file" ]] && rm -f "$instance_socket_file"
-    return 1
+    return $EC_ERROR
   fi
 
   # Verify the process actually started
   if ! kill -0 "$server_pid" 2>/dev/null; then
     __print_error "Server process failed to start or exited immediately"
     [[ -p "$instance_socket_file" ]] && rm -f "$instance_socket_file"
-    return 1
+    return $EC_ERROR
   fi
 
   # Save the server PID to file
@@ -637,7 +633,7 @@ function _start_background() {
 function _attach_to_instance() {
   if ! _is_active &>/dev/null; then
     __print_error "Cannot attach: $instance_name is not running"
-    return 1
+    return $EC_ERROR
   fi
 
   __print_info "Attaching to $instance_name console"
@@ -649,7 +645,7 @@ function _attach_to_instance() {
   _print_logs true 50 2>/dev/null &
 
   # Trap Ctrl+C to stop server (expected behavior when attached)
-  trap '_stop_server && echo "" && return 0' INT
+  trap '_stop_server && echo "" && return $EC_SUCCESS' INT
 
   # Read loop with prompt
   while IFS= read -r -e -p "[$instance_name]> " line; do
@@ -657,7 +653,7 @@ function _attach_to_instance() {
     if ! _is_active &>/dev/null; then
       __print_info "$instance_name has stopped, returning to shell"
       echo ""
-      return 0
+      return $EC_SUCCESS
     fi
 
     # Check for detach command
@@ -672,7 +668,11 @@ function _attach_to_instance() {
 
     # Send to socket
     if [[ -p "$instance_socket_file" ]]; then
-      echo "$line" >"$instance_socket_file"
+      if ! __sanitize_input_command "$line"; then
+        __print_error "Input rejected due to unsafe characters"
+        continue
+      fi
+      echo "$line" >>"$instance_socket_file"
     else
       __print_error "Socket not available, server may have stopped"
       break
@@ -691,7 +691,7 @@ function _stop_server() {
 
   if ! _is_active &>/dev/null; then
     __print_error "Instance '$instance_name' is not running"
-    return 0
+    return $EC_SUCCESS
   fi
 
   # Process arguments without destroying them
@@ -714,7 +714,7 @@ function _stop_server() {
     # Send stop command to socket
     if [[ -p "$instance_socket_file" ]]; then
       if [[ -n "$instance_stop_command" ]]; then
-        echo "$instance_stop_command" >"$instance_socket_file"
+        echo "$instance_stop_command" >>"$instance_socket_file"
       fi
     fi
   fi
@@ -761,14 +761,14 @@ function _kill_all_processes() {
   if ! server_pid=$(cat "$instance_pid_file" 2>/dev/null); then
     __print_error "No PID file found for $instance_name."
     __print_error "If this is unexpected, check running processes to ensure the instance is not running uncontrolled"
-    return 1
+    return $EC_ERROR
   fi
 
   # Validate that PID is numeric
   if [[ -z "${server_pid// /}" ]] || [[ ! "$server_pid" =~ ^[0-9]+$ ]]; then
     __print_error "Invalid PID in file: '$server_pid'"
     rm -f "$instance_pid_file"
-    return 1
+    return $EC_ERROR
   fi
 
   # Find all child processes of the server PID
@@ -784,7 +784,7 @@ function _kill_all_processes() {
       if ! output=$(kill -TERM "${child_pids_array[@]}" 2>&1); then
         __print_error "Failed to kill child PIDs: ${child_pids_array[*]}"
         __print_error "Output: ${output}"
-        return 1
+        return $EC_ERROR
       fi
       __print_info "Killed ${#child_pids_array[@]} child processes"
     fi
@@ -795,7 +795,7 @@ function _kill_all_processes() {
     if ! output=$(kill -TERM "$server_pid" 2>&1); then
       __print_error "Failed to kill main process PID $server_pid."
       __print_error "Output: ${output}"
-      return 1
+      return $EC_ERROR
     fi
     __print_info "Killed main process PID $server_pid"
   fi
@@ -831,14 +831,52 @@ trap _cleanup_on_exit INT TERM
 # SERVER I/O
 # =============================================================================
 
+# Security function to validate and sanitize input commands
+# Prevents command injection attacks through user-provided input
+function __sanitize_input_command() {
+  local command="$1"
+
+  # Check for empty command
+  if [[ -z "$command" ]]; then
+    echo "ERROR: Empty command provided"
+    return $EC_ERROR
+  fi
+
+  # Check command length to prevent buffer overflow attempts
+  if [[ ${#command} -gt 1000 ]]; then
+    echo "ERROR: Command too long (${#command} characters, max 1000)"
+    echo "Command: ${command:0:100}..."
+    return $EC_ERROR
+  fi
+
+  # Check for dangerous characters that could be used for command injection
+  # Using individual checks to avoid regex complexity issues
+  if [[ "$command" != *";"* ]] && [[ "$command" != *"&"* ]] && [[ "$command" != *"|"* ]] &&
+    [[ "$command" != *"\`"* ]] && [[ "$command" != *"\$("* ]] && [[ "$command" != *")"* ]] &&
+    [[ "$command" != *"{"* ]] && [[ "$command" != *"}"* ]] && [[ "$command" != *"["* ]] &&
+    [[ "$command" != *"]"* ]] && [[ "$command" != *"\\"* ]] && [[ "$command" != *"<"* ]] &&
+    [[ "$command" != *">"* ]] && [[ "$command" != *"*"* ]] && [[ "$command" != *"?"* ]] &&
+    [[ "$command" != *"~"* ]] && [[ "$command" != *"\$"* ]] && [[ "$command" != *"!"* ]]; then
+    return $EC_SUCCESS
+  fi
+
+  echo "ERROR: Input command contains potentially dangerous characters"
+  echo "Rejected characters: ; & | \` \$( ) { } [ ] \\ < > * ? ~ \$ !"
+  echo "Command: $command"
+  return $EC_ERROR
+}
+
 # This function is used to send input commands to the server through
 # the named pipe
 function _send_input() {
   if [[ -p "$instance_socket_file" ]]; then
+    if ! __sanitize_input_command "$1"; then
+      return $EC_ERROR
+    fi
     echo "$1" >>"$instance_socket_file"
   else
     __print_error "Input failed: No active server found."
-    return 1
+    return $EC_ERROR
   fi
 }
 
@@ -852,11 +890,11 @@ function _send_save_command() {
       echo "${instance_save_command}" >>"${instance_socket_file}"
       # Sleep to give the server time to process the save command
       sleep "${instance_save_command_timeout_seconds:-5}"
-      return 0
+      return $EC_SUCCESS
     fi
   else
     __print_error "Save failed: No active server found or socket file missing."
-    return 1
+    return $EC_ERROR
   fi
 }
 
@@ -877,12 +915,12 @@ function _get_latest_version() {
   if [[ "$instance_is_steam_account_required" == "true" ]]; then
     if [[ -z "$STEAM_USERNAME" ]]; then
       __print_error "STEAM_USERNAME is expected but it's not set"
-      return 1
+      return $EC_ERROR
     fi
 
     if [[ -z "$STEAM_PASSWORD" ]]; then
       __print_error "STEAM_PASSWORD is expected but it's not set"
-      return 1
+      return $EC_ERROR
     fi
 
     # Authenticated login: pass username and password as separate arguments
@@ -903,7 +941,7 @@ function _get_latest_version() {
 
   if [[ -z "$latest_version" ]]; then
     __print_error "Failed to retrieve latest version, got empty response from SteamCMD"
-    return 1
+    return $EC_ERROR
   fi
 
   echo "$latest_version"
@@ -918,15 +956,16 @@ function _compare_versions() {
 
   if [[ -z "$latest_version" ]]; then
     __print_error "No version information was returned from remote"
-    return 1
+    return $EC_ERROR
   fi
 
   if [[ "$latest_version" == "$installed_version" ]]; then
     __print_info "Local version is the same as remote version"
-    return 1
+    return $EC_ERROR
   fi
 
   echo "$latest_version"
+  return $EC_SUCCESS
 }
 
 function _save_version() {
@@ -937,7 +976,7 @@ function _save_version() {
   echo "$version" >"$instance_version_file"
 
   __print_success "Version saved"
-  return 0
+  return $EC_SUCCESS
 }
 
 # =============================================================================
@@ -959,25 +998,25 @@ function _download() {
 
   if [[ -z "$instance_steam_app_id" ]]; then
     __print_error "'instance_steam_app_id' is expected but it's not set"
-    return 1
+    return $EC_ERROR
   fi
 
   if [[ -z "$instance_is_steam_account_required" ]]; then
     __print_error "'instance_is_steam_account_required' is expected but it's not set"
-    return 1
+    return $EC_ERROR
   fi
 
   # Build login arguments based on authentication requirement
   local login_args="anonymous"
-  if [[ $instance_is_steam_account_required -ne 0 ]]; then
+  if [[ "$instance_is_steam_account_required" == "true" ]]; then
     if [[ -z "$STEAM_USERNAME" ]]; then
       __print_error "'STEAM_USERNAME' is expected but it's not set"
-      return 1
+      return $EC_ERROR
     fi
 
     if [[ -z "$STEAM_PASSWORD" ]]; then
       __print_error "'STEAM_PASSWORD' is expected but it's not set"
-      return 1
+      return $EC_ERROR
     fi
 
     # Authenticated login: pass username and password as separate arguments
@@ -994,7 +1033,7 @@ function _download() {
     +quit
 
   __print_success "Download complete"
-  return 0
+  return $EC_SUCCESS
 }
 
 function _deploy() {
@@ -1006,22 +1045,22 @@ function _deploy() {
   # Check if $source is empty
   if [[ -z "$(ls -A "$source")" ]]; then
     __print_error "$source is empty, nothing to deploy. Exiting"
-    return 1
+    return $EC_ERROR
   fi
 
   # Copy everything from $source into $dest
   if ! cp -rf "$source"/* "$dest"; then
     __print_error "Failed to copy contents from $source into $dest"
-    return 1
+    return $EC_ERROR
   fi
 
   if ! rm -rf "${source:?}"/*; then
     __print_error "Failed to clear $source"
-    return 1
+    return $EC_ERROR
   fi
 
   __print_success "Deploy complete"
-  return 0
+  return $EC_SUCCESS
 }
 
 function _update() {
@@ -1031,7 +1070,7 @@ function _update() {
   # Check if the instance is active
   if _is_active &>/dev/null; then
     __print_error "$self is currently running, please shut down before attempting to update"
-    return 1
+    return $EC_ERROR
   fi
 
   # Get the latest version from remote
@@ -1040,7 +1079,7 @@ function _update() {
 
   if [[ -z "$latest_version" ]]; then
     __print_error "Failed to retrieve latest version, exiting"
-    return 1
+    return $EC_ERROR
   fi
 
   # Compare versions and save the latest version if different
@@ -1049,30 +1088,30 @@ function _update() {
 
   if [[ "$latest_version" == "$installed_version" ]]; then
     __print_info "Local version is already up-to-date"
-    return 0
+    return $EC_SUCCESS
   fi
 
   # Download the latest version
   if ! _download "$latest_version"; then
     __print_error "Failed to download latest version $latest_version"
-    return 1
+    return $EC_ERROR
   fi
 
   # Deploy the downloaded files
   if ! _deploy; then
     __print_error "Failed to deploy new files"
-    return 1
+    return $EC_ERROR
   fi
 
   # Save the new version to file
   if ! _save_version "$latest_version"; then
     __print_error "Failed to save new version $latest_version to file"
-    return 1
+    return $EC_ERROR
   fi
 
   __print_success "Update complete, new version: $latest_version"
 
-  return 0
+  return $EC_SUCCESS
 }
 
 # =============================================================================
@@ -1085,7 +1124,7 @@ function _create_backup() {
   # Check if install directory exists
   if [[ ! -d "${instance_install_dir}" ]]; then
     __print_error "Install directory ${instance_install_dir} does not exist"
-    return 1
+    return $EC_ERROR
   fi
 
   # Check for content inside the install directory before attempting to
@@ -1093,20 +1132,20 @@ function _create_backup() {
   if [ -z "$(ls -A "${instance_install_dir}")" ]; then
     # Source directory is empty, nothing to back up
     __print_warning "${instance_install_dir} is empty, skipping backup"
-    return 0
+    return $EC_SUCCESS
   fi
 
   # Check instance running state before attempting to create backup
   if _is_active &>/dev/null; then
     __print_error "$self is currently running, please shut down before attempting to create a backup"
-    return 1
+    return $EC_ERROR
   fi
 
   # Ensure backup directory exists
   if [[ ! -d "${instance_backups_dir}" ]]; then
     mkdir -p "${instance_backups_dir}" || {
       __print_error "Failed to create backup directory ${instance_backups_dir}"
-      return 1
+      return $EC_ERROR
     }
   fi
 
@@ -1122,21 +1161,21 @@ function _create_backup() {
 
     if ! touch "$output"; then
       __print_error "Failed to create $output"
-      return 1
+      return $EC_ERROR
     fi
 
-    cd "$instance_install_dir" || return 1
+    cd "$instance_install_dir" || return $EC_ERROR
 
     if ! tar -czf "$output" .; then
       __print_error "Failed to compress $output"
-      return 1
+      return $EC_ERROR
     fi
   else
     # Create backup folder if it doesn't exist
     if [ ! -d "$output" ]; then
       if ! mkdir -p "$output"; then
         __print_error "Error creating backup folder $output"
-        return 1
+        return $EC_ERROR
       fi
     fi
 
@@ -1144,12 +1183,12 @@ function _create_backup() {
     if ! cp -r "$instance_install_dir"/* "$output"/; then
       __print_error "Failed to create backup $output"
       rm -rf "${output:?}"
-      return 1
+      return $EC_ERROR
     fi
   fi
 
   __print_success "Backup created"
-  return 0
+  return $EC_SUCCESS
 }
 
 function _restore_backup() {
@@ -1160,7 +1199,7 @@ function _restore_backup() {
 
   if [[ ! -f "$source" ]] && [[ ! -d "$source" ]]; then
     __print_error "Could not find backup $source"
-    return 1
+    return $EC_ERROR
   fi
 
   # Get version number from $source with robust parsing and fallback
@@ -1199,7 +1238,7 @@ function _restore_backup() {
     # Create backup and verify it succeeded
     if ! _create_backup; then
       __print_error "Failed to create backup before restore. Aborting to prevent data loss."
-      return 1
+      return $EC_ERROR
     fi
 
     # Verify backup was actually created and is accessible
@@ -1207,7 +1246,7 @@ function _restore_backup() {
     latest_backup=$(ls -t "$instance_backups_dir" | head -1 2>/dev/null)
     if [[ -z "$latest_backup" ]] || [[ ! -e "$instance_backups_dir/$latest_backup" ]]; then
       __print_error "Backup creation appeared to succeed but backup file is not accessible. Aborting to prevent data loss."
-      return 1
+      return $EC_ERROR
     fi
 
     __print_info "Backup created successfully: $latest_backup"
@@ -1215,33 +1254,33 @@ function _restore_backup() {
     # Now safe to proceed with destructive operations
     if ! rm -rf "${instance_install_dir:?}"/*; then
       __print_error "Failed to clear $instance_install_dir, exiting"
-      return 1
+      return $EC_ERROR
     fi
   fi
 
   if [[ "$source" == *.gz ]]; then
-    cd "$instance_install_dir" || return 1
+    cd "$instance_install_dir" || return $EC_ERROR
 
-    if ! tar -xzf "$source" .; then
+    if ! tar -xzf "$source"; then
       __print_error "Failed to restore $source"
-      return 1
+      return $EC_ERROR
     fi
   else
     # $instance_install_dir is empty/user confirmed continue, move the backup into it
     if ! cp -r "$source"/* "$instance_install_dir"/; then
       __print_error "Failed to restore backup $source"
-      return 1
+      return $EC_ERROR
     fi
   fi
 
   # Update instance version file with $backup_version
   _save_version "$backup_version" || {
     __print_error "Failed to save restored version $backup_version to file."
-    return 1
+    return $EC_ERROR
   }
 
   __print_success "Restore complete"
-  return 0
+  return $EC_SUCCESS
 }
 
 function _list_backups() {
@@ -1268,14 +1307,14 @@ function _enable_upnp() {
   # This prevents command failures when the array is unset or empty
   if [[ -z "${instance_upnp_ports[*]:-}" ]]; then
     __print_error "No UPnP ports configured (instance_upnp_ports is empty or unset)"
-    return 1
+    return $EC_ERROR
   fi
 
   if ! output=$(upnpc -e "$instance_name" -r "${instance_upnp_ports[@]}" 2>&1); then
     __print_error "Failed to enable UPnP ports"
     __print_error "To stop these messages, set 'enable_port_forwarding' to 'false' in $CONFIG_FILE"
     __print_error "${output}"
-    return 1
+    return $EC_ERROR
   fi
 
   # Mark UPnP as enabled
@@ -1286,20 +1325,24 @@ function _enable_upnp() {
 function _disable_upnp() {
   local output
 
+  if ! _is_upnp_enabled; then
+    return $EC_SUCCESS
+  fi
+
   __print_info "Disabling UPnP..."
 
   # Check if UPnP ports array is set and not empty
   # This prevents command failures when the array is unset or empty
   if [[ -z "${instance_upnp_ports[*]:-}" ]]; then
     __print_error "No UPnP ports configured (instance_upnp_ports is empty or unset)"
-    return 1
+    return $EC_ERROR
   fi
 
   if ! output=$(upnpc -f "${instance_upnp_ports[@]}" 2>&1); then
     __print_error "Failed to disable UPnP ports"
     __print_error "To stop these messages, set 'enable_port_forwarding' to 'false' in $CONFIG_FILE"
     __print_error "${output}"
-    return 1
+    return $EC_ERROR
   fi
 
   # Mark UPnP as disabled
@@ -1335,10 +1378,10 @@ function _rotate_log_file() {
     __print_success "Rotated log file $log_file to $rotated_log_file"
   else
     __print_error "Failed to rotate log file $log_file to $rotated_log_file"
-    return 1
+    return $EC_ERROR
   fi
 
-  return 0
+  return $EC_SUCCESS
 }
 
 function _print_logs() {
@@ -1347,7 +1390,7 @@ function _print_logs() {
 
   if [[ ! -f "$instance_log_file" ]]; then
     __print_info "No log file found at '$instance_log_file'"
-    return 0
+    return $EC_SUCCESS
   fi
 
   if [[ "$follow" == "true" ]]; then
@@ -1565,7 +1608,7 @@ function _cmd_start() {
     case $1 in
     -h | --help | help)
       show_usage_start
-      return 0
+      return $EC_SUCCESS
       ;;
     -d | --detached)
       _start_background
@@ -1594,7 +1637,7 @@ function _cmd_stop() {
     case $1 in
     -h | --help | help)
       show_usage_stop
-      return 0
+      return $EC_SUCCESS
       ;;
     --no-save) no_save=1 ;;
     --no-graceful) no_graceful=1 ;;
@@ -1618,7 +1661,7 @@ function _cmd_restart() {
     case $1 in
     -h | --help | help)
       show_usage_restart
-      return 0
+      return $EC_SUCCESS
       ;;
     *)
       __print_error "Invalid argument: $1"
@@ -1628,7 +1671,7 @@ function _cmd_restart() {
     shift
   done
 
-  _timed_stop 0 0
+  _timed_stop 0 0 || return $?
   _start_background
 }
 
@@ -1664,7 +1707,7 @@ function _cmd_status() {
     case $1 in
     -h | --help | help)
       show_usage_status
-      return 0
+      return $EC_SUCCESS
       ;;
     --json) json_format="1" ;;
     --fast) fast_mode="1" ;;
@@ -1691,7 +1734,7 @@ function _cmd_logs() {
     case $1 in
     -h | --help | help)
       show_usage_logs
-      return 0
+      return $EC_SUCCESS
       ;;
     -f | --follow) follow="true" ;;
     -n | --tail | --lines)
@@ -1727,7 +1770,7 @@ function _cmd_version() {
     case $1 in
     -h | --help | help)
       show_usage_version
-      return 0
+      return $EC_SUCCESS
       ;;
     --compare)
       _compare_versions
@@ -1766,7 +1809,7 @@ function _cmd_download() {
     case $1 in
     -h | --help | help)
       show_usage_download
-      return 0
+      return $EC_SUCCESS
       ;;
     -*)
       __print_error "Invalid option: $1"
@@ -1805,7 +1848,7 @@ function _cmd_backup() {
   case "$subcommand" in
   -h | --help | help)
     show_usage_backup
-    return 0
+    return $EC_SUCCESS
     ;;
   create) _create_backup ;;
   restore)
@@ -1834,7 +1877,7 @@ function _cmd_upnp() {
   case "$subcommand" in
   -h | --help | help)
     show_usage_upnp
-    return 0
+    return $EC_SUCCESS
     ;;
   enable) _enable_upnp ;;
   disable) _disable_upnp ;;
