@@ -40,7 +40,7 @@ function setup_test() {
 
   TEST_INSTALL_DIR="$KGSM_ROOT/test-installs"
   TEST_SHORTCUTS_DIR="$KGSM_ROOT/test-shortcuts"
-  mkdir -p "$TEST_INSTALL_DIR"
+  mkdir -p
   mkdir -p "$TEST_SHORTCUTS_DIR"
 
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
@@ -75,8 +75,9 @@ function setup_test() {
 function test_management_file_creation() {
   log_test_step "Testing: management file creation for a valid instance"
 
-  local instance_name="test-mgmt-create-$$"
-  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$instance_name")
   local create_exit=$?
 
   if [[ $create_exit -ne 0 ]]; then
@@ -107,7 +108,7 @@ function test_management_file_creation() {
     "Management file should be executable"
 
   # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
+  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -118,8 +119,9 @@ function test_management_file_creation() {
 function test_management_file_content() {
   log_test_step "Testing: management file contains instance-specific content"
 
-  local instance_name="test-mgmt-content-$$"
-  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$instance_name")
   local create_exit=$?
 
   if [[ $create_exit -ne 0 ]]; then
@@ -146,7 +148,7 @@ function test_management_file_content() {
     "Management file should define INSTANCE_NAME"
 
   # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
+  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -157,8 +159,9 @@ function test_management_file_content() {
 function test_management_file_removal() {
   log_test_step "Testing: management file removal for a valid instance"
 
-  local instance_name="test-mgmt-remove-$$"
-  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$instance_name")
   local create_exit=$?
 
   if [[ $create_exit -ne 0 ]]; then
@@ -185,7 +188,7 @@ function test_management_file_removal() {
     "Management file should be gone after files.management.sh remove"
 
   # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
+  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -217,8 +220,9 @@ function test_management_file_fails_for_nonexistent_instance() {
 function test_files_orchestrator_create() {
   log_test_step "Testing: files.sh create orchestrator creates management file"
 
-  local instance_name="test-orch-create-$$"
-  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$instance_name")
   local create_exit=$?
 
   if [[ $create_exit -ne 0 ]]; then
@@ -242,7 +246,7 @@ function test_files_orchestrator_create() {
   assert_file_executable "$manage_file" "Management file created by files.sh must be executable"
 
   # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
+  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -253,8 +257,9 @@ function test_files_orchestrator_create() {
 function test_files_orchestrator_remove() {
   log_test_step "Testing: files.sh remove orchestrator removes management file"
 
-  local instance_name="test-orch-remove-$$"
-  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$instance_name")
   local create_exit=$?
 
   if [[ $create_exit -ne 0 ]]; then
@@ -281,7 +286,7 @@ function test_files_orchestrator_remove() {
     "Management file should be gone after files.sh remove"
 
   # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
+  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -319,8 +324,9 @@ function test_symlink_enable_creates_symlink() {
     return
   fi
 
-  local instance_name="test-sym-enable-$$"
-  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$instance_name")
   local create_exit=$?
 
   if [[ $create_exit -ne 0 ]]; then
@@ -367,7 +373,7 @@ function test_symlink_enable_creates_symlink() {
       "$sandbox_config" 2>/dev/null || true
   fi
 
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
+  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -384,8 +390,9 @@ function test_symlink_disable_removes_symlink() {
     return
   fi
 
-  local instance_name="test-sym-disable-$$"
-  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$instance_name")
   local create_exit=$?
 
   if [[ $create_exit -ne 0 ]]; then
@@ -433,7 +440,7 @@ function test_symlink_disable_removes_symlink() {
       "$sandbox_config" 2>/dev/null || true
   fi
 
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
+  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -444,8 +451,9 @@ function test_symlink_disable_removes_symlink() {
 function test_symlink_enable_fails_without_management_file() {
   log_test_step "Testing: files.symlink.sh enable fails when management file is missing"
 
-  local instance_name="test-sym-nomanage-$$"
-  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$instance_name")
   local create_exit=$?
 
   if [[ $create_exit -ne 0 ]]; then
@@ -474,7 +482,7 @@ function test_symlink_enable_fails_without_management_file() {
       "$sandbox_config" 2>/dev/null || true
   fi
 
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
+  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -505,8 +513,9 @@ function test_symlink_fails_for_nonexistent_instance() {
 function test_upnp_enable_updates_config() {
   log_test_step "Testing: files.upnp.sh enable sets enable_port_forwarding=true"
 
-  local instance_name="test-upnp-enable-$$"
-  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$instance_name")
   local create_exit=$?
 
   if [[ $create_exit -ne 0 ]]; then
@@ -525,7 +534,7 @@ function test_upnp_enable_updates_config() {
     "Instance config should have enable_port_forwarding=true after upnp enable"
 
   # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
+  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -535,8 +544,9 @@ function test_upnp_enable_updates_config() {
 function test_upnp_disable_updates_config() {
   log_test_step "Testing: files.upnp.sh disable sets enable_port_forwarding=false"
 
-  local instance_name="test-upnp-disable-$$"
-  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$instance_name")
   local create_exit=$?
 
   if [[ $create_exit -ne 0 ]]; then
@@ -567,7 +577,7 @@ function test_upnp_disable_updates_config() {
     "Instance config should have enable_port_forwarding=false after upnp disable"
 
   # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
+  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -629,17 +639,18 @@ function test_systemd_and_ufw_fail_for_nonexistent_instance() {
 function test_two_instances_have_independent_management_files() {
   log_test_step "Testing: two instances have independent management files"
 
-  local instance1="test-two-mgmt1-$$"
-  local instance2="test-two-mgmt2-$$"
+  local blueprint="factorio"
+  local instance1
+  local instance2
 
-  create_test_instance "factorio" "$instance1" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  instance1="$(create_test_instance "$blueprint" "$instance1")"
   local create_exit1=$?
-  create_test_instance "factorio" "$instance2" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  instance2="$(create_test_instance "$blueprint" "$instance2")"
   local create_exit2=$?
 
   if [[ $create_exit1 -ne 0 || $create_exit2 -ne 0 ]]; then
-    [[ $create_exit1 -eq 0 ]] && remove_test_instance "factorio" "$instance1" "$TEST_INSTALL_DIR"
-    [[ $create_exit2 -eq 0 ]] && remove_test_instance "factorio" "$instance2" "$TEST_INSTALL_DIR"
+    [[ $create_exit1 -eq 0 ]] && remove_test_instance "$blueprint" "$instance1"
+    [[ $create_exit2 -eq 0 ]] && remove_test_instance "$blueprint" "$instance2"
     skip_test "Instance creation failed - skipping test"
     return
   fi
@@ -675,8 +686,8 @@ function test_two_instances_have_independent_management_files() {
     "Instance2 management file should still exist after instance1 removal"
 
   # Cleanup
-  remove_test_instance "factorio" "$instance1" "$TEST_INSTALL_DIR"
-  remove_test_instance "factorio" "$instance2" "$TEST_INSTALL_DIR"
+  remove_test_instance "$blueprint" "$instance1"
+  remove_test_instance "$blueprint" "$instance2"
 }
 
 # =============================================================================
@@ -687,8 +698,9 @@ function test_two_instances_have_independent_management_files() {
 function test_files_create_is_idempotent() {
   log_test_step "Testing: files.sh create is idempotent (can run twice)"
 
-  local instance_name="test-idem-$$"
-  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$instance_name")
   local create_exit=$?
 
   if [[ $create_exit -ne 0 ]]; then
@@ -711,7 +723,7 @@ function test_files_create_is_idempotent() {
     "Management file should still exist after second create"
 
   # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
+  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -722,17 +734,18 @@ function test_files_create_is_idempotent() {
 function test_management_file_creation_for_terraria() {
   log_test_step "Testing: management file creation for terraria blueprint (has overrides)"
 
-  local instance_name="test-terraria-mgmt-$$"
-  create_test_instance "terraria" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  local blueprint="terraria"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$instance_name")
   local create_exit=$?
 
   if [[ $create_exit -ne 0 ]]; then
-    skip_test "Terraria instance creation failed - skipping test"
+    skip_test "Instance creation failed - skipping test"
     return
   fi
 
   assert_command_succeeds "$FILES_MANAGEMENT_MODULE create $instance_name" \
-    "files.management.sh create should succeed for terraria instance"
+    "files.management.sh create should succeed for $blueprint instance"
 
   local instance_config
   instance_config=$("$KGSM_ROOT/kgsm.sh" instances find "$instance_name" 2>/dev/null)
@@ -740,12 +753,12 @@ function test_management_file_creation_for_terraria() {
   manage_file=$(grep "^management_file=" "$instance_config" 2>/dev/null | cut -d= -f2 | tr -d '"')
 
   assert_file_exists "$manage_file" \
-    "Management file should exist after creation for terraria"
+    "Management file should exist after creation for $blueprint"
   assert_file_executable "$manage_file" \
-    "Terraria management file should be executable"
+    "$blueprint management file should be executable"
 
   # Cleanup
-  remove_test_instance "terraria" "$instance_name" "$TEST_INSTALL_DIR"
+  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -756,8 +769,9 @@ function test_management_file_creation_for_terraria() {
 function test_upnp_idempotent() {
   log_test_step "Testing: files.upnp.sh enable/disable are idempotent"
 
-  local instance_name="test-upnp-idem-$$"
-  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$instance_name")
   local create_exit=$?
 
   if [[ $create_exit -ne 0 ]]; then
@@ -787,7 +801,7 @@ function test_upnp_idempotent() {
     "Second upnp disable should also succeed (idempotent)"
 
   # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
+  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -798,8 +812,9 @@ function test_upnp_idempotent() {
 function test_full_files_workflow() {
   log_test_step "Testing: complete files.sh create → verify → remove → verify workflow"
 
-  local instance_name="test-full-workflow-$$"
-  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$instance_name")
   local create_exit=$?
 
   if [[ $create_exit -ne 0 ]]; then
@@ -829,6 +844,5 @@ function test_full_files_workflow() {
     "Management file should be gone after files.sh remove"
 
   # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
+  remove_test_instance "$blueprint" "$instance_name"
 }
-

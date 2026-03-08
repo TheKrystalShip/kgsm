@@ -178,6 +178,11 @@ function __capture_test_output() {
 
     if [[ -n "${KGSM_TEST_FUNCTION_FILTER:-}" ]]; then
       # Run only the specified function (with per-function tracking)
+      if declare -f setup >/dev/null 2>&1; then
+        setup
+      fi
+
+      # Snapshot counters AFTER setup() so setup assertions are not counted
       local _before_passed=${ASSERT_PASSED:-0}
       local _before_failed=${ASSERT_FAILED:-0}
       local _before_count=${ASSERT_COUNT:-0}
@@ -202,13 +207,22 @@ function __capture_test_output() {
       if [[ -n "${KGSM_TEST_LOG:-}" ]]; then
         echo "KGSM_FUNC_RESULT: ${KGSM_TEST_FUNCTION_FILTER}|${_fn_passed}|${_fn_failed}|${_fn_total}|${_fn_status}" >> "$KGSM_TEST_LOG"
       fi
+
+      if declare -f teardown >/dev/null 2>&1; then
+        teardown || true
+      fi
     else
       # Auto-discover and run all test_* functions in file order
       local -a _test_functions
       mapfile -t _test_functions < <(grep -oP '^function \Ktest_\w+' "$test_file")
       for _fn in "${_test_functions[@]}"; do
         if declare -f "$_fn" >/dev/null 2>&1; then
-          # Track per-function assertion deltas
+          # Per-test setup (runs before each test function)
+          if declare -f setup >/dev/null 2>&1; then
+            setup
+          fi
+
+          # Snapshot counters AFTER setup() so setup assertions are not counted
           local _before_passed=${ASSERT_PASSED:-0}
           local _before_failed=${ASSERT_FAILED:-0}
           local _before_count=${ASSERT_COUNT:-0}
@@ -232,6 +246,11 @@ function __capture_test_output() {
 
           if [[ -n "${KGSM_TEST_LOG:-}" ]]; then
             echo "KGSM_FUNC_RESULT: ${_fn}|${_fn_passed}|${_fn_failed}|${_fn_total}|${_fn_status}" >> "$KGSM_TEST_LOG"
+          fi
+
+          # Per-test teardown (runs after each test function, failures ignored)
+          if declare -f teardown >/dev/null 2>&1; then
+            teardown || true
           fi
         fi
       done
@@ -305,7 +324,13 @@ function __execute_test_inline() {
   # Run target function(s)
   if [[ -n "${KGSM_TEST_FUNCTION_FILTER:-}" ]]; then
     if declare -f "$KGSM_TEST_FUNCTION_FILTER" >/dev/null 2>&1; then
+      if declare -f setup >/dev/null 2>&1; then
+        setup
+      fi
       "$KGSM_TEST_FUNCTION_FILTER"
+      if declare -f teardown >/dev/null 2>&1; then
+        teardown || true
+      fi
     else
       echo "ERROR: Function not found: $KGSM_TEST_FUNCTION_FILTER" >&2
       echo "Available test functions in $(basename "$test_file"):" >&2
@@ -317,7 +342,13 @@ function __execute_test_inline() {
     mapfile -t _test_functions < <(grep -oP '^function \Ktest_\w+' "$test_file")
     for _fn in "${_test_functions[@]}"; do
       if declare -f "$_fn" >/dev/null 2>&1; then
+        if declare -f setup >/dev/null 2>&1; then
+          setup
+        fi
         "$_fn"
+        if declare -f teardown >/dev/null 2>&1; then
+          teardown || true
+        fi
       fi
     done
   fi

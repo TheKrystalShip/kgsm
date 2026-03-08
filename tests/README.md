@@ -156,6 +156,16 @@ function setup_test() {
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
 }
 
+# Optional: runs before EACH test function
+function setup() {
+  # Per-test resource creation, state reset
+}
+
+# Optional: runs after EACH test function (even on failure)
+function teardown() {
+  # Per-test cleanup
+}
+
 function test_something() {
   log_test_step "Testing something"
   assert_equals "expected" "$actual" "Values should match"
@@ -167,7 +177,7 @@ function test_something() {
 # NO main() — framework auto-discovers test_* functions
 ```
 
-> **Important:** Do NOT add `main()` or `main "$@"`. The framework calls `setup_test()` before tests and `print_assert_summary()` after automatically.
+> **Important:** Do NOT add `main()` or `main "$@"`. The framework calls `setup_test()` once before all tests, `setup()` / `teardown()` around **each** `test_*()` function, and `print_assert_summary()` after automatically.
 
 ### Available Assertions
 
@@ -237,6 +247,8 @@ test_id=$(generate_test_id "custom") # Custom prefix: "custom"
 - `remove_test_instance <blueprint> <name> [dir]` - Complete cleanup (config + symlink + dirs)
 - `setup_instance_prereqs <blueprint> <name> [dir]` - Manual working dir + symlink setup
 - `generate_test_id [prefix]` - Generate unique instance name
+
+> **Note:** For per-test instance lifecycle, create instances in `setup()` and destroy them in `teardown()`.
 
 ## VS Code Integration
 
@@ -349,7 +361,8 @@ echo "SKIP_STEAMCMD_TESTS=true" >> tests/config.test.ini
 2. Create file: `tests/unit/test_feature.sh`
 3. Copy template: `cp tests/templates/test.template.sh tests/unit/test_feature.sh`
 4. Implement `setup_test()` and `test_*` functions (no `main()`)
-5. Test: `./tests/run.sh --pattern "feature"`
+5. Optionally add `setup()` / `teardown()` hooks for per-test isolation
+6. Test: `./tests/run.sh --pattern "feature"`
 
 ### Improving Framework
 

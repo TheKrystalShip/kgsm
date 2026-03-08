@@ -17,6 +17,7 @@
 # NOTE: Do NOT add a main() function or "main "$@"" invocation.
 # The framework auto-discovers test_* functions and calls them automatically.
 # The framework also calls setup_test() before tests and print_assert_summary() after.
+# Per-test hooks: setup() runs before EACH test_*() function, teardown() runs after each.
 
 # =============================================================================
 # TEST SETUP
@@ -59,6 +60,21 @@ function setup_test() {
 
   log_test_step "Test environment validated"
 }
+
+# Optional: setup() is called by the framework BEFORE EACH test_*() function.
+# Use for per-test resource creation, state reset, creating temp directories, etc.
+# function setup() {
+#   log_test_step "Per-test setup"
+#   # Create test-specific resources here
+# }
+
+# Optional: teardown() is called by the framework AFTER EACH test_*() function.
+# Runs even if the test fails. Failures here do not affect the test result.
+# Use for per-test cleanup: removing temp files, restoring config, etc.
+# function teardown() {
+#   log_test_step "Per-test cleanup"
+#   # Clean up test-specific resources here
+# }
 
 # =============================================================================
 # EXAMPLE TEST PATTERNS
@@ -182,3 +198,10 @@ function test_complete_workflow() {
 # function cleanup_test() {
 #   # Clean up any resources created during testing
 # }
+
+# Hook execution order:
+# 1. setup_test()    - once per file (environment validation)
+# 2. setup()         - before EACH test_*() function
+# 3. test_*()        - the test function
+# 4. teardown()      - after EACH test_*() function
+# 5. cleanup_test()  - once per file (final cleanup)
