@@ -31,6 +31,9 @@ readonly INSTANCES_MODULE="$KGSM_ROOT/commands/instances.sh"
 TEST_INSTALL_DIR=""
 TEST_SHORTCUTS_DIR=""
 
+# Per-test cleanup tracking (used by teardown hook)
+_TEARDOWN_INSTANCES=()
+
 # =============================================================================
 # TEST FUNCTIONS
 # =============================================================================
@@ -67,6 +70,19 @@ function setup_test() {
   log_test_step "Integration test environment validated"
 }
 
+function setup() {
+  _TEARDOWN_INSTANCES=()
+}
+
+function teardown() {
+  local entry bp name
+  for entry in "${_TEARDOWN_INSTANCES[@]}"; do
+    bp="${entry%%:*}"
+    name="${entry#*:}"
+    remove_test_instance "$bp" "$name" 2>/dev/null || true
+  done
+}
+
 # =============================================================================
 # TEST 1: Management file is created for a valid instance
 # files.management.sh create → management file exists at expected path
@@ -84,6 +100,8 @@ function test_management_file_creation() {
     skip_test "Instance creation failed - skipping test"
     return
   fi
+
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Get the expected management file path from instance config
   local instance_config
@@ -106,9 +124,6 @@ function test_management_file_creation() {
   # Management file should be executable
   assert_file_executable "$expected_manage_file" \
     "Management file should be executable"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -129,6 +144,8 @@ function test_management_file_content() {
     return
   fi
 
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
   assert_command_succeeds "$FILES_MANAGEMENT_MODULE create $instance_name" \
     "files.management.sh create should succeed"
 
@@ -146,9 +163,6 @@ function test_management_file_content() {
   # Management file should contain the INSTANCE_NAME dynamic setup (from template)
   assert_file_contains "$manage_file" "INSTANCE_NAME" \
     "Management file should define INSTANCE_NAME"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -169,6 +183,8 @@ function test_management_file_removal() {
     return
   fi
 
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
   # Create management file first
   assert_command_succeeds "$FILES_MANAGEMENT_MODULE create $instance_name" \
     "files.management.sh create should succeed"
@@ -186,9 +202,6 @@ function test_management_file_removal() {
 
   assert_file_not_exists "$manage_file" \
     "Management file should be gone after files.management.sh remove"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -230,6 +243,8 @@ function test_files_orchestrator_create() {
     return
   fi
 
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
   local instance_config
   instance_config=$("$KGSM_ROOT/kgsm.sh" instances find "$instance_name" 2>/dev/null)
   local manage_file
@@ -244,9 +259,6 @@ function test_files_orchestrator_create() {
 
   assert_file_exists "$manage_file" "Management file must exist after files.sh create"
   assert_file_executable "$manage_file" "Management file created by files.sh must be executable"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -267,6 +279,8 @@ function test_files_orchestrator_remove() {
     return
   fi
 
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
   # Create files first
   assert_command_succeeds "$FILES_MODULE create $instance_name" \
     "files.sh create should succeed"
@@ -284,9 +298,6 @@ function test_files_orchestrator_remove() {
 
   assert_file_not_exists "$manage_file" \
     "Management file should be gone after files.sh remove"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -334,6 +345,8 @@ function test_symlink_enable_creates_symlink() {
     return
   fi
 
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
   # Create management file (symlink enable requires it to exist)
   assert_command_succeeds "$FILES_MANAGEMENT_MODULE create $instance_name" \
     "files.management.sh create must succeed before symlink enable"
@@ -372,8 +385,6 @@ function test_symlink_enable_creates_symlink() {
     sed -i "s|^command_shortcuts_directory=.*|command_shortcuts_directory=$original_shortcuts_dir|" \
       "$sandbox_config" 2>/dev/null || true
   fi
-
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -399,6 +410,8 @@ function test_symlink_disable_removes_symlink() {
     skip_test "Instance creation failed - skipping test"
     return
   fi
+
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Create management file
   assert_command_succeeds "$FILES_MANAGEMENT_MODULE create $instance_name" \
@@ -439,8 +452,6 @@ function test_symlink_disable_removes_symlink() {
     sed -i "s|^command_shortcuts_directory=.*|command_shortcuts_directory=$original_shortcuts_dir|" \
       "$sandbox_config" 2>/dev/null || true
   fi
-
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -460,6 +471,8 @@ function test_symlink_enable_fails_without_management_file() {
     skip_test "Instance creation failed - skipping test"
     return
   fi
+
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Do NOT create management file
 
@@ -481,8 +494,6 @@ function test_symlink_enable_fails_without_management_file() {
     sed -i "s|^command_shortcuts_directory=.*|command_shortcuts_directory=$original_shortcuts_dir|" \
       "$sandbox_config" 2>/dev/null || true
   fi
-
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -523,6 +534,8 @@ function test_upnp_enable_updates_config() {
     return
   fi
 
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
   # Enable UPnP
   assert_command_succeeds "$FILES_UPNP_MODULE enable $instance_name" \
     "files.upnp.sh enable should succeed"
@@ -532,9 +545,6 @@ function test_upnp_enable_updates_config() {
   instance_config=$("$KGSM_ROOT/kgsm.sh" instances find "$instance_name" 2>/dev/null)
   assert_file_contains "$instance_config" "enable_port_forwarding=true" \
     "Instance config should have enable_port_forwarding=true after upnp enable"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -553,6 +563,8 @@ function test_upnp_disable_updates_config() {
     skip_test "Instance creation failed - skipping test"
     return
   fi
+
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Enable then disable UPnP
   assert_command_succeeds "$FILES_UPNP_MODULE enable $instance_name" \
@@ -575,9 +587,6 @@ function test_upnp_disable_updates_config() {
   instance_config=$("$KGSM_ROOT/kgsm.sh" instances find "$instance_name" 2>/dev/null)
   assert_file_contains "$instance_config" "enable_port_forwarding=false" \
     "Instance config should have enable_port_forwarding=false after upnp disable"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -645,12 +654,13 @@ function test_two_instances_have_independent_management_files() {
 
   instance1="$(create_test_instance "$blueprint" "$instance1")"
   local create_exit1=$?
+  [[ $create_exit1 -eq 0 ]] && _TEARDOWN_INSTANCES+=("$blueprint:$instance1")
+
   instance2="$(create_test_instance "$blueprint" "$instance2")"
   local create_exit2=$?
+  [[ $create_exit2 -eq 0 ]] && _TEARDOWN_INSTANCES+=("$blueprint:$instance2")
 
   if [[ $create_exit1 -ne 0 || $create_exit2 -ne 0 ]]; then
-    [[ $create_exit1 -eq 0 ]] && remove_test_instance "$blueprint" "$instance1"
-    [[ $create_exit2 -eq 0 ]] && remove_test_instance "$blueprint" "$instance2"
     skip_test "Instance creation failed - skipping test"
     return
   fi
@@ -684,10 +694,6 @@ function test_two_instances_have_independent_management_files() {
     "Instance1 management file should be gone after remove"
   assert_file_exists "$manage_file2" \
     "Instance2 management file should still exist after instance1 removal"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance1"
-  remove_test_instance "$blueprint" "$instance2"
 }
 
 # =============================================================================
@@ -708,6 +714,8 @@ function test_files_create_is_idempotent() {
     return
   fi
 
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
   assert_command_succeeds "$FILES_MODULE create $instance_name" \
     "First files.sh create should succeed"
 
@@ -721,9 +729,6 @@ function test_files_create_is_idempotent() {
 
   assert_file_exists "$manage_file" \
     "Management file should still exist after second create"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -744,6 +749,8 @@ function test_management_file_creation_for_terraria() {
     return
   fi
 
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
   assert_command_succeeds "$FILES_MANAGEMENT_MODULE create $instance_name" \
     "files.management.sh create should succeed for $blueprint instance"
 
@@ -756,9 +763,6 @@ function test_management_file_creation_for_terraria() {
     "Management file should exist after creation for $blueprint"
   assert_file_executable "$manage_file" \
     "$blueprint management file should be executable"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -778,6 +782,8 @@ function test_upnp_idempotent() {
     skip_test "Instance creation failed - skipping test"
     return
   fi
+
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Enable twice
   assert_command_succeeds "$FILES_UPNP_MODULE enable $instance_name" \
@@ -799,9 +805,6 @@ function test_upnp_idempotent() {
   [[ $disable2_exit -eq 0 || $disable2_exit -eq 219 ]] && disable2_ok="true"
   assert_true "$disable2_ok" \
     "Second upnp disable should also succeed (idempotent)"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -821,6 +824,8 @@ function test_full_files_workflow() {
     skip_test "Instance creation failed - skipping test"
     return
   fi
+
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   local instance_config
   instance_config=$("$KGSM_ROOT/kgsm.sh" instances find "$instance_name" 2>/dev/null)
@@ -842,7 +847,4 @@ function test_full_files_workflow() {
 
   assert_file_not_exists "$manage_file" \
     "Management file should be gone after files.sh remove"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }

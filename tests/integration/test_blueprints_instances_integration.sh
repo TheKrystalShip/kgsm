@@ -24,6 +24,9 @@ readonly INSTANCES_MODULE="$KGSM_ROOT/commands/instances.sh"
 
 TEST_INSTALL_DIR=""
 
+# Per-test cleanup tracking (used by teardown hook)
+_TEARDOWN_INSTANCES=()
+
 # =============================================================================
 # TEST FUNCTIONS
 # =============================================================================
@@ -42,6 +45,19 @@ function setup_test() {
   assert_file_executable "$INSTANCES_MODULE" "instances.sh command should be executable"
 
   log_test_step "Integration test environment validated"
+}
+
+function setup() {
+  _TEARDOWN_INSTANCES=()
+}
+
+function teardown() {
+  local entry bp name
+  for entry in "${_TEARDOWN_INSTANCES[@]}"; do
+    bp="${entry%%:*}"
+    name="${entry#*:}"
+    remove_test_instance "$bp" "$name" "$TEST_INSTALL_DIR" 2>/dev/null || true
+  done
 }
 
 # =============================================================================
@@ -85,6 +101,7 @@ function test_blueprint_path_reflected_in_instance_config() {
   local instance_name="test-bp-path-$$"
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   local create_exit=$?
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
 
   assert_equals 0 "$create_exit" "Instance creation should succeed"
 
@@ -97,9 +114,6 @@ function test_blueprint_path_reflected_in_instance_config() {
   # Instance config should contain the blueprint filename
   assert_file_contains "$instance_config" "factorio" \
     "Instance config should reference factorio blueprint"
-
-  # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
 # =============================================================================
@@ -129,6 +143,7 @@ function test_blueprint_info_fields_in_instance_config() {
   local instance_name="test-bp-fields-$$"
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "Instance creation should succeed"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
 
   # Get instance info and verify blueprint-derived fields
   local instance_info
@@ -143,9 +158,6 @@ function test_blueprint_info_fields_in_instance_config() {
   assert_file_contains "$("$INSTANCES_MODULE" find "$instance_name" 2>&1)" \
     "$expected_level" \
     "Instance config should contain blueprint level_name value"
-
-  # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
 # =============================================================================
@@ -168,6 +180,8 @@ function test_blueprint_list_unaffected_by_instances() {
   local instance_terraria="test-bplist-t-$$"
   create_test_instance "factorio" "$instance_factorio" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   create_test_instance "terraria" "$instance_terraria" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  _TEARDOWN_INSTANCES+=("factorio:$instance_factorio")
+  _TEARDOWN_INSTANCES+=("terraria:$instance_terraria")
 
   # Blueprint list should still contain the same blueprints
   local list_during
@@ -199,9 +213,11 @@ function test_instance_list_filtered_by_blueprint() {
 
   create_test_instance "factorio" "$instance_factorio" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "factorio instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_factorio")
 
   create_test_instance "terraria" "$instance_terraria" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "terraria instance should be created"
+  _TEARDOWN_INSTANCES+=("terraria:$instance_terraria")
 
   # Filter by factorio: must include factorio instance, must not include terraria instance
   local factorio_list
@@ -220,10 +236,6 @@ function test_instance_list_filtered_by_blueprint() {
     "instances list terraria should include terraria instance"
   assert_not_contains "$terraria_list" "$instance_factorio" \
     "instances list terraria should not include factorio instance"
-
-  # Cleanup
-  remove_test_instance "factorio" "$instance_factorio" "$TEST_INSTALL_DIR"
-  remove_test_instance "terraria" "$instance_terraria" "$TEST_INSTALL_DIR"
 }
 
 # =============================================================================
@@ -239,9 +251,11 @@ function test_multiple_instances_from_same_blueprint() {
 
   create_test_instance "factorio" "$instance_one" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "First factorio instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_one")
 
   create_test_instance "factorio" "$instance_two" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "Second factorio instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_two")
 
   # Both should appear in the list
   local all_instances
@@ -268,10 +282,6 @@ function test_multiple_instances_from_same_blueprint() {
     "Two instances should have different config file paths"
   assert_file_exists "$config_one" "First instance config should exist"
   assert_file_exists "$config_two" "Second instance config should exist"
-
-  # Cleanup
-  remove_test_instance "factorio" "$instance_one" "$TEST_INSTALL_DIR"
-  remove_test_instance "factorio" "$instance_two" "$TEST_INSTALL_DIR"
 }
 
 # =============================================================================
@@ -285,6 +295,7 @@ function test_instance_removal_does_not_affect_blueprint() {
   local instance_name="test-rm-bp-$$"
   create_test_instance "necesse" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "necesse instance should be created"
+  _TEARDOWN_INSTANCES+=("necesse:$instance_name")
 
   # Instance should exist in list
   local list_before
@@ -330,6 +341,7 @@ function test_generate_id_compatible_with_create() {
   local created_name
   created_name=$(create_test_instance "factorio" "$generated_id" "$TEST_INSTALL_DIR" 2>&1)
   local create_exit=$?
+  _TEARDOWN_INSTANCES+=("factorio:$generated_id")
 
   assert_equals 0 "$create_exit" \
     "create with generated ID should succeed"
@@ -342,9 +354,6 @@ function test_generate_id_compatible_with_create() {
   list_output=$("$INSTANCES_MODULE" list 2>&1)
   assert_contains "$list_output" "$generated_id" \
     "Instance created with generated ID should appear in list"
-
-  # Cleanup
-  remove_test_instance "factorio" "$generated_id" "$TEST_INSTALL_DIR"
 }
 
 # =============================================================================
@@ -360,6 +369,7 @@ function test_duplicate_instance_name_rejected() {
   # Create first instance
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "First instance creation should succeed"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
 
   # Attempt to create a second instance with the same name
   local alt_name="${instance_name}-alt"
@@ -372,8 +382,6 @@ function test_duplicate_instance_name_rejected() {
   assert_not_equals 0 "$dup_exit" \
     "Creating instance with duplicate name should fail"
 
-  # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
   # Also clean up the alt prereq symlink that was created above
   __cleanup_instance "factorio" "$alt_name" "$TEST_INSTALL_DIR" 2>/dev/null || true
 }
@@ -399,6 +407,7 @@ function test_steam_blueprint_data_flows_to_instance() {
   local instance_name="test-steam-$$"
   create_test_instance "necesse" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "necesse instance creation should succeed"
+  _TEARDOWN_INSTANCES+=("necesse:$instance_name")
 
   # Instance config should contain the steam_app_id
   local instance_config_path
@@ -406,9 +415,6 @@ function test_steam_blueprint_data_flows_to_instance() {
   assert_file_exists "$instance_config_path" "Instance config file should exist"
   assert_file_contains "$instance_config_path" "$expected_app_id" \
     "Instance config should contain the blueprint's steam_app_id"
-
-  # Cleanup
-  remove_test_instance "necesse" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
 # =============================================================================
@@ -422,6 +428,7 @@ function test_instance_info_json_contains_blueprint_data() {
   local instance_name="test-json-$$"
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "Instance should be created for JSON info test"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
 
   local json_output
   json_output=$("$INSTANCES_MODULE" info "$instance_name" --json 2>&1)
@@ -439,9 +446,6 @@ function test_instance_info_json_contains_blueprint_data() {
     "JSON output should include 'name' key"
   assert_contains "$json_output" "$instance_name" \
     "JSON output should include the actual instance name"
-
-  # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
 # =============================================================================
@@ -456,6 +460,7 @@ function test_blueprint_type_reflected_in_instance_runtime() {
   local native_instance="test-native-$$"
   create_test_instance "factorio" "$native_instance" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "Native (factorio) instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$native_instance")
 
   local native_config
   native_config=$("$INSTANCES_MODULE" find "$native_instance" 2>&1)
@@ -474,9 +479,6 @@ function test_blueprint_type_reflected_in_instance_runtime() {
   assert_contains "$bp_type" ".bp" \
     "Native blueprint path should end with .bp"
 
-  # Cleanup native instance
-  remove_test_instance "factorio" "$native_instance" "$TEST_INSTALL_DIR"
-
   # Container blueprint: vrising (if Docker available)
   if ! is_docker_available; then
     log_test_step "Docker not available - skipping container blueprint type check"
@@ -486,6 +488,7 @@ function test_blueprint_type_reflected_in_instance_runtime() {
   local container_instance="test-container-$$"
   create_test_instance "vrising" "$container_instance" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "Container (vrising) instance should be created"
+  _TEARDOWN_INSTANCES+=("vrising:$container_instance")
 
   local container_config
   container_config=$("$INSTANCES_MODULE" find "$container_instance" 2>&1)
@@ -500,8 +503,5 @@ function test_blueprint_type_reflected_in_instance_runtime() {
   bp_path=$("$BLUEPRINTS_MODULE" find vrising 2>&1)
   assert_contains "$bp_path" "docker-compose.yml" \
     "Container blueprint path should contain docker-compose.yml"
-
-  # Cleanup container instance
-  remove_test_instance "vrising" "$container_instance" "$TEST_INSTALL_DIR"
 }
 

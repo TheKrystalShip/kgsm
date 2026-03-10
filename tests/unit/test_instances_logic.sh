@@ -20,6 +20,9 @@ readonly HANDLER="$KGSM_ROOT/commands/handlers/instances.sh"
 # Test-specific paths
 TEST_INSTALL_DIR=""
 
+# Per-test cleanup tracking (used by teardown hook)
+_TEARDOWN_INSTANCES=()
+
 # =============================================================================
 # TEST HELPER FUNCTIONS
 # =============================================================================
@@ -96,6 +99,19 @@ function setup_test() {
   log_test_step "Test environment validated"
 }
 
+function setup() {
+  _TEARDOWN_INSTANCES=()
+}
+
+function teardown() {
+  local entry bp name
+  for entry in "${_TEARDOWN_INSTANCES[@]}"; do
+    bp="${entry%%:*}"
+    name="${entry#*:}"
+    remove_test_instance "$bp" "$name" 2>/dev/null || true
+  done
+}
+
 # =============================================================================
 # __logic_generate_unique_instance_name() TESTS
 # =============================================================================
@@ -122,6 +138,7 @@ function test_generate_name_second_instance() {
 
   # Create first instance with blueprint name
   create_test_instance "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Generate name for second instance (should return blueprint-XX format)
   local generated_name
@@ -131,9 +148,6 @@ function test_generate_name_second_instance() {
   assert_equals 0 "$exit_code" "Should succeed"
   assert_matches "$generated_name" "^${instance_name}-[0-9]+$" \
     "Second instance should use blueprint-suffix format"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 function test_generate_name_empty_parameter() {
@@ -168,6 +182,7 @@ function test_generate_name_suffix_length() {
 
   # Create first instance
   create_test_instance "$blueprint" "$blueprint"
+  _TEARDOWN_INSTANCES+=("$blueprint:$blueprint")
 
   # Generate second instance name
   local generated_name
@@ -179,9 +194,6 @@ function test_generate_name_suffix_length() {
 
   # Default suffix length should be 2 (from config_instance_suffix_length)
   assert_equals 2 "$suffix_length" "Suffix length should be 2 by default"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$blueprint"
 }
 
 # =============================================================================
@@ -196,15 +208,13 @@ function test_config_exists_true() {
 
   # Create minimal instance
   create_test_instance "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Check if config exists
   __logic_instance_config_exists "$instance_name" "$blueprint"
   local exit_code=$?
 
   assert_equals 0 "$exit_code" "Should return 0 when config exists"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 function test_config_exists_false() {
@@ -262,6 +272,7 @@ function test_create_config_file_success() {
 
   # Setup prerequisites (symlink must exist)
   _setup_instance_prereqs "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Create config file
   local config_path
@@ -276,9 +287,6 @@ function test_create_config_file_success() {
   local expected_config="${instance_name}.config.ini"
   assert_contains "$config_path" "$expected_config" \
     "Path should contain correct config filename"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 function test_create_config_file_empty_instance_name() {
@@ -323,6 +331,7 @@ function test_create_config_file_container_blueprint() {
 
   # Setup prerequisites
   _setup_instance_prereqs "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Create config file
   local config_path
@@ -331,9 +340,6 @@ function test_create_config_file_container_blueprint() {
 
   assert_equals 0 "$exit_code" "Should succeed for container blueprint"
   assert_file_exists "$config_path" "Config file should exist"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -348,6 +354,7 @@ function test_create_base_instance_native_blueprint() {
 
   # Setup prerequisites
   _setup_instance_prereqs "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Create config file first
   local config_path
@@ -368,9 +375,6 @@ function test_create_base_instance_native_blueprint() {
     "Config should contain runtime=native"
   assert_file_contains "$config_path" "name=\"$instance_name\"" \
     "Config should contain instance name"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 function test_create_base_instance_container_blueprint() {
@@ -381,6 +385,7 @@ function test_create_base_instance_container_blueprint() {
 
   # Setup prerequisites
   _setup_instance_prereqs "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Create config file
   local config_path
@@ -398,9 +403,6 @@ function test_create_base_instance_container_blueprint() {
   # Verify config contains container runtime
   assert_file_contains "$config_path" "runtime=\"container\"" \
     "Config should contain runtime=container"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 function test_create_base_instance_empty_config_path() {
@@ -451,6 +453,7 @@ function test_create_base_instance_invalid_blueprint() {
 
   # Setup prerequisites
   _setup_instance_prereqs "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Create config file
   local config_path
@@ -462,9 +465,6 @@ function test_create_base_instance_invalid_blueprint() {
 
   assert_equals "$EC_INVALID_ARG" "$exit_code" \
     "Should return EC_INVALID_ARG when config path is empty"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -479,6 +479,7 @@ function test_create_instance_native_blueprint() {
 
   # Setup prerequisites
   _setup_instance_prereqs "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Create instance
   local result
@@ -492,9 +493,6 @@ function test_create_instance_native_blueprint() {
   # Verify config file exists
   local config_path="$KGSM_INSTANCES_DIR/$blueprint/$instance_name/$instance_name.config.ini"
   assert_file_exists "$config_path" "Config file should exist"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 function test_create_instance_container_blueprint() {
@@ -505,6 +503,7 @@ function test_create_instance_container_blueprint() {
 
   # Setup prerequisites
   _setup_instance_prereqs "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Create instance
   local result
@@ -514,9 +513,6 @@ function test_create_instance_container_blueprint() {
   assert_equals "$EC_SUCCESS_INSTANCE_CREATED" "$exit_code" \
     "Should return EC_SUCCESS_INSTANCE_CREATED"
   assert_equals "$instance_name" "$result" "Should echo instance name"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 function test_create_instance_auto_generate_name() {
@@ -534,6 +530,7 @@ function test_create_instance_auto_generate_name() {
 
   # Setup prerequisites with generated name
   _setup_instance_prereqs "$blueprint" "$generated_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$generated_name")
 
   # Create instance without identifier (auto-generate)
   local result
@@ -543,9 +540,6 @@ function test_create_instance_auto_generate_name() {
   assert_equals "$EC_SUCCESS_INSTANCE_CREATED" "$exit_code" \
     "Should return EC_SUCCESS_INSTANCE_CREATED"
   assert_not_null "$result" "Should echo generated instance name"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$result"
 }
 
 function test_create_instance_custom_identifier() {
@@ -556,6 +550,7 @@ function test_create_instance_custom_identifier() {
 
   # Setup prerequisites
   _setup_instance_prereqs "$blueprint" "$custom_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$custom_name")
 
   # Create instance with custom identifier
   local result
@@ -565,9 +560,6 @@ function test_create_instance_custom_identifier() {
   assert_equals "$EC_SUCCESS_INSTANCE_CREATED" "$exit_code" \
     "Should return EC_SUCCESS_INSTANCE_CREATED"
   assert_equals "$custom_name" "$result" "Should use custom identifier"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$custom_name"
 }
 
 function test_create_instance_invalid_blueprint() {
@@ -625,6 +617,7 @@ function test_create_instance_duplicate_name() {
 
   # Create first instance
   create_test_instance "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Try to create second instance with same name
   # Setup prereqs again would fail, so we just call the logic directly
@@ -633,9 +626,6 @@ function test_create_instance_duplicate_name() {
 
   assert_equals "$EC_INVALID_INSTANCE" "$exit_code" \
     "Should return EC_INVALID_INSTANCE for duplicate instance name"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -650,6 +640,7 @@ function test_remove_instance_success() {
 
   # Create minimal instance
   create_test_instance "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Verify symlink exists before removal
   local symlink_path="$KGSM_INSTANCES_DIR/$blueprint/$instance_name"
@@ -672,7 +663,6 @@ function test_remove_instance_success() {
   else
     assert_false "false" "Symlink should be removed"
   fi
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 function test_remove_instance_empty_blueprint_dir() {
@@ -683,6 +673,7 @@ function test_remove_instance_empty_blueprint_dir() {
 
   # Create minimal instance
   create_test_instance "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Remove instance
   __logic_remove_instance "$instance_name"
@@ -694,9 +685,6 @@ function test_remove_instance_empty_blueprint_dir() {
   else
     assert_false "false" "Empty instance directory should be removed"
   fi
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 function test_remove_instance_empty_parameter() {
@@ -749,6 +737,7 @@ function test_remove_instance_container_blueprint() {
 
   # Create minimal container instance
   create_test_instance "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Remove instance
   __logic_remove_instance "$instance_name"
@@ -756,9 +745,6 @@ function test_remove_instance_container_blueprint() {
 
   assert_equals "$EC_SUCCESS_INSTANCE_REMOVED" "$exit_code" \
     "Should succeed for container blueprint instance"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -776,8 +762,11 @@ function test_get_instances_all() {
 
   # Create multiple instances
   create_test_instance "$blueprint1" "$instance1"
+  _TEARDOWN_INSTANCES+=("$blueprint1:$instance1")
   create_test_instance "$blueprint1" "$instance2"
+  _TEARDOWN_INSTANCES+=("$blueprint1:$instance2")
   create_test_instance "$blueprint2" "$instance3"
+  _TEARDOWN_INSTANCES+=("$blueprint2:$instance3")
 
   # Get all instances
   local instances
@@ -788,11 +777,6 @@ function test_get_instances_all() {
   assert_contains "$instances" "$instance1" "Should contain instance1"
   assert_contains "$instances" "$instance2" "Should contain instance2"
   assert_contains "$instances" "$instance3" "Should contain instance3"
-
-  # Cleanup
-  remove_test_instance "$blueprint1" "$instance1"
-  remove_test_instance "$blueprint1" "$instance2"
-  remove_test_instance "$blueprint2" "$instance3"
 }
 
 function test_get_instances_filtered_by_blueprint() {
@@ -806,8 +790,11 @@ function test_get_instances_filtered_by_blueprint() {
 
   # Create instances for different blueprints
   create_test_instance "$blueprint1" "$instance1"
+  _TEARDOWN_INSTANCES+=("$blueprint1:$instance1")
   create_test_instance "$blueprint1" "$instance2"
+  _TEARDOWN_INSTANCES+=("$blueprint1:$instance2")
   create_test_instance "$blueprint2" "$instance3"
+  _TEARDOWN_INSTANCES+=("$blueprint2:$instance3")
 
   # Get only factorio instances
   local instances
@@ -819,11 +806,6 @@ function test_get_instances_filtered_by_blueprint() {
   assert_contains "$instances" "$instance2" "Should contain factorio instance2"
   assert_not_contains "$instances" "$instance3" \
     "Should not contain necesse instance"
-
-  # Cleanup
-  remove_test_instance "$blueprint1" "$instance1"
-  remove_test_instance "$blueprint1" "$instance2"
-  remove_test_instance "$blueprint2" "$instance3"
 }
 
 function test_get_instances_empty_result() {
@@ -852,6 +834,7 @@ function test_get_instances_single_instance() {
 
   # Create single instance
   create_test_instance "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Get instances
   local instances
@@ -867,9 +850,6 @@ function test_get_instances_single_instance() {
 
   assert_equals "$instance_name" "$instances" \
     "Should return single instance name"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 function test_get_instances_container_blueprint() {
@@ -880,6 +860,7 @@ function test_get_instances_container_blueprint() {
 
   # Create container instance
   create_test_instance "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Get instances filtered by container blueprint
   local instances
@@ -889,9 +870,6 @@ function test_get_instances_container_blueprint() {
   assert_equals 0 "$exit_code" "Should succeed"
   assert_contains "$instances" "$instance_name" \
     "Should contain container instance"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 # =============================================================================
@@ -908,7 +886,9 @@ function test_get_instance_paths_all() {
 
   # Create instances
   create_test_instance "$blueprint1" "$instance1"
+  _TEARDOWN_INSTANCES+=("$blueprint1:$instance1")
   create_test_instance "$blueprint2" "$instance2"
+  _TEARDOWN_INSTANCES+=("$blueprint2:$instance2")
 
   # Get all instance paths
   local paths
@@ -920,10 +900,6 @@ function test_get_instance_paths_all() {
     "Should contain config path for instance1"
   assert_contains "$paths" "$instance2.config.ini" \
     "Should contain config path for instance2"
-
-  # Cleanup
-  remove_test_instance "$blueprint1" "$instance1"
-  remove_test_instance "$blueprint2" "$instance2"
 }
 
 function test_get_instance_paths_filtered() {
@@ -936,7 +912,9 @@ function test_get_instance_paths_filtered() {
 
   # Create instances
   create_test_instance "$blueprint1" "$instance1"
+  _TEARDOWN_INSTANCES+=("$blueprint1:$instance1")
   create_test_instance "$blueprint2" "$instance2"
+  _TEARDOWN_INSTANCES+=("$blueprint2:$instance2")
 
   # Get paths filtered by blueprint1
   local paths
@@ -948,10 +926,6 @@ function test_get_instance_paths_filtered() {
     "Should contain factorio instance path"
   assert_not_contains "$paths" "$instance2.config.ini" \
     "Should not contain necesse instance path"
-
-  # Cleanup
-  remove_test_instance "$blueprint1" "$instance1"
-  remove_test_instance "$blueprint2" "$instance2"
 }
 
 function test_get_instance_paths_empty_result() {
@@ -980,6 +954,7 @@ function test_get_instance_paths_absolute() {
 
   # Create instance
   create_test_instance "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Get paths
   local paths
@@ -988,9 +963,6 @@ function test_get_instance_paths_absolute() {
 
   assert_equals 0 "$exit_code" "Should succeed"
   assert_matches "$paths" "^/" "Path should be absolute (start with /)"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 
 function test_get_instance_paths_container_blueprint() {
@@ -1001,6 +973,7 @@ function test_get_instance_paths_container_blueprint() {
 
   # Create container instance
   create_test_instance "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   # Get paths
   local paths
@@ -1010,8 +983,5 @@ function test_get_instance_paths_container_blueprint() {
   assert_equals 0 "$exit_code" "Should succeed"
   assert_contains "$paths" "$instance_name.config.ini" \
     "Should contain container instance config path"
-
-  # Cleanup
-  remove_test_instance "$blueprint" "$instance_name"
 }
 

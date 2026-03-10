@@ -15,6 +15,9 @@ readonly MODULE="$KGSM_ROOT/commands/instances.sh"
 # Test-specific paths
 TEST_INSTALL_DIR=""
 
+# Per-test cleanup tracking (used by teardown hook)
+_TEARDOWN_INSTANCES=()
+
 # =============================================================================
 # TEST FUNCTIONS
 # =============================================================================
@@ -31,6 +34,19 @@ function setup_test() {
   assert_file_executable "$MODULE" "instances.sh command should be executable"
 
   log_test_step "Test environment validated"
+}
+
+function setup() {
+  _TEARDOWN_INSTANCES=()
+}
+
+function teardown() {
+  local entry bp name
+  for entry in "${_TEARDOWN_INSTANCES[@]}"; do
+    bp="${entry%%:*}"
+    name="${entry#*:}"
+    remove_test_instance "$bp" "$name" "$TEST_INSTALL_DIR" 2>/dev/null || true
+  done
 }
 
 # =============================================================================
@@ -162,9 +178,7 @@ function test_create_instance() {
   assert_equals 0 "$exit_code" "create should succeed"
   assert_not_null "$output" "create should output the instance name"
   assert_contains "$output" "$instance_name" "create should echo back instance name"
-
-  # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
 }
 
 function test_create_missing_blueprint() {
@@ -191,6 +205,7 @@ function test_info_instance() {
   local instance_name="test-info-$$"
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "Instance should be created for info test"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
 
   local output
   output=$("$MODULE" info "$instance_name" 2>&1)
@@ -199,8 +214,6 @@ function test_info_instance() {
   assert_equals 0 "$exit_code" "info should succeed"
   assert_not_null "$output" "info should produce output"
   assert_contains "$output" "name=" "info output should contain name key"
-
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
 function test_info_json_instance() {
@@ -209,6 +222,7 @@ function test_info_json_instance() {
   local instance_name="test-info-json-$$"
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "Instance should be created for info --json test"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
 
   local output
   output=$("$MODULE" info "$instance_name" --json 2>&1)
@@ -217,8 +231,6 @@ function test_info_json_instance() {
   assert_equals 0 "$exit_code" "info --json should succeed"
   echo "$output" | jq . >/dev/null 2>&1
   assert_equals 0 "$?" "info --json output should be valid JSON"
-
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
 function test_info_missing_instance() {
@@ -245,6 +257,7 @@ function test_find_instance() {
   local instance_name="test-find-$$"
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "Instance should be created for find test"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
 
   local output
   output=$("$MODULE" find "$instance_name" 2>&1)
@@ -253,8 +266,6 @@ function test_find_instance() {
   assert_equals 0 "$exit_code" "find should succeed"
   assert_not_null "$output" "find should return a path"
   assert_file_exists "$output" "find should return path to existing file"
-
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
 function test_find_missing_instance_arg() {
@@ -281,13 +292,12 @@ function test_list_after_creation() {
   local instance_name="test-list-$$"
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "Instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
 
   local output
   output=$("$MODULE" list 2>&1)
 
   assert_contains "$output" "$instance_name" "list should include the created instance"
-
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
 function test_list_json_after_creation() {
@@ -296,6 +306,7 @@ function test_list_json_after_creation() {
   local instance_name="test-list-json-$$"
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "Instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
 
   local output
   output=$("$MODULE" list --json 2>&1)
@@ -305,8 +316,6 @@ function test_list_json_after_creation() {
   echo "$output" | jq . >/dev/null 2>&1
   assert_equals 0 "$?" "list --json output should be valid JSON"
   assert_contains "$output" "$instance_name" "list --json should include the created instance"
-
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
 function test_list_filter_by_blueprint() {
@@ -315,6 +324,7 @@ function test_list_filter_by_blueprint() {
   local instance_name="test-list-filter-$$"
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "Instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
 
   local output
   output=$("$MODULE" list factorio 2>&1)
@@ -322,8 +332,6 @@ function test_list_filter_by_blueprint() {
 
   assert_equals 0 "$exit_code" "list factorio should succeed"
   assert_contains "$output" "$instance_name" "list factorio should include factorio instance"
-
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
 # =============================================================================
@@ -336,6 +344,7 @@ function test_remove_instance() {
   local instance_name="test_remove_instance"
   create_test_instance "factorio" "$instance_name" >/dev/null 2>&1
   assert_equals 0 "$?" "Instance should be created for remove test"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
 
   local output
   output=$("$MODULE" remove "$instance_name" 2>&1)
@@ -346,9 +355,6 @@ function test_remove_instance() {
   # Instance should no longer be findable
   "$MODULE" find "$instance_name" 2>/dev/null
   assert_not_equals 0 "$?" "find should fail after remove"
-
-  # Cleanup remaining directory structures
-  __cleanup_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" 2>/dev/null || true
 }
 
 function test_remove_missing_instance_arg() {

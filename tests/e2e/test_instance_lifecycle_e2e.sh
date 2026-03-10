@@ -31,6 +31,9 @@ readonly LIFECYCLE_MODULE="$KGSM_ROOT/commands/lifecycle.sh"
 
 TEST_INSTALL_DIR=""
 
+# Per-test cleanup tracking (used by teardown hook)
+_TEARDOWN_INSTANCES=()
+
 # =============================================================================
 # TEST FUNCTIONS
 # =============================================================================
@@ -62,6 +65,19 @@ function setup_test() {
   log_test_step "E2E test environment validated"
 }
 
+function setup() {
+  _TEARDOWN_INSTANCES=()
+}
+
+function teardown() {
+  local entry bp name
+  for entry in "${_TEARDOWN_INSTANCES[@]}"; do
+    bp="${entry%%:*}"
+    name="${entry#*:}"
+    remove_test_instance "$bp" "$name" "$TEST_INSTALL_DIR" 2>/dev/null || true
+  done
+}
+
 # =============================================================================
 # TEST 1: Blueprint-to-instance creation
 # factorio blueprint → instance config file exists with expected content
@@ -74,6 +90,7 @@ function test_instance_creation_from_blueprint() {
 
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   local create_exit=$?
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
 
   assert_equals 0 "$create_exit" "Instance creation should succeed"
 
@@ -91,8 +108,6 @@ function test_instance_creation_from_blueprint() {
   assert_file_contains "$instance_config" "name=" \
     "Instance config should contain name field"
 
-  # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
 # =============================================================================
@@ -106,6 +121,7 @@ function test_directory_creation() {
   local instance_name="e2e-dirs-$$"
 
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
   assert_equals 0 "$?" "Instance should be created before directory test"
 
   # Create directories first, then read paths from the updated config
@@ -139,12 +155,6 @@ function test_directory_creation() {
     assert_dir_exists "$logs_dir" "Logs directory should be created"
   fi
 
-  # Cleanup: remove instance first (while config is accessible), then directories
-  "$INSTANCES_MODULE" remove "$instance_name" >/dev/null 2>&1 || true
-  "$DIRECTORIES_MODULE" remove "$instance_name" >/dev/null 2>&1 || true
-  local install_base="${TEST_INSTALL_DIR:-$TEST_SANDBOX_INSTANCES_INSTALL_DIR}"
-  rm -rf "$install_base/factorio/$instance_name" 2>/dev/null || true
-  rmdir "$install_base/factorio" 2>/dev/null || true
 }
 
 # =============================================================================
@@ -158,6 +168,7 @@ function test_management_file_creation() {
   local instance_name="e2e-files-$$"
 
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
   assert_equals 0 "$?" "Instance should be created before file test"
 
   # Create directories first (required for management file)
@@ -182,10 +193,6 @@ function test_management_file_creation() {
   assert_file_exists "$manage_file" "Management file should exist after files.management.sh create"
   assert_file_executable "$manage_file" "Management file should be executable"
 
-  # Cleanup
-  "$FILES_MANAGEMENT_MODULE" remove "$instance_name" >/dev/null 2>&1 || true
-  "$DIRECTORIES_MODULE" remove "$instance_name" >/dev/null 2>&1 || true
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
 # =============================================================================
@@ -199,6 +206,7 @@ function test_instance_info_readable() {
   local instance_name="e2e-info-$$"
 
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
   assert_equals 0 "$?" "Instance should be created for info test"
 
   # instances info should succeed
@@ -215,8 +223,6 @@ function test_instance_info_readable() {
   assert_contains "$info_output" "factorio" \
     "instances info output should reference factorio"
 
-  # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
 # =============================================================================
@@ -230,6 +236,7 @@ function test_instance_appears_in_list() {
   local instance_name="e2e-list-$$"
 
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
   assert_equals 0 "$?" "Instance should be created for list test"
 
   # Instance should appear in global list
@@ -246,8 +253,6 @@ function test_instance_appears_in_list() {
   assert_contains "$blueprint_list" "$instance_name" \
     "Instance should appear in factorio-filtered list"
 
-  # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
 # =============================================================================
@@ -261,6 +266,7 @@ function test_files_removal() {
   local instance_name="e2e-filesrm-$$"
 
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
   assert_equals 0 "$?" "Instance should be created for file removal test"
 
   "$DIRECTORIES_MODULE" create "$instance_name" >/dev/null 2>&1
@@ -284,9 +290,6 @@ function test_files_removal() {
   assert_file_not_exists "$manage_file" \
     "Management file should not exist after files.management.sh remove"
 
-  # Cleanup
-  "$DIRECTORIES_MODULE" remove "$instance_name" >/dev/null 2>&1 || true
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
 # =============================================================================
@@ -300,6 +303,7 @@ function test_directory_removal() {
   local instance_name="e2e-dirsrm-$$"
 
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
   assert_equals 0 "$?" "Instance should be created for directory removal test"
 
   "$DIRECTORIES_MODULE" create "$instance_name" >/dev/null 2>&1
@@ -320,8 +324,6 @@ function test_directory_removal() {
   assert_dir_not_exists "$install_dir" \
     "Install directory should not exist after directories.sh remove"
 
-  # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
 # =============================================================================
@@ -335,6 +337,7 @@ function test_instance_removal() {
   local instance_name="e2e-instremove-$$"
 
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
   assert_equals 0 "$?" "Instance should be created for removal test"
 
   # Verify instance exists before removal
@@ -357,12 +360,6 @@ function test_instance_removal() {
   assert_not_contains "$list_after" "$instance_name" \
     "Instance should not appear in list after removal"
 
-  # Cleanup prereqs only (instance config already removed)
-  local install_dir="${TEST_INSTALL_DIR:-$TEST_SANDBOX_INSTANCES_INSTALL_DIR}"
-  rm -f "$KGSM_INSTANCES_DIR/factorio/$instance_name" 2>/dev/null || true
-  rmdir "$KGSM_INSTANCES_DIR/factorio" 2>/dev/null || true
-  rm -rf "$install_dir/factorio/$instance_name" 2>/dev/null || true
-  rmdir "$install_dir/factorio" 2>/dev/null || true
 }
 
 # =============================================================================
@@ -377,6 +374,7 @@ function test_complete_lifecycle() {
 
   # --- Step 1: Create instance from blueprint ---
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
   assert_equals 0 "$?" "Step 1: Instance creation should succeed"
 
   # Verify instance exists
@@ -436,12 +434,6 @@ function test_complete_lifecycle() {
   assert_not_contains "$list_after" "$instance_name" \
     "Step 9: Instance should not appear in list after removal"
 
-  # Cleanup prereqs
-  local install_dir="${TEST_INSTALL_DIR:-$TEST_SANDBOX_INSTANCES_INSTALL_DIR}"
-  rm -f "$KGSM_INSTANCES_DIR/factorio/$instance_name" 2>/dev/null || true
-  rmdir "$KGSM_INSTANCES_DIR/factorio" 2>/dev/null || true
-  rm -rf "$install_dir/factorio/$instance_name" 2>/dev/null || true
-  rmdir "$install_dir/factorio" 2>/dev/null || true
 }
 
 # =============================================================================
@@ -456,6 +448,7 @@ function test_duplicate_instance_creation_fails() {
 
   # Create first instance
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
   assert_equals 0 "$?" "First instance creation should succeed"
 
   # Attempt to create second instance with same name (prereqs already exist)
@@ -467,8 +460,6 @@ function test_duplicate_instance_creation_fails() {
   assert_not_equals 0 "$dup_exit" \
     "Creating instance with duplicate name should fail"
 
-  # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
 # =============================================================================
@@ -505,6 +496,7 @@ function test_lifecycle_commands_on_stopped_instance() {
   local instance_name="e2e-lc-$$"
 
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
   assert_equals 0 "$?" "Instance should be created for lifecycle test"
 
   "$DIRECTORIES_MODULE" create "$instance_name" >/dev/null 2>&1
@@ -514,9 +506,5 @@ function test_lifecycle_commands_on_stopped_instance() {
   assert_command_fails "$LIFECYCLE_MODULE is-active $instance_name" \
     "is-active should return non-zero for a non-running instance"
 
-  # Cleanup
-  "$FILES_MANAGEMENT_MODULE" remove "$instance_name" >/dev/null 2>&1 || true
-  "$DIRECTORIES_MODULE" remove "$instance_name" >/dev/null 2>&1 || true
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 }
 

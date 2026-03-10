@@ -25,6 +25,9 @@ readonly INSTANCES_MODULE="$KGSM_ROOT/commands/instances.sh"
 
 TEST_INSTALL_DIR=""
 
+# Per-test cleanup tracking (used by teardown hook)
+_TEARDOWN_INSTANCES=()
+
 # =============================================================================
 # TEST FUNCTIONS
 # =============================================================================
@@ -48,6 +51,38 @@ function setup_test() {
   fi
 
   log_test_step "Config+instances integration test environment validated"
+}
+
+function setup() {
+  _TEARDOWN_INSTANCES=()
+  # Snapshot config state for guaranteed restoration
+  cp "$CONFIG_FILE" "${CONFIG_FILE}.pre-test-snapshot"
+  _SNAPSHOT_suffix_length="${config_instance_suffix_length:-}"
+  _SNAPSHOT_save_timeout="${config_instance_save_command_timeout_seconds:-}"
+  _SNAPSHOT_stop_timeout="${config_instance_stop_command_timeout_seconds:-}"
+  _SNAPSHOT_backup_compression="${config_enable_backup_compression:-}"
+}
+
+function teardown() {
+  # Restore config file from snapshot
+  if [[ -f "${CONFIG_FILE}.pre-test-snapshot" ]]; then
+    cp "${CONFIG_FILE}.pre-test-snapshot" "$CONFIG_FILE"
+    rm -f "${CONFIG_FILE}.pre-test-snapshot"
+  fi
+
+  # Restore exported config variables
+  export config_instance_suffix_length="${_SNAPSHOT_suffix_length}"
+  export config_instance_save_command_timeout_seconds="${_SNAPSHOT_save_timeout}"
+  export config_instance_stop_command_timeout_seconds="${_SNAPSHOT_stop_timeout}"
+  export config_enable_backup_compression="${_SNAPSHOT_backup_compression}"
+
+  # Clean up tracked instances
+  local entry bp name
+  for entry in "${_TEARDOWN_INSTANCES[@]}"; do
+    bp="${entry%%:*}"
+    name="${entry#*:}"
+    remove_test_instance "$bp" "$name" "$TEST_INSTALL_DIR" 2>/dev/null || true
+  done
 }
 
 # =============================================================================
@@ -94,13 +129,8 @@ function test_instance_suffix_length_affects_name_generation() {
     assert_equals 5 "${#suffix}" \
       "Suffix should be 5 digits when instance_suffix_length=5"
 
-    # Cleanup first instance
-    remove_test_instance "factorio" "$first_name" "$TEST_INSTALL_DIR"
+    _TEARDOWN_INSTANCES+=("factorio:$first_name")
   fi
-
-  # Restore default suffix length
-  export config_instance_suffix_length=2
-  sed -i "s/^instance_suffix_length=.*/instance_suffix_length=2/" "$CONFIG_FILE"
 }
 
 # =============================================================================
@@ -117,6 +147,7 @@ function test_config_save_timeout_embedded_in_instance() {
   local instance_name="test-save-to-$$"
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "Instance creation should succeed"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
 
   # Find instance config file
   local instance_config
@@ -127,13 +158,6 @@ function test_config_save_timeout_embedded_in_instance() {
   # Verify the timeout value is embedded
   assert_file_contains "$instance_config" 'save_command_timeout_seconds="42"' \
     "Instance config should contain the configured save timeout"
-
-  # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
-
-  # Restore default
-  export config_instance_save_command_timeout_seconds=5
-  sed -i "s/^instance_save_command_timeout_seconds=.*/instance_save_command_timeout_seconds=5/" "$CONFIG_FILE"
 }
 
 # =============================================================================
@@ -150,6 +174,7 @@ function test_config_stop_timeout_embedded_in_instance() {
   local instance_name="test-stop-to-$$"
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "Instance creation should succeed"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
 
   local instance_config
   instance_config=$("$INSTANCES_MODULE" find "$instance_name" 2>&1)
@@ -158,13 +183,6 @@ function test_config_stop_timeout_embedded_in_instance() {
 
   assert_file_contains "$instance_config" 'stop_command_timeout_seconds="99"' \
     "Instance config should contain the configured stop timeout"
-
-  # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
-
-  # Restore default
-  export config_instance_stop_command_timeout_seconds=30
-  sed -i "s/^instance_stop_command_timeout_seconds=.*/instance_stop_command_timeout_seconds=30/" "$CONFIG_FILE"
 }
 
 # =============================================================================
@@ -181,6 +199,7 @@ function test_config_backup_compression_embedded_in_instance() {
   local instance_name="test-compress-$$"
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "Instance creation should succeed"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
 
   local instance_config
   instance_config=$("$INSTANCES_MODULE" find "$instance_name" 2>&1)
@@ -189,13 +208,6 @@ function test_config_backup_compression_embedded_in_instance() {
 
   assert_file_contains "$instance_config" 'compress_backups="true"' \
     "Instance config should reflect compress_backups=true"
-
-  # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
-
-  # Restore default
-  export config_enable_backup_compression=false
-  sed -i "s/^enable_backup_compression=.*/enable_backup_compression=false/" "$CONFIG_FILE"
 }
 
 # =============================================================================
@@ -215,6 +227,7 @@ function test_config_validate_after_instance_operations() {
   local instance_name="test-cfg-valid-$$"
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "Instance creation should succeed"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
 
   # Validate during (instance exists)
   "$KGSM_ROOT/kgsm.sh" config validate >/dev/null 2>&1
@@ -259,10 +272,6 @@ function test_config_merge_preserves_instance_defaults() {
   stop_timeout=$("$CONFIG_MODULE" get instance_stop_command_timeout_seconds 2>&1)
   assert_equals "88" "$stop_timeout" \
     "Merge should preserve custom instance_stop_command_timeout_seconds=88"
-
-  # Restore defaults
-  "$CONFIG_MODULE" set instance_save_command_timeout_seconds=5 >/dev/null 2>&1
-  "$CONFIG_MODULE" set instance_stop_command_timeout_seconds=30 >/dev/null 2>&1
 }
 
 # =============================================================================
