@@ -52,6 +52,29 @@ function __setup_test_environment() {
   declare -g TEST_SANDBOX_INSTANCES_INSTALL_DIR="${sandbox_path}/test_instances"
   export TEST_SANDBOX_INSTANCES_INSTALL_DIR
 
+  # Save original XDG variables for restoration.
+  # XDG paths control where KGSM stores user data (instances, config, logs).
+  # Without sandboxing these, tests pollute the real user's home directory.
+  declare -g _ORIG_XDG_DATA_HOME="${XDG_DATA_HOME:-}"
+  declare -g _ORIG_XDG_CONFIG_HOME="${XDG_CONFIG_HOME:-}"
+  declare -g _ORIG_XDG_DATA_HOME_WAS_SET="${XDG_DATA_HOME+set}"
+  declare -g _ORIG_XDG_CONFIG_HOME_WAS_SET="${XDG_CONFIG_HOME+set}"
+
+  # Override XDG paths to point inside the sandbox.
+  # Subprocesses (e.g., kgsm.sh invocations) inherit these exports,
+  # ensuring all paths resolve inside the sandbox.
+  export XDG_DATA_HOME="${sandbox_path}/.local/share"
+  export XDG_CONFIG_HOME="${sandbox_path}/.config"
+
+  # Pre-create the XDG config directory and place the test config there
+  # BEFORE sourcing bootstrap.sh. This is critical because core/config.sh
+  # calls `exit 0` if CONFIG_FILE doesn't exist at the XDG path, which
+  # would kill the test runner.
+  mkdir -p "${sandbox_path}/.config/kgsm"
+  if [[ -f "${sandbox_path}/config.ini" ]]; then
+    cp "${sandbox_path}/config.ini" "${sandbox_path}/.config/kgsm/config.ini"
+  fi
+
   # CRITICAL: Unset all module load flags to force fresh initialization in sandbox
   # The test framework loaded KGSM modules with HOST KGSM_ROOT, but tests need
   # modules loaded with SANDBOX KGSM_ROOT. By unsetting these flags, we force
@@ -65,9 +88,14 @@ function __setup_test_environment() {
   unset KGSM_LOGGING_LOADED
   unset KGSM_EVENTS_LOADED
   unset KGSM_OVERRIDES_LOADED
+  # Unset KGSM_PATHS_LOADED so core/paths.sh re-evaluates XDG-derived paths
+  unset KGSM_PATHS_LOADED
 
   # Load KGSM bootstrap in sandbox context
-  # This gives tests access to KGSM modules, error codes, and functions
+  # This gives tests access to KGSM modules, error codes, and functions.
+  # bootstrap.sh will source paths.sh (now with sandbox XDG vars) and call
+  # __init_user_directories() to create the XDG directory structure inside
+  # the sandbox.
   if [[ -f "${original_kgsm_root}/core/bootstrap.sh" ]]; then
     # shellcheck disable=SC1090,SC1091
     source "${original_kgsm_root}/core/bootstrap.sh" || {
@@ -104,6 +132,22 @@ function __restore_test_environment() {
     unset KGSM_ROOT
   fi
 
+  # Restore original XDG variables
+  if [[ "${_ORIG_XDG_DATA_HOME_WAS_SET:-}" == "set" ]]; then
+    export XDG_DATA_HOME="$_ORIG_XDG_DATA_HOME"
+  else
+    unset XDG_DATA_HOME
+  fi
+
+  if [[ "${_ORIG_XDG_CONFIG_HOME_WAS_SET:-}" == "set" ]]; then
+    export XDG_CONFIG_HOME="$_ORIG_XDG_CONFIG_HOME"
+  else
+    unset XDG_CONFIG_HOME
+  fi
+
+  unset _ORIG_XDG_DATA_HOME _ORIG_XDG_CONFIG_HOME
+  unset _ORIG_XDG_DATA_HOME_WAS_SET _ORIG_XDG_CONFIG_HOME_WAS_SET
+
   # Unset sandbox context variables
   unset KGSM_TEST_MODE
   unset KGSM_TEST_LOG
@@ -116,6 +160,7 @@ function __restore_test_environment() {
   export KGSM_COMMON_LOADED
   export KGSM_LOADER_LOADED
   export KGSM_CONFIG_LOADED
+  export KGSM_PATHS_LOADED
 
   return $EC_SUCCESS
 }
