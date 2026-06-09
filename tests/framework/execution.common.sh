@@ -216,9 +216,9 @@ function __capture_test_output() {
     # Source the test file — only defines functions (no main "$@" invocation)
     source "$test_file"
 
-    # Run setup_test if defined
-    if declare -f setup_test >/dev/null 2>&1; then
-      setup_test
+    # Run setup_file if defined
+    if declare -f setup_file >/dev/null 2>&1; then
+      setup_file
     fi
 
     if [[ -n "${KGSM_TEST_FUNCTION_FILTER:-}" ]]; then
@@ -253,6 +253,7 @@ function __capture_test_output() {
         echo "KGSM_FUNC_RESULT: ${KGSM_TEST_FUNCTION_FILTER}|${_fn_passed}|${_fn_failed}|${_fn_total}|${_fn_status}" >> "$KGSM_TEST_LOG"
       fi
 
+      # Cleanup after single function run
       if declare -f teardown >/dev/null 2>&1; then
         teardown || true
       fi
@@ -307,9 +308,9 @@ function __capture_test_output() {
       print_assert_summary "${TEST_NAME:-}" || _test_exit=$?
     fi
 
-    # Run cleanup_test if defined (must not affect test result)
-    if declare -f cleanup_test >/dev/null 2>&1; then
-      cleanup_test
+    # Run teardown_file if defined (must not affect test result)
+    if declare -f teardown_file >/dev/null 2>&1; then
+      teardown_file
     fi
 
     exit $_test_exit
@@ -361,9 +362,9 @@ function __execute_test_inline() {
   # shellcheck disable=SC1090
   source "$test_file"
 
-  # Run setup_test if defined
-  if declare -f setup_test >/dev/null 2>&1; then
-    setup_test
+  # Run setup_file if defined
+  if declare -f setup_file >/dev/null 2>&1; then
+    setup_file
   fi
 
   # Run target function(s)
@@ -404,9 +405,9 @@ function __execute_test_inline() {
     print_assert_summary "${TEST_NAME:-}" || _test_exit=$?
   fi
 
-  # Run cleanup_test if defined (must not affect test result)
-  if declare -f cleanup_test >/dev/null 2>&1; then
-    cleanup_test
+  # Run teardown_file if defined (must not affect test result)
+  if declare -f teardown_file >/dev/null 2>&1; then
+    teardown_file
   fi
 
   return $_test_exit

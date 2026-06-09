@@ -64,7 +64,7 @@ MGMT_EOF
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up files.common logic tests"
 
   # Verify environment

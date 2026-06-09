@@ -55,7 +55,7 @@ function _setup_instance_prereqs() {
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up instances logic tests"
 
   # Set test install directory within sandbox

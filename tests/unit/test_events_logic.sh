@@ -28,7 +28,7 @@ readonly HANDLER="$KGSM_ROOT/commands/handlers/events.sh"
 # SETUP FUNCTION
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up events logic tests"
 
   # Verify test environment

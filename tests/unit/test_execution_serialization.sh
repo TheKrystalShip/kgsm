@@ -26,7 +26,7 @@ TEST_TEMP_DIR=""
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up execution serialization tests"
 
   # Verify test environment
@@ -43,7 +43,7 @@ function setup_test() {
   log_test_step "Test environment validated"
 }
 
-function cleanup_test() {
+function teardown_file() {
   log_test_step "Cleaning up serialization test resources"
 
   # Remove temp directory

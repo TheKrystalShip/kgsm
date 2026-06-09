@@ -25,7 +25,7 @@ TEST_INSTALL_DIR=""
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up files.upnp commands tests"
 
   TEST_INSTALL_DIR="$KGSM_ROOT/test-installs"
@@ -229,7 +229,7 @@ function test_enable_on_valid_instance() {
 
   local blueprint="factorio"
   local instance_name
-  instance_name=$(create_test_instance "$blueprint" "$(generate_test_id)" "$TEST_INSTALL_DIR" 2>/dev/null)
+  instance_name=$(create_test_instance "$blueprint" 2>/dev/null)
 
   if [[ -z "$instance_name" ]]; then
     skip_test "Instance creation failed - skipping test"
@@ -252,7 +252,7 @@ function test_disable_on_valid_instance() {
 
   local blueprint="factorio"
   local instance_name
-  instance_name=$(create_test_instance "$blueprint" "$(generate_test_id)" "$TEST_INSTALL_DIR" 2>/dev/null)
+  instance_name=$(create_test_instance "$blueprint" 2>/dev/null)
 
   if [[ -z "$instance_name" ]]; then
     skip_test "Instance creation failed - skipping test"
@@ -275,7 +275,7 @@ function test_enable_then_disable_on_valid_instance() {
 
   local blueprint="factorio"
   local instance_name
-  instance_name=$(create_test_instance "$blueprint" "$(generate_test_id)" "$TEST_INSTALL_DIR" 2>/dev/null)
+  instance_name=$(create_test_instance "$blueprint" 2>/dev/null)
 
   if [[ -z "$instance_name" ]]; then
     skip_test "Instance creation failed - skipping test"

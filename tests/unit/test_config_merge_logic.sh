@@ -15,7 +15,7 @@ readonly TEST_NAME="config_merge_logic"
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up config merge logic tests"
 
   # Verify environment

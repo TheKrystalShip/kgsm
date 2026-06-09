@@ -15,7 +15,7 @@ readonly TEST_NAME="config_commands"
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up config commands integration tests"
 
   # Verify config command exists

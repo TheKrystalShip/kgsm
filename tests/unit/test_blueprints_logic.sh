@@ -18,7 +18,7 @@ readonly HANDLER="$KGSM_ROOT/commands/handlers/blueprints.sh"
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up blueprint logic tests"
 
   # Verify environment

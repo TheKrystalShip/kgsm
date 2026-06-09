@@ -31,7 +31,7 @@ readonly CONTAINER_BLUEPRINTS=("vrising")
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up blueprint management e2e tests"
 
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
@@ -66,7 +66,7 @@ function setup_test() {
   log_test_step "Blueprint management e2e environment validated"
 }
 
-function cleanup_test() {
+function teardown_file() {
   log_test_step "Cleaning up blueprint management e2e tests"
   # No cleanup actions needed for read-only blueprint management tests
   log_test_step "Blueprint management e2e cleanup complete"

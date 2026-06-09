@@ -18,7 +18,7 @@ function __create_dir() {
 
   if [[ -z "$dir" ]]; then
     __print_error "No directory specified for creation."
-    exit $EC_INVALID_ARG
+    return $EC_INVALID_ARG
   fi
 
   # If directory already exists, there's nothing to do
@@ -29,13 +29,13 @@ function __create_dir() {
   # Create the directory with appropriate permissions
   mkdir -p "$dir" || {
     __print_error "Failed to create directory '$dir'."
-    exit $EC_FAILED_MKDIR
+    return $EC_FAILED_MKDIR
   }
 
   # Set permissions to 755
   chmod $permissions "$dir" || {
     __print_error "Failed to set permissions for '$dir'."
-    exit $EC_PERMISSION
+    return $EC_PERMISSION
   }
 }
 
@@ -45,26 +45,26 @@ function __source() {
   local file="$1"
   if [[ -z "$file" ]]; then
     __print_error "No file specified for sourcing."
-    exit $EC_INVALID_ARG
+    return $EC_INVALID_ARG
   fi
 
   # Check if the file is readable
   if [[ ! -r "$file" ]]; then
     __print_error "File '$file' is not readable."
-    exit $EC_PERMISSION
+    return $EC_PERMISSION
   fi
 
   # Check if the file exists
   if [[ ! -f "$file" ]]; then
     __print_error "File '$file' does not exist."
-    exit $EC_FILE_NOT_FOUND
+    return $EC_FILE_NOT_FOUND
   fi
 
   # Source the file
   # shellcheck disable=SC1090
   source "$file" || {
     __print_error "Failed to source file '$file'."
-    exit $EC_FAILED_SOURCE
+    return $EC_FAILED_SOURCE
   }
 }
 
@@ -77,7 +77,7 @@ function __create_file() {
 
   if [[ -z "$file" ]]; then
     __print_error "No file specified for creation."
-    exit $EC_INVALID_ARG
+    return $EC_INVALID_ARG
   fi
 
   # If file already exists, there's nothing to do
@@ -88,13 +88,13 @@ function __create_file() {
   # Create the file with appropriate permissions
   touch "$file" || {
     __print_error "Failed to create file '$file'."
-    exit $EC_FAILED_TOUCH
+    return $EC_FAILED_TOUCH
   }
 
   # Set permissions to 644
   chmod $permissions "$file" || {
     __print_error "Failed to set permissions for '$file'."
-    exit $EC_PERMISSION
+    return $EC_PERMISSION
   }
 }
 

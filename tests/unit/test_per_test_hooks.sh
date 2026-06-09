@@ -41,7 +41,7 @@ function teardown() {
 # TEST LIFECYCLE
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up per-test hooks tests"
 
   assert_not_null "$KGSM_TEST_SANDBOX" "KGSM_TEST_SANDBOX should be set"
@@ -60,7 +60,7 @@ function setup_test() {
   log_test_step "Per-test hooks test environment validated"
 }
 
-function cleanup_test() {
+function teardown_file() {
   rm -f "$SETUP_COUNTER_FILE" "$TEARDOWN_COUNTER_FILE"
 }
 

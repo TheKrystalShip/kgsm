@@ -38,7 +38,7 @@ readonly TEST_NAME="<test_name>"
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up <test_name> tests"
 
   # Verify test environment
@@ -195,7 +195,7 @@ function test_complete_workflow() {
 }
 
 # Optional: cleanup_test() is called by the framework after all tests complete
-# function cleanup_test() {
+# function teardown_file() {
 #   # Clean up any resources created during testing
 # }
 

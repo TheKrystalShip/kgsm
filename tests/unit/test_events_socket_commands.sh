@@ -26,7 +26,7 @@ readonly MODULE="$KGSM_ROOT/commands/events.socket.sh"
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up events.socket.sh command tests"
 
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"

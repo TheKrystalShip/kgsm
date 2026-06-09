@@ -16,7 +16,7 @@
 # Test variables
 readonly TEST_NAME="xdg_paths"
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up XDG path integration tests"
 
   # Verify test environment

@@ -24,7 +24,7 @@ readonly HANDLER="$KGSM_ROOT/commands/handlers/system.sh"
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up system logic tests"
 
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"

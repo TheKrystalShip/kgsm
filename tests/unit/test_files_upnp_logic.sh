@@ -25,7 +25,7 @@ readonly HANDLER="$KGSM_ROOT/commands/handlers/files.upnp.sh"
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up files.upnp logic tests"
 
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"

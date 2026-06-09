@@ -29,7 +29,7 @@ readonly MODULE="$KGSM_ROOT/commands/events.sh"
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up events command tests"
 
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"

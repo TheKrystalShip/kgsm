@@ -49,7 +49,7 @@ EOF
   return 0
 }
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up files.systemd logic tests"
 
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"

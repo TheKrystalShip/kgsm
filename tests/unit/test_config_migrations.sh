@@ -16,7 +16,7 @@ readonly MIGRATION_DIR="$KGSM_ROOT/migrations/config"
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up config migration tests"
 
   # Verify environment

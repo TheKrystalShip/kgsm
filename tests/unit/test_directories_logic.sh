@@ -17,7 +17,7 @@ readonly HANDLER="$KGSM_ROOT/commands/handlers/directories.sh"
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up directory logic tests"
 
   # Verify environment
@@ -530,33 +530,3 @@ function test_remove_directories_nonexistent_directory() {
   assert_equals "$exit_code" "$EC_SUCCESS_DIRECTORIES_REMOVED" \
     "Should return EC_SUCCESS_DIRECTORIES_REMOVED (rm -rf succeeds on non-existent)"
 }
-
-# The test is skipped because the code is able to delete directories even with
-# restrictive permissions, as long as the user has the necessary permissions on
-# the parent directory.
-function test_remove_directories_permission_denied() {
-  log_test_step "Testing __logic_remove_directories with protected directory"
-
-  todo_test "Skipped because the code is able to delete directories even with restrictive permissions, as long as the user has the necessary permissions on the parent directory"
-
-  local instance_name="test-instance-$$"
-  local working_dir="$KGSM_TEST_SANDBOX/test_protected_$$"
-  local protected_subdir="$working_dir/protected"
-
-  # Create directory structure with protected subdirectory
-  mkdir -p "$protected_subdir"
-  chmod 000 "$protected_subdir"
-
-  __logic_remove_directories "$instance_name" "$protected_subdir" 2>/dev/null
-  local exit_code=$?
-
-  # Should fail to remove due to permission denied
-  assert_equals "$EC_FAILED_RM" "$exit_code" "Should return EC_FAILED_RM for permission denied"
-
-  # Restore permissions for cleanup
-  chmod 755 "$protected_subdir" 2>/dev/null || true
-
-  # Cleanup
-  rm -rf "$working_dir"
-}
-

@@ -41,7 +41,7 @@ _TEST_FIXTURES_DIR=""
 # SETUP FUNCTION
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up watchers logic tests"
 
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"

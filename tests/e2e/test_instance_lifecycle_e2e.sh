@@ -38,7 +38,7 @@ _TEARDOWN_INSTANCES=()
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up instance lifecycle E2E tests"
 
   TEST_INSTALL_DIR="$KGSM_ROOT/test-installs-e2e"

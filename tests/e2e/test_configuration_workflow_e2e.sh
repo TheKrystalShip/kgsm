@@ -20,7 +20,7 @@ readonly CONFIG_MODULE="$KGSM_ROOT/commands/config.sh"
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up configuration workflow E2E tests"
 
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
@@ -40,7 +40,7 @@ function setup_test() {
   log_test_step "Configuration workflow E2E environment validated"
 }
 
-function cleanup_test() {
+function teardown_file() {
   log_test_step "Cleaning up configuration workflow E2E tests"
 
   # Remove any backup files created during tests
@@ -357,7 +357,7 @@ function test_config_file_integrity_after_operations() {
 # CLEANUP
 # =============================================================================
 
-function cleanup_test() {
+function teardown_file() {
   log_test_step "Cleaning up E2E test artifacts"
 
   # Remove any backup files created during tests

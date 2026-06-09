@@ -19,7 +19,7 @@ readonly TEST_NAME="paths"
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up paths module tests"
 
   # Verify test environment

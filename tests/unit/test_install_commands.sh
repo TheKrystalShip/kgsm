@@ -20,7 +20,7 @@ readonly MODULE="$KGSM_ROOT/commands/install.sh"
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up install commands tests"
 
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"

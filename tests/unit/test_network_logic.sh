@@ -25,7 +25,7 @@ TEST_INSTALL_DIR=""
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up network logic tests"
 
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"

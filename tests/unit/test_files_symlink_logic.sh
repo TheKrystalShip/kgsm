@@ -100,7 +100,7 @@ function __can_create_symlink() {
 # TEST FUNCTIONS
 # =============================================================================
 
-function setup_test() {
+function setup_file() {
   log_test_step "Setting up files.symlink logic tests"
 
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
