@@ -117,7 +117,7 @@ The low-level file discovery is handled by `__find_template` in `core/loader.sh`
 **Used by:** `commands/handlers/files.management.sh` (`__logic_create_management_file`) when `instance_runtime=native`. Modules 03–11 may be replaced by per-game override modules from `overrides/{blueprint_name}/`. Can be manually regenerated with:
 
 ```bash
-./kgsm.sh files --instance <instance_name> --create --manage
+./kgsm.sh files management create <instance_name>
 ```
 
 **Format:** Each module is a self-contained bash fragment. They are concatenated in numerical order into a single `#!/usr/bin/env bash` script.
@@ -131,7 +131,7 @@ The low-level file discovery is handled by `__find_template` in `core/loader.sh`
 **Used by:** `commands/handlers/files.management.sh` when `instance_runtime=container`. Can be manually regenerated with:
 
 ```bash
-./kgsm.sh files --instance <instance_name> --create --manage
+./kgsm.sh files management create <instance_name>
 ```
 
 **Format:** Same numbered module structure as `manage.native.d/`. Reads `$instance_compose_file` and delegates container operations to Docker Compose.
@@ -350,6 +350,6 @@ These `$config_*` variables reflect KGSM-wide settings and are also available in
 - To add game-specific logic, create a directory `overrides/{blueprint_name}/`, copy the relevant default modules from `templates/manage.native.d/`, and modify only the functions you need. See `docs/overrides.md` for details.
 - If a management script becomes corrupted or needs to be regenerated, use:
   ```bash
-  ./kgsm.sh files --instance <instance_name> --create --manage
+  ./kgsm.sh files management create <instance_name>
   ```
 - The management script is assembled from numbered modules in `templates/manage.{runtime}.d/`, with per-game overrides from `overrides/{blueprint_name}/` substituted for modules 03–11 where they exist.

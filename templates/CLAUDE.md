@@ -42,7 +42,7 @@ Modules `00`–`13` are concatenated in numeric order into one
 - `12-commands` `13-dispatch` — structural, **never overridden**.
 
 Regenerate an instance's management script with:
-`./kgsm.sh files --instance <name> --create --manage`.
+`./kgsm.sh files management create <name>`.
 
 ## Editing rules
 

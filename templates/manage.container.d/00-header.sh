@@ -6,7 +6,7 @@
 # Any changes made to this file will be overwritten if the file is regenerated.
 # KGSM will not regenerated this file on its own, but there is a command that
 # can be manually used to regenerate the file in case something breaks:
-# > $KGSM_ROOT/commands/files.sh --instance <instance> --create --manage
+# > $KGSM_ROOT/commands/files.sh management create <instance>
 
 # Disabling SC2154 globally:
 # $instance_* variables are set dynamically from the config file
