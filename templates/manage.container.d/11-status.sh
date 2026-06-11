@@ -86,7 +86,8 @@ function _get_status() {
   local start_time=""
   local current_version=""
   local latest_version=""
-  local updates_available="false"
+  local updates_available=""
+  local updates_checked="false"
   local disk_usage=""
   local backup_count=""
   local recent_logs=""
@@ -155,11 +156,15 @@ function _get_status() {
   current_version=$(_get_installed_version 2>/dev/null || echo "Unknown")
 
   if [[ -n "$fast_mode" ]]; then
-    latest_version="$current_version"
-    updates_available="false"
+    # Fast mode skips the (networked) update check. Do NOT fabricate a result:
+    # report 'unchecked' (updates_checked=false) rather than claiming "up to date".
+    latest_version=""
+    updates_available=""
+    updates_checked="false"
   else
-    # Only check for updates if we have a valid current version
+    # Only a known current version allows a real comparison.
     if [[ "$current_version" != "Unknown" ]]; then
+      updates_checked="true"
       if _compare_versions >/dev/null 2>&1; then
         latest_version=$(_get_latest_version 2>/dev/null || echo "Unknown")
         if [[ "$latest_version" != "$current_version" ]] && [[ "$latest_version" != "Unknown" ]]; then
@@ -172,8 +177,10 @@ function _get_status() {
         updates_available="false"
       fi
     else
-      latest_version="$current_version"
-      updates_available="false"
+      # Version unknown -> no real check possible; report 'unchecked'.
+      latest_version=""
+      updates_available=""
+      updates_checked="false"
     fi
   fi
 
@@ -227,6 +234,7 @@ function _get_status() {
       --arg current_version "$current_version" \
       --arg latest_version "$latest_version" \
       --arg updates_available "$updates_available" \
+      --arg updates_checked "$updates_checked" \
       --arg blueprint "$(basename "$instance_blueprint_file")" \
       --arg runtime "$instance_runtime" \
       --arg lifecycle_manager "$instance_lifecycle_manager" \
@@ -245,8 +253,9 @@ function _get_status() {
         },
         version: {
           current: $current_version,
-          latest: $latest_version,
-          updates_available: ($updates_available == "true")
+          latest: (if $latest_version != "" then $latest_version else null end),
+          checked: ($updates_checked == "true"),
+          updates_available: (if $updates_checked == "true" then ($updates_available == "true") else null end)
         },
         configuration: {
           blueprint: $blueprint,
@@ -309,8 +318,12 @@ function _get_status() {
     echo "$current_version"
 
     echo -n "Updates: "
-    if [[ -n "$fast_mode" ]]; then
-      echo "Skipped (fast mode)"
+    if [[ "$updates_checked" != "true" ]]; then
+      if [[ -n "$fast_mode" ]]; then
+        echo "Not checked (fast mode)"
+      else
+        echo "Not checked"
+      fi
     elif [[ "$updates_available" == "true" ]]; then
       echo "Available (Latest: $latest_version)"
     else
