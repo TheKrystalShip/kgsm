@@ -46,6 +46,24 @@ function __get_lifecycle_manager() {
 
 export -f __get_lifecycle_manager
 
+# Resolves an instance's lifecycle_manager by name, for event payloads.
+# Unlike __get_lifecycle_manager (which takes a config file), this resolves the
+# config file from the instance name. Echoes the real value or nothing on
+# failure — never a fabricated default, so a failed lookup omits the field
+# rather than emitting a wrong one.
+# Args: $1 = _instance_name
+# Returns: echoes lifecycle_manager value (empty if it cannot be resolved)
+function __resolve_lifecycle_manager() {
+  local _instance_name="$1"
+
+  local _instance_config_file
+  _instance_config_file=$(validate_instance_name "$_instance_name" 2> /dev/null) || return 0
+
+  __get_lifecycle_manager "$_instance_config_file" 2> /dev/null
+}
+
+export -f __resolve_lifecycle_manager
+
 # Starts an instance using the appropriate lifecycle manager
 # Args: $1 = _instance_name
 # Returns: 211 on success (triggers instance-started event), error codes on failure

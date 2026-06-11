@@ -349,7 +349,7 @@ function _build_event_payload() {
         Version: $version
       }'
       ;;
-    "$EVENT_INSTANCE_STARTED" | "$EVENT_INSTANCE_STOPPED")
+    "$EVENT_INSTANCE_STARTED" | "$EVENT_INSTANCE_STOPPED" | "$EVENT_INSTANCE_RESTARTED")
       data_object='{
         InstanceName: $instance,
         LifecycleManager: $lifecycle_manager

@@ -31,6 +31,9 @@ export EVENT_INSTANCE_DOWNLOAD_STARTED
 declare -g -r EVENT_INSTANCE_DOWNLOAD_FINISHED="instance_download_finished"
 export EVENT_INSTANCE_DOWNLOAD_FINISHED
 
+declare -g -r EVENT_INSTANCE_DOWNLOAD_FAILED="instance_download_failed"
+export EVENT_INSTANCE_DOWNLOAD_FAILED
+
 declare -g -r EVENT_INSTANCE_DOWNLOADED="instance_downloaded"
 export EVENT_INSTANCE_DOWNLOADED
 
@@ -39,6 +42,9 @@ export EVENT_INSTANCE_DEPLOY_STARTED
 
 declare -g -r EVENT_INSTANCE_DEPLOY_FINISHED="instance_deploy_finished"
 export EVENT_INSTANCE_DEPLOY_FINISHED
+
+declare -g -r EVENT_INSTANCE_DEPLOY_FAILED="instance_deploy_failed"
+export EVENT_INSTANCE_DEPLOY_FAILED
 
 declare -g -r EVENT_INSTANCE_DEPLOYED="instance_deployed"
 export EVENT_INSTANCE_DEPLOYED
@@ -70,6 +76,9 @@ export EVENT_INSTANCE_STARTED
 declare -g -r EVENT_INSTANCE_STOPPED="instance_stopped"
 export EVENT_INSTANCE_STOPPED
 
+declare -g -r EVENT_INSTANCE_RESTARTED="instance_restarted"
+export EVENT_INSTANCE_RESTARTED
+
 declare -g -r EVENT_INSTANCE_READY="instance_ready"
 export EVENT_INSTANCE_READY
 
@@ -94,6 +103,9 @@ export EVENT_INSTANCE_UNINSTALL_STARTED
 declare -g -r EVENT_INSTANCE_UNINSTALL_FINISHED="instance_uninstall_finished"
 export EVENT_INSTANCE_UNINSTALL_FINISHED
 
+declare -g -r EVENT_INSTANCE_UNINSTALL_FAILED="instance_uninstall_failed"
+export EVENT_INSTANCE_UNINSTALL_FAILED
+
 declare -g -r EVENT_INSTANCE_UNINSTALLED="instance_uninstalled"
 export EVENT_INSTANCE_UNINSTALLED
 
@@ -104,9 +116,11 @@ declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_FILES_CREATED"]="instance"
   ["$EVENT_INSTANCE_DOWNLOAD_STARTED"]="instance"
   ["$EVENT_INSTANCE_DOWNLOAD_FINISHED"]="instance"
+  ["$EVENT_INSTANCE_DOWNLOAD_FAILED"]="instance"
   ["$EVENT_INSTANCE_DOWNLOADED"]="instance"
   ["$EVENT_INSTANCE_DEPLOY_STARTED"]="instance"
   ["$EVENT_INSTANCE_DEPLOY_FINISHED"]="instance"
+  ["$EVENT_INSTANCE_DEPLOY_FAILED"]="instance"
   ["$EVENT_INSTANCE_DEPLOYED"]="instance"
   ["$EVENT_INSTANCE_UPDATE_STARTED"]="instance"
   ["$EVENT_INSTANCE_UPDATE_FINISHED"]="instance"
@@ -117,6 +131,7 @@ declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_INSTALLED"]="instance blueprint"
   ["$EVENT_INSTANCE_STARTED"]="instance lifecycle_manager"
   ["$EVENT_INSTANCE_STOPPED"]="instance lifecycle_manager"
+  ["$EVENT_INSTANCE_RESTARTED"]="instance lifecycle_manager"
   ["$EVENT_INSTANCE_READY"]="instance"
   ["$EVENT_INSTANCE_BACKUP_CREATED"]="instance source version"
   ["$EVENT_INSTANCE_BACKUP_RESTORED"]="instance source version"
@@ -125,6 +140,7 @@ declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_REMOVED"]="instance"
   ["$EVENT_INSTANCE_UNINSTALL_STARTED"]="instance"
   ["$EVENT_INSTANCE_UNINSTALL_FINISHED"]="instance"
+  ["$EVENT_INSTANCE_UNINSTALL_FAILED"]="instance"
   ["$EVENT_INSTANCE_UNINSTALLED"]="instance"
 )
 

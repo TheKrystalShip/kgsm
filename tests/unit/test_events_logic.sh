@@ -114,8 +114,8 @@ function test_validate_event_type_empty_returns_error() {
     "Should return EC_EVENT_TYPE_INVALID for empty parameter"
 }
 
-function test_validate_event_type_all_27_constants() {
-  log_test_step "Testing __logic_validate_event_type with all 27 event constants"
+function test_validate_event_type_all_31_constants() {
+  log_test_step "Testing __logic_validate_event_type with all 31 event constants"
 
   local event_types=(
     "instance_created"
@@ -123,9 +123,11 @@ function test_validate_event_type_all_27_constants() {
     "instance_files_created"
     "instance_download_started"
     "instance_download_finished"
+    "instance_download_failed"
     "instance_downloaded"
     "instance_deploy_started"
     "instance_deploy_finished"
+    "instance_deploy_failed"
     "instance_deployed"
     "instance_update_started"
     "instance_update_finished"
@@ -136,6 +138,7 @@ function test_validate_event_type_all_27_constants() {
     "instance_installed"
     "instance_started"
     "instance_stopped"
+    "instance_restarted"
     "instance_ready"
     "instance_backup_created"
     "instance_backup_restored"
@@ -144,6 +147,7 @@ function test_validate_event_type_all_27_constants() {
     "instance_removed"
     "instance_uninstall_started"
     "instance_uninstall_finished"
+    "instance_uninstall_failed"
     "instance_uninstalled"
   )
 
@@ -156,7 +160,7 @@ function test_validate_event_type_all_27_constants() {
   done
 
   assert_equals "${#failed_events[@]}" "0" \
-    "All 27 event types should be valid. Failed: ${failed_events[*]}"
+    "All 31 event types should be valid. Failed: ${failed_events[*]}"
 }
 
 function test_validate_event_type_case_sensitive() {
@@ -431,8 +435,8 @@ function test_get_param_spec_output_format_space_separated() {
     "Should contain spaces between parameters"
 }
 
-function test_get_param_spec_all_27_events() {
-  log_test_step "Testing __logic_get_event_param_spec for all 27 events"
+function test_get_param_spec_all_31_events() {
+  log_test_step "Testing __logic_get_event_param_spec for all 31 events"
 
   local event_types=(
     "instance_created"
@@ -440,9 +444,11 @@ function test_get_param_spec_all_27_events() {
     "instance_files_created"
     "instance_download_started"
     "instance_download_finished"
+    "instance_download_failed"
     "instance_downloaded"
     "instance_deploy_started"
     "instance_deploy_finished"
+    "instance_deploy_failed"
     "instance_deployed"
     "instance_update_started"
     "instance_update_finished"
@@ -453,6 +459,7 @@ function test_get_param_spec_all_27_events() {
     "instance_installed"
     "instance_started"
     "instance_stopped"
+    "instance_restarted"
     "instance_ready"
     "instance_backup_created"
     "instance_backup_restored"
@@ -461,6 +468,7 @@ function test_get_param_spec_all_27_events() {
     "instance_removed"
     "instance_uninstall_started"
     "instance_uninstall_finished"
+    "instance_uninstall_failed"
     "instance_uninstalled"
   )
 
@@ -476,7 +484,7 @@ function test_get_param_spec_all_27_events() {
   done
 
   assert_equals "${#failed_events[@]}" "0" \
-    "All 27 events should return valid specs. Failed: ${failed_events[*]}"
+    "All 31 events should return valid specs. Failed: ${failed_events[*]}"
 }
 
 # =============================================================================
@@ -703,11 +711,37 @@ function test_edge_case_all_events_have_configs() {
 }
 
 function test_edge_case_event_count_matches_configs() {
-  log_test_step "Testing EVENT_CONFIGS count matches expected 27 events"
+  log_test_step "Testing EVENT_CONFIGS count matches expected 31 events"
 
   local config_count="${#EVENT_CONFIGS[@]}"
 
-  assert_equals "$config_count" "27" \
-    "EVENT_CONFIGS should contain exactly 27 entries (found: $config_count)"
+  assert_equals "$config_count" "31" \
+    "EVENT_CONFIGS should contain exactly 31 entries (found: $config_count)"
+}
+
+# Conformance guard: every event a call site actually emits must be registered
+# in EVENT_CONFIGS. Emitting an unregistered name fails validation silently and
+# never reaches any transport — the exact drift that hid instance-started,
+# instance-restarted, and the *-failed events. Comment lines are excluded so the
+# dispatcher's commented-out system-*/config-* TODOs do not false-positive.
+function test_all_emit_call_sites_are_registered() {
+  log_test_step "Testing every 'events.sh emit' call site is registered"
+
+  local unregistered=()
+  local name event_type
+  while IFS= read -r name; do
+    [[ -z "$name" ]] && continue
+    event_type="${name//-/_}"
+    if [[ -z "${EVENT_CONFIGS[$event_type]}" ]]; then
+      unregistered+=("$name")
+    fi
+  done < <(grep -rhE "events\.sh emit [a-z-]+" \
+    "$KGSM_ROOT/commands" "$KGSM_ROOT/core" 2> /dev/null \
+    | grep -vE "^[[:space:]]*#" \
+    | grep -oE "events\.sh emit [a-z-]+" \
+    | sed 's/events\.sh emit //' | sort -u)
+
+  assert_equals "${#unregistered[@]}" "0" \
+    "Every emitted event must be registered in EVENT_CONFIGS. Unregistered: ${unregistered[*]}"
 }
 
