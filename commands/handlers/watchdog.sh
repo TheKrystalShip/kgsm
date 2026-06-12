@@ -1,0 +1,212 @@
+#!/usr/bin/env bash
+
+# KGSM Pure Logic Layer - Watchdog Routing
+#
+# Routes native (standalone) lifecycle operations to the resident kgsm-watchdog
+# daemon when it is present and ready. The daemon owns the cgroup-v2 spawn and
+# crash-restart (see ../../docs/specs/cgroup-supervision-plan.md and the
+# kgsm-watchdog repo); when it is absent or unreachable these helpers report
+# "not available" so the caller transparently falls back to the direct
+# management-script path. No user-facing I/O — results are exit codes only.
+#
+# Transport mirrors the daemon's control protocol: HTTP/1.1 over a unix socket
+# (curl --unix-socket). The socket's filesystem perms are the security boundary.
+
+# Disabling SC2086 globally:
+# Exit code variables are guaranteed to be numeric and safe for unquoted use.
+# shellcheck disable=SC2086
+
+if [[ -n "${KGSM_LOGIC_WATCHDOG_LOADED}" ]]; then
+  return 0
+fi
+
+# Default control socket — matches kgsm-watchdog's KGSM_WATCHDOG_SOCKET default.
+# Guarded so re-sourcing the module never re-declares the readonly constant.
+if [[ -z "${KGSM_WATCHDOG_DEFAULT_SOCKET:-}" ]]; then
+  declare -g -r KGSM_WATCHDOG_DEFAULT_SOCKET="/run/kgsm-watchdog/control.sock"
+fi
+
+# Resolves the watchdog control socket path.
+# Order: explicit env override > config flag > built-in default.
+# Returns: echoes the socket path, always 0.
+function __watchdog_socket_path() {
+  if [[ -n "${KGSM_WATCHDOG_SOCKET:-}" ]]; then
+    echo "$KGSM_WATCHDOG_SOCKET"
+  elif [[ -n "${config_watchdog_socket:-}" ]]; then
+    echo "$config_watchdog_socket"
+  else
+    echo "$KGSM_WATCHDOG_DEFAULT_SOCKET"
+  fi
+}
+
+export -f __watchdog_socket_path
+
+# Single curl chokepoint for code-only requests against the control socket.
+# Echoes the HTTP status code to stdout and returns curl's own exit code
+# (non-zero = could not connect). Kept as one function so the routing logic has
+# a single, overridable seam.
+# Args: $1 = HTTP method, $2 = path (no leading slash), $3 = max-time seconds (default 60)
+# Returns: curl exit code (0 = connected); echoes the 3-digit HTTP status
+function __watchdog_curl() {
+  local _method="$1"
+  local _path="$2"
+  local _max_time="${3:-60}"
+
+  local _sock
+  _sock="$(__watchdog_socket_path)"
+
+  curl -s -o /dev/null -w '%{http_code}' \
+    --max-time "$_max_time" \
+    -X "$_method" \
+    --unix-socket "$_sock" \
+    "http://localhost/$_path" 2> /dev/null
+}
+
+export -f __watchdog_curl
+
+# Is the watchdog present AND ready to supervise?
+# True only when: routing is not disabled, curl exists, the socket is a live
+# unix-domain socket, and GET /ready returns 200. A stale socket file (daemon
+# dead) yields a connection failure, not a hang (curl --max-time), so the caller
+# falls back to the direct path.
+# Returns: 0 if the watchdog is usable, non-zero otherwise
+function __watchdog_available() {
+  # Explicit opt-out lets an operator force the legacy direct-spawn path.
+  [[ "${KGSM_WATCHDOG_DISABLE:-}" == "true" ]] && return 1
+  # Forward-compatible config flag (defaults to enabled when the key is absent).
+  [[ "${config_enable_watchdog:-true}" == "true" ]] || return 1
+
+  command -v curl > /dev/null 2>&1 || return 1
+
+  local _sock
+  _sock="$(__watchdog_socket_path)"
+  [[ -S "$_sock" ]] || return 1
+
+  local _code
+  _code="$(__watchdog_curl GET ready 2)" || return 1
+  [[ "$_code" == "200" ]]
+}
+
+export -f __watchdog_available
+
+# Routes a start/stop verb to the watchdog and maps the HTTP result to a kgsm
+# exit code mirroring the direct path's contract:
+#   200 -> success event code (started/stopped)
+#   409 -> already in the desired state; treated as idempotent success
+#   connection failure / other status -> EC_ERROR. Availability was already
+#     confirmed by the caller, so a failure here is a real error: do NOT silently
+#     re-spawn via the direct path (that risks a double start).
+# Args: $1 = verb (start|stop), $2 = instance name
+# Returns: EC_SUCCESS_INSTANCE_STARTED / EC_SUCCESS_INSTANCE_STOPPED, or an error code
+function __watchdog_dispatch_lifecycle() {
+  local _verb="$1"
+  local _name="${2%.ini}"
+
+  local _path
+  local _success_ec
+  local _timeout
+  case "$_verb" in
+    start)
+      _path="start/$_name"
+      _success_ec=$EC_SUCCESS_INSTANCE_STARTED
+      _timeout=60
+      ;;
+    stop)
+      _path="stop/$_name"
+      _success_ec=$EC_SUCCESS_INSTANCE_STOPPED
+      _timeout=120
+      ;;
+    *)
+      return $EC_INVALID_ARG
+      ;;
+  esac
+
+  local _code
+  local _rc
+  _code="$(__watchdog_curl POST "$_path" "$_timeout")"
+  _rc=$?
+
+  if [[ $_rc -ne 0 ]]; then
+    return $EC_ERROR
+  fi
+
+  case "$_code" in
+    200) return $_success_ec ;;
+    409) return $_success_ec ;;
+    *) return $EC_ERROR ;;
+  esac
+}
+
+export -f __watchdog_dispatch_lifecycle
+
+# Fetches GET /status/<name>. Echoes the JSON response body; returns 0 only on
+# HTTP 200, non-zero on 404 / connection failure / any other status. Separate
+# from __watchdog_curl because liveness needs the body, not just the code.
+# Args: $1 = instance name
+# Returns: 0 on HTTP 200 (body echoed), non-zero otherwise
+function __watchdog_status_body() {
+  local _name="${1%.ini}"
+
+  local _sock
+  _sock="$(__watchdog_socket_path)"
+
+  local _resp
+  local _code
+  _resp="$(curl -s -w $'\n%{http_code}' --max-time 5 \
+    --unix-socket "$_sock" \
+    "http://localhost/status/$_name" 2> /dev/null)" || return 2
+
+  _code="${_resp##*$'\n'}"
+  printf '%s' "${_resp%$'\n'*}"
+
+  [[ "$_code" == "200" ]] && return 0
+  return 1
+}
+
+export -f __watchdog_status_body
+
+# Queries the watchdog for an instance's liveness via /status.
+# Returns:
+#   0 - active   (tracked and cgroup populated)
+#   1 - inactive (tracked but not populated: stopped / restart-pending)
+#   2 - unknown  (not tracked by the watchdog, or a connection error) — the
+#       caller should fall through to the direct PID-based check.
+# Args: $1 = instance name
+function __watchdog_is_active() {
+  local _name="${1%.ini}"
+
+  local _body
+  local _rc
+  _body="$(__watchdog_status_body "$_name")"
+  _rc=$?
+  [[ $_rc -ne 0 ]] && return 2
+
+  # System.Text.Json emits compact, camelCase output; strip any stray whitespace
+  # to keep the substring match robust.
+  local _compact="${_body//[[:space:]]/}"
+  [[ "$_compact" == *'"populated":true'* ]] && return 0
+  return 1
+}
+
+export -f __watchdog_is_active
+
+# Does the watchdog currently track this instance? Used to decide whether stop
+# should be routed to the daemon. A "not tracked" result means the instance is not
+# under supervision — typically an orphan started via the direct path before the
+# daemon existed. Routing its stop to the daemon would be wrong: the daemon only
+# sees its own cgroups, so it would report "not running" (HTTP 200) while the orphan
+# kept running, and a subsequent restart would double-spawn. So an untracked
+# instance falls through to the direct (PID-file) stop instead.
+# Args: $1 = instance name
+# Returns: 0 if the watchdog tracks it (route to the daemon), non-zero otherwise
+function __watchdog_tracks() {
+  __watchdog_is_active "$1"
+  local _rc=$?
+  [[ $_rc -eq 0 || $_rc -eq 1 ]]
+}
+
+export -f __watchdog_tracks
+
+# Mark module as loaded
+declare -g KGSM_LOGIC_WATCHDOG_LOADED=1
+export KGSM_LOGIC_WATCHDOG_LOADED

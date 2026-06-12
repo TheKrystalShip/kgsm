@@ -20,6 +20,14 @@ if [[ -n "${KGSM_LOGIC_LIFECYCLE_LOADED}" ]]; then
   return 0
 fi
 
+# Load watchdog routing logic (native lifecycle -> resident supervisor daemon
+# when present). These helpers self-gate on the daemon's availability, so the
+# direct management-script path is used unchanged when it is absent.
+if [[ -z "${KGSM_LOGIC_WATCHDOG_LOADED}" ]]; then
+  # shellcheck source=watchdog.sh
+  source "$(__find_command_handler watchdog.sh)" || return $EC_FAILED_SOURCE
+fi
+
 # Success event exit codes are now centralized in core/errors.sh
 # They are automatically available through the bootstrap process
 
@@ -136,6 +144,21 @@ function __logic_start_standalone_instance() {
   local _instance_name="$1"
   local _instance_config_file="$2"
 
+  # Route to the resident watchdog when present + ready; it owns the cgroup
+  # spawn and crash-restart. Falls back to the direct management-script path
+  # below when the daemon is absent/unreachable.
+  #
+  # Known limitation (orphan re-adoption, a documented future gap): if this exact
+  # instance is ALREADY running as a direct-path orphan (started before the daemon
+  # existed) and an operator runs `start` again, the daemon does not see that
+  # process and will spawn a second copy. The normal flow — instances managed
+  # through the daemon from creation — is unaffected, and `restart` is safe because
+  # its stop half (above) tears the orphan down first before this start runs.
+  if __watchdog_available; then
+    __watchdog_dispatch_lifecycle start "$_instance_name"
+    return $?
+  fi
+
   # Get management file from config
   local management_file
   management_file=$(__get_config_value "$_instance_config_file" "management_file" 2> /dev/null)
@@ -226,6 +249,17 @@ export -f __logic_stop_systemd_instance
 function __logic_stop_standalone_instance() {
   local _instance_name="$1"
   local _instance_config_file="$2"
+
+  # Route to the resident watchdog when present + ready AND it actually tracks this
+  # instance: it records desired-state = stopped (so it will not crash-restart) and
+  # performs the graceful drain -> cgroup.kill teardown. An instance the daemon does
+  # NOT track (e.g. an orphan started via the direct path before the daemon existed)
+  # falls through to the direct PID-file stop below — otherwise the daemon, which
+  # only sees its own cgroups, would report success while the orphan kept running.
+  if __watchdog_available && __watchdog_tracks "$_instance_name"; then
+    __watchdog_dispatch_lifecycle stop "$_instance_name"
+    return $?
+  fi
 
   # Get management file from config
   local management_file
@@ -350,6 +384,20 @@ export -f __logic_is_active_systemd_instance
 function __logic_is_active_standalone_instance() {
   local _instance_name="$1"
   local _instance_config_file="$2"
+
+  # When the watchdog supervises this instance it is the source of truth for
+  # liveness: the daemon spawns the process itself and writes no PID file, so the
+  # management script's PID check would be stale. A "not tracked" result (the
+  # instance was started before the daemon existed) falls through to the direct
+  # check below.
+  if __watchdog_available; then
+    __watchdog_is_active "$_instance_name"
+    case $? in
+      0) return 0 ;;
+      1) return 1 ;;
+      *) ;; # unknown / not tracked -> direct check below
+    esac
+  fi
 
   # Get management file from config
   local management_file
