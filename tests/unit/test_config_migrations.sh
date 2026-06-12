@@ -23,9 +23,11 @@ function setup_file() {
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
   assert_dir_exists "$MIGRATION_DIR" "Migration directory should exist"
 
-  # Verify migration script exists
+  # Verify migration scripts exist
   assert_file_exists "$MIGRATION_DIR/001_v0_to_v1_flat_to_sectioned.sh" "Migration 001 should exist"
   assert_file_executable "$MIGRATION_DIR/001_v0_to_v1_flat_to_sectioned.sh" "Migration 001 should be executable"
+  assert_file_exists "$MIGRATION_DIR/002_v1_to_v2_add_cgroup_section.sh" "Migration 002 should exist"
+  assert_file_executable "$MIGRATION_DIR/002_v1_to_v2_add_cgroup_section.sh" "Migration 002 should be executable"
 
   log_test_step "Config migration test environment validated"
 }
@@ -302,5 +304,109 @@ EOF
   # Verify backup contains original content
   assert_command_succeeds "grep -q '^update_channel=main' '${test_config}.pre-migration-v1.bak'"
   assert_command_fails "grep -q 'config_schema_version' '${test_config}.pre-migration-v1.bak'"
+}
+
+# =============================================================================
+# TEST: Migration 002 - Adds [cgroup] Section
+# =============================================================================
+
+function test_migration_002_adds_cgroup_section() {
+  log_test_step "Testing migration 002 adds the [cgroup] section"
+
+  # Create a sectioned v1 config
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v1_cgroup.ini"
+  cat > "$test_config" << 'EOF'
+config_schema_version=1
+
+[system]
+wget_timeout_seconds=60
+
+[services]
+enable_systemd=false
+systemd_files_dir=/etc/systemd/system
+EOF
+
+  # Run migration
+  bash "$MIGRATION_DIR/002_v1_to_v2_add_cgroup_section.sh" "$test_config"
+  assert_equals "$?" "0" "Migration 002 should succeed"
+
+  # Schema version bumped to 2
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "2" "Schema version should be 2"
+
+  # [cgroup] section and its keys present
+  assert_command_succeeds "grep -q '^\[cgroup\]' '$test_config'"
+  assert_command_succeeds "grep -q '^enable_cgroups=true' '$test_config'"
+  assert_command_succeeds "grep -q '^cgroup_mount_point=/sys/fs/cgroup' '$test_config'"
+  assert_command_succeeds "grep -q '^cgroup_base_name=kgsm.slice' '$test_config'"
+  assert_command_succeeds "grep -q '^cgroup_controllers=' '$test_config'"
+
+  # Backup created
+  assert_file_exists "${test_config}.pre-migration-v2.bak"
+}
+
+# =============================================================================
+# TEST: Migration 002 - Idempotency (Can Run Twice Safely)
+# =============================================================================
+
+function test_migration_002_idempotent() {
+  log_test_step "Testing migration 002 idempotency"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v1_idem.ini"
+  cat > "$test_config" << 'EOF'
+config_schema_version=1
+
+[system]
+wget_timeout_seconds=60
+EOF
+
+  # Run twice
+  bash "$MIGRATION_DIR/002_v1_to_v2_add_cgroup_section.sh" "$test_config"
+  assert_equals "$?" "0" "First migration run should succeed"
+
+  bash "$MIGRATION_DIR/002_v1_to_v2_add_cgroup_section.sh" "$test_config"
+  assert_equals "$?" "0" "Second migration run should succeed"
+
+  # Section should appear exactly once
+  local section_count
+  section_count=$(grep -c '^\[cgroup\]' "$test_config")
+  assert_equals "$section_count" "1" "[cgroup] section should appear exactly once"
+
+  # Version remains 2
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "2" "Schema version should remain 2"
+}
+
+# =============================================================================
+# TEST: Migration 002 - Preserves Existing Values
+# =============================================================================
+
+function test_migration_002_preserves_existing_values() {
+  log_test_step "Testing migration 002 preserves existing values"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v1_preserve.ini"
+  cat > "$test_config" << 'EOF'
+config_schema_version=1
+
+[system]
+wget_timeout_seconds=120
+
+[services]
+enable_systemd=true
+EOF
+
+  bash "$MIGRATION_DIR/002_v1_to_v2_add_cgroup_section.sh" "$test_config"
+  assert_equals "$?" "0" "Migration 002 should succeed"
+
+  # Pre-existing values untouched
+  local wget_timeout
+  wget_timeout=$(grep "^wget_timeout_seconds=" "$test_config" | head -1 | cut -d= -f2)
+  assert_equals "$wget_timeout" "120" "wget_timeout_seconds preserved"
+
+  local systemd
+  systemd=$(grep "^enable_systemd=" "$test_config" | head -1 | cut -d= -f2)
+  assert_equals "$systemd" "true" "enable_systemd preserved"
 }
 

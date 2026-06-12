@@ -52,6 +52,9 @@ __load_core_module "parser.sh"
 # Validation
 __load_core_module "validation.sh"
 
+# cgroup v2 process supervision primitives
+__load_core_module "cgroup.sh"
+
 # Cleanup
 unset -f __load_core_module
 

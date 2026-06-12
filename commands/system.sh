@@ -31,6 +31,7 @@ ${UNDERLINE}Commands:${END}
   disk                        Show disk usage
   reboot-required             Check if system reboot is required
   info                        Display comprehensive system information
+  setup-cgroups               Set up the delegated cgroup base for supervision
   help [command]              Show help information
 
 ${UNDERLINE}Options:${END}
@@ -825,6 +826,83 @@ function _cmd_help() {
   return 0
 }
 
+function show_usage_setup_cgroups() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Set up KGSM cgroup delegation${END}
+
+Creates KGSM's delegated cgroup v2 base and hands its ownership to a user, so
+game-server instances can be supervised (crash detection, whole-tree teardown,
+accurate metrics) without systemd. Run once, with privilege.
+
+${UNDERLINE}Usage:${END}
+  $self setup-cgroups [options]
+
+${UNDERLINE}Options:${END}
+  --user <name>               Delegate the base to this user
+                              (default: the invoking user)
+  -h, --help                  Show this help and exit
+
+${UNDERLINE}Notes:${END}
+  • Requires root (e.g. sudo): it enables cgroup controllers and changes
+    ownership of the delegated base.
+  • Requires a cgroup v2 host with kernel >= 5.14.
+  • Idempotent: safe to run more than once."
+}
+
+function _cmd_setup_cgroups() {
+  local target_user=""
+
+  # Parse arguments
+  while [[ "$#" -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_setup_cgroups
+        return 0
+        ;;
+      --user)
+        shift
+        if [[ -z "${1:-}" ]]; then
+          __print_error "--user requires a username"
+          return $EC_INVALID_ARG
+        fi
+        target_user="$1"
+        ;;
+      *)
+        __print_error "Invalid argument: $1"
+        return $EC_INVALID_ARG
+        ;;
+    esac
+    shift
+  done
+
+  __print_info "Setting up KGSM cgroup delegation base..."
+
+  __logic_setup_cgroups "$target_user"
+  local exit_code=$?
+
+  case $exit_code in
+    $EC_SUCCESS)
+      __print_success "cgroup base ready: $(__cgroup_base)"
+      __print_info "Delegated to user: ${target_user:-${SUDO_USER:-$USER}}"
+      ;;
+    $EC_CGROUP_UNSUPPORTED)
+      __print_error "cgroup v2 is not mounted at ${config_cgroup_mount_point:-/sys/fs/cgroup}"
+      __print_error "This host does not support cgroup v2 supervision"
+      ;;
+    $EC_PERMISSION)
+      __print_error "Permission denied while enabling cgroup controllers"
+      __print_error "Run with privilege, e.g.: sudo $self setup-cgroups"
+      ;;
+    *)
+      __print_error "Failed to set up the cgroup base"
+      ;;
+  esac
+
+  return $exit_code
+}
+
 # Parse command
 command="${1:-}"
 shift 2> /dev/null || true
@@ -873,6 +951,10 @@ case "$command" in
     ;;
   info)
     _cmd_info "$@"
+    exit $?
+    ;;
+  setup-cgroups)
+    _cmd_setup_cgroups "$@"
     exit $?
     ;;
   *)

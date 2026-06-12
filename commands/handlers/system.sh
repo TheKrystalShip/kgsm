@@ -280,5 +280,64 @@ export -f __logic_get_disk_usage
 # MODULE LOADED FLAG
 # =============================================================================
 
+# =============================================================================
+# CGROUP DELEGATION
+# =============================================================================
+
+# Set up KGSM's delegated cgroup base so unprivileged spawns can later create
+# per-instance cgroups, move processes, and tear down whole process trees.
+# Idempotent. Requires privilege (root) for the root subtree_control write and
+# the ownership handover.
+# Args:
+#   $1 - target user to delegate the base to (defaults to the invoking user,
+#        resolved through SUDO_USER when run via sudo)
+# Returns:
+#   EC_SUCCESS - base set up (or already set up)
+#   EC_CGROUP_UNSUPPORTED - cgroup v2 not mounted at the configured mount point
+#   EC_PERMISSION - a privileged operation failed (likely not running as root)
+#   EC_CGROUP - a cgroup filesystem operation failed
+function __logic_setup_cgroups() {
+  local target_user="${1:-${SUDO_USER:-$USER}}"
+
+  local mount_point="${config_cgroup_mount_point:-/sys/fs/cgroup}"
+  local base
+  base="$(__cgroup_base)"
+
+  # 1. cgroup v2 unified hierarchy must be mounted.
+  if [[ ! -f "${mount_point}/cgroup.controllers" ]]; then
+    return $EC_CGROUP_UNSUPPORTED
+  fi
+
+  # 2. Make controllers available to the base by enabling them in the mount
+  #    root's subtree_control. Privileged; a failure here is almost always
+  #    "not root". Idempotent (already-enabled controllers are skipped).
+  if ! __cgroup_enable_controllers "$mount_point"; then
+    return $EC_PERMISSION
+  fi
+
+  # 3. Create the delegated base.
+  if ! mkdir -p "$base" 2> /dev/null; then
+    return $EC_CGROUP
+  fi
+
+  # 4. Enable controllers in the base so per-instance children inherit them.
+  if ! __cgroup_enable_controllers "$base"; then
+    return $EC_CGROUP
+  fi
+
+  # 5. Hand ownership of the base to the target user so subsequent spawns can
+  #    create children and move PIDs without privilege.
+  if ! chown "$target_user" "$base" \
+      "${base}/cgroup.procs" \
+      "${base}/cgroup.subtree_control" \
+      "${base}/cgroup.threads" 2> /dev/null; then
+    return $EC_CGROUP
+  fi
+
+  return $EC_SUCCESS
+}
+
+export -f __logic_setup_cgroups
+
 declare -g KGSM_LOGIC_SYSTEM_LOADED=1
 export KGSM_LOGIC_SYSTEM_LOADED

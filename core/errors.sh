@@ -143,6 +143,12 @@ export EC_WATCHER_LOG_FILE_MISSING
 declare -g -r EC_DIRECTORY_NOT_FOUND=46
 export EC_DIRECTORY_NOT_FOUND
 
+declare -g -r EC_CGROUP=47
+export EC_CGROUP
+
+declare -g -r EC_CGROUP_UNSUPPORTED=48
+export EC_CGROUP_UNSUPPORTED
+
 # =============================================================================
 # EVENT SUCCESS CODES (200-255 range)
 # =============================================================================
@@ -340,6 +346,8 @@ declare -A EXIT_CODES=(
    [$EC_WATCHER_PATTERN_NOT_FOUND]="Log pattern not found in instance configuration"
    [$EC_WATCHER_PORT_NOT_ACTIVE]="Port not active or not configured"
    [$EC_WATCHER_LOG_FILE_MISSING]="Log file not found for instance"
+   [$EC_CGROUP]="Error with cgroup operation"
+   [$EC_CGROUP_UNSUPPORTED]="cgroup v2 not available, not delegated, or kernel too old"
 )
 
 declare -g KGSM_ERRORS_LOADED=1
