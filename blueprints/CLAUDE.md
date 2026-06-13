@@ -1,49 +1,71 @@
 # CLAUDE.md — blueprints/
 
-Blueprints are the templates that declare a game server's parameters. KGSM
-creates **instances** from them. Full reference: `docs/blueprints.md`.
+Blueprints are the templates that declare a game server's identity and
+parameters. KGSM creates **instances** from them. Full reference:
+`docs/blueprints.md`.
 
-## Layout
+## Format & layout
 
-- `native/*.bp` — native (direct Linux process) servers, `key=value` INI format.
-- `container/*.docker-compose.yml` — containerized servers, standard Docker
-  Compose files.
+One **unified YAML** file per game: `<name>.bp.yaml`, in a single **flat**
+`blueprints/` directory. There is no `native/` vs `container/` split — the
+`runtime` field inside the file (`native` | `container`) decides how the server
+runs. Parsing is done with **mikefarah/yq** (Arch package `go-yq`), a **hard
+dependency**: a blueprint operation on a host without it fails fast with an
+actionable error (`__require_yq` in `core/loader.sh`).
 
 These are the **system** (read-only, shipped) blueprints. User blueprints live
-under `~/.local/share/kgsm/blueprints/{native,container}/` (respects
-`$XDG_DATA_HOME`) and **shadow** a system blueprint of the same filename. Never
-tell users to edit files here directly — they get overwritten on update; have
-them copy to the user directory instead.
+under `~/.local/share/kgsm/blueprints/*.bp.yaml` (respects `$XDG_DATA_HOME`) and
+**shadow** a system blueprint of the same name. Never tell users to edit files
+here directly — they get overwritten on update; have them copy to the user
+directory instead.
 
-## Native blueprint (`.bp`) essentials
+## Required fields (both runtimes)
 
-Required fields: `name`, `executable_file`, `level_name`. Common optional:
-`ports`, `steam_app_id` (`0` if not Steam), `executable_subdirectory`,
+- `schema_version` — currently `1` (future migration hook).
+- `name` — lowercase, no spaces. Also the **override-binding key** (see below).
+- `runtime` — `native` | `container`.
+- `metadata:` — a block of advisory, presentation-oriented fields for catalog /
+  control-panel UIs. All six keys are **required to be present** but every value
+  is **nullable**: `display_name`, `description`, `max_players`, `min_ram_mb`,
+  `recommended_ram_mb`, `base_disk_mb`. **`null` means unknown/unbounded — never
+  a fabricated `0`** (the project's no-fabricate invariant). Nothing in
+  create/install reads metadata, so a blueprint works fully with it all null.
+
+## Native blueprint (`runtime: native`)
+
+Required: `native.executable_file`. Common optional under `native:`: `ports`,
+`steam_app_id` (`0` if not Steam), `is_steam_account_required`,
+`steamcmd_arguments`, `platform`, `level_name`, `executable_subdirectory`,
 `executable_arguments`, `stop_command`, `save_command`, `startup_success_regex`.
 
 - `ports` is **single-quoted, pipe-separated** UFW format:
-  `ports='1111:2222/tcp|3333/udp'`.
-- `executable_arguments` may reference `$instance_*` variables resolved at
-  runtime (e.g. `"--start-server $instance_saves_dir/$instance_level_name"`).
-  The full variable list is in `docs/blueprints.md` and `templates/blueprint.tp`.
-- Copy `templates/blueprint.tp` (the documented blank template) or an existing
-  `.bp` as a starting point.
+  `ports: '1111:2222/tcp|3333/udp'`.
+- `executable_arguments` is single-quoted YAML so `$instance_*` variables survive
+  to runtime (e.g. `'--start-server $instance_saves_dir/$instance_level_name'`);
+  the eval-cat in `__logic_create_base_instance` substitutes them. The full
+  variable list is in `docs/blueprints.md` and `templates/blueprint.tp`.
 
-## Container blueprint essentials
+## Container blueprint (`runtime: container`)
 
-Plain Docker Compose. Set `container_name: ${instance_name}`, prefer
-`network_mode: host`, and bind-mount KGSM dirs via `${instance_install_dir}`,
-`${instance_backups_dir}`, etc. Official images: `ghcr.io/thekrystalship/`
-(see the kgsm-containers project).
+Required: `container.compose` — a YAML **literal block scalar** (`compose: |`)
+holding the Docker Compose **verbatim** (comments and `${instance_*}` preserved).
+KGSM extracts it to the instance's `docker-compose.yml` at create time and
+substitutes `${instance_*}`. Inside the compose: set
+`container_name: ${instance_name}`, prefer `network_mode: host`, and bind-mount
+KGSM dirs via `${instance_install_dir}`, `${instance_backups_dir}`, etc. Official
+images: `ghcr.io/thekrystalship/` (see the kgsm-containers project).
+
+- **UFW ports are derived** from the embedded compose (`__derive_ufw_ports_from_compose`),
+  so there is **no** top-level/native `ports` for a container — the compose is the
+  single source.
 
 ## The critical gotcha: name → override binding
 
-A blueprint binds to an override directory by its **logical name, not its
-filename**:
-- Native: the `name=` field. `terraria-modded.bp` with `name=terraria` →
-  `overrides/terraria/`.
-- Container: the **first service name** under `services:` →
-  `overrides/<service>/`.
+A blueprint binds to an override directory by its **logical `name`, not its
+filename**, for **both** runtimes: a blueprint with `name: terraria` uses
+`overrides/terraria/` regardless of the file name. (Containers used to bind on
+the "first service name under `services:`" — that hack is gone; the explicit
+`name` field is now authoritative for every runtime.)
 
 Multiple blueprint variants can share one `name` (and thus one override dir) on
 purpose. See `overrides/CLAUDE.md` and `docs/overrides.md`.
@@ -51,6 +73,10 @@ purpose. See `overrides/CLAUDE.md` and `docs/overrides.md`.
 ## Editing checklist
 
 - Keep `name` lowercase, no spaces.
-- Keep `ports` single-quoted.
+- Keep native `ports` single-quoted; for containers, declare ports only inside
+  the embedded compose (KGSM derives the firewall rules from it).
+- Leave any unknown `metadata` value as `null` — never invent a number.
+- The file must parse: `yq eval '.' blueprints/<name>.bp.yaml` and
+  `./kgsm.sh blueprints info <name>` should both succeed.
 - If you add a blueprint that needs custom install/update logic, it needs a
   matching `overrides/<name>/` directory — the `name` must line up.

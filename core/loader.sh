@@ -29,6 +29,39 @@ function __find_or_fail() {
 
 export -f __find_or_fail
 
+# Ensure the mikefarah/yq YAML processor (Arch package `go-yq`) is available.
+# The unified `<name>.bp.yaml` blueprint format is read EXCLUSIVELY through yq, so
+# it is a hard dependency for every blueprint operation. Without this guard a
+# yq-less host produces silent, downstream-only failures (empty `blueprint_*`
+# vars, a misleading "Invalid YAML syntax", garbled `info` JSON) instead of one
+# actionable error.
+#
+# The check is a process-level invariant (yq either is or isn't on PATH for the
+# life of the process), so the first successful verification is memoized via
+# KGSM_YQ_VERIFIED — callers may invoke it liberally, including in loops, at zero
+# repeat cost. A separate mikefarah-detection guard rejects the unrelated python
+# `yq` (a jq wrapper) whose expression syntax differs and would corrupt output.
+# Usage: __require_yq   (returns EC_MISSING_DEPENDENCY if unavailable/wrong impl)
+function __require_yq() {
+  [[ -n "${KGSM_YQ_VERIFIED:-}" ]] && return 0
+
+  if ! command -v yq >/dev/null 2>&1; then
+    __print_error "Required dependency 'yq' is not installed. KGSM blueprints are YAML and need mikefarah/yq (Arch package 'go-yq'; see https://github.com/mikefarah/yq)."
+    return $EC_MISSING_DEPENDENCY
+  fi
+
+  if ! yq --version 2>/dev/null | grep -qi 'mikefarah'; then
+    __print_error "The 'yq' on PATH is not mikefarah/yq. KGSM requires mikefarah/yq (Arch package 'go-yq'); a python 'yq' (a jq wrapper) is incompatible."
+    return $EC_MISSING_DEPENDENCY
+  fi
+
+  declare -g KGSM_YQ_VERIFIED=1
+  export KGSM_YQ_VERIFIED
+  return 0
+}
+
+export -f __require_yq
+
 # Locate a unified blueprint by name and return its absolute path.
 # Blueprints are `<name>.bp.yaml` files in a single flat directory; the runtime
 # (native|container) is a field inside the file, not a subdirectory. A user
@@ -238,6 +271,8 @@ function __source_blueprint() {
     __print_error "No blueprint file specified."
     exit $EC_INVALID_ARG
   fi
+
+  __require_yq || exit $EC_MISSING_DEPENDENCY
 
   local bp
   if ! bp=$(__find_blueprint "$blueprint_file"); then

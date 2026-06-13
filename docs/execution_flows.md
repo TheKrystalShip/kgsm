@@ -81,11 +81,10 @@ System (read-only, under KGSM_ROOT)          User (writable, under XDG dirs)
 core/                                        ~/.config/kgsm/config.ini
 commands/                                    ~/.local/share/kgsm/instances/
 commands/handlers/                           ~/.local/share/kgsm/logs/
-templates/                                   ~/.local/share/kgsm/blueprints/native/
-migrations/                                  ~/.local/share/kgsm/blueprints/container/
-blueprints/native/    (default blueprints)   ~/.local/share/kgsm/overrides/
-blueprints/container/ (default blueprints)
-overrides/            (system overrides)
+templates/                                   ~/.local/share/kgsm/blueprints/
+migrations/                                  ~/.local/share/kgsm/overrides/
+blueprints/  (default *.bp.yaml blueprints)
+overrides/   (system overrides)
 config.default.ini
 ```
 
@@ -526,5 +525,5 @@ KGSM integrates with external systems through dedicated sub-commands and optiona
 - **UFW**: Firewall rule management (`files.ufw.sh`, enabled via `config_enable_firewall_management`)
 - **UPnP**: Port forwarding (`files.upnp.sh`, enabled via `config_enable_port_forwarding`)
 - **Steam**: Game file downloading via SteamCMD (implemented in override `_download()` functions)
-- **Docker**: Container-based servers use `docker-compose.yml` blueprints instead of `.bp` files
+- **Docker**: Container-based servers declare `runtime: container` and embed their Docker Compose under `container.compose` in the unified `.bp.yaml` blueprint
 - **Webhooks / Unix sockets**: Event delivery via `commands/events.webhook.sh` and `commands/events.socket.sh`

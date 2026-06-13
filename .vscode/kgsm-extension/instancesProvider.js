@@ -108,9 +108,9 @@ class InstancesProvider {
    */
   _extractBlueprintName(info) {
     if (info.blueprint_file) {
-      // Path like: /path/to/blueprints/native/factorio.bp
+      // Unified format path, e.g. /path/to/blueprints/factorio.bp.yaml
       const filename = info.blueprint_file.split("/").pop();
-      return filename.replace(/\.(bp|docker-compose\.yml)$/, "");
+      return filename.replace(/\.bp\.yaml$/, "");
     }
     // Fallback: use the instance name without numeric suffix
     return info.name?.replace(/-\d+$/, "") || "unknown";

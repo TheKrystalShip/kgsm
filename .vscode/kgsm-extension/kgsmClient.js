@@ -48,53 +48,30 @@ class KgsmClient {
   }
 
   /**
-   * List native blueprints (.bp files).
-   * @param {"default"|"custom"|undefined} filter
-   * @returns {Promise<string[]>}
+   * List all blueprints with full detail, keyed by name. Used to surface each
+   * blueprint's runtime (native|container), which is now a field inside the
+   * unified `<name>.bp.yaml` rather than a separate file family.
+   * @returns {Promise<Record<string, object>>} name -> info object (has BlueprintType)
    */
-  async getNativeBlueprints(filter) {
-    const args = ["blueprints.native.sh", "list"];
-    if (filter) args.push(filter);
-    args.push("--json");
+  async getBlueprintsDetailed() {
+    const { stdout, exitCode } = await this.exec([
+      "blueprints", "list", "detailed", "--json",
+    ]);
+    if (exitCode !== 0 || !stdout.trim()) return {};
 
-    // blueprints.native.sh lives in commands/
-    const { execFile } = require("child_process");
-    const path = require("path");
-    const cmdPath = path.join(this.cwd, "commands", "blueprints.native.sh");
-
-    return new Promise((resolve) => {
-      execFile(cmdPath, args.slice(1), { cwd: this.cwd }, (error, stdout) => {
-        if (error || !stdout?.trim()) return resolve([]);
-        try { resolve(JSON.parse(stdout)); } catch { resolve([]); }
-      });
-    });
-  }
-
-  /**
-   * List container blueprints (docker-compose.yml files).
-   * @param {"default"|"custom"|undefined} filter
-   * @returns {Promise<string[]>}
-   */
-  async getContainerBlueprints(filter) {
-    const args = ["list"];
-    if (filter) args.push(filter);
-    args.push("--json");
-
-    const { execFile } = require("child_process");
-    const path = require("path");
-    const cmdPath = path.join(this.cwd, "commands", "blueprints.container.sh");
-
-    return new Promise((resolve) => {
-      execFile(cmdPath, args, { cwd: this.cwd }, (error, stdout) => {
-        if (error || !stdout?.trim()) return resolve([]);
-        try { resolve(JSON.parse(stdout)); } catch { resolve([]); }
-      });
-    });
+    try {
+      return JSON.parse(stdout);
+    } catch {
+      return {};
+    }
   }
 
   /**
    * Get blueprint directory paths by parsing `./kgsm.sh --paths`.
-   * @returns {Promise<{defaultNative: string, defaultContainer: string, customNative: string, customContainer: string}|null>}
+   * The unified format uses one flat directory per source (no native/container
+   * subdirs), so there are just two paths: the system (default) dir and the
+   * user (custom) dir, the latter shadowing same-named defaults.
+   * @returns {Promise<{default: string, custom: string}|null>}
    */
   async getBlueprintDirs() {
     const { stdout, exitCode } = await this.exec(["--paths"]);
@@ -106,10 +83,8 @@ class KgsmClient {
     };
 
     return {
-      defaultNative: parse("KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR"),
-      defaultContainer: parse("KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR"),
-      customNative: parse("KGSM_USER_BLUEPRINTS_NATIVE_DIR"),
-      customContainer: parse("KGSM_USER_BLUEPRINTS_CONTAINER_DIR"),
+      default: parse("KGSM_SYSTEM_BLUEPRINTS_DIR"),
+      custom: parse("KGSM_USER_BLUEPRINTS_DIR"),
     };
   }
 

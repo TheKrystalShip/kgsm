@@ -264,43 +264,42 @@ These come from the KGSM config file and apply across all instances:
 
 ### Blueprint-Override Linking
 
-Overrides are linked to blueprints through the **`name` field extracted from the blueprint**, not the blueprint filename. For a complete explanation of blueprints, see [Blueprints 101](blueprints.md).
+Overrides are linked to blueprints through the **`name` field of the blueprint**, not the blueprint filename. This holds for **both** runtimes — the unified `.bp.yaml` format gives every blueprint, container included, an explicit `name`. For a complete explanation of blueprints, see [Blueprints 101](blueprints.md).
 
-#### Native Blueprints
+KGSM reads the top-level `name` field (via yq) regardless of runtime:
 
-For `.bp` files, KGSM reads the `name=` variable directly:
-
-```ini
-# blueprints/native/custom/factorio-experimental.bp
-name=factorio
+```yaml
+# blueprints/factorio-experimental.bp.yaml
+name: factorio
+runtime: native
 ```
 
 → override directory consulted: `overrides/factorio/`
 
-#### Container Blueprints
-
-For `.docker-compose.yml` files, there is no `name=` field. Instead, KGSM uses the **first service name** listed under the `services:` key:
-
 ```yaml
-# blueprints/container/custom/valheim.docker-compose.yml
-services:
-  valheim:   # ← this name is used
-    image: ...
+# blueprints/valheim.bp.yaml
+name: valheim
+runtime: container
+container:
+  compose: |
+    services:
+      valheim:
+        image: ...
 ```
 
 → override directory consulted: `overrides/valheim/`
 
 > [!IMPORTANT]
-> The override directory name is derived from the blueprint's logical name (the `name=` field for native blueprints, the first service name for container blueprints), **not** the blueprint filename. If the naming convention is not followed, KGSM will not find the override modules.
+> The override directory name is derived from the blueprint's `name` field, **not** the blueprint filename and **not** (for containers) the first service name in the compose — that older container heuristic is gone. If the naming convention is not followed, KGSM will not find the override modules.
 
 #### Example: Multiple Blueprint Variants
 
 Multiple blueprint files for the same game can all share one override directory by using the same `name` value:
 
 ```
-blueprints/native/custom/terraria-vanilla.bp    (name=terraria) → overrides/terraria/
-blueprints/native/custom/terraria-modded.bp     (name=terraria) → overrides/terraria/
-blueprints/native/custom/terraria-hardcore.bp   (name=terraria) → overrides/terraria/
+blueprints/terraria-vanilla.bp.yaml    (name: terraria) → overrides/terraria/
+blueprints/terraria-modded.bp.yaml     (name: terraria) → overrides/terraria/
+blueprints/terraria-hardcore.bp.yaml   (name: terraria) → overrides/terraria/
 ```
 
 All three blueprint variants use the same `terraria/` override directory, ensuring consistent installation and update logic across configurations.
@@ -321,7 +320,7 @@ The name-based approach was selected because it better supports KGSM's goal of p
 ### Comparison: Name-Based vs File-Based Matching
 
 #### Name-Based Matching (Current Approach)
-**How it works:** `terraria-vanilla.bp` (name=terraria) → `overrides/terraria/`
+**How it works:** `terraria-vanilla.bp.yaml` (name: terraria) → `overrides/terraria/`
 
 **Pros:**
 - **DRY principle**: Single override directory serves multiple blueprint variants
@@ -334,7 +333,7 @@ The name-based approach was selected because it better supports KGSM's goal of p
 - Potential confusion for users expecting file-based matching
 
 #### File-Based Matching (Alternative Approach)
-**How it would work:** `terraria-vanilla.bp` → `overrides/terraria-vanilla/`
+**How it would work:** `terraria-vanilla.bp.yaml` → `overrides/terraria-vanilla/`
 
 **Pros:**
 - Simple and intuitive 1:1 mapping
@@ -346,8 +345,8 @@ The name-based approach was selected because it better supports KGSM's goal of p
 
 ### Best Practices for Name-Based Matching
 
-- **Use descriptive blueprint filenames**: `terraria-vanilla.bp`, `terraria-modded.bp`, `terraria-hardcore.bp`
-- **Keep blueprint names consistent**: All variants should use the same `name=terraria` value
+- **Use descriptive blueprint filenames**: `terraria-vanilla.bp.yaml`, `terraria-modded.bp.yaml`, `terraria-hardcore.bp.yaml`
+- **Keep blueprint names consistent**: All variants should use the same `name: terraria` value
 - **Document override dependencies**: Add comments in override modules explaining which blueprint variants use them
 - **Test all variants**: When modifying an override, test all blueprint variants that use it
 

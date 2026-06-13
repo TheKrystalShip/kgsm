@@ -97,7 +97,7 @@ const client = new KgsmClient("/usr/local/bin/kgsm");
 
 ### `this.cwd`
 
-`path.dirname(kgsmPath)` — the KGSM root directory. This is used as the working directory for all `execFile` calls and for resolving sibling paths (e.g., `templates/blueprint.tp`, `commands/blueprints.native.sh`).
+`path.dirname(kgsmPath)` — the KGSM root directory. This is used as the working directory for all `execFile` calls and for resolving sibling paths (e.g., `templates/blueprint.tp`).
 
 **Critical:** If `kgsmPath` is a symlink to `kgsm.sh` in a different directory (e.g., `/usr/local/bin/kgsm` → `/opt/kgsm/kgsm.sh`), `this.cwd` will be `/usr/local/bin`, not `/opt/kgsm`. Blueprint template reading and sub-script resolution in `addBlueprint` will fail unless the path points directly to the script's real location.
 
@@ -110,9 +110,8 @@ The core method. Calls `execFile(this.kgsmPath, args, { cwd: this.cwd })` and re
 | Method                                         | CLI invocation                                                    | Returns                                                                        |
 | ---------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------ |
 | `getBlueprints(filter?)`                       | `kgsm.sh blueprints list [filter] --json`                         | `string[]`                                                                     |
-| `getNativeBlueprints(filter?)`                 | `commands/blueprints.native.sh list [filter] --json`              | `string[]`                                                                     |
-| `getContainerBlueprints(filter?)`              | `commands/blueprints.container.sh list [filter] --json`           | `string[]`                                                                     |
-| `getBlueprintDirs()`                           | `kgsm.sh --paths`                                                 | `{ defaultNative, defaultContainer, customNative, customContainer }` or `null` |
+| `getBlueprintsDetailed()`                      | `kgsm.sh blueprints list detailed --json`                         | `Record<string, object>` (name → info, incl. `BlueprintType`)                  |
+| `getBlueprintDirs()`                           | `kgsm.sh --paths`                                                 | `{ default, custom }` or `null`                                                |
 | `getBlueprintFilePath(name)`                   | `kgsm.sh blueprints find <name>`                                  | `string` or `null` (stdout trimmed)                                            |
 | `getInstances(blueprint?)`                     | `kgsm.sh instances list [blueprint] --json`                       | `string[]`                                                                     |
 | `getInstanceStatus(name)`                      | `kgsm.sh instances status <name> --json --fast`                   | `object` or `null`                                                             |
@@ -124,25 +123,23 @@ The core method. Calls `execFile(this.kgsmPath, args, { cwd: this.cwd })` and re
 | `restartInstance(name)`                        | `kgsm.sh restart <name>`                                          | `{ stdout, stderr, exitCode }`                                                 |
 | `createInstance(blueprint, installDir, name?)` | `kgsm.sh install <blueprint> --install-dir <dir> [--name <name>]` | `{ stdout, stderr, exitCode }`                                                 |
 
-### Divergent Invocation Patterns
+### Runtime is a per-blueprint field, not a file family
 
-`getNativeBlueprints` and `getContainerBlueprints` **bypass `kgsm.sh`** and invoke scripts in `commands/` directly. This is inconsistent with every other method and has two important implications:
-
-1. The sub-scripts (`commands/blueprints.native.sh`, `commands/blueprints.container.sh`) must be executable.
-2. The argument array construction differs between the two:
-   - `getNativeBlueprints` builds `args = ["blueprints.native.sh", "list", ...]` and then passes `args.slice(1)` to the `execFile` call (correctly dropping the script name).
-   - `getContainerBlueprints` builds `args = ["list", ...]` and passes `args` directly (no leading script name to drop).
-
-These two methods should eventually be unified to go through `kgsm.sh blueprints list --native/--container` if such flags are ever added.
+With the unified `<name>.bp.yaml` format, every method goes through `kgsm.sh` (no
+direct `commands/*.sh` invocation). There is no longer a native-vs-container script
+split. A blueprint's runtime lives in its `runtime` field, surfaced on the wire as
+`BlueprintType` (`Native`/`Container`). `getBlueprintsDetailed()` returns the full
+info object for every blueprint keyed by name, which the tree uses to pick a
+per-item icon and tooltip.
 
 ### `getBlueprintDirs()` — `--paths` Parsing
 
-This method calls `kgsm.sh --paths` and parses the output with regex matching for specific key names:
+This method calls `kgsm.sh --paths` and parses the output with regex matching for the
+two flat blueprint directories (one per source — no native/container subdirs):
 
 ```
-KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR: /path/to/blueprints/native/default
-KGSM_USER_BLUEPRINTS_NATIVE_DIR:   /path/to/blueprints/native/custom
-...
+KGSM_SYSTEM_BLUEPRINTS_DIR: /path/to/blueprints
+KGSM_USER_BLUEPRINTS_DIR:   /path/to/.local/share/kgsm/blueprints
 ```
 
 If the output format of `--paths` ever changes (key names, spacing, or ordering), this parsing will silently return `null` values.
@@ -153,16 +150,15 @@ If the output format of `--paths` ever changes (key names, spacing, or ordering)
 
 **File:** `blueprintsProvider.js`
 
-Implements `vscode.TreeDataProvider`. The tree has two levels:
+Implements `vscode.TreeDataProvider`. The tree has two levels, split by source
+(default vs. custom). Runtime is shown per-item (icon + tooltip), not as a category:
 
 ```
-Default Native          (BlueprintCategory, filter="default", runtime="native")
-  ├─ factorio           (BlueprintItem)
-  └─ minecraft          (BlueprintItem)
-Default Container       (BlueprintCategory, filter="default", runtime="container")
-  └─ valheim            (BlueprintItem)
-Custom Native           (BlueprintCategory, filter="custom", runtime="native")
-Custom Container        (BlueprintCategory, filter="custom", runtime="container")
+Default                 (BlueprintCategory, filter="default")
+  ├─ factorio           (BlueprintItem, native)
+  └─ valheim            (BlueprintItem, native)
+Custom                  (BlueprintCategory, filter="custom")
+  └─ vrising            (BlueprintItem, container)
 ```
 
 ### `BlueprintCategory`
@@ -170,20 +166,23 @@ Custom Container        (BlueprintCategory, filter="custom", runtime="container"
 A `vscode.TreeItem` subclass representing a collapsible folder node. Its `contextValue` is:
 
 ```
-blueprintCategory-{filter}-{runtime}
+blueprintCategory-{filter}
 ```
 
-Examples: `blueprintCategory-default-native`, `blueprintCategory-custom-container`.
+Examples: `blueprintCategory-default`, `blueprintCategory-custom`.
 
 The `addBlueprint` command menu item uses the when-clause `viewItem =~ /^blueprintCategory/` to match all category nodes.
 
 ### `BlueprintItem`
 
-A `vscode.TreeItem` subclass representing a single blueprint file. Its `contextValue` is `"blueprint"`. Clicking it fires `kgsm.openBlueprint` with itself as the argument, providing `item.blueprintName` to the command handler.
+A `vscode.TreeItem` subclass representing a single blueprint. Its `contextValue` is `"blueprint"` and it carries `item.runtime` (`"native"`/`"container"`/`""`) for its icon and tooltip. Clicking it fires `kgsm.openBlueprint` with itself as the argument, providing `item.blueprintName` to the command handler.
 
 ### Data Flow
 
-When a category is expanded, `getChildren(element)` calls either `client.getNativeBlueprints(element.filter)` or `client.getContainerBlueprints(element.filter)` depending on `element.runtime`. Each returns a `string[]` of blueprint names, which are mapped to `BlueprintItem` instances.
+When a category is expanded, `getChildren(element)` fetches the source's names via
+`client.getBlueprints(element.filter)` and a name→info map via
+`client.getBlueprintsDetailed()` (both in parallel), then maps each name to a
+`BlueprintItem`, reading the runtime from the detail map's `BlueprintType`.
 
 ---
 
@@ -206,11 +205,11 @@ minecraft               (BlueprintGroup, 1 instance)
 At the root level, all instances are fetched, then `getInstanceInfo(name)` is called for each (in parallel via `Promise.all`). The `blueprint_file` field of the returned info object is parsed to extract the blueprint name:
 
 ```js
-// e.g. info.blueprint_file = "/opt/kgsm/blueprints/native/default/factorio.bp"
-// → filename = "factorio.bp" → name = "factorio"
+// e.g. info.blueprint_file = "/opt/kgsm/blueprints/factorio.bp.yaml"
+// → filename = "factorio.bp.yaml" → name = "factorio"
 ```
 
-The regex `replace(/\.(bp|docker-compose\.yml)$/, "")` strips the extension. If `blueprint_file` is absent or null, the fallback strips a trailing `-{digits}` suffix from the instance name.
+The regex `replace(/\.bp\.yaml$/, "")` strips the unified extension. If `blueprint_file` is absent or null, the fallback strips a trailing `-{digits}` suffix from the instance name.
 
 ### Instance Status
 
@@ -250,7 +249,7 @@ All commands are registered in `extension.js`. Each wraps one or more `KgsmClien
 | `kgsm.openSettings`         | Gear icon in view title                   | Opens VS Code settings filtered to this extension                                                                             |
 | `kgsm.refreshBlueprints`    | Refresh icon on Blueprints panel          | Fires `blueprintsProvider.refresh()`                                                                                          |
 | `kgsm.openBlueprint`        | Click or inline icon on `BlueprintItem`   | Calls `getBlueprintFilePath(name)`, opens file in editor                                                                      |
-| `kgsm.addBlueprint`         | `+` inline on `BlueprintCategory`         | Prompts name, resolves target dir via `getBlueprintDirs()`, writes `.bp` or `.docker-compose.yml` from template, opens editor |
+| `kgsm.addBlueprint`         | `+` inline on `BlueprintCategory`         | Prompts name + runtime, resolves target dir via `getBlueprintDirs()`, writes `<name>.bp.yaml` from the unified template, opens editor |
 | `kgsm.refreshInstances`     | Refresh icon on Instances panel           | Fires `instancesProvider.refresh()`                                                                                           |
 | `kgsm.createInstance`       | `+` icon on Instances panel title         | Prompts blueprint (QuickPick), install dir (folder dialog), optional name, runs `kgsm.sh install`                             |
 | `kgsm.startInstance`        | Inline play button on stopped instance    | Calls `client.startInstance(name)`                                                                                            |
@@ -319,7 +318,7 @@ Similarly, `scriptPath` is read once at activation. Changes require a reload.
 
 ### 1. `kgsmPath` Must Be the Real Script Location
 
-`this.cwd = path.dirname(kgsmPath)` underpins template resolution and sub-script invocation. If `kgsmPath` points to a symlink (e.g., `/usr/local/bin/kgsm` → `/opt/kgsm/kgsm.sh`), then `cwd` will be `/usr/local/bin` — and calls to `commands/blueprints.native.sh`, `commands/blueprints.container.sh`, and `templates/blueprint.tp` will fail. Users must set `kgsm.scriptPath` to the actual script path, not a symlink wrapper.
+`this.cwd = path.dirname(kgsmPath)` underpins template resolution. If `kgsmPath` points to a symlink (e.g., `/usr/local/bin/kgsm` → `/opt/kgsm/kgsm.sh`), then `cwd` will be `/usr/local/bin` — and reading `templates/blueprint.tp` (for `addBlueprint`) will fail. Users must set `kgsm.scriptPath` to the actual script path, not a symlink wrapper.
 
 ### 2. No `--json` Flag Consistency
 

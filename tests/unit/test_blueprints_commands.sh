@@ -139,6 +139,31 @@ function test_list_detailed() {
 
   assert_command_succeeds "$MODULE list detailed" \
     "list detailed should succeed"
+
+  # Regression: the detailed loop must not discard entries. The info handler
+  # returns a 200-range success-with-event code, so a naive `|| continue`
+  # treated every blueprint as a failure and produced empty output.
+  assert_command_output "$MODULE list detailed" "factorio" \
+    "list detailed should include factorio"
+
+  assert_command_output "$MODULE list detailed" "Native" \
+    "list detailed should include the runtime column"
+}
+
+function test_list_detailed_json() {
+  log_test_step "Testing: list detailed --json"
+
+  assert_command_succeeds "$MODULE list detailed --json" \
+    "list detailed --json should succeed"
+
+  local output
+  output=$("$MODULE" list detailed --json 2>&1)
+  # Regression: must be a populated object keyed by blueprint name, not "{}".
+  assert_contains "$output" "factorio" \
+    "list detailed --json should include factorio"
+
+  assert_contains "$output" "BlueprintType" \
+    "list detailed --json entries should carry full info objects"
 }
 
 function test_list_json() {

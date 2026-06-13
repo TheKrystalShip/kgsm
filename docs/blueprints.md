@@ -4,7 +4,9 @@ This document explains what blueprints are, how they work in KGSM, and how to cr
 
 ## Table of Contents
 - [What are Blueprints?](#what-are-blueprints)
-- [Blueprint Types and Storage](#blueprint-types-and-storage)
+- [Blueprint Storage](#blueprint-storage)
+- [Required Fields](#required-fields)
+- [Metadata](#metadata)
 - [Managing Blueprints](#managing-blueprints)
   - [Listing Available Blueprints](#listing-available-blueprints)
   - [Inspecting a Blueprint](#inspecting-a-blueprint)
@@ -27,37 +29,87 @@ This document explains what blueprints are, how they work in KGSM, and how to cr
 
 Blueprints in KGSM are configuration files that define the parameters needed to create a game server. These parameters typically include server settings such as port numbers, game world names, maximum player counts, and other initialization values required to start and configure the server properly. Think of them like an architect's blueprint: a detailed plan to build something specific.
 
-KGSM supports two types of blueprints:
+A blueprint is **one YAML file per game**, named `<name>.bp.yaml`, that holds a
+game server's *entire identity* in a single place: presentation metadata plus
+everything needed to install, configure, and run it. The `runtime` field —
+`native` or `container` — decides how the server runs:
 
-1. **Native Blueprints** (`.bp` files): Simple text files using a `key=value` format for game servers that run directly on your system.
-2. **Container Blueprints** (`.docker-compose.yml` files): Standard Docker Compose files that define containerized game servers.
+1. **Native** servers run directly on your system as a Linux process; their
+   parameters live under a `native:` block.
+2. **Container** servers run as a Docker Compose stack embedded under
+   `container.compose`.
+
+There is no separate file format or directory per type — a single unified file
+covers both. Blueprints are parsed with [**mikefarah/yq**](https://github.com/mikefarah/yq)
+(Arch package `go-yq`), which is a **hard dependency**: blueprint operations on a
+host without it fail immediately with a clear message.
 
 KGSM comes with a growing collection of pre-configured blueprints for popular game servers, making it easy to get started quickly without having to create custom configurations from scratch.
 
-## Blueprint Types and Storage
+## Blueprint Storage
 
-KGSM follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/) to separate read-only system blueprints from user-managed ones.
+KGSM follows the [XDG Base Directory Specification](https://specifications.freedesktop.org/basedir-spec/latest/) to separate read-only system blueprints from user-managed ones. Each is a single **flat** directory of `*.bp.yaml` files (no `native/` vs `container/` subdirectories):
 
 - **System Blueprints** (read-only, provided by KGSM, updated with the package):
-  - `blueprints/native/` — Native server blueprints (`.bp` files)
-  - `blueprints/container/` — Container server blueprints (`.docker-compose.yml` files)
+  - `blueprints/` — all shipped blueprints, e.g. `blueprints/factorio.bp.yaml`
 
 - **User Blueprints** (writable, managed by you):
-  - `~/.local/share/kgsm/blueprints/native/` — Your custom native blueprints
-  - `~/.local/share/kgsm/blueprints/container/` — Your custom container blueprints
+  - `~/.local/share/kgsm/blueprints/` — your custom blueprints
 
   > The base path respects `$XDG_DATA_HOME` if that environment variable is set.
 
 When KGSM resolves a blueprint by name, **user blueprints take precedence over system blueprints**. A user blueprint with the same filename as a system blueprint will shadow it, allowing you to override defaults without modifying the originals.
 
 > [!IMPORTANT]
-> Never modify files in the system `blueprints/` directories directly. Those files may be overwritten during KGSM updates. Always create your customized copies in the user blueprint directories.
+> Never modify files in the system `blueprints/` directory directly. Those files may be overwritten during KGSM updates. Always create your customized copies in the user blueprint directory.
 
 ### Blueprint to Override Relationship
 
-The `name` field in a blueprint connects it to a corresponding override directory. For example, if a blueprint has `name=factorio`, KGSM will look for override modules in `overrides/factorio/` during management script assembly. Multiple blueprint variants can share the same `name`, allowing them to reuse the same override logic (e.g., `terraria-modded.bp` with `name=terraria` uses `overrides/terraria/`).
+The `name` field in a blueprint connects it to a corresponding override directory, for **both** runtimes. For example, a blueprint with `name: factorio` makes KGSM look for override modules in `overrides/factorio/` during management script assembly. Multiple blueprint variants can share the same `name`, allowing them to reuse the same override logic (e.g., `terraria-modded.bp.yaml` with `name: terraria` uses `overrides/terraria/`). The binding is always the `name` field — never the file name, and (unlike older KGSM) never the first service name in a container's compose.
 
 For details about overrides and how they provide custom functionality for specific game servers, see [Overrides 101](overrides.md).
+
+## Required Fields
+
+Every blueprint, regardless of runtime, must declare:
+
+| Field | Description |
+|-------|-------------|
+| `schema_version` | Format version. Currently `1` (a future-migration hook). |
+| `name` | Unique, lowercase, no spaces. Also the override-binding key. |
+| `runtime` | `native` or `container`. |
+| `metadata:` | A block of advisory presentation fields (see below). The keys must be present; the values may be `null`. |
+
+Then, depending on `runtime`:
+
+- **native** requires `native.executable_file` (everything else under `native:` is optional with sensible defaults).
+- **container** requires `container.compose` with at least one service.
+
+## Metadata
+
+The `metadata:` block carries advisory, presentation-oriented information for
+catalogs and UIs (such as the control panel) — it does **not** affect how a
+server installs or runs, so a blueprint is fully functional with every metadata
+value left `null`.
+
+```yaml
+metadata:
+  display_name: "Factorio"          # human-friendly name ("7 Days to Die", not "7dtd")
+  description: "Automation/factory-building dedicated server."
+  max_players: 65535                # null if unbounded/configurable/unknown
+  min_ram_mb: 2048                  # advisory minimum RAM
+  recommended_ram_mb: 4096          # advisory recommended RAM
+  base_disk_mb: 3000                # base install footprint (grows with saves/mods)
+```
+
+> [!IMPORTANT]
+> Every metadata value is **nullable**, and `null` means *unknown or unbounded*
+> — it is **never** a substitute for a real `0`. These figures are
+> vendor-declared estimates, not measured guarantees. Honoring KGSM's
+> "never fabricate a metric" rule, leave anything you are unsure of as `null`
+> rather than guessing a number. (On the wire, `kgsm blueprints info --json`
+> emits these under a nested `Metadata` object, with unknown numerics as JSON
+> `null`.)
 
 ## Managing Blueprints
 
@@ -109,35 +161,36 @@ Find the absolute path to a blueprint file:
 
 To create a blueprint for a game server that KGSM does not include:
 
-1. Copy the blank template to the appropriate user blueprint directory:
+1. Copy the blank template to the user blueprint directory as `<name>.bp.yaml`:
 
    ```sh
-   # For a native (Linux) server
-   cp templates/blueprint.tp ~/.local/share/kgsm/blueprints/native/mygame.bp
-
-   # For a Docker-based server
-   cp blueprints/container/enshrouded.docker-compose.yml \
-      ~/.local/share/kgsm/blueprints/container/mygame.docker-compose.yml
+   cp templates/blueprint.tp ~/.local/share/kgsm/blueprints/mygame.bp.yaml
    ```
 
-2. Open the file in your editor and fill in the required fields (`name`, `executable_file`, `level_name`) plus any optional fields.
+2. Open the file in your editor, set `name` and `runtime`, and fill in the
+   matching block (`native:` or `container:`) plus any metadata you know. The
+   template documents every field inline.
 
-3. Save the file. The blueprint is immediately available to KGSM.
+3. Save the file. The blueprint is immediately available to KGSM. Verify it:
+
+   ```sh
+   ./kgsm.sh blueprints info mygame
+   ```
 
 > [!TIP]
 > You can use an existing blueprint as a starting point. For example:
 > ```sh
-> cp blueprints/native/minecraft.bp ~/.local/share/kgsm/blueprints/native/my-custom-game.bp
+> cp blueprints/minecraft.bp.yaml ~/.local/share/kgsm/blueprints/my-custom-game.bp.yaml
 > ```
 
 ### Customizing Existing Blueprints
 
 To adjust a system blueprint without modifying the original:
 
-1. Copy it from the system directory to the corresponding user directory:
+1. Copy it from the system directory to the user directory (same file name):
 
    ```sh
-   cp blueprints/native/minecraft.bp ~/.local/share/kgsm/blueprints/native/minecraft.bp
+   cp blueprints/minecraft.bp.yaml ~/.local/share/kgsm/blueprints/minecraft.bp.yaml
    ```
 
 2. Edit your copy. KGSM will automatically prefer the user copy over the system original.
@@ -152,7 +205,7 @@ Once you have a blueprint, create a new game server instance with:
 
 `create` is an accepted alias for `install`.
 
-KGSM automatically detects whether the blueprint is native or container-based by its file extension and handles it accordingly.
+KGSM reads the blueprint's `runtime` field to decide whether to install it as a native process or a container stack, and handles it accordingly.
 
 ### Native Server Example
 
@@ -173,74 +226,74 @@ KGSM automatically detects whether the blueprint is native or container-based by
 
 ### Native Blueprint Example Template
 
-Below is a representative native blueprint (Factorio). It illustrates the full set of available fields:
+Below is a representative native blueprint (Factorio). The `native:` block holds
+the runtime-specific fields; the top-level `schema_version`/`name`/`runtime`/
+`metadata` are shared by every blueprint:
 
-```bash
-# Unique name, lowercase with no spaces
-name=factorio
+```yaml
+schema_version: 1
+name: factorio
+runtime: native
+metadata:
+  display_name: "Factorio"
+  description: "Automation/factory-building dedicated server."
+  max_players: null          # null = unknown/unbounded, NEVER 0
+  min_ram_mb: null
+  recommended_ram_mb: null
+  base_disk_mb: null
+native:
+  # Port(s), in UFW format. Single-quoted, pipe-separated.
+  # Example: '1111:2222/tcp|1111:2222/udp'
+  ports: '34197'
 
-# Port(s), used by UFW
-# Wrap in single quotes (')
-# Example: '1111:2222/tcp|1111:2222/udp'
-ports='34197'
+  # Steam App ID. 0 if not applicable, a valid Steam app id otherwise.
+  steam_app_id: 0
 
-# Steam APP_ID
-# Values: 0 if not applicable, Valid Steam app id otherwise
-# Default: 0
-steam_app_id=0
+  # (Optional) Additional steamcmd arguments, e.g. "+beta <branch>".
+  steamcmd_arguments: ""
 
-# (Optional) Additional steamcmd arguments
-# Values: Any valid steamcmd arguments, for example: "+beta <branch>".
-# Default: ""
-steamcmd_arguments=""
+  # Only applicable if steam_app_id != 0. false = anonymous, true = account required.
+  is_steam_account_required: false
 
-# Only applicable if steam_app_id != 0
-# Values: false for anonymous, true for account required
-# Default: false
-is_steam_account_required=false
+  # (Optional) Target platform if not Linux. windows / linux / macos.
+  platform: linux
 
-# (Optional) Target platform if not Linux
-# Values: windows / linux / macos
-# Default: linux
-platform=linux
+  # Savefile / world / level name, whichever applies.
+  level_name: default
 
-# Savefile name or world name, level, whichever is applicable
-level_name="default"
+  # (Optional) Subdirectory containing the executable, relative to install dir.
+  executable_subdirectory: bin/x64
 
-# (Optional) Subdirectory containing the executable, relative to install dir
-# Example: bin/x64 | DedicatedServer
-executable_subdirectory=bin/x64
+  # Name of the executable that starts the server. (Required for native.)
+  executable_file: factorio
 
-# Name of the executable that starts the server
-executable_file=factorio
+  # (Optional) Arguments passed to the executable. Single-quote so $instance_*
+  # variables (see "Available Instance Variables") survive to runtime.
+  executable_arguments: '--start-server $instance_saves_dir/$instance_level_name'
 
-# (Optional) Arguments passed to the executable
-# See "Available Instance Variables" below for substitution variables
-executable_arguments="--start-server $instance_saves_dir/$instance_level_name"
+  # (Optional) Stop / save commands sent to the input socket.
+  stop_command: /quit
+  save_command: /save
 
-# (Optional) Stop command sent to the input socket
-stop_command=/quit
-
-# (Optional) Save command sent to the input socket
-save_command=/save
-
-# (Optional) Regex to match the startup success message
-# If not set, KGSM waits for the server to listen on the declared ports
-startup_success_regex="Hosting game at IP ADDR"
+  # (Optional) Regex matching the startup-success log line. If unset, KGSM waits
+  # for the server to listen on the declared ports.
+  startup_success_regex: "Hosting game at IP ADDR"
 ```
 
 ### Native Blueprint Key Parameters
 
+All of these live under the `native:` block. Only `executable_file` is required;
+the rest are optional with the noted defaults.
+
 | Parameter | Description | Required | Example |
 |-----------|-------------|:--------:|---------|
-| `name` | Unique identifier, lowercase with no spaces | Yes | `factorio` |
 | `executable_file` | Name of the server executable | Yes | `factorio` |
-| `level_name` | World/map/save name | Yes | `"default"` |
 | `ports` | Network ports in UFW format (single-quoted) | No | `'25565/tcp'` |
 | `steam_app_id` | Steam App ID (`0` if not applicable) | No | `294420` |
 | `steamcmd_arguments` | Extra arguments passed to steamcmd | No | `"+beta public"` |
 | `is_steam_account_required` | Whether a Steam account is required (`false`/`true`) | No | `false` |
 | `platform` | Target platform (`linux`, `windows`, `macos`) | No | `linux` |
+| `level_name` | World/map/save name (defaults to `default`) | No | `default` |
 | `executable_subdirectory` | Subdirectory containing the executable | No | `bin/x64` |
 | `executable_arguments` | Command-line arguments for the server | No | `--dedicated` |
 | `stop_command` | Command sent to socket to stop the server | No | `/quit` |
@@ -343,43 +396,62 @@ The following variables can be used inside `executable_arguments` and are resolv
 
 ### Container Blueprint Example Template
 
-Container-based blueprints are standard Docker Compose files with the `.docker-compose.yml` extension. Below is a representative example (V Rising):
+A container blueprint embeds its Docker Compose **verbatim** under
+`container.compose` as a YAML *literal block scalar* (`compose: |`). The compose
+text is opaque to KGSM — comments and `${instance_*}` placeholders are preserved
+exactly — and is extracted to the instance's `docker-compose.yml` (with
+`${instance_*}` substituted) at create time. Below is a representative example
+(V Rising):
 
-```yml
-# DO NOT MODIFY THIS FILE
-# Instead, copy it to the user blueprints directory and modify it there
+```yaml
+schema_version: 1
+name: vrising
+runtime: container
+metadata:
+  display_name: "V Rising"
+  description: "Survival vampire dedicated server (official image)."
+  max_players: null          # null = unknown/unbounded, NEVER 0
+  min_ram_mb: null
+  recommended_ram_mb: null
+  base_disk_mb: null
+container:
+  compose: |
+    services:
+      vrising:
 
-services:
-  vrising:
+        # Official image for V Rising
+        image: ghcr.io/thekrystalship/vrising:latest
 
-    # Official image for V Rising
-    image: ghcr.io/thekrystalship/vrising:latest
+        # Dynamic container name set by KGSM at deploy time
+        container_name: ${instance_name}
 
-    # Dynamic container name set by KGSM at deploy time
-    container_name: ${instance_name}
+        # Use the host's network stack directly
+        network_mode: host
 
-    # Use the host's network stack directly
-    network_mode: host
+        # Ports the server uses (KGSM derives firewall rules from these)
+        ports:
+          - 9876:9876/udp
+          - 9877:9877/udp
+          - 27015:27015/udp
+          - 27016:27016/udp
 
-    # Ports the server uses (informational when network_mode: host)
-    ports:
-      - 9876:9876/udp
-      - 9877:9877/udp
-      - 27015:27015/udp
-      - 27016:27016/udp
+        # Bind mount volumes for persistent storage
+        volumes:
+          - type: bind
+            source: ${instance_backups_dir}
+            target: /opt/vrising/backups
+          - type: bind
+            source: ${instance_install_dir}
+            target: /opt/vrising/install
 
-    # Bind mount volumes for persistent storage
-    volumes:
-      - type: bind
-        source: ${instance_backups_dir}
-        target: /opt/vrising/backups
-      - type: bind
-        source: ${instance_install_dir}
-        target: /opt/vrising/install
-
-    # Restart policy to keep the container running
-    restart: unless-stopped
+        # Restart policy to keep the container running
+        restart: unless-stopped
 ```
+
+> [!NOTE]
+> A container blueprint has **no** top-level `ports` field — KGSM **derives** the
+> firewall ports from the `ports:` entries inside the embedded compose, so the
+> compose is the single source of truth for ports.
 
 > [!IMPORTANT]
 > KGSM uses official container images from the [KGSM-Containers](https://github.com/TheKrystalShip/kgsm-containers) project. These images are specifically tested and configured to work with the KGSM ecosystem. While you can use other container images, the official ones ensure compatibility and proper integration.
@@ -477,4 +549,4 @@ If you want to contribute a new container image for a game server:
 2. Follow the contribution guidelines specific to that project
 3. Submit your container image via a Pull Request
 
-Once your container image is accepted and published to the official repository, you can then create a corresponding `.docker-compose.yml` blueprint that uses your image.
+Once your container image is accepted and published to the official repository, you can then create a corresponding `<name>.bp.yaml` blueprint (`runtime: container`) whose embedded `container.compose` uses your image.

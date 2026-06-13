@@ -32,34 +32,35 @@ The template engine lives in `commands/handlers/templates.sh` and exposes these 
 The low-level file discovery is handled by `__find_template` in `core/loader.sh`.
 
 > [!NOTE]
-> Template files in `templates/` should never be modified directly. They are internal KGSM artifacts. To customize behavior, use the appropriate directories: `blueprints/custom/` for blueprint variants, or `overrides/` for game-specific function implementations.
+> Template files in `templates/` should never be modified directly. They are internal KGSM artifacts. To customize behavior, use the appropriate directories: `~/.local/share/kgsm/blueprints/` for blueprint variants, or `overrides/` for game-specific function implementations.
 
 ## Template Reference
 
 ### blueprint.tp
 
-**Purpose:** A human-readable starting point for creating a new native blueprint. It documents every supported field with inline comments, examples, and the full list of `$instance_*` variables available for use in `executable_arguments`.
+**Purpose:** A human-readable starting point for creating a new blueprint. It documents every supported field with inline comments, examples (both `native:` and `container:`), the `metadata:` block, and the full list of `$instance_*` variables available for use in `executable_arguments`.
 
 **Used by:** Not expanded programmatically. Referenced in `commands/blueprints.sh` documentation and in the KGSM user guide as the canonical example for authoring blueprints.
 
-**Format:** INI-style `key=value`.
+**Format:** Unified YAML (`<name>.bp.yaml`), parsed with mikefarah/yq.
 
-**Key fields defined:**
+**Key fields defined:** Top-level `schema_version`, `name`, `runtime`, and a nullable `metadata:` block are shared by both runtimes. The fields below live under the `native:` block; only `executable_file` is required.
 
 | Field | Required | Description |
 |---|---|---|
-| `name` | Yes | Unique identifier (lowercase, no spaces) |
 | `executable_file` | Yes | Server binary name |
-| `level_name` | Yes | Default world/map name |
 | `ports` | No | Network ports in UFW format, e.g. `'27015/tcp\|27015/udp'` |
 | `steam_app_id` | No | Steam App ID; `0` if not applicable |
 | `is_steam_account_required` | No | `true` if a Steam account is needed |
 | `platform` | No | Target OS: `linux` (default), `windows`, `macos` |
+| `level_name` | No | Default world/map name (defaults to `default`) |
 | `executable_subdirectory` | No | Relative subdirectory containing the binary |
 | `executable_arguments` | No | CLI arguments passed to the server binary |
 | `stop_command` | No | Command sent to the input socket to stop the server |
 | `save_command` | No | Command sent to the input socket to save the game |
 | `startup_success_regex` | No | Regex matched against server log to detect successful startup |
+
+For a container blueprint (`runtime: container`), the body is instead a `container.compose` literal block scalar holding the Docker Compose verbatim; firewall ports are derived from it.
 
 ---
 
@@ -283,7 +284,7 @@ These `$config_*` variables reflect KGSM-wide settings and are also available in
 ## Usage Guidelines
 
 - **Never modify files in `templates/`**. These are internal KGSM files and may be overwritten during updates.
-- To create a new blueprint, copy `templates/blueprint.tp` to `blueprints/custom/native/your_game.bp` and fill in the fields.
+- To create a new blueprint, copy `templates/blueprint.tp` to `~/.local/share/kgsm/blueprints/your_game.bp.yaml` and fill in the fields.
 - To add game-specific logic, create a directory `overrides/{blueprint_name}/`, copy the relevant default modules from `templates/manage.native.d/`, and modify only the functions you need. See `docs/overrides.md` for details.
 - If a management script becomes corrupted or needs to be regenerated, use:
   ```bash

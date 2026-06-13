@@ -191,13 +191,17 @@ function _cmd_list() {
   names=$(__logic_list_blueprints "$source" 2> /dev/null)
 
   if [[ "$filter" == "detailed" ]]; then
-    local name info
+    local name info rc
     if [[ -n "$json_opt" ]]; then
       # Object keyed by blueprint name -> full info object.
       local obj="{}"
       while IFS= read -r name; do
         [[ -z "$name" ]] && continue
-        info=$(__logic_get_blueprint_info_json "$name" 2> /dev/null) || continue
+        info=$(__logic_get_blueprint_info_json "$name" 2> /dev/null)
+        # The handler signals success via EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED
+        # (a 200-range event code), not 0 — only a genuine error skips the entry.
+        rc=$?
+        [[ $rc -ne 0 && $rc -ne $EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED ]] && continue
         obj=$(jq --arg k "$name" --argjson v "$info" '. + {($k): $v}' <<< "$obj")
       done <<< "$names"
       echo "$obj"
@@ -205,7 +209,11 @@ function _cmd_list() {
       # One human-readable line per blueprint: name, runtime, display name.
       while IFS= read -r name; do
         [[ -z "$name" ]] && continue
-        info=$(__logic_get_blueprint_info_json "$name" 2> /dev/null) || continue
+        info=$(__logic_get_blueprint_info_json "$name" 2> /dev/null)
+        # The handler signals success via EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED
+        # (a 200-range event code), not 0 — only a genuine error skips the entry.
+        rc=$?
+        [[ $rc -ne 0 && $rc -ne $EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED ]] && continue
         echo "$info" | jq -r '"\(.Name)\t\(.BlueprintType)\t\(.Metadata.DisplayName // "—")"'
       done <<< "$names"
     fi
@@ -371,10 +379,13 @@ case "$command" in
     exit $?
     ;;
   list)
+    # `list detailed[ --json]` reads metadata via yq; `info` always does.
+    __require_yq || exit $EC_MISSING_DEPENDENCY
     _cmd_list "$@"
     exit $?
     ;;
   info)
+    __require_yq || exit $EC_MISSING_DEPENDENCY
     _cmd_info "$@"
     exit $?
     ;;

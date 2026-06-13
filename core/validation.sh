@@ -147,6 +147,10 @@ function validate_blueprint_format() {
     return $EC_INVALID_ARG
   fi
 
+  # yq is a hard dependency — fail with an actionable message before the syntax
+  # check (which would otherwise misreport a yq-less host as "Invalid YAML").
+  __require_yq || return $EC_MISSING_DEPENDENCY
+
   # YAML syntax (yq is a hard dependency)
   if ! yq eval '.' "$blueprint_path" >/dev/null 2>&1; then
     __print_error "Invalid YAML syntax in blueprint: $blueprint_path"

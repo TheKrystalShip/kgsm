@@ -26,7 +26,7 @@ This is the simplest way to create an instance:
 
 ### Arguments
 
-- **`<blueprint>`**: The name of a blueprint file (without the `.bp` extension). KGSM searches user blueprints first, then bundled blueprints. Run `./kgsm.sh blueprints list` to see all available blueprints.
+- **`<blueprint>`**: The blueprint name (without the `.bp.yaml` extension). KGSM searches user blueprints first, then bundled blueprints. Run `./kgsm.sh blueprints list` to see all available blueprints.
 - **`--install-dir <directory>`** *(optional)*: Absolute path where the instance will be installed. If omitted, the value from `default_install_directory` in `config.ini` is used.
 - **`--version <version>`** *(optional)*: A specific version to install. If omitted, the latest available version is fetched automatically.
 - **`--name <name>`** *(optional)*: Custom name for the instance. If omitted, KGSM generates a unique identifier based on the blueprint name.
@@ -76,10 +76,12 @@ List available blueprints to find the one you want:
 
 Blueprints are loaded in this priority order:
 
-1. User custom native (`blueprints/native/` in your XDG data directory)
-2. User custom container (`blueprints/container/` in your XDG data directory)
-3. Bundled native (`blueprints/native/` in the KGSM install directory)
-4. Bundled container (`blueprints/container/` in the KGSM install directory)
+1. User custom (`blueprints/` in your XDG data directory)
+2. Bundled (`blueprints/` in the KGSM install directory)
+
+A user blueprint shadows a bundled one of the same name. (Both are flat
+directories of `<name>.bp.yaml` files — the `runtime` field, not the location,
+determines native vs. container.)
 
 Run `./kgsm.sh --paths` to see the exact paths for your system.
 

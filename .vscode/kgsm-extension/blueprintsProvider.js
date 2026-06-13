@@ -1,9 +1,10 @@
 // Blueprints TreeDataProvider
-// Displays KGSM blueprints in a tree view with 4 groups:
-// Default Native, Default Container, Custom Native, Custom Container.
+// Displays KGSM blueprints in a tree view with 2 groups: Default and Custom.
+// The unified format makes runtime (native|container) a field inside each
+// `<name>.bp.yaml`, not a separate file family — so it is shown per-item (icon
+// + tooltip) instead of as a top-level category.
 
 const vscode = require("vscode");
-const path = require("path");
 
 class BlueprintsProvider {
   /**
@@ -34,21 +35,22 @@ class BlueprintsProvider {
   async getChildren(element) {
     if (!element) {
       return [
-        new BlueprintCategory("Default Native", "default", "native"),
-        new BlueprintCategory("Default Container", "default", "container"),
-        new BlueprintCategory("Custom Native", "custom", "native"),
-        new BlueprintCategory("Custom Container", "custom", "container"),
+        new BlueprintCategory("Default", "default"),
+        new BlueprintCategory("Custom", "custom"),
       ];
     }
 
     if (element instanceof BlueprintCategory) {
-      const fetcher =
-        element.runtime === "native"
-          ? this.client.getNativeBlueprints(element.filter)
-          : this.client.getContainerBlueprints(element.filter);
-
-      const names = await fetcher;
-      return names.map((name) => new BlueprintItem(name));
+      // Names belonging to this source group, plus a detail map (all blueprints)
+      // so each item can show its runtime. BlueprintType is Native/Container.
+      const [names, detailed] = await Promise.all([
+        this.client.getBlueprints(element.filter),
+        this.client.getBlueprintsDetailed(),
+      ]);
+      return names.map((name) => {
+        const runtime = (detailed[name]?.BlueprintType || "").toLowerCase();
+        return new BlueprintItem(name, runtime);
+      });
     }
 
     return [];
@@ -59,35 +61,40 @@ class BlueprintCategory extends vscode.TreeItem {
   /**
    * @param {string} label
    * @param {"default"|"custom"} filter
-   * @param {"native"|"container"} runtime
    */
-  constructor(label, filter, runtime) {
+  constructor(label, filter) {
     super(label, vscode.TreeItemCollapsibleState.Collapsed);
     this.filter = filter;
-    this.runtime = runtime;
     this.iconPath = new vscode.ThemeIcon(
-      runtime === "native" ? "folder" : "symbol-namespace"
+      filter === "default" ? "library" : "account"
     );
-    // contextValue encodes both filter and runtime for menu when-clauses
-    this.contextValue = `blueprintCategory-${filter}-${runtime}`;
+    this.contextValue = `blueprintCategory-${filter}`;
   }
 }
 
 class BlueprintItem extends vscode.TreeItem {
   /**
    * @param {string} name
+   * @param {string} [runtime] - "native" | "container" | "" (unknown)
    */
-  constructor(name) {
+  constructor(name, runtime) {
     super(name, vscode.TreeItemCollapsibleState.None);
     this.blueprintName = name;
-    this.iconPath = new vscode.ThemeIcon("file-code");
+    this.runtime = runtime || "";
+    // Distinct icon per runtime so the (now per-item) native/container axis
+    // stays visible at a glance.
+    this.iconPath = new vscode.ThemeIcon(
+      runtime === "container" ? "symbol-namespace" : "file-code"
+    );
     this.contextValue = "blueprint";
     this.command = {
       command: "kgsm.openBlueprint",
       title: "Open Blueprint",
       arguments: [this],
     };
-    this.tooltip = `Blueprint: ${name}`;
+    this.tooltip = runtime
+      ? `Blueprint: ${name} (${runtime})`
+      : `Blueprint: ${name}`;
   }
 }
 

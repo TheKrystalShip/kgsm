@@ -53,7 +53,7 @@ function activate(context) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand("kgsm.addBlueprint", async (item) => {
-      // item is a BlueprintCategory with .filter and .runtime
+      // item is a BlueprintCategory with .filter ("default" | "custom").
       const name = await vscode.window.showInputBox({
         prompt: "Enter a name for the new blueprint (lowercase, no spaces)",
         placeHolder: "my-game",
@@ -65,20 +65,21 @@ function activate(context) {
       });
       if (!name) return;
 
-      // Resolve the target directory
+      // Runtime is now a field inside the unified blueprint, so ask for it up front.
+      const runtime = await vscode.window.showQuickPick(["native", "container"], {
+        placeHolder: "Select the runtime for this blueprint",
+        title: "Blueprint Runtime",
+      });
+      if (!runtime) return;
+
+      // Resolve the target directory (one flat dir per source).
       const dirs = await client.getBlueprintDirs();
       if (!dirs) {
         vscode.window.showErrorMessage("Failed to resolve KGSM blueprint directories");
         return;
       }
 
-      const dirMap = {
-        "default-native": dirs.defaultNative,
-        "default-container": dirs.defaultContainer,
-        "custom-native": dirs.customNative,
-        "custom-container": dirs.customContainer,
-      };
-      const targetDir = dirMap[`${item.filter}-${item.runtime}`];
+      const targetDir = item.filter === "custom" ? dirs.custom : dirs.default;
       if (!targetDir) {
         vscode.window.showErrorMessage("Could not determine target directory");
         return;
@@ -90,22 +91,31 @@ function activate(context) {
       // Ensure directory exists
       fs.mkdirSync(targetDir, { recursive: true });
 
-      // Determine filename and template content
-      let filePath;
+      // One unified file per game: <name>.bp.yaml. Seed it from the documented
+      // unified template, substituting the chosen name and runtime.
+      const filePath = fspath.join(targetDir, `${name}.bp.yaml`);
       let templateContent;
-
-      if (item.runtime === "native") {
-        filePath = fspath.join(targetDir, `${name}.bp`);
-        // Copy from the blueprint template
-        const templatePath = fspath.join(client.cwd, "templates", "blueprint.tp");
-        try {
-          templateContent = fs.readFileSync(templatePath, "utf8");
-        } catch {
-          templateContent = `# KGSM Blueprint: ${name}\nname=${name}\nports=\nsteam_app_id=0\nexecutable_file=\nlevel_name=default\n`;
-        }
-      } else {
-        filePath = fspath.join(targetDir, `${name}.docker-compose.yml`);
-        templateContent = `# KGSM Docker Compose file for ${name}\n#\n# See existing container blueprints for examples.\n\nservices:\n  ${name}:\n    image: \n    container_name: ${name}\n    restart: unless-stopped\n    ports: []\n    volumes: []\n`;
+      const templatePath = fspath.join(client.cwd, "templates", "blueprint.tp");
+      try {
+        templateContent = fs.readFileSync(templatePath, "utf8")
+          .replace(/^name:.*$/m, `name: ${name}`)
+          .replace(/^runtime:.*$/m, `runtime: ${runtime}`);
+      } catch {
+        templateContent =
+          `# KGSM Blueprint: ${name}\n` +
+          `schema_version: 1\n` +
+          `name: ${name}\n` +
+          `runtime: ${runtime}\n` +
+          `metadata:\n` +
+          `  display_name: null\n` +
+          `  description: null\n` +
+          `  max_players: null\n` +
+          `  min_ram_mb: null\n` +
+          `  recommended_ram_mb: null\n` +
+          `  base_disk_mb: null\n` +
+          (runtime === "native"
+            ? `native:\n  ports: ''\n  steam_app_id: 0\n  executable_file: \n  level_name: default\n`
+            : `container:\n  compose: |\n    services:\n      ${name}:\n        image: \n        container_name: \${instance_name}\n        restart: unless-stopped\n`);
       }
 
       if (fs.existsSync(filePath)) {

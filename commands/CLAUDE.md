@@ -20,7 +20,8 @@ call it from the command; don't grow the command file.
 ## File families
 
 Related commands cluster by prefix — keep new files in the existing family:
-- `blueprints.sh`, `blueprints.native.sh`, `blueprints.container.sh`
+- `blueprints.sh` (one unified module — the former `blueprints.native.sh` /
+  `blueprints.container.sh` split is gone, since runtime is now a blueprint field)
 - `files.sh`, `files.management.sh`, `files.ufw.sh`,
   `files.upnp.sh`, `files.symlink.sh` (+ paired handlers)
 - `events.sh`, `events.socket.sh`, `events.webhook.sh`
