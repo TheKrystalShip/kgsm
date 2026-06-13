@@ -9,7 +9,7 @@ KGSM uses a sophisticated configuration management system that automatically han
 KGSM's configuration is stored in `config.ini` at the root of your KGSM installation. The file is organized into sections for easier navigation:
 
 ```ini
-config_schema_version=1
+config_schema_version=3
 
 [system]
 wget_timeout_seconds=60
@@ -19,10 +19,6 @@ log_max_size_kb=10240
 [steam]
 STEAM_USERNAME=
 STEAM_PASSWORD=
-
-[services]
-enable_systemd=false
-systemd_files_dir=/etc/systemd/system
 
 [network]
 enable_firewall_management=false
@@ -60,6 +56,13 @@ command_shortcuts_directory=/usr/local/bin
 ### Schema Versioning
 
 The `config_schema_version` field tracks the configuration format version. This allows KGSM to automatically migrate your config when the structure changes between major versions.
+
+> [!NOTE]
+> The current schema version is **3**. Schema v3 removed the `[services]` section
+> (`enable_systemd`, `systemd_files_dir`) when systemd integration was dropped as an
+> instance lifecycle manager. Migration `003_v2_to_v3_remove_services_section.sh`
+> strips this section from existing configs automatically. Boot auto-start is now
+> handled by `kgsm autostart`, backed by the kgsm-watchdog daemon.
 
 ## Automatic Configuration Updates
 
@@ -431,7 +434,6 @@ For a complete list of all configuration keys and their meanings, see:
 Common sections:
 - **[system]** - Core KGSM behavior (logging, download timeouts)
 - **[steam]** - Steam integration credentials
-- **[services]** - systemd service file integration
 - **[network]** - UFW firewall management, UPnP port forwarding
 - **[events]** - Event broadcasting (webhooks, Unix Domain Sockets)
 - **[watchers]** - Server readiness detection (log pattern / port monitoring)
@@ -460,4 +462,4 @@ If you encounter issues with configuration:
 
 **Last Updated:** December 16, 2025  
 **KGSM Version:** 3.0+  
-**Schema Version:** 1
+**Schema Version:** 3

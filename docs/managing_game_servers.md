@@ -21,13 +21,8 @@ KGSM provides dedicated commands for controlling the operational state of game s
 
 When a server starts, KGSM automatically launches a readiness watcher (if configured) to monitor when the instance is ready for players.
 
-#### Using systemctl
-
-If `enable_systemd=true` is set in `config.ini` (under the `[services]` section), the instance is registered as a systemd service:
-
-```sh
-sudo systemctl start <instance>
-```
+> [!NOTE]
+> `start` only runs the instance now. It does **not** enable the instance for boot auto-start — that is controlled separately by `kgsm autostart enable` (see [Automatic Start on Boot](#automatic-start-on-boot)).
 
 #### Using the instance management script directly
 
@@ -50,11 +45,8 @@ Run `./<instance>.manage.sh --help` to see all available options.
 ./kgsm.sh stop <instance>
 ```
 
-#### Using systemctl
-
-```sh
-sudo systemctl stop <instance>
-```
+> [!NOTE]
+> `stop` only stops the instance now. It does **not** disable boot auto-start — if the instance is enabled via `kgsm autostart enable`, it will still come back after a reboot.
 
 #### Using the instance management script directly
 
@@ -74,12 +66,6 @@ sudo systemctl stop <instance>
 ./kgsm.sh restart <instance>
 ```
 
-#### Using systemctl
-
-```sh
-sudo systemctl restart <instance>
-```
-
 ---
 
 ### Checking Instance Status
@@ -90,12 +76,6 @@ sudo systemctl restart <instance>
 ./kgsm.sh status <instance>             # Comprehensive runtime status
 ./kgsm.sh status <instance> --json      # Machine-readable JSON output
 ./kgsm.sh status <instance> --fast      # Skip update checking for faster response
-```
-
-#### Using systemctl
-
-```sh
-sudo systemctl status <instance>
 ```
 
 ---
@@ -120,7 +100,7 @@ sudo systemctl status <instance>
 ./kgsm.sh logs <instance> --follow --tail 100 # Follow, starting with last 100 lines
 ```
 
-Logs are sourced from `journalctl` when the instance runs under systemd, or from the instance's own log file otherwise.
+Logs are read from the instance's own log file.
 
 The instance management script exposes the same options directly:
 
@@ -134,21 +114,26 @@ The instance management script exposes the same options directly:
 
 ### Automatic Start on Boot
 
-#### With systemd integration
-
-Enable automatic startup on boot for any instance managed by systemd:
-
-```sh
-sudo systemctl enable <instance>
-```
-
-#### Without systemd
-
-Add the instance management script to your system's startup configuration, using the `--detached` flag:
+Boot auto-start is controlled with the `autostart` command, which works like
+`systemctl enable`/`disable`. It is backed by the **kgsm-watchdog** daemon, which
+persists each instance's desired state and brings enabled instances back up after a
+reboot. The watchdog daemon must be running for these commands to work.
 
 ```sh
-/full/path/to/instance/<instance>.manage.sh start --detached
+./kgsm.sh autostart enable <instance>    # Bring this instance up automatically on boot
+./kgsm.sh autostart disable <instance>   # Don't bring it up on boot
+./kgsm.sh autostart status <instance>    # Show whether the instance is enabled for boot
+./kgsm.sh autostart list                 # List all instances enabled for boot
 ```
+
+> [!IMPORTANT]
+> `autostart` is **independent** of `start`/`stop`, exactly like `systemctl enable`
+> is independent of `systemctl start`:
+>
+> - `enable` does **not** start the instance now; `disable` does **not** stop it.
+>   They only change what comes back after a reboot.
+> - An instance that is **started but not enabled** will **not** survive a reboot.
+> - An instance that is **enabled but stopped** **will** be started on the next boot.
 
 ---
 
@@ -164,7 +149,7 @@ This will:
 
 - Stop the instance if it is running.
 - Remove all files and directories associated with the instance.
-- Delete `systemd` and `ufw` integrations, if applicable.
+- Delete `ufw` integrations, if applicable.
 
 ---
 

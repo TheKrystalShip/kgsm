@@ -287,7 +287,6 @@ The following variables can be used inside `executable_arguments` and are resolv
 
 | Variable | Description |
 |----------|-------------|
-| `$instance_lifecycle_manager` | How the instance is managed (`standalone`, `systemd`) |
 | `$instance_runtime` | Runtime type (`native`, `container`) |
 | `$instance_platform` | Target platform (`linux`, `windows`, `macos`) |
 | `$instance_auto_update` | Whether to auto-update before starting |
@@ -332,14 +331,6 @@ The following variables can be used inside `executable_arguments` and are resolv
 | Variable | Description |
 |----------|-------------|
 | `$instance_compress_backups` | Whether to compress backups |
-
-**System Integration**
-
-| Variable | Description |
-|----------|-------------|
-| `$instance_enable_systemd` | Whether systemd integration is enabled |
-| `$instance_systemd_service_file` | Path to the systemd service file |
-| `$instance_systemd_socket_file` | Path to the systemd socket file |
 
 **Management Features**
 

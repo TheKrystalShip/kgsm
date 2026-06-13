@@ -160,11 +160,10 @@ This creates the following subdirectories inside the working directory:
 
 This creates the `<instance>.manage.sh` management script. Depending on `config.ini` settings, it may also create:
 
-- Systemd service and socket files (if `enable_systemd=true`)
 - UFW firewall rules (if `enable_firewall_management=true`)
 - Command shortcuts/symlinks (if `enable_command_shortcuts=true`)
 
-> ⚠️ **Note**: Root permissions are required for systemd or UFW integrations. KGSM will prompt for a password when needed.
+> ⚠️ **Note**: Root permissions are required for UFW integration. KGSM will prompt for a password when needed.
 
 ---
 
@@ -232,7 +231,7 @@ Your game server instance is now ready. To learn how to start, stop, and manage 
 | ----------------------------------------- | ----------------------------------------------------------- |
 | Missing installation directory            | Set `default_install_directory` in `config.ini` or provide `--install-dir`. |
 | Blueprint not found                       | Run `./kgsm.sh blueprints list` to confirm the blueprint name. |
-| Permission errors with `systemd` or `ufw` | Run the script with `sudo`.                                 |
+| Permission errors with `ufw`              | Run the script with `sudo`.                                 |
 
 ### Debugging
 

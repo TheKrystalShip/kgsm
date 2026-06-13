@@ -1,6 +1,6 @@
 # Templates in KGSM
 
-Templates in KGSM are standardized files that provide consistent structure for generating and managing game server configuration and runtime artifacts. They act as the blueprints that KGSM uses to produce instance configuration files, management scripts, systemd units, and firewall rules — each tailored to the specific parameters of a deployed game server.
+Templates in KGSM are standardized files that provide consistent structure for generating and managing game server configuration and runtime artifacts. They act as the blueprints that KGSM uses to produce instance configuration files, management scripts, and firewall rules — each tailored to the specific parameters of a deployed game server.
 
 ## Table of Contents
 
@@ -10,8 +10,6 @@ Templates in KGSM are standardized files that provide consistent structure for g
   - [instance.tp](#instancetp)
   - [manage.native.d/](#managenativedd)
   - [manage.container.d/](#managecontainerd)
-  - [service.tp](#servicetp)
-  - [socket.tp](#sockettp)
   - [ufw.tp](#ufwtp)
   - [overrides.tp](#overridestown)
 - [Template Variables Reference](#template-variables-reference)
@@ -80,13 +78,12 @@ The low-level file discovery is handled by `__find_template` in `core/loader.sh`
 | Basic Instance Information | `name`, `blueprint_file`, `install_datetime` |
 | Directory and File Paths | `working_dir`, `backups_dir`, `install_dir`, `saves_dir`, `temp_dir`, `logs_dir`, `launch_dir`, `executable_subdirectory`, `executable_file`, `management_file`, `compose_file` |
 | Process Management Files | `version_file`, `pid_file`, `socket_file`, `log_file`, `port_forwarding_state_file` |
-| Runtime Configuration | `lifecycle_manager`, `runtime`, `platform`, `auto_update`, `startup_success_regex` |
+| Runtime Configuration | `runtime`, `platform`, `auto_update`, `startup_success_regex` |
 | Game Server Executable Configuration | `level_name`, `executable_arguments` |
 | Steam Integration | `steam_app_id`, `steamcmd_arguments`, `is_steam_account_required` |
 | Network Configuration | `ports`, `enable_port_forwarding`, `upnp_ports`, `enable_firewall_management`, `firewall_rule_file`, `wget_timeout_seconds` |
 | Server Control Commands | `stop_command`, `save_command`, `save_command_timeout_seconds`, `stop_command_timeout_seconds` |
 | Backup Configuration | `compress_backups` |
-| System Integration | `enable_systemd`, `systemd_service_file`, `systemd_socket_file` |
 | Management Features | `enable_command_shortcuts`, `command_shortcut_file` |
 
 ---
@@ -135,56 +132,6 @@ The low-level file discovery is handled by `__find_template` in `core/loader.sh`
 ```
 
 **Format:** Same numbered module structure as `manage.native.d/`. Reads `$instance_compose_file` and delegates container operations to Docker Compose.
-
----
-
-### service.tp
-
-**Purpose:** Template for the systemd `.service` unit file for a game server instance. When systemd integration is enabled, KGSM expands this template and installs the resulting unit file.
-
-**Used by:** `commands/handlers/files.systemd.sh`.
-
-**Variables used:**
-
-| Variable | Description |
-|---|---|
-| `$instance_name` | Used for the service description and socket reference |
-| `$instance_pid_file` | PID file path for the service |
-| `$INSTANCE_USER` | OS user the service runs as |
-| `$instance_working_dir` | Working directory for the service |
-| `$instance_management_file` | Path to the management script for `ExecStart`/`ExecStop` |
-| `$instance_socket_file` | (Indirect) bound via the socket unit |
-
-**Generated unit excerpt:**
-
-```ini
-[Unit]
-Description=$instance_name Dedicated Server
-Requires=$instance_name.socket
-
-[Service]
-Type=exec
-PIDFile=$instance_pid_file
-User=$INSTANCE_USER
-WorkingDirectory=$instance_working_dir
-ExecStart=$instance_management_file --start
-ExecStop=$instance_management_file --stop
-```
-
----
-
-### socket.tp
-
-**Purpose:** Template for the systemd `.socket` unit file that provides the named pipe (FIFO) used for sending commands to the running server process.
-
-**Used by:** `commands/handlers/files.systemd.sh` (expanded alongside `service.tp`).
-
-**Variables used:**
-
-| Variable | Description |
-|---|---|
-| `$instance_name` | Used for unit description and `PartOf` reference |
-| `$instance_socket_file` | Path to the `ListenFIFO` named pipe |
 
 ---
 
@@ -266,7 +213,6 @@ The following `$instance_*` variables are available in templates that are expand
 
 | Variable | Description |
 |---|---|
-| `$instance_lifecycle_manager` | How the instance is managed: `standalone` or `systemd` |
 | `$instance_runtime` | Runtime type: `native` or `container` |
 | `$instance_platform` | Target platform: `linux`, `windows`, or `macos` |
 | `$instance_auto_update` | `true` if the server auto-updates before starting |
@@ -313,14 +259,6 @@ The following `$instance_*` variables are available in templates that are expand
 |---|---|
 | `$instance_compress_backups` | `true` if backups are compressed |
 
-### System Integration
-
-| Variable | Description |
-|---|---|
-| `$instance_enable_systemd` | `true` if systemd integration is enabled |
-| `$instance_systemd_service_file` | Path to the systemd service unit file |
-| `$instance_systemd_socket_file` | Path to the systemd socket unit file |
-
 ### Management Features
 
 | Variable | Description |
@@ -336,7 +274,6 @@ These `$config_*` variables reflect KGSM-wide settings and are also available in
 |---|---|
 | `$config_wget_timeout_seconds` | Timeout in seconds for `wget` operations (default: `60`) |
 | `$config_enable_logging` | `true` if file logging is enabled |
-| `$config_enable_systemd` | Global systemd integration toggle |
 | `$config_enable_firewall_management` | Global UFW management toggle |
 | `$config_enable_port_forwarding` | Global UPnP toggle |
 | `$config_enable_backup_compression` | Global backup compression toggle |

@@ -175,7 +175,7 @@ For detailed instructions on day-to-day management of game servers, including:
 - Starting and stopping instances
 - Checking server status
 - Viewing logs
-- Using systemd integration
+- Configuring boot auto-start with `kgsm autostart`
 - Sending console commands
 - Managing backups
 - Updating instances
@@ -188,7 +188,7 @@ Please refer to the [Managing Game Servers](managing_game_servers.md) document.
 
 - **Regular backups:** Use the `--create-backup` option on the management script before making significant changes, or schedule it via cron.
 
-- **Systemd integration:** For servers that need to be always online, configure systemd integration for automatic startup on system boot.
+- **Boot auto-start:** For servers that need to be always online, run `kgsm.sh autostart enable <instance>` so the kgsm-watchdog daemon brings the instance back up automatically after a reboot.
 
 - **Avoid manual edits:** Don't manually modify `<instance-name>.config.ini` or `<instance-name>.manage.sh` unless you know exactly what you're doing. If the management script becomes broken, it can be regenerated.
 
@@ -202,7 +202,7 @@ Please refer to the [Managing Game Servers](managing_game_servers.md) document.
 kgsm.sh uninstall <instance-name>
 ```
 
-This removes the working directory, all game files, saves, backups, the instance configuration, the management script, the symlink in `instances/`, and any system integrations (systemd, firewall rules).
+This removes the working directory, all game files, saves, backups, the instance configuration, the management script, the symlink in `instances/`, and any system integrations (firewall rules).
 
 > [!WARNING]
 > Uninstalling an instance permanently removes all game data, including world saves. Create a backup first if you want to preserve your data.

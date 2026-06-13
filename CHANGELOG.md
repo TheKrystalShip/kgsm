@@ -53,6 +53,32 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Breaking Changes
 
+#### Systemd Removed as an Instance Lifecycle Manager
+systemd is no longer used to supervise or boot game server instances. All native
+instances are now supervised by the resident **kgsm-watchdog** daemon (cgroup-v2
+spawn + crash-restart), and `runtime` (`native` | `container`) is the sole instance
+runtime discriminator.
+
+**Removed:**
+- The `lifecycle_manager` instance field (every native instance was `standalone`;
+  the field is gone) and the `enable_systemd`, `systemd_service_file`, and
+  `systemd_socket_file` instance fields.
+- The `[services]` config section (`enable_systemd`, `systemd_files_dir`).
+- The `service.tp` and `socket.tp` templates.
+- The `kgsm files systemd` command and the `files.systemd.sh` handler.
+- The `LifecycleManager` field from the `instance-started`/`instance-stopped` event
+  payloads (and the corresponding `[lifecycle_manager]` emit parameter); the event
+  `Data` is now just `{"InstanceName": ...}`.
+
+**Config schema bumped to v3:** migration
+`003_v2_to_v3_remove_services_section.sh` removes the `[services]` section from
+existing configs automatically.
+
+**Migration Required:**
+Boot auto-start was previously achieved with `sudo systemctl enable <instance>`.
+Replace it with the new `kgsm autostart` command (see below). Existing systemd unit
+files for KGSM instances are no longer used and may be removed.
+
 #### Events System Refactoring
 Complete refactor of the events system from legacy dash-argument style to modern command-based architecture with separated I/O and logic layers.
 
@@ -109,6 +135,13 @@ events.webhook.sh --test → events.webhook.sh test
 ```
 
 ### Added
+- New `kgsm autostart enable|disable|status|list <instance>` command for boot
+  auto-start, backed by the kgsm-watchdog daemon's persisted desired-state. It works
+  like `systemctl enable`/`disable`: it is **independent** of `start`/`stop` —
+  `enable` does not start the instance now and `disable` does not stop it; they only
+  change what comes back after a reboot. A started-but-not-enabled instance will not
+  survive a reboot, while an enabled-but-stopped one will be started on the next
+  boot. Requires the watchdog daemon to be running.
 - Comprehensive event validation in `commands/handlers/events.sh`
 - Command-specific help for all event commands
 - Unit tests for event logic library (`tests/unit/test_events_logic.sh`)

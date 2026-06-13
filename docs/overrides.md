@@ -195,7 +195,6 @@ Override functions have access to all instance and global configuration variable
 
 | Variable | Description |
 |---|---|
-| `$instance_lifecycle_manager` | How the instance is managed: `standalone` or `systemd` |
 | `$instance_runtime` | Runtime type: `native` or `container` |
 | `$instance_platform` | SteamCMD platform string (default: `linux`) |
 | `$instance_auto_update` | Whether to auto-update before starting (`true`/`false`) |
@@ -245,9 +244,6 @@ Override functions have access to all instance and global configuration variable
 
 | Variable | Description |
 |---|---|
-| `$instance_enable_systemd` | Whether systemd integration is enabled for this instance (`true`/`false`) |
-| `$instance_systemd_service_file` | Path to the systemd service file |
-| `$instance_systemd_socket_file` | Path to the systemd socket file |
 | `$instance_enable_command_shortcuts` | Whether command shortcuts are enabled (`true`/`false`) |
 | `$instance_command_shortcut_file` | Path to the command shortcut file |
 
@@ -262,7 +258,6 @@ These come from the KGSM config file and apply across all instances:
 | `$config_save_command_timeout_seconds` | Default timeout for save commands (default: `5`) |
 | `$config_stop_command_timeout_seconds` | Default timeout for stop commands (default: `30`) |
 | `$config_enable_logging` | Whether file logging is enabled (`true`/`false`) |
-| `$config_enable_systemd` | Whether systemd is enabled globally (`true`/`false`) |
 | `$config_enable_firewall_management` | Whether firewall management is enabled globally (`true`/`false`) |
 | `$config_enable_port_forwarding` | Whether UPnP port forwarding is enabled globally (`true`/`false`) |
 | `$config_enable_backup_compression` | Whether backup compression is enabled globally (`true`/`false`) |

@@ -53,8 +53,8 @@ Event types use **underscore-separated** names in JSON payloads and **dash-separ
 
 | Event Name | Description | Data Fields |
 |------------|-------------|-------------|
-| `instance_started` | Server process started | `InstanceName`, `LifecycleManager` |
-| `instance_stopped` | Server process stopped | `InstanceName`, `LifecycleManager` |
+| `instance_started` | Server process started | `InstanceName` |
+| `instance_stopped` | Server process stopped | `InstanceName` |
 | `instance_ready` | Server is accepting connections | `InstanceName` |
 | `instance_backup_created` | Backup created | `InstanceName`, `Source`, `Version` |
 | `instance_backup_restored` | Backup restored | `InstanceName`, `Source`, `Version` |
@@ -101,8 +101,7 @@ Every event is a JSON object with the following top-level fields:
 {
     "EventType": "instance_started",
     "Data": {
-        "InstanceName": "minecraft_survival",
-        "LifecycleManager": "systemd"
+        "InstanceName": "minecraft_survival"
     },
     "Timestamp": "2024-01-15T12:34:56Z",
     "Hostname": "my-server",
@@ -170,8 +169,8 @@ events.sh emit <event-type> [parameters...]
 | CLI Event Name | Parameters |
 |----------------|------------|
 | `instance-created` | `<instance>` `[blueprint]` |
-| `instance-started` | `<instance>` `[lifecycle_manager]` |
-| `instance-stopped` | `<instance>` `[lifecycle_manager]` |
+| `instance-started` | `<instance>` |
+| `instance-stopped` | `<instance>` |
 | `instance-ready` | `<instance>` |
 | `instance-removed` | `<instance>` |
 | `instance-directories-created` | `<instance>` |
@@ -201,10 +200,10 @@ events.sh emit <event-type> [parameters...]
 
 ```bash
 events.sh emit instance-created myserver factorio
-events.sh emit instance-started myserver systemd
+events.sh emit instance-started myserver
 events.sh emit instance-version-updated myserver 1.0.0 1.1.0
 events.sh emit instance-backup-created myserver auto 1.2.3
-events.sh emit instance-stopped myserver manual
+events.sh emit instance-stopped myserver
 ```
 
 ## ⚙️ Configuration
