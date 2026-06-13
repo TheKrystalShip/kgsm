@@ -51,6 +51,7 @@ ${BOLD}${UNDERLINE}Module Commands:${END}
   files <command>             Manage instance files
   instances <command>         Manage server instances
   lifecycle <command>         Control server lifecycle
+  autostart <command>         Control boot auto-start (enable, disable, status, list)
   network <command>           Manage network and ports
   system <command>            Manage system operations
   watcher <command>           Manage monitoring watchers
@@ -88,7 +89,7 @@ ${BOLD}${UNDERLINE}Examples:${END}
   ${BOLD}Configuration:${END}
   ${self} config list
   ${self} config set enable_logging=true
-  ${self} config get enable_systemd
+  ${self} config get enable_command_shortcuts
 "
 }
 
@@ -194,6 +195,10 @@ case "$command" in
     ;;
   lifecycle)
     lifecycle.sh "$@"
+    exit $?
+    ;;
+  autostart)
+    autostart.sh "$@"
     exit $?
     ;;
   network)

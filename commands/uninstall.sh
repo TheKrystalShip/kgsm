@@ -98,7 +98,7 @@ function _uninstall() {
   echo "  - Server logs"
   echo "  - World saves and backups"
   echo "  - All configuration files"
-  echo "  - Associated system files (systemd, firewall rules, etc.)"
+  echo "  - Associated system files (firewall rules, symlinks, etc.)"
   echo ""
 
   # Confirmation prompt
@@ -113,7 +113,7 @@ function _uninstall() {
 
   events.sh emit instance-uninstall-started "${instance}"
 
-  # Remove instance files (systemd, ufw, symlinks, etc.)
+  # Remove instance files (ufw, symlinks, etc.)
   files.sh remove "$instance" || {
     __print_warning "Failed to remove some instance files"
     # Continue with uninstall even if file removal fails

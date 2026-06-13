@@ -80,9 +80,6 @@ port_forwarding_state_file="${instance_port_forwarding_state_file}"
 # How the instance runs and is managed by the system
 #=============================================================================
 
-# How the instance is managed (standalone, systemd)
-lifecycle_manager="${instance_lifecycle_manager}"
-
 # Specifies that this is a containerized or native (non-containerized) game server
 runtime="${instance_runtime}"
 
@@ -167,20 +164,6 @@ stop_command_timeout_seconds="${instance_stop_command_timeout_seconds}"
 
 # Whether to compress backups to save space
 compress_backups="${instance_compress_backups}"
-
-#=============================================================================
-# SYSTEM INTEGRATION
-# Integration with system services and daemons
-#=============================================================================
-
-# Whether to enable systemd integration (true | false)
-enable_systemd="${instance_enable_systemd:-false}"
-
-# Path to the systemd service file
-systemd_service_file="${instance_systemd_service_file}"
-
-# Path to the systemd socket file
-systemd_socket_file="${instance_systemd_socket_file}"
 
 #=============================================================================
 # MANAGEMENT FEATURES

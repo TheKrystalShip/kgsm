@@ -7,7 +7,7 @@
 #
 # Tests all logic functions for lifecycle management including start, stop,
 # restart, is-active checks, status retrieval, and logs. Focuses on standalone
-# mode since systemd requires real service infrastructure.
+# mode.
 
 # =============================================================================
 # TEST SETUP
@@ -66,7 +66,6 @@ function setup_file() {
   assert_function_exists "__logic_instance_logs" "__logic_instance_logs should be exported"
 
   # Verify helper functions
-  assert_function_exists "__get_lifecycle_manager" "__get_lifecycle_manager should be exported"
   assert_function_exists "__logic_start_standalone_instance" "__logic_start_standalone_instance should be exported"
   assert_function_exists "__logic_stop_standalone_instance" "__logic_stop_standalone_instance should be exported"
   assert_function_exists "__logic_is_active_standalone_instance" "__logic_is_active_standalone_instance should be exported"
@@ -229,33 +228,6 @@ function test_logs_nonexistent_instance() {
   local exit_code=$?
 
   assert_equals "$EC_FILE_NOT_FOUND" "$exit_code" "Should return EC_FILE_NOT_FOUND for nonexistent instance"
-}
-
-# =============================================================================
-# __get_lifecycle_manager() HELPER TESTS
-# =============================================================================
-
-function test_get_lifecycle_manager_empty_config_path() {
-  log_test_step "Testing __get_lifecycle_manager with empty config path"
-
-  # Execute with empty path
-  __get_lifecycle_manager "" 2>/dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_INVALID_ARG" "$exit_code" "Should return EC_INVALID_ARG for empty config path"
-}
-
-function test_get_lifecycle_manager_nonexistent_config() {
-  log_test_step "Testing __get_lifecycle_manager with nonexistent config file"
-
-  local fake_config="/tmp/nonexistent_config_xyz_12345.conf"
-
-  # Execute with nonexistent config
-  __get_lifecycle_manager "$fake_config" 2>/dev/null
-  local exit_code=$?
-
-  # Should return non-zero exit code (any error is acceptable)
-  assert_not_equals 0 "$exit_code" "Should return non-zero exit code for nonexistent config"
 }
 
 # =============================================================================

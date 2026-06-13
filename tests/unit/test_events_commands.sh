@@ -280,7 +280,7 @@ function test_emit_any_event_broadcasting_disabled_succeeds() {
   assert_command_succeeds "$MODULE emit instance-created myserver factorio" \
     "emit instance-created should succeed when broadcasting is disabled"
 
-  assert_command_succeeds "$MODULE emit instance-started myserver systemd" \
+  assert_command_succeeds "$MODULE emit instance-started myserver" \
     "emit instance-started should succeed when broadcasting is disabled"
 
   assert_command_succeeds "$MODULE emit instance-version-updated myserver 1.0.0 2.0.0" \

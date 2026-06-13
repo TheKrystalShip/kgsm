@@ -28,6 +28,8 @@ function setup_file() {
   assert_file_executable "$MIGRATION_DIR/001_v0_to_v1_flat_to_sectioned.sh" "Migration 001 should be executable"
   assert_file_exists "$MIGRATION_DIR/002_v1_to_v2_add_cgroup_section.sh" "Migration 002 should exist"
   assert_file_executable "$MIGRATION_DIR/002_v1_to_v2_add_cgroup_section.sh" "Migration 002 should be executable"
+  assert_file_exists "$MIGRATION_DIR/003_v2_to_v3_remove_services_section.sh" "Migration 003 should exist"
+  assert_file_executable "$MIGRATION_DIR/003_v2_to_v3_remove_services_section.sh" "Migration 003 should be executable"
 
   log_test_step "Config migration test environment validated"
 }
@@ -408,5 +410,84 @@ EOF
   local systemd
   systemd=$(grep "^enable_systemd=" "$test_config" | head -1 | cut -d= -f2)
   assert_equals "$systemd" "true" "enable_systemd preserved"
+}
+
+# =============================================================================
+# TEST: Migration 003 - Removes [services] Section
+# =============================================================================
+
+function test_migration_003_removes_services_section() {
+  log_test_step "Testing migration 003 removes the [services] section"
+
+  # Create a sectioned v2 config with a [services] section bracketed by others.
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v2_services.ini"
+  cat > "$test_config" << 'EOF'
+config_schema_version=2
+
+[system]
+wget_timeout_seconds=60
+
+[services]
+enable_systemd=true
+systemd_files_dir=/custom/systemd
+
+[cgroup]
+enable_cgroups=true
+EOF
+
+  bash "$MIGRATION_DIR/003_v2_to_v3_remove_services_section.sh" "$test_config"
+  assert_equals "$?" "0" "Migration 003 should succeed"
+
+  # Schema version bumped to 3
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "3" "Schema version should be 3"
+
+  # [services] and its keys removed
+  assert_command_fails "grep -q '^\[services\]' '$test_config'"
+  assert_command_fails "grep -q '^enable_systemd=' '$test_config'"
+  assert_command_fails "grep -q '^systemd_files_dir=' '$test_config'"
+
+  # Surrounding sections and their values preserved
+  assert_command_succeeds "grep -q '^\[system\]' '$test_config'"
+  assert_command_succeeds "grep -q '^wget_timeout_seconds=60' '$test_config'"
+  assert_command_succeeds "grep -q '^\[cgroup\]' '$test_config'"
+  assert_command_succeeds "grep -q '^enable_cgroups=true' '$test_config'"
+
+  # Backup created
+  assert_file_exists "${test_config}.pre-migration-v3.bak"
+}
+
+# =============================================================================
+# TEST: Migration 003 - Idempotency (No [services] Present)
+# =============================================================================
+
+function test_migration_003_idempotent() {
+  log_test_step "Testing migration 003 idempotency"
+
+  # A config that already lacks [services]: 003 must only ensure the version.
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v2_no_services.ini"
+  cat > "$test_config" << 'EOF'
+config_schema_version=2
+
+[system]
+wget_timeout_seconds=60
+
+[cgroup]
+enable_cgroups=true
+EOF
+
+  bash "$MIGRATION_DIR/003_v2_to_v3_remove_services_section.sh" "$test_config"
+  assert_equals "$?" "0" "First run should succeed"
+
+  bash "$MIGRATION_DIR/003_v2_to_v3_remove_services_section.sh" "$test_config"
+  assert_equals "$?" "0" "Second run should succeed (idempotent)"
+
+  # Version is 3 and no [services] was introduced
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "3" "Schema version should be 3"
+  assert_command_fails "grep -q '^\[services\]' '$test_config'"
+  assert_command_succeeds "grep -q '^\[cgroup\]' '$test_config'"
 }
 

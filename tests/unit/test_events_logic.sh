@@ -287,16 +287,6 @@ function test_validate_params_extra_params_allowed() {
     "Should return EC_SUCCESS when extra parameters provided (only minimum validated)"
 }
 
-function test_validate_params_lifecycle_manager_param() {
-  log_test_step "Testing __logic_validate_event_params with lifecycle_manager parameter"
-
-  __logic_validate_event_params "instance_started" "test_instance" "systemd"
-  local exit_code=$?
-
-  assert_equals "$exit_code" "$EC_SUCCESS" \
-    "Should return EC_SUCCESS for instance_started with instance and lifecycle_manager params"
-}
-
 function test_validate_params_backup_source_version() {
   log_test_step "Testing __logic_validate_event_params with backup event (3 params)"
 
@@ -398,10 +388,10 @@ function test_get_param_spec_lifecycle_events() {
   local spec_stopped
   spec_stopped=$(__logic_get_event_param_spec "instance_stopped")
 
-  assert_equals "$spec_started" "instance lifecycle_manager" \
-    "Should return 'instance lifecycle_manager' for instance_started"
-  assert_equals "$spec_stopped" "instance lifecycle_manager" \
-    "Should return 'instance lifecycle_manager' for instance_stopped"
+  assert_equals "$spec_started" "instance" \
+    "Should return 'instance' for instance_started"
+  assert_equals "$spec_stopped" "instance" \
+    "Should return 'instance' for instance_stopped"
 }
 
 function test_get_param_spec_backup_events() {

@@ -72,7 +72,9 @@ The testing framework has its own substantial conventions (per-test setup/teardo
 
 ## Integration points (all opt-in via config flags)
 
-systemd service generation, UFW firewall rules (`enable_firewall_management`), UPnP port forwarding (`enable_port_forwarding`), and a webhook/socket event system (`commands/events.*.sh`, `enable_event_broadcasting`). Log/port watchers live in `commands/watcher.*.sh`.
+UFW firewall rules (`enable_firewall_management`), UPnP port forwarding (`enable_port_forwarding`), and a webhook/socket event system (`commands/events.*.sh`, `enable_event_broadcasting`). Log/port watchers live in `commands/watcher.*.sh`.
+
+Native instances are supervised by the resident **kgsm-watchdog** daemon (cgroup-v2 spawn + crash-restart). `kgsm start/stop` route to it when present (`commands/handlers/watchdog.sh`), and `kgsm autostart enable|disable|status|list` controls boot auto-start via its persisted desired-state — the in-house replacement for systemd's `enable`/`WantedBy=`. systemd is no longer an instance lifecycle manager.
 
 ## Key references
 

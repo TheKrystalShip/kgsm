@@ -207,6 +207,107 @@ function __watchdog_tracks() {
 
 export -f __watchdog_tracks
 
+# ---- boot auto-start (enable/disable) ------------------------------------------------------------
+# The systemctl-style boot axis, orthogonal to start/stop. These drive the daemon's persisted
+# desired-state set (POST /enable, /disable; GET /enabled). Only meaningful WITH the watchdog —
+# there is no other boot-auto-start mechanism — so the caller should gate on __watchdog_available.
+
+# Routes enable/disable to the watchdog and maps the HTTP result to a kgsm exit code.
+#   200 -> success event code (enabled/disabled)
+#   connection failure / other status (e.g. 409 out-of-scope/unknown) -> EC_ERROR.
+# Args: $1 = verb (enable|disable), $2 = instance name
+# Returns: EC_SUCCESS_AUTOSTART_ENABLED / EC_SUCCESS_AUTOSTART_DISABLED, or an error code
+function __watchdog_set_autostart() {
+  local _verb="$1"
+  local _name="${2%.ini}"
+
+  local _path
+  local _success_ec
+  case "$_verb" in
+    enable)
+      _path="enable/$_name"
+      _success_ec=$EC_SUCCESS_AUTOSTART_ENABLED
+      ;;
+    disable)
+      _path="disable/$_name"
+      _success_ec=$EC_SUCCESS_AUTOSTART_DISABLED
+      ;;
+    *)
+      return $EC_INVALID_ARG
+      ;;
+  esac
+
+  local _code
+  local _rc
+  _code="$(__watchdog_curl POST "$_path" 10)"
+  _rc=$?
+
+  if [[ $_rc -ne 0 ]]; then
+    return $EC_ERROR
+  fi
+
+  [[ "$_code" == "200" ]] && return $_success_ec
+  return $EC_ERROR
+}
+
+export -f __watchdog_set_autostart
+
+# Fetches GET /enabled. Echoes the JSON array body; returns 0 only on HTTP 200, non-zero on
+# connection failure / any other status. Separate from __watchdog_curl because the set needs the body.
+# Returns: 0 on HTTP 200 (body echoed), 1 on other status, 2 on connection failure
+function __watchdog_enabled_body() {
+  local _sock
+  _sock="$(__watchdog_socket_path)"
+
+  local _resp
+  local _code
+  _resp="$(curl -s -w $'\n%{http_code}' --max-time 5 \
+    --unix-socket "$_sock" \
+    "http://localhost/enabled" 2> /dev/null)" || return 2
+
+  _code="${_resp##*$'\n'}"
+  printf '%s' "${_resp%$'\n'*}"
+
+  [[ "$_code" == "200" ]] && return 0
+  return 1
+}
+
+export -f __watchdog_enabled_body
+
+# Echoes the enabled instance names, one per line (nothing if the set is empty or unreachable).
+# Returns: 0 on success, 2 if the daemon is unreachable.
+function __watchdog_enabled_names() {
+  local _body
+  local _rc
+  _body="$(__watchdog_enabled_body)"
+  _rc=$?
+  [[ $_rc -eq 2 ]] && return 2
+
+  # Compact JSON array of strings: ["a","b"] -> one quoted token per line, unquoted.
+  echo "$_body" | grep -oE '"[^"]*"' | sed 's/^"//; s/"$//'
+  return 0
+}
+
+export -f __watchdog_enabled_names
+
+# Is <name> in the enabled set?
+# Returns: 0 enabled, 1 not enabled, 2 daemon unreachable.
+# Args: $1 = instance name
+function __watchdog_is_enabled() {
+  local _name="${1%.ini}"
+
+  local _names
+  local _rc
+  _names="$(__watchdog_enabled_names)"
+  _rc=$?
+  [[ $_rc -eq 2 ]] && return 2
+
+  grep -qxF "$_name" <<< "$_names" && return 0
+  return 1
+}
+
+export -f __watchdog_is_enabled
+
 # Mark module as loaded
 declare -g KGSM_LOGIC_WATCHDOG_LOADED=1
 export KGSM_LOGIC_WATCHDOG_LOADED

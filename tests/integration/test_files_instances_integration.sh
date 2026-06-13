@@ -4,7 +4,7 @@
 #
 # Test Type: INTEGRATION
 # Target: Interaction between files.sh, files.management.sh, files.symlink.sh,
-#         files.upnp.sh, files.ufw.sh, files.systemd.sh and the instances module
+#         files.upnp.sh, files.ufw.sh and the instances module
 #
 # Integration points tested:
 # - Management file creation after an instance is created
@@ -25,7 +25,6 @@ readonly FILES_MANAGEMENT_MODULE="$KGSM_ROOT/commands/files.management.sh"
 readonly FILES_SYMLINK_MODULE="$KGSM_ROOT/commands/files.symlink.sh"
 readonly FILES_UPW_MODULE="$KGSM_ROOT/commands/files.ufw.sh"
 readonly FILES_UPNP_MODULE="$KGSM_ROOT/commands/files.upnp.sh"
-readonly FILES_SYSTEMD_MODULE="$KGSM_ROOT/commands/files.systemd.sh"
 readonly INSTANCES_MODULE="$KGSM_ROOT/commands/instances.sh"
 
 TEST_INSTALL_DIR=""
@@ -60,9 +59,6 @@ function setup_file() {
 
   assert_file_exists "$FILES_UPNP_MODULE" "files.upnp.sh command should exist"
   assert_file_executable "$FILES_UPNP_MODULE" "files.upnp.sh should be executable"
-
-  assert_file_exists "$FILES_SYSTEMD_MODULE" "files.systemd.sh command should exist"
-  assert_file_executable "$FILES_SYSTEMD_MODULE" "files.systemd.sh should be executable"
 
   assert_file_exists "$FILES_UPW_MODULE" "files.ufw.sh command should exist"
   assert_file_executable "$FILES_UPW_MODULE" "files.ufw.sh should be executable"
@@ -253,7 +249,7 @@ function test_files_orchestrator_create() {
   # Note: The management file is now created when calling "create_test_instance"
   # assert_not_null "$manage_file" "Instance config should have management_file path"
   # assert_file_not_exists "$manage_file" "Management file should not exist before files.sh create"
-  # Run orchestrator create (test sandbox has systemd/ufw/symlink disabled in config)
+  # Run orchestrator create (test sandbox has ufw/symlink disabled in config)
   # assert_command_succeeds "$FILES_MODULE create $instance_name" "files.sh create should succeed"
   # Management file must always be created
 
@@ -610,24 +606,14 @@ function test_upnp_fails_for_nonexistent_instance() {
 }
 
 # =============================================================================
-# TEST 15: Systemd and UFW commands fail for nonexistent instance
+# TEST 15: UFW commands fail for nonexistent instance
 # Validates error handling before any system-level operations
 # =============================================================================
 
-function test_systemd_and_ufw_fail_for_nonexistent_instance() {
-  log_test_step "Testing: files.systemd.sh and files.ufw.sh fail for nonexistent instance"
+function test_ufw_fails_for_nonexistent_instance() {
+  log_test_step "Testing: files.ufw.sh fails for nonexistent instance"
 
   local fake="nonexistent_sysufw_xyz_$$"
-
-  "$FILES_SYSTEMD_MODULE" enable "$fake" 2>/dev/null
-  local systemd_enable_code=$?
-  assert_not_equals 0 "$systemd_enable_code" \
-    "files.systemd.sh enable should fail for nonexistent instance"
-
-  "$FILES_SYSTEMD_MODULE" disable "$fake" 2>/dev/null
-  local systemd_disable_code=$?
-  assert_not_equals 0 "$systemd_disable_code" \
-    "files.systemd.sh disable should fail for nonexistent instance"
 
   "$FILES_UPW_MODULE" enable "$fake" 2>/dev/null
   local ufw_enable_code=$?

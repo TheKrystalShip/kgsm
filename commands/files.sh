@@ -25,7 +25,6 @@ ${UNDERLINE}Usage:${END}
 ${UNDERLINE}Components:${END}
   management                  Management file operations (create, remove)
   config                      Standalone config operations (install, uninstall)
-  systemd                     Systemd integration (enable, disable)
   ufw                         UFW firewall integration (enable, disable)
   symlink                     Command shortcut integration (enable, disable)
   upnp                        UPnP port forwarding integration (enable, disable)
@@ -39,15 +38,13 @@ ${UNDERLINE}Examples:${END}
   ${self} create factorio-server
   ${self} remove factorio-server
   ${self} management create factorio-server
-  ${self} systemd enable factorio-server
   ${self} ufw disable factorio-server
   ${self} help management
-  ${self} help systemd
 
 ${UNDERLINE}Notes:${END}
   • Quick commands are configuration-aware and respect config.ini settings
   • Management file and config file are ALWAYS created (required for operation)
-  • Optional integrations (systemd, ufw, symlink, upnp) follow config.ini defaults
+  • Optional integrations (ufw, symlink, upnp) follow config.ini defaults
   • Component commands allow manual control after initial instance creation
   • Use 'help <component>' for component-specific documentation
 "
@@ -76,13 +73,12 @@ ${UNDERLINE}Description:${END}
     • Standalone configuration file
 
   ${UNDERLINE}Optional Integrations (Config-Dependent):${END}
-    • Systemd service/socket files (if enable_systemd=true)
     • UFW firewall rules (if enable_firewall_management=true)
     • Command shortcuts/symlinks (if enable_command_shortcuts=true)
     • UPnP port forwarding rules (if enable_port_forwarding=true)
 
   After initial creation, you can manually enable/disable optional integrations
-  using the component-specific commands (e.g., 'files.sh systemd enable').
+  using the component-specific commands (e.g., 'files.sh ufw enable').
 
 ${UNDERLINE}Examples:${END}
   ${self} create factorio-server
@@ -91,7 +87,7 @@ ${UNDERLINE}Examples:${END}
 ${UNDERLINE}Requirements:${END}
   • Valid instance configuration file
   • Write permissions in instance directories
-  • Root/sudo permissions (only if systemd or UFW are enabled)
+  • Root/sudo permissions (only if UFW is enabled)
 "
 }
 
@@ -115,7 +111,6 @@ ${UNDERLINE}Description:${END}
   integrations are currently enabled and removes them accordingly.
 
   ${UNDERLINE}Removed Components:${END}
-    • Systemd service/socket files (if lifecycle_manager=systemd)
     • UFW firewall rules (if enable_firewall_management=true)
     • Command shortcuts/symlinks (if enable_command_shortcuts=true)
     • UPnP port forwarding rules (if enable_port_forwarding=true)
@@ -135,7 +130,7 @@ ${UNDERLINE}Warning:${END}
 
 ${UNDERLINE}Requirements:${END}
   • Valid instance configuration file
-  • Root/sudo permissions (only if systemd or UFW integration is enabled)
+  • Root/sudo permissions (only if UFW integration is enabled)
 "
 }
 
@@ -187,12 +182,8 @@ function _cmd_create() {
   files.management.sh create "$instance_name" || return $?
 
   # When creating files, we read the $config_ variables from the KGSM config file.
-  # This is necessary to determine if we need to create systemd service files,
-  # the firewall rules, or command shortcuts.
-
-  if [[ "$config_enable_systemd" == "true" ]]; then
-    files.systemd.sh enable "$instance_name" || return $?
-  fi
+  # This is necessary to determine if we need to create the firewall rules or
+  # command shortcuts.
 
   if [[ "$config_enable_firewall_management" == "true" ]]; then
     files.ufw.sh enable "$instance_name" || return $?
@@ -254,13 +245,8 @@ function _cmd_remove() {
   __print_info "Removing files and integrations for instance '$instance_name'..."
 
   # When uninstalling files, we read the $instance_ variables from the instance config file.
-  # This is necessary to determine if we need to remove systemd service files,
-  # the firewall rules, or command shortcuts.
-
-  if [[ "$instance_lifecycle_manager" == "systemd" ]]; then
-    __print_info "Disabling systemd integration for instance '$instance_name'..."
-    files.systemd.sh disable "$instance_name" || return $?
-  fi
+  # This is necessary to determine if we need to remove the firewall rules or
+  # command shortcuts.
 
   if [[ "$instance_enable_firewall_management" == "true" ]]; then
     __print_info "Disabling firewall integration for instance '$instance_name'..."
@@ -331,10 +317,6 @@ case "$command" in
     ;;
   management)
     files.management.sh "$@"
-    exit $?
-    ;;
-  systemd)
-    files.systemd.sh "$@"
     exit $?
     ;;
   ufw)

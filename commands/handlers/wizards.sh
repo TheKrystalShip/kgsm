@@ -132,7 +132,7 @@ export -f __logic_wizard_install
 # Example:
 #   mapfile -t options < <(__logic_get_modify_options "factorio-01")
 #   # Returns lines like:
-#   # Enable systemd service|--add systemd
+#   # Enable firewall rules|--add ufw
 #   # Disable firewall rules|--remove ufw
 function __logic_get_modify_options() {
   local _instance_name="$1"
@@ -154,12 +154,6 @@ function __logic_get_modify_options() {
   source "$instance_config_file" || return $EC_FAILED_SOURCE
 
   # Build modification options based on current state
-  if [[ "$instance_enable_systemd" == "true" ]]; then
-    echo "Disable systemd service|--remove systemd"
-  else
-    echo "Enable systemd service|--add systemd"
-  fi
-
   if [[ "$instance_enable_firewall_management" == "true" ]]; then
     echo "Disable firewall rules|--remove ufw"
   else
@@ -186,14 +180,14 @@ export -f __logic_get_modify_options
 #
 # Args:
 #   $1 - _instance_name
-#   $2 - modification_command (e.g., "--add systemd", "--remove ufw")
+#   $2 - modification_command (e.g., "--add ufw", "--remove ufw")
 #
 # Returns:
 #   0 on success
 #   Error codes on failure
 #
 # Example:
-#   __logic_wizard_modify "factorio-01" "--add systemd"
+#   __logic_wizard_modify "factorio-01" "--add ufw"
 function __logic_wizard_modify() {
   local _instance_name="$1"
   local modification_command="$2"

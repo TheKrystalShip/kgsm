@@ -127,7 +127,6 @@
 # $instance_socket_file          Path to the socket file for communication
 #
 # Runtime Configuration:
-# $instance_lifecycle_manager    How the instance is managed (standalone/systemd)
 # $instance_runtime              Runtime type (native, container)
 # $instance_platform             Platform type for SteamCMD (default: linux)
 # $instance_auto_update          Whether to auto-update before starting
@@ -159,9 +158,6 @@
 # $instance_compress_backups     Whether to compress backups (true/false)
 #
 # System Integration:
-# $instance_enable_systemd       Whether systemd integration is enabled (true/false)
-# $instance_systemd_service_file Path to systemd service file
-# $instance_systemd_socket_file  Path to systemd socket file
 #
 # Management Features:
 # $instance_enable_command_shortcuts  Whether command shortcuts are enabled (true/false)
@@ -173,7 +169,6 @@
 # $config_save_command_timeout_seconds  Timeout for save commands (default: 5)
 # $config_stop_command_timeout_seconds  Timeout for stop commands (default: 30)
 # $config_enable_logging         Whether logging is enabled (true/false)
-# $config_enable_systemd         Whether systemd is enabled globally (true/false)
 # $config_enable_firewall_management  Whether firewall management is enabled (true/false)
 # $config_enable_port_forwarding Whether port forwarding is enabled (true/false)
 # $config_enable_backup_compression  Whether backup compression is enabled (true/false)

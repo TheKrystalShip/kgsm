@@ -21,11 +21,12 @@ call it from the command; don't grow the command file.
 
 Related commands cluster by prefix — keep new files in the existing family:
 - `blueprints.sh`, `blueprints.native.sh`, `blueprints.container.sh`
-- `files.sh`, `files.management.sh`, `files.systemd.sh`, `files.ufw.sh`,
+- `files.sh`, `files.management.sh`, `files.ufw.sh`,
   `files.upnp.sh`, `files.symlink.sh` (+ paired handlers)
 - `events.sh`, `events.socket.sh`, `events.webhook.sh`
 - `watcher.sh`, `watcher.logs.sh`, `watcher.ports.sh`
-- lifecycle: `install.sh`, `uninstall.sh`, `lifecycle.sh`, `instances.sh`
+- lifecycle: `install.sh`, `uninstall.sh`, `lifecycle.sh`, `instances.sh`,
+  `autostart.sh` (boot auto-start enable/disable via the watchdog)
 - `config.sh`, `system.sh`, `network.sh`, `directories.sh`, `interactive.sh`
 
 Handlers without a 1:1 command pair exist for shared logic

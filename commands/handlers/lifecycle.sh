@@ -10,7 +10,7 @@
 # - 211: Instance started successfully (emit instance-started)
 # - 212: Instance stopped successfully (emit instance-stopped)
 # - 213: Instance restarted successfully (emit instance-restarted)
-# - Standard error codes: EC_INVALID_ARG, EC_INVALID_CONFIG, EC_SYSTEMD, etc.
+# - Standard error codes: EC_INVALID_ARG, EC_INVALID_CONFIG, etc.
 
 # Disabling SC2086 globally:
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
@@ -31,48 +31,7 @@ fi
 # Success event exit codes are now centralized in core/errors.sh
 # They are automatically available through the bootstrap process
 
-# Helper function to extract lifecycle manager from instance config
-# Args: $1 = _instance_config_file
-# Returns: lifecycle_manager value to stdout, 0 on success, error code on failure
-function __get_lifecycle_manager() {
-  local _instance_config_file="$1"
-
-  if [[ -z "$_instance_config_file" ]]; then
-    return $EC_INVALID_ARG
-  fi
-
-  local lifecycle_manager
-  lifecycle_manager=$(__get_config_value "$_instance_config_file" "lifecycle_manager" 2> /dev/null)
-
-  if [[ -z "$lifecycle_manager" ]]; then
-    return $EC_INVALID_CONFIG
-  fi
-
-  echo "$lifecycle_manager"
-  return 0
-}
-
-export -f __get_lifecycle_manager
-
-# Resolves an instance's lifecycle_manager by name, for event payloads.
-# Unlike __get_lifecycle_manager (which takes a config file), this resolves the
-# config file from the instance name. Echoes the real value or nothing on
-# failure — never a fabricated default, so a failed lookup omits the field
-# rather than emitting a wrong one.
-# Args: $1 = _instance_name
-# Returns: echoes lifecycle_manager value (empty if it cannot be resolved)
-function __resolve_lifecycle_manager() {
-  local _instance_name="$1"
-
-  local _instance_config_file
-  _instance_config_file=$(validate_instance_name "$_instance_name" 2> /dev/null) || return 0
-
-  __get_lifecycle_manager "$_instance_config_file" 2> /dev/null
-}
-
-export -f __resolve_lifecycle_manager
-
-# Starts an instance using the appropriate lifecycle manager
+# Starts an instance
 # Args: $1 = _instance_name
 # Returns: 211 on success (triggers instance-started event), error codes on failure
 function __logic_instance_start() {
@@ -91,51 +50,14 @@ function __logic_instance_start() {
     return $exit_code
   fi
 
-  # Extract lifecycle manager from config
-  local lifecycle_manager
-  lifecycle_manager=$(__get_lifecycle_manager "$_instance_config_file" 2> /dev/null)
-  exit_code=$?
-  if [[ $exit_code -ne 0 ]]; then
-    return $exit_code
-  fi
-
-  # Execute type-specific logic
-  case "$lifecycle_manager" in
-    systemd)
-      __logic_start_systemd_instance "$_instance_name" "$_instance_config_file"
-      return $?
-      ;;
-    standalone)
-      __logic_start_standalone_instance "$_instance_name" "$_instance_config_file"
-      return $?
-      ;;
-    *)
-      return $EC_INVALID_CONFIG
-      ;;
-  esac
+  # Native instances are the only kind KGSM starts here (the watchdog, or the
+  # direct management script when it is absent). Container instances run their own
+  # path; systemd is no longer a lifecycle manager.
+  __logic_start_standalone_instance "$_instance_name" "$_instance_config_file"
+  return $?
 }
 
 export -f __logic_instance_start
-# Helper function to start systemd instance
-# Args: $1 = _instance_name, $2 = _instance_config_file
-# Returns: 211 on success, error codes on failure
-function __logic_start_systemd_instance() {
-  local _instance_name="$1"
-  local _instance_config_file="$2"
-
-  # Determine if sudo is needed
-  local sudo_cmd=""
-  [[ "$EUID" -ne 0 ]] && sudo_cmd="sudo -E"
-
-  # Start systemd service - suppress output since this is pure logic
-  if ! $sudo_cmd systemctl start "${_instance_name%.ini}" --no-pager > /dev/null 2>&1; then
-    return $EC_SYSTEMD
-  fi
-
-  return $EC_SUCCESS_INSTANCE_STARTED
-}
-
-export -f __logic_start_systemd_instance
 
 # Helper function to start standalone instance
 # Args: $1 = _instance_name, $2 = _instance_config_file
@@ -196,52 +118,12 @@ function __logic_instance_stop() {
     return $exit_code
   fi
 
-  # Extract lifecycle manager from config
-  local lifecycle_manager
-  lifecycle_manager=$(__get_lifecycle_manager "$_instance_config_file")
-  exit_code=$?
-  if [[ $exit_code -ne 0 ]]; then
-    return $exit_code
-  fi
-
-  # Execute type-specific logic
-  case "$lifecycle_manager" in
-    systemd)
-      __logic_stop_systemd_instance "$_instance_name" "$_instance_config_file"
-      return $?
-      ;;
-    standalone)
-      __logic_stop_standalone_instance "$_instance_name" "$_instance_config_file"
-      return $?
-      ;;
-    *)
-      return $EC_INVALID_CONFIG
-      ;;
-  esac
+  # Native instances only (watchdog, or the direct management script when absent).
+  __logic_stop_standalone_instance "$_instance_name" "$_instance_config_file"
+  return $?
 }
 
 export -f __logic_instance_stop
-
-# Helper function to stop systemd instance
-# Args: $1 = _instance_name, $2 = _instance_config_file
-# Returns: 212 on success, error codes on failure
-function __logic_stop_systemd_instance() {
-  local _instance_name="$1"
-  local _instance_config_file="$2"
-
-  # Determine if sudo is needed
-  local sudo_cmd=""
-  [[ "$EUID" -ne 0 ]] && sudo_cmd="sudo -E"
-
-  # Stop systemd service - suppress output since this is pure logic
-  if ! $sudo_cmd systemctl stop "${_instance_name%.ini}" --no-pager > /dev/null 2>&1; then
-    return $EC_SYSTEMD
-  fi
-
-  return $EC_SUCCESS_INSTANCE_STOPPED
-}
-
-export -f __logic_stop_systemd_instance
 
 # Helper function to stop standalone instance
 # Args: $1 = _instance_name, $2 = _instance_config_file
@@ -327,7 +209,6 @@ function __logic_instance_is_active() {
 
   # Load instance configuration using centralized validation
   local _instance_config_file
-  local lifecycle_manager
   local exit_code
 
   _instance_config_file=$(validate_instance_name "$_instance_name" 2> /dev/null)
@@ -336,47 +217,11 @@ function __logic_instance_is_active() {
     return $exit_code
   fi
 
-  # Extract lifecycle manager from config
-  lifecycle_manager=$(__get_lifecycle_manager "$_instance_config_file")
-  exit_code=$?
-  if [[ $exit_code -ne 0 ]]; then
-    return $exit_code
-  fi
-
-  # Execute type-specific logic
-  case "$lifecycle_manager" in
-    systemd)
-      __logic_is_active_systemd_instance "$_instance_name" "$_instance_config_file"
-      return $?
-      ;;
-    standalone)
-      __logic_is_active_standalone_instance "$_instance_name" "$_instance_config_file"
-      return $?
-      ;;
-    *)
-      return $EC_INVALID_CONFIG
-      ;;
-  esac
+  __logic_is_active_standalone_instance "$_instance_name" "$_instance_config_file"
+  return $?
 }
 
 export -f __logic_instance_is_active
-
-# Helper function to check if systemd instance is active
-# Args: $1 = _instance_name, $2 = _instance_config_file
-# Returns: 0 if active, 1 if inactive
-function __logic_is_active_systemd_instance() {
-  local _instance_name="$1"
-  local _instance_config_file="$2"
-
-  # Check systemd service status - suppress output since this is pure logic
-  local is_active
-  is_active=$(systemctl is-active "${_instance_name%.ini}" --no-pager 2> /dev/null)
-
-  [[ "$is_active" == "active" ]] && return 0
-  return 1
-}
-
-export -f __logic_is_active_systemd_instance
 
 # Helper function to check if standalone instance is active
 # Args: $1 = _instance_name, $2 = _instance_config_file
@@ -435,17 +280,9 @@ function __logic_instance_status() {
 
   # Load instance configuration using centralized validation
   local _instance_config_file
-  local lifecycle_manager
   local exit_code
 
   _instance_config_file=$(validate_instance_name "$_instance_name" 2> /dev/null)
-  exit_code=$?
-  if [[ $exit_code -ne 0 ]]; then
-    return $exit_code
-  fi
-
-  # Extract lifecycle manager from config
-  lifecycle_manager=$(__get_lifecycle_manager "$_instance_config_file")
   exit_code=$?
   if [[ $exit_code -ne 0 ]]; then
     return $exit_code
@@ -482,7 +319,6 @@ function __logic_instance_logs() {
   fi
 
   local _instance_config_file
-  local lifecycle_manager
   local exit_code
 
   # Load instance configuration using centralized validation
@@ -492,51 +328,11 @@ function __logic_instance_logs() {
     return $exit_code
   fi
 
-  # Extract lifecycle manager from config
-  lifecycle_manager=$(__get_lifecycle_manager "$_instance_config_file")
-  exit_code=$?
-  if [[ $exit_code -ne 0 ]]; then
-    return $EC_INVALID_CONFIG
-  fi
-
-  # Execute type-specific logic
-  case "$lifecycle_manager" in
-    systemd)
-      __logic_logs_systemd_instance "$_instance_name" "$_instance_config_file" "$follow_flag" "$line_count"
-      return $?
-      ;;
-    standalone)
-      __logic_logs_standalone_instance "$_instance_name" "$_instance_config_file" "$follow_flag" "$line_count"
-      return $?
-      ;;
-    *)
-      return $EC_INVALID_CONFIG
-      ;;
-  esac
-}
-
-export -f __logic_instance_logs
-
-# Helper function to display systemd instance logs
-# Args: $1 = _instance_name, $2 = _instance_config_file, $3 = follow_flag, $4 = line_count
-# Returns: 0 on success, error codes on failure
-function __logic_logs_systemd_instance() {
-  local _instance_name="$1"
-  local _instance_config_file="$2"
-  local follow_flag="$3"
-  local line_count="$4"
-
-  # Display logs using journalctl
-  if [[ "$follow_flag" == "true" ]]; then
-    journalctl -n "$line_count" -fu "${_instance_name%.ini}"
-  else
-    journalctl -n "$line_count" -u "${_instance_name%.ini}" --no-pager
-  fi
-
+  __logic_logs_standalone_instance "$_instance_name" "$_instance_config_file" "$follow_flag" "$line_count"
   return $?
 }
 
-export -f __logic_logs_systemd_instance
+export -f __logic_instance_logs
 
 # Helper function to display standalone instance logs
 # Args: $1 = _instance_name, $2 = _instance_config_file, $3 = follow_flag, $4 = line_count

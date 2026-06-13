@@ -144,8 +144,8 @@ ${UNDERLINE}Event Types and Parameters:${END}
 
 ${UNDERLINE}Instance Lifecycle:${END}
   instance-created <instance> [blueprint]
-  instance-started <instance> [lifecycle_manager]
-  instance-stopped <instance> [lifecycle_manager]
+  instance-started <instance>
+  instance-stopped <instance>
   instance-removed <instance>
   instance-ready <instance>
 
@@ -189,7 +189,7 @@ Optional parameters (shown in brackets) can be omitted or left as empty strings.
 
 ${UNDERLINE}Examples:${END}
   ${self} emit instance-created myserver factorio
-  ${self} emit instance-started myserver systemd
+  ${self} emit instance-started myserver
   ${self} emit instance-version-updated myserver 1.0.0 1.1.1
   ${self} emit instance-backup-created myserver auto 1.2.3
   ${self} emit instance-stopped myserver manual
@@ -351,8 +351,7 @@ function _build_event_payload() {
       ;;
     "$EVENT_INSTANCE_STARTED" | "$EVENT_INSTANCE_STOPPED" | "$EVENT_INSTANCE_RESTARTED")
       data_object='{
-        InstanceName: $instance,
-        LifecycleManager: $lifecycle_manager
+        InstanceName: $instance
       }'
       ;;
     *)

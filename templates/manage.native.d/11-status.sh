@@ -115,7 +115,6 @@ function _get_status() {
       --arg updates_checked "$updates_checked" \
       --arg blueprint "$(basename "$instance_blueprint_file")" \
       --arg runtime "$instance_runtime" \
-      --arg lifecycle_manager "$instance_lifecycle_manager" \
       --arg directory "$instance_working_dir" \
       --arg ports "${instance_ports:-}" \
       --arg disk_usage "$disk_usage" \
@@ -138,7 +137,6 @@ function _get_status() {
         configuration: {
           blueprint: $blueprint,
           runtime: $runtime,
-          lifecycle_manager: $lifecycle_manager,
           directory: $directory,
           ports: (if $ports != "" then $ports else null end)
         },

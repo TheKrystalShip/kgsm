@@ -107,7 +107,7 @@ ${UNDERLINE}Description:${END}
   - Config - Manage KGSM configuration
   - Directories - Manage directory structures
   - Events - Manage event system
-  - Files - Manage instance files (systemd, ufw, symlinks)
+  - Files - Manage instance files (ufw, symlinks)
   - Instances - Manage server instances
   - Lifecycle - Control server lifecycle (start, stop, restart, logs)
   - Network - Manage network and ports
@@ -340,10 +340,9 @@ function __show_files_menu() {
   __ui_draw_box "Files Module"
   __ui_print_box_line "Equivalent to: kgsm.sh files <command>" "$UI_COLOR_INFO"
   __ui_print_empty_line
-  __ui_print_menu_item "1" "Create Systemd Service" "Generate systemd service file"
-  __ui_print_menu_item "2" "Create UFW Rules" "Generate UFW firewall rules"
-  __ui_print_menu_item "3" "Create Symlinks" "Create command shortcuts"
-  __ui_print_menu_item "4" "Remove Files" "Remove generated files"
+  __ui_print_menu_item "1" "Create UFW Rules" "Generate UFW firewall rules"
+  __ui_print_menu_item "2" "Create Symlinks" "Create command shortcuts"
+  __ui_print_menu_item "3" "Remove Files" "Remove generated files"
   __ui_print_empty_line
   __ui_print_menu_item "b" "$UI_MENU_BACK" "Return to modules menu"
   __ui_print_menu_item "m" "$UI_MENU_MAIN" "Jump to main menu"
@@ -1235,35 +1234,6 @@ function __action_system_restart() {
 
 # Files module actions
 
-function __action_files_create_systemd() {
-  local instances
-  local selected_instance
-
-  mapfile -t instances < <(__logic_get_instances 2>/dev/null)
-
-  if [[ ${#instances[@]} -eq 0 ]]; then
-    echo -e "${UI_COLOR_WARNING}No server instances found.${UI_COLOR_RESET}" >&2
-    __ui_wait_for_key
-    return 1
-  fi
-
-  selected_instance=$(__ui_select_from_list "Select Instance" instances)
-  case $? in
-    1) return 0 ;; # Back
-    2) return 2 ;; # Quit
-  esac
-
-  __ui_clear_screen
-  echo -e "${UI_COLOR_INFO}Creating systemd service file...${UI_COLOR_RESET}" >&2
-
-  local files_module
-  files_module=$(__find_command files.sh)
-  "$files_module" create systemd --instance "$selected_instance"
-
-  __ui_wait_for_key
-  return 0
-}
-
 function __action_files_create_ufw() {
   local instances
   local selected_instance
@@ -1342,7 +1312,7 @@ function __action_files_remove() {
     2) return 2 ;; # Quit
   esac
 
-  file_types=("systemd" "ufw" "symlink")
+  file_types=("ufw" "symlink")
   selected_type=$(__ui_select_from_list "Select File Type to Remove" file_types)
   case $? in
     1) return 0 ;; # Back
@@ -1971,18 +1941,14 @@ function __handle_files_choice() {
 
   case "$choice" in
     1)
-      __menu_execute_action "__action_files_create_systemd"
-      return $?
-      ;;
-    2)
       __menu_execute_action "__action_files_create_ufw"
       return $?
       ;;
-    3)
+    2)
       __menu_execute_action "__action_files_create_symlinks"
       return $?
       ;;
-    4)
+    3)
       __menu_execute_action "__action_files_remove"
       return $?
       ;;

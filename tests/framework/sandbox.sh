@@ -185,7 +185,6 @@ function create_test_config() {
 
 [system]
 # Disable system integrations that require root or external services
-enable_systemd=false
 enable_firewall_management=false
 enable_port_forwarding=false
 enable_event_broadcasting=false

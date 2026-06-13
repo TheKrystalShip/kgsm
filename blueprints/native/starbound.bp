@@ -100,7 +100,6 @@ executable_file=starbound_server
 #  $instance_socket_file - Path to the input socket file
 #
 # Runtime Configuration:
-#  $instance_lifecycle_manager - How the instance is managed (standalone, systemd)
 #  $instance_runtime - Runtime type (native, container)
 #  $instance_platform - Target platform (linux, windows, macos)
 #  $instance_auto_update - Whether to auto-update before starting
@@ -130,11 +129,6 @@ executable_file=starbound_server
 #
 # Backup Configuration:
 #  $instance_compress_backups - Whether to compress backups
-#
-# System Integration:
-#  $instance_enable_systemd - Whether systemd integration is enabled
-#  $instance_systemd_service_file - Path to systemd service file
-#  $instance_systemd_socket_file - Path to systemd socket file
 #
 # Management Features:
 #  $instance_enable_command_shortcuts - Whether command shortcuts are enabled

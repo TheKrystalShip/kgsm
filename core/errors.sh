@@ -59,8 +59,7 @@ export EC_PERMISSION
 declare -g -r EC_FAILED_SED=17
 export EC_FAILED_SED
 
-declare -g -r EC_SYSTEMD=18
-export EC_SYSTEMD
+# 18 retired: was EC_SYSTEMD (systemd is no longer a lifecycle manager).
 
 declare -g -r EC_UFW=19
 export EC_UFW
@@ -183,11 +182,13 @@ export EC_SUCCESS_MANAGEMENT_FILE_CREATED
 declare -g -r EC_SUCCESS_MANAGEMENT_FILE_REMOVED=207
 export EC_SUCCESS_MANAGEMENT_FILE_REMOVED
 
-declare -g -r EC_SUCCESS_SYSTEMD_ENABLED=208
-export EC_SUCCESS_SYSTEMD_ENABLED
+# Boot auto-start enable/disable (watchdog desired-state), replacing the old
+# systemd enable/disable success codes (same values, repurposed).
+declare -g -r EC_SUCCESS_AUTOSTART_ENABLED=208
+export EC_SUCCESS_AUTOSTART_ENABLED
 
-declare -g -r EC_SUCCESS_SYSTEMD_DISABLED=209
-export EC_SUCCESS_SYSTEMD_DISABLED
+declare -g -r EC_SUCCESS_AUTOSTART_DISABLED=209
+export EC_SUCCESS_AUTOSTART_DISABLED
 
 declare -g -r EC_SUCCESS_INSTANCE_CREATED=210
 export EC_SUCCESS_INSTANCE_CREATED
@@ -318,7 +319,6 @@ declare -A EXIT_CODES=(
    [$EC_FAILED_MKDIR]="Failed mkdir"
    [$EC_PERMISSION]="Permission issue"
    [$EC_FAILED_SED]="Error with 'sed' command"
-   [$EC_SYSTEMD]="Error with 'systemctl' command"
    [$EC_UFW]="Error with 'ufw' command"
    [$EC_MALFORMED_INSTANCE]="Malformed instance config file"
    [$EC_MISSING_DEPENDENCY]="Missing required dependency"

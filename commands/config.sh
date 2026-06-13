@@ -39,7 +39,7 @@ ${UNDERLINE}Options:${END}
 ${UNDERLINE}Examples:${END}
   $self set enable_logging=true
   $self set instance_suffix_length=3
-  $self get enable_systemd
+  $self get enable_command_shortcuts
   $self list
   $self list --json
   $self reset

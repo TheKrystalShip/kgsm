@@ -4,14 +4,14 @@
 #
 # Test Type: E2E
 # Target: Complete file management workflow - files.sh, files.management.sh,
-#         files.systemd.sh, files.ufw.sh, files.upnp.sh, files.symlink.sh
+#         files.ufw.sh, files.upnp.sh, files.symlink.sh
 #
 # Validates the full lifecycle:
 #   1. Instance creation (prerequisite)
 #   2. Directory creation (prerequisite for files)
 #   3. Management file creation, verification, and removal
 #   4. Orchestrated file creation and removal via files.sh
-#   5. Config-dependent integrations (systemd, ufw, upnp, symlink)
+#   5. Config-dependent integrations (ufw, upnp, symlink)
 #   6. Error handling for invalid instances
 
 # =============================================================================
@@ -22,7 +22,6 @@ readonly TEST_NAME="files_management_e2e"
 
 readonly FILES_MODULE="$KGSM_ROOT/commands/files.sh"
 readonly FILES_MANAGEMENT_MODULE="$KGSM_ROOT/commands/files.management.sh"
-readonly FILES_SYSTEMD_MODULE="$KGSM_ROOT/commands/files.systemd.sh"
 readonly FILES_UFW_MODULE="$KGSM_ROOT/commands/files.ufw.sh"
 readonly FILES_UPNP_MODULE="$KGSM_ROOT/commands/files.upnp.sh"
 readonly FILES_SYMLINK_MODULE="$KGSM_ROOT/commands/files.symlink.sh"
@@ -48,9 +47,6 @@ function setup_file() {
 
   assert_file_exists "$FILES_MANAGEMENT_MODULE" "files.management.sh should exist"
   assert_file_executable "$FILES_MANAGEMENT_MODULE" "files.management.sh should be executable"
-
-  assert_file_exists "$FILES_SYSTEMD_MODULE" "files.systemd.sh should exist"
-  assert_file_executable "$FILES_SYSTEMD_MODULE" "files.systemd.sh should be executable"
 
   assert_file_exists "$FILES_UFW_MODULE" "files.ufw.sh should exist"
   assert_file_executable "$FILES_UFW_MODULE" "files.ufw.sh should be executable"
@@ -257,50 +253,6 @@ function test_files_orchestrator_fails_for_invalid_instance() {
 }
 
 # =============================================================================
-# TEST 8: Systemd integration respects config setting (disabled by default)
-# =============================================================================
-
-function test_systemd_respects_config() {
-  log_test_step "Testing: systemd integration behavior matches config setting"
-
-  local instance_name="test-systemd-cfg-$$"
-  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
-  local create_exit=$?
-
-  if [[ $create_exit -ne 0 ]]; then
-    skip_test "Instance creation failed - skipping systemd config test"
-    return
-  fi
-
-  # Check config to determine expected behavior
-  local systemd_enabled
-  systemd_enabled=$(grep "^enable_systemd=" "$KGSM_ROOT/config.ini" 2>/dev/null | cut -d= -f2 | tr -d '"')
-
-  # Run files.sh create - should succeed regardless of systemd config
-  assert_command_succeeds "$FILES_MODULE create $instance_name" \
-    "files.sh create should succeed regardless of systemd config"
-
-  if [[ "$systemd_enabled" != "true" ]]; then
-    # When systemd is disabled, files.systemd.sh enable should still work
-    # (it's a component command, not config-gated)
-    # But the orchestrated 'create' should not have enabled systemd
-    # Verify by checking that lifecycle_manager in instance config is NOT systemd
-    local instance_config
-    instance_config=$("$KGSM_ROOT/kgsm.sh" instances find "$instance_name" 2>/dev/null)
-    local lifecycle_manager
-    lifecycle_manager=$(grep "^instance_lifecycle_manager=" "$instance_config" 2>/dev/null | cut -d= -f2 | tr -d '"')
-
-    # lifecycle_manager should NOT be systemd since systemd integration is disabled
-    assert_not_equals "systemd" "$lifecycle_manager" \
-      "Lifecycle manager should not be systemd when enable_systemd=false"
-  fi
-
-  # Cleanup
-  "$FILES_MODULE" remove "$instance_name" >/dev/null 2>&1 || true
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
-}
-
-# =============================================================================
 # TEST 9: UFW integration fails for nonexistent instance
 # =============================================================================
 
@@ -368,17 +320,6 @@ function test_upnp_fails_for_invalid_instance() {
 
   assert_command_fails "$FILES_UPNP_MODULE enable nonexistent-instance-xyz-$$" \
     "files.upnp.sh enable should fail for nonexistent instance"
-}
-
-# =============================================================================
-# TEST 12: Systemd module fails for nonexistent instance
-# =============================================================================
-
-function test_systemd_fails_for_invalid_instance() {
-  log_test_step "Testing: files.systemd.sh fails for nonexistent instance"
-
-  assert_command_fails "$FILES_SYSTEMD_MODULE enable nonexistent-instance-xyz-$$" \
-    "files.systemd.sh enable should fail for nonexistent instance"
 }
 
 # =============================================================================

@@ -233,8 +233,7 @@ function _cmd_start() {
   case $exit_code in
     $EC_SUCCESS_INSTANCE_STARTED)
       __print_success "Instance $instance_name started successfully"
-      __dispatch_event_from_exit_code "$exit_code" "$instance_name" \
-        "$(__resolve_lifecycle_manager "$instance_name")"
+      __dispatch_event_from_exit_code "$exit_code" "$instance_name"
 
       # Start watcher if available
       watcher.sh start "$instance_name" --detach > /dev/null 2>&1 || true
@@ -288,8 +287,7 @@ function _cmd_stop() {
   case $exit_code in
     $EC_SUCCESS_INSTANCE_STOPPED)
       __print_success "Instance $instance_name stopped successfully"
-      __dispatch_event_from_exit_code "$exit_code" "$instance_name" \
-        "$(__resolve_lifecycle_manager "$instance_name")"
+      __dispatch_event_from_exit_code "$exit_code" "$instance_name"
       return $EC_SUCCESS
       ;;
     *)
@@ -335,8 +333,7 @@ function _cmd_restart() {
   case $exit_code in
     $EC_SUCCESS_INSTANCE_RESTARTED)
       __print_success "Instance $instance_name restarted successfully"
-      __dispatch_event_from_exit_code "$exit_code" "$instance_name" \
-        "$(__resolve_lifecycle_manager "$instance_name")"
+      __dispatch_event_from_exit_code "$exit_code" "$instance_name"
       return 0
       ;;
     *)

@@ -51,7 +51,6 @@ function test_help_command() {
   assert_contains "$output" "create" "Help should mention create command"
   assert_contains "$output" "remove" "Help should mention remove command"
   assert_contains "$output" "management" "Help should mention management component"
-  assert_contains "$output" "systemd" "Help should mention systemd component"
 }
 
 function test_help_flag() {
@@ -228,15 +227,6 @@ function test_management_component_routes_to_submodule() {
 
   # Should produce output (not silent failure)
   assert_not_null "$output" "management component routing should produce output"
-}
-
-function test_systemd_component_routes_to_submodule() {
-  log_test_step "Testing 'systemd' routes to files.systemd.sh"
-
-  local output
-  output=$("$MODULE" systemd 2>&1 || true)
-
-  assert_not_null "$output" "systemd component routing should produce output"
 }
 
 function test_ufw_component_routes_to_submodule() {
