@@ -1,0 +1,24 @@
+schema_version: 1
+name: factorio
+runtime: native
+metadata:
+  # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
+  display_name: null
+  description: null
+  max_players: null
+  min_ram_mb: null
+  recommended_ram_mb: null
+  base_disk_mb: null
+native:
+  ports: "34197"
+  steam_app_id: 0
+  steamcmd_arguments: ""
+  is_steam_account_required: false
+  platform: linux
+  level_name: default
+  executable_subdirectory: bin/x64
+  executable_file: factorio
+  executable_arguments: --start-server $instance_saves_dir/$instance_level_name
+  stop_command: /quit
+  save_command: /save
+  startup_success_regex: Hosting game at IP ADDR

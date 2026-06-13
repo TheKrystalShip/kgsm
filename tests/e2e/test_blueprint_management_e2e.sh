@@ -3,16 +3,18 @@
 # KGSM Blueprint Management End-to-End Tests
 #
 # Test Type: E2E
-# Target: Complete blueprint discovery and management workflow
+# Target: Complete blueprint discovery and management workflow via the unified
+#         commands/blueprints.sh surface.
 #
-# Covers the full blueprint management workflow:
-# - Blueprint listing (all, native-only, container-only, default, custom)
-# - Blueprint finding (native and container)
-# - Blueprint info retrieval and field validation
-# - Standard test blueprints: factorio, terraria, starbound, necesse (native), vrising (container)
-# - Error handling for invalid/missing blueprints
-# - Cross-blueprint consistency checks
-# - Native and container submodule direct access
+# Blueprints are unified `<name>.bp.yaml` files in a single flat directory; the
+# `runtime` field (native|container) discriminates the body. There is no longer
+# a native/container command split — everything goes through blueprints.sh.
+#
+# Covers: listing (all/default/custom, text + JSON), finding, info retrieval and
+# field validation (via the canonical info JSON, including the Metadata block),
+# native vs container runtime detection, Steam differentiation, and error paths.
+# Standard blueprints: factorio, terraria, starbound, necesse (native), vrising
+# (container).
 
 # =============================================================================
 # TEST SETUP
@@ -20,247 +22,145 @@
 
 readonly TEST_NAME="blueprint_management_e2e"
 readonly MODULE="$KGSM_ROOT/commands/blueprints.sh"
-readonly NATIVE_MODULE="$KGSM_ROOT/commands/blueprints.native.sh"
-readonly CONTAINER_MODULE="$KGSM_ROOT/commands/blueprints.container.sh"
 
-# Standard test blueprints per testing specification
 readonly NATIVE_BLUEPRINTS=("factorio" "terraria" "starbound" "necesse")
 readonly CONTAINER_BLUEPRINTS=("vrising")
-
-# =============================================================================
-# TEST FUNCTIONS
-# =============================================================================
 
 function setup_file() {
   log_test_step "Setting up blueprint management e2e tests"
 
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
-  assert_dir_exists "$KGSM_ROOT" "KGSM root directory should exist"
-
   assert_file_exists "$MODULE" "blueprints.sh should exist"
   assert_file_executable "$MODULE" "blueprints.sh should be executable"
 
-  assert_file_exists "$NATIVE_MODULE" "blueprints.native.sh should exist"
-  assert_file_executable "$NATIVE_MODULE" "blueprints.native.sh should be executable"
+  # Single flat blueprints dir; runtime is a field, not a subdirectory.
+  assert_dir_exists "$KGSM_SYSTEM_BLUEPRINTS_DIR" "Blueprints directory should exist"
 
-  assert_file_exists "$CONTAINER_MODULE" "blueprints.container.sh should exist"
-  assert_file_executable "$CONTAINER_MODULE" "blueprints.container.sh should be executable"
-
-  # Verify blueprint directories exist
-  assert_dir_exists "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR" \
-    "Native blueprints directory should exist"
-  assert_dir_exists "$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR" \
-    "Container blueprints directory should exist"
-
-  # Verify standard test blueprints exist on disk
-  for bp in "${NATIVE_BLUEPRINTS[@]}"; do
-    assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/${bp}.bp" \
-      "Standard native blueprint '${bp}' should exist"
-  done
-
-  for bp in "${CONTAINER_BLUEPRINTS[@]}"; do
-    assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR/${bp}.docker-compose.yml" \
-      "Standard container blueprint '${bp}' should exist"
+  for bp in "${NATIVE_BLUEPRINTS[@]}" "${CONTAINER_BLUEPRINTS[@]}"; do
+    assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_DIR/${bp}.bp.yaml" \
+      "Standard blueprint '${bp}' should exist as ${bp}.bp.yaml"
   done
 
   log_test_step "Blueprint management e2e environment validated"
 }
 
-function teardown_file() {
-  log_test_step "Cleaning up blueprint management e2e tests"
-  # No cleanup actions needed for read-only blueprint management tests
-  log_test_step "Blueprint management e2e cleanup complete"
-}
-
 # =============================================================================
 # WORKFLOW 1: List all blueprints
-# Verify the list command returns results and includes all known blueprints
 # =============================================================================
 
 function test_list_all_blueprints() {
-  log_test_step "Workflow: list all blueprints returns results with known blueprints"
+  log_test_step "Workflow: list returns all standard blueprints"
 
   local output
   output=$("$MODULE" list 2>&1)
-  local exit_code=$?
+  assert_equals 0 "$?" "blueprints list should succeed"
 
-  assert_equals 0 "$exit_code" "blueprints list should succeed"
-  assert_not_null "$output" "blueprints list should produce output"
-
-  # All standard native blueprints must appear
-  for bp in "${NATIVE_BLUEPRINTS[@]}"; do
-    assert_contains "$output" "$bp" \
-      "blueprints list should include native blueprint '${bp}'"
-  done
-
-  # Standard container blueprint must appear
-  for bp in "${CONTAINER_BLUEPRINTS[@]}"; do
-    assert_contains "$output" "$bp" \
-      "blueprints list should include container blueprint '${bp}'"
+  for bp in "${NATIVE_BLUEPRINTS[@]}" "${CONTAINER_BLUEPRINTS[@]}"; do
+    assert_contains "$output" "$bp" "list should include '${bp}'"
   done
 }
 
 # =============================================================================
-# WORKFLOW 2: Find native blueprint
-# Verify find returns a valid, readable file path
+# WORKFLOW 2: List default blueprints
+# =============================================================================
+
+function test_list_default_blueprints() {
+  log_test_step "Workflow: list default returns shipped blueprints"
+
+  local output
+  output=$("$MODULE" list default 2>&1)
+  assert_equals 0 "$?" "blueprints list default should succeed"
+  assert_contains "$output" "factorio" "default list should include factorio"
+}
+
+# =============================================================================
+# WORKFLOW 3: Find native blueprint
 # =============================================================================
 
 function test_find_native_blueprint() {
-  log_test_step "Workflow: find native blueprint returns valid file path"
+  log_test_step "Workflow: find native blueprint returns valid .bp.yaml path"
 
   local path
   path=$("$MODULE" find factorio 2>&1)
-  local exit_code=$?
-
-  assert_equals 0 "$exit_code" "blueprints find factorio should succeed"
-  assert_not_null "$path" "blueprints find should return a path"
-  assert_file_exists "$path" "blueprints find should return path to an existing file"
-  assert_contains "$path" "factorio.bp" "found path should contain factorio.bp"
-  assert_ends_with "$path" ".bp" "native blueprint path should end with .bp"
-}
-
-# =============================================================================
-# WORKFLOW 3: Get blueprint info for native blueprint
-# Verify info populates key required fields
-# =============================================================================
-
-function test_get_native_blueprint_info() {
-  log_test_step "Workflow: get native blueprint info returns populated key fields"
-
-  local info
-  info=$("$MODULE" info factorio 2>&1)
-  local exit_code=$?
-
-  assert_equals 0 "$exit_code" "blueprints info factorio should succeed"
-  assert_not_null "$info" "blueprints info should produce output"
-
-  # Required fields must be present
-  assert_contains "$info" "name=" "info output should contain name field"
-  assert_contains "$info" "executable_file=" "info output should contain executable_file field"
-  assert_contains "$info" "level_name=" "info output should contain level_name field"
-
-  # Values must be non-empty (field=value where value is not empty)
-  local name_val
-  name_val=$(echo "$info" | grep "^name=" | cut -d= -f2)
-  assert_not_null "$name_val" "factorio blueprint name field should not be empty"
-  assert_equals "factorio" "$name_val" "factorio blueprint name should equal 'factorio'"
-
-  local exe_val
-  exe_val=$(echo "$info" | grep "^executable_file=" | cut -d= -f2)
-  assert_not_null "$exe_val" "factorio blueprint executable_file should not be empty"
+  assert_equals 0 "$?" "blueprints find factorio should succeed"
+  assert_file_exists "$path" "found path should point to an existing file"
+  assert_ends_with "$path" "factorio.bp.yaml" "native blueprint path should end with .bp.yaml"
 }
 
 # =============================================================================
 # WORKFLOW 4: Find container blueprint
-# Verify find returns valid docker-compose.yml path
 # =============================================================================
 
 function test_find_container_blueprint() {
-  log_test_step "Workflow: find container blueprint returns valid docker-compose.yml path"
+  log_test_step "Workflow: find container blueprint returns valid .bp.yaml path"
 
   local path
   path=$("$MODULE" find vrising 2>&1)
-  local exit_code=$?
-
-  assert_equals 0 "$exit_code" "blueprints find vrising should succeed"
-  assert_not_null "$path" "blueprints find vrising should return a path"
-  assert_file_exists "$path" "blueprints find vrising should return path to an existing file"
-  assert_contains "$path" "vrising" "found path should contain vrising"
-  assert_contains "$path" "docker-compose.yml" "container blueprint path should contain docker-compose.yml"
+  assert_equals 0 "$?" "blueprints find vrising should succeed"
+  assert_file_exists "$path" "found path should point to an existing file"
+  assert_ends_with "$path" "vrising.bp.yaml" "container blueprint path should end with .bp.yaml"
 }
 
 # =============================================================================
-# WORKFLOW 5: List native-only blueprints via native submodule
-# Verify blueprints.native.sh list only returns native blueprints
+# WORKFLOW 5: Runtime detection per blueprint (via info --json BlueprintType)
 # =============================================================================
 
-function test_list_native_only() {
-  log_test_step "Workflow: native submodule list returns only native blueprints"
+function test_runtime_detection() {
+  log_test_step "Workflow: each blueprint reports its correct runtime"
 
-  local output
-  output=$("$NATIVE_MODULE" list 2>&1)
-  local exit_code=$?
-
-  assert_equals 0 "$exit_code" "blueprints.native.sh list should succeed"
-  assert_not_null "$output" "blueprints.native.sh list should produce output"
-
-  # All standard native blueprints must appear
   for bp in "${NATIVE_BLUEPRINTS[@]}"; do
-    assert_contains "$output" "$bp" \
-      "native list should include '${bp}'"
+    local bt
+    bt=$("$MODULE" info "$bp" --json 2>&1 | jq -r '.BlueprintType')
+    assert_equals "Native" "$bt" "${bp} should be Native"
   done
 
-  # Container blueprint should NOT appear in native list
-  assert_not_contains "$output" "vrising" \
-    "native list should not include container blueprint 'vrising'"
-}
-
-# =============================================================================
-# WORKFLOW 6: List container-only blueprints via container submodule
-# Verify blueprints.container.sh list only returns container blueprints
-# =============================================================================
-
-function test_list_container_only() {
-  log_test_step "Workflow: container submodule list returns only container blueprints"
-
-  local output
-  output=$("$CONTAINER_MODULE" list 2>&1)
-  local exit_code=$?
-
-  assert_equals 0 "$exit_code" "blueprints.container.sh list should succeed"
-  assert_not_null "$output" "blueprints.container.sh list should produce output"
-
-  # Standard container blueprint must appear
-  assert_contains "$output" "vrising" "container list should include 'vrising'"
-
-  # Native blueprints should NOT appear in container list
-  for bp in "${NATIVE_BLUEPRINTS[@]}"; do
-    assert_not_contains "$output" "$bp" \
-      "container list should not include native blueprint '${bp}'"
+  for bp in "${CONTAINER_BLUEPRINTS[@]}"; do
+    local bt
+    bt=$("$MODULE" info "$bp" --json 2>&1 | jq -r '.BlueprintType')
+    assert_equals "Container" "$bt" "${bp} should be Container"
   done
 }
 
 # =============================================================================
-# WORKFLOW 7: Blueprint field validation for all standard blueprints
-# Verify every standard native blueprint has required fields with values
+# WORKFLOW 6: Required fields populated for native blueprints (info --json)
 # =============================================================================
 
-function test_all_native_blueprints_have_required_fields() {
-  log_test_step "Workflow: all standard native blueprints have required fields populated"
+function test_native_blueprints_have_required_fields() {
+  log_test_step "Workflow: native blueprints expose name/executable_file/level_name"
 
   for bp in "${NATIVE_BLUEPRINTS[@]}"; do
     local info
-    info=$("$MODULE" info "$bp" 2>&1)
-    local exit_code=$?
+    info=$("$MODULE" info "$bp" --json 2>&1)
+    assert_equals 0 "$?" "blueprints info ${bp} --json should succeed"
 
-    assert_equals 0 "$exit_code" \
-      "blueprints info ${bp} should succeed"
-    assert_not_null "$info" \
-      "blueprints info ${bp} should produce output"
-
-    # name field must be present and non-empty
-    local name_val
-    name_val=$(echo "$info" | grep "^name=" | cut -d= -f2)
-    assert_not_null "$name_val" \
-      "${bp}: name field should not be empty"
-
-    # executable_file must be present and non-empty
-    local exe_val
-    exe_val=$(echo "$info" | grep "^executable_file=" | cut -d= -f2)
-    assert_not_null "$exe_val" \
-      "${bp}: executable_file field should not be empty"
-
-    # level_name must be present and non-empty
-    local level_val
-    level_val=$(echo "$info" | grep "^level_name=" | cut -d= -f2)
-    assert_not_null "$level_val" \
-      "${bp}: level_name field should not be empty"
+    assert_equals "$bp" "$(echo "$info" | jq -r '.Name')" "${bp}: Name should match"
+    assert_not_null "$(echo "$info" | jq -r '.ExecutableFile')" \
+      "${bp}: ExecutableFile should not be empty"
+    assert_not_null "$(echo "$info" | jq -r '.LevelName')" \
+      "${bp}: LevelName should not be empty"
   done
+}
+
+# =============================================================================
+# WORKFLOW 7: Metadata block present (nullable, never fabricated)
+# =============================================================================
+
+function test_metadata_block_present() {
+  log_test_step "Workflow: info JSON carries the nullable Metadata block"
+
+  local info
+  info=$("$MODULE" info factorio --json 2>&1)
+
+  # The block exists with the full key set...
+  assert_equals "6" "$(echo "$info" | jq -r '.Metadata | keys | length')" \
+    "Metadata should expose six keys"
+  # ...and uncurated numeric values are null, never a fabricated 0.
+  assert_equals "true" "$(echo "$info" | jq '.Metadata.MaxPlayers == null')" \
+    "Uncurated MaxPlayers must be JSON null"
 }
 
 # =============================================================================
 # WORKFLOW 8: Invalid blueprint returns error
-# Verify clean error handling for nonexistent blueprint names
 # =============================================================================
 
 function test_invalid_blueprint_returns_error() {
@@ -268,136 +168,61 @@ function test_invalid_blueprint_returns_error() {
 
   assert_command_fails "$MODULE find nonexistent_blueprint_xyz_abc" \
     "find with nonexistent blueprint should fail"
-
   assert_command_fails "$MODULE info nonexistent_blueprint_xyz_abc" \
     "info with nonexistent blueprint should fail"
-
-  # Native submodule should also fail cleanly
-  assert_command_fails "$NATIVE_MODULE find nonexistent_blueprint_xyz_abc" \
-    "blueprints.native.sh find with nonexistent blueprint should fail"
-
-  # Container submodule should also fail cleanly
-  assert_command_fails "$CONTAINER_MODULE find nonexistent_blueprint_xyz_abc" \
-    "blueprints.container.sh find with nonexistent blueprint should fail"
 }
 
 # =============================================================================
-# WORKFLOW 9: Cross-blueprint consistency
-# Each known blueprint found via 'list' can also be found via 'find'
+# WORKFLOW 9: list/find consistency for every standard blueprint
 # =============================================================================
 
 function test_list_find_consistency() {
-  log_test_step "Workflow: every blueprint from list can be found via find"
+  log_test_step "Workflow: every standard blueprint resolves via find"
 
-  # All standard native blueprints in list should resolve via find
-  for bp in "${NATIVE_BLUEPRINTS[@]}"; do
+  for bp in "${NATIVE_BLUEPRINTS[@]}" "${CONTAINER_BLUEPRINTS[@]}"; do
     local path
     path=$("$MODULE" find "$bp" 2>&1)
-    local exit_code=$?
-
-    assert_equals 0 "$exit_code" \
-      "blueprints find '${bp}' (from list) should succeed"
-    assert_file_exists "$path" \
-      "blueprints find '${bp}' should return a path to an existing file"
-  done
-
-  # Container blueprints in list should also resolve via find
-  for bp in "${CONTAINER_BLUEPRINTS[@]}"; do
-    local path
-    path=$("$MODULE" find "$bp" 2>&1)
-    local exit_code=$?
-
-    assert_equals 0 "$exit_code" \
-      "blueprints find '${bp}' (container, from list) should succeed"
-    assert_file_exists "$path" \
-      "blueprints find '${bp}' (container) should return a path to an existing file"
-  done
-}
-
-# =============================================================================
-# WORKFLOW 10: Blueprint metadata completeness for all standard blueprints
-# Verify all standard test blueprints (native + container) are accessible
-# =============================================================================
-
-function test_all_standard_blueprints_accessible() {
-  log_test_step "Workflow: all standard test blueprints are accessible end-to-end"
-
-  # Native: find + info must succeed for all standard blueprints
-  for bp in "${NATIVE_BLUEPRINTS[@]}"; do
-    local find_output info_output
-    find_output=$("$MODULE" find "$bp" 2>&1)
     assert_equals 0 "$?" "find '${bp}' should succeed"
-    assert_file_exists "$find_output" "'${bp}' blueprint file should exist at found path"
-
-    info_output=$("$MODULE" info "$bp" 2>&1)
-    assert_equals 0 "$?" "info '${bp}' should succeed"
-    assert_not_null "$info_output" "info '${bp}' should return content"
-  done
-
-  # Container: find + info via container submodule
-  for bp in "${CONTAINER_BLUEPRINTS[@]}"; do
-    local find_output info_output
-    find_output=$("$CONTAINER_MODULE" find "$bp" 2>&1)
-    assert_equals 0 "$?" "container find '${bp}' should succeed"
-    assert_file_exists "$find_output" "'${bp}' container blueprint file should exist at found path"
-
-    info_output=$("$CONTAINER_MODULE" info "$bp" 2>&1)
-    assert_equals 0 "$?" "container info '${bp}' should succeed"
-    assert_not_null "$info_output" "container info '${bp}' should return content"
+    assert_file_exists "$path" "find '${bp}' should return an existing file"
   done
 }
 
 # =============================================================================
-# WORKFLOW 11: Steam vs non-Steam blueprint differentiation
-# starbound (steam, account required) and necesse (steam, no account) differ
+# WORKFLOW 10: Steam vs non-Steam differentiation (via info --json SteamAppId)
 # =============================================================================
 
 function test_steam_blueprint_field_differentiation() {
-  log_test_step "Workflow: Steam blueprints have steam_app_id; non-Steam do not"
+  log_test_step "Workflow: Steam blueprints carry a steam_app_id; factorio is 0"
 
-  # Steam blueprints (starbound, necesse) must have steam_app_id
   for bp in "starbound" "necesse"; do
-    local info steam_app_id
-    info=$("$MODULE" info "$bp" 2>&1)
-    assert_equals 0 "$?" "blueprints info ${bp} should succeed"
-
-    steam_app_id=$(echo "$info" | grep "^steam_app_id=" | cut -d= -f2)
-    assert_not_null "$steam_app_id" \
-      "${bp}: steam_app_id should be set for Steam blueprint"
+    local steam_app_id
+    steam_app_id=$("$MODULE" info "$bp" --json 2>&1 | jq -r '.SteamAppId')
+    assert_not_null "$steam_app_id" "${bp}: SteamAppId should be set"
+    assert_not_equals "0" "$steam_app_id" "${bp}: SteamAppId should be a real Steam id"
   done
 
-  # factorio is non-Steam; steam_app_id should be 0 (no Steam ID)
-  local factorio_info factorio_steam_id
-  factorio_info=$("$MODULE" info factorio 2>&1)
-  assert_equals 0 "$?" "blueprints info factorio should succeed"
-
-  factorio_steam_id=$(echo "$factorio_info" | grep "^steam_app_id=" | cut -d= -f2)
-  assert_equals "0" "$factorio_steam_id" \
-    "factorio: steam_app_id should be 0 for non-Steam blueprint"
+  local factorio_steam_id
+  factorio_steam_id=$("$MODULE" info factorio --json 2>&1 | jq -r '.SteamAppId')
+  assert_equals "0" "$factorio_steam_id" "factorio: SteamAppId should be 0 (non-Steam)"
 }
 
 # =============================================================================
-# WORKFLOW 12: JSON output for blueprints list and info
-# Verify --json flag produces output containing expected blueprint names
+# WORKFLOW 11: JSON output for list and info
 # =============================================================================
 
 function test_json_output() {
-  log_test_step "Workflow: blueprints list and info --json output contains expected data"
+  log_test_step "Workflow: list and info --json produce expected data"
 
   local list_json
   list_json=$("$MODULE" list --json 2>&1)
   assert_equals 0 "$?" "blueprints list --json should succeed"
-  assert_not_null "$list_json" "blueprints list --json should produce output"
-  assert_contains "$list_json" "factorio" \
-    "list --json output should include factorio"
-  assert_contains "$list_json" "vrising" \
-    "list --json output should include vrising"
+  assert_contains "$list_json" "factorio" "list --json should include factorio"
+  assert_contains "$list_json" "vrising" "list --json should include vrising"
 
   local info_json
-  info_json=$("$MODULE" info factorio --json 2>&1)
-  assert_equals 0 "$?" "blueprints info factorio --json should succeed"
-  assert_not_null "$info_json" "blueprints info factorio --json should produce output"
-  assert_contains "$info_json" "factorio" \
-    "info factorio --json output should include factorio"
+  info_json=$("$MODULE" info vrising --json 2>&1)
+  assert_equals 0 "$?" "blueprints info vrising --json should succeed"
+  # Container ports are derived from the embedded compose.
+  assert_contains "$(echo "$info_json" | jq -r '.Ports')" "9876/udp" \
+    "vrising info --json should expose derived ports"
 }
-

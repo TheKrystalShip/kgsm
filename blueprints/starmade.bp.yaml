@@ -1,0 +1,24 @@
+schema_version: 1
+name: starmade
+runtime: native
+metadata:
+  # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
+  display_name: null
+  description: null
+  max_players: null
+  min_ram_mb: null
+  recommended_ram_mb: null
+  base_disk_mb: null
+native:
+  ports: 4242/tcp|4242/udp
+  steam_app_id: 335180
+  steamcmd_arguments: ""
+  is_steam_account_required: true
+  platform: linux
+  level_name: default
+  executable_subdirectory: StarMade
+  executable_file: java
+  executable_arguments: -Xms4G -Xmx4G -jar StarMade.jar -server
+  stop_command: exit
+  save_command: ""
+  startup_success_regex: SERVER INIT FINISHED

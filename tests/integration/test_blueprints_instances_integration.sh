@@ -124,17 +124,17 @@ function test_blueprint_path_reflected_in_instance_config() {
 function test_blueprint_info_fields_in_instance_config() {
   log_test_step "Testing: blueprint info fields are reflected in instance config"
 
-  # Get blueprint info to know expected values
+  # Get blueprint info (canonical JSON) to know expected values
   local blueprint_info
-  blueprint_info=$("$BLUEPRINTS_MODULE" info factorio 2>&1)
-  assert_equals 0 "$?" "blueprints info factorio should succeed"
+  blueprint_info=$("$BLUEPRINTS_MODULE" info factorio --json 2>&1)
+  assert_equals 0 "$?" "blueprints info factorio --json should succeed"
   assert_not_null "$blueprint_info" "Blueprint info should not be empty"
 
   # Extract expected values from blueprint info
   local expected_executable
-  expected_executable=$(echo "$blueprint_info" | grep "^executable_file=" | cut -d= -f2)
+  expected_executable=$(echo "$blueprint_info" | jq -r '.ExecutableFile')
   local expected_level
-  expected_level=$(echo "$blueprint_info" | grep "^level_name=" | cut -d= -f2)
+  expected_level=$(echo "$blueprint_info" | jq -r '.LevelName')
 
   assert_not_null "$expected_executable" "Blueprint should define executable_file"
   assert_not_null "$expected_level" "Blueprint should define level_name"
@@ -394,13 +394,13 @@ function test_duplicate_instance_name_rejected() {
 function test_steam_blueprint_data_flows_to_instance() {
   log_test_step "Testing: Steam blueprint data (steam_app_id) appears in instance config"
 
-  # Get necesse blueprint info and extract steam_app_id
+  # Get necesse blueprint info (canonical JSON) and extract SteamAppId
   local blueprint_info
-  blueprint_info=$("$BLUEPRINTS_MODULE" info necesse 2>&1)
-  assert_equals 0 "$?" "blueprints info necesse should succeed"
+  blueprint_info=$("$BLUEPRINTS_MODULE" info necesse --json 2>&1)
+  assert_equals 0 "$?" "blueprints info necesse --json should succeed"
 
   local expected_app_id
-  expected_app_id=$(echo "$blueprint_info" | grep "^steam_app_id=" | cut -d= -f2)
+  expected_app_id=$(echo "$blueprint_info" | jq -r '.SteamAppId')
   assert_not_null "$expected_app_id" "Necesse blueprint should have steam_app_id"
 
   # Create an instance from necesse
@@ -476,8 +476,8 @@ function test_blueprint_type_reflected_in_instance_runtime() {
   # Verify blueprint module identifies it as native
   local bp_type
   bp_type=$("$BLUEPRINTS_MODULE" find factorio 2>&1)
-  assert_contains "$bp_type" ".bp" \
-    "Native blueprint path should end with .bp"
+  assert_contains "$bp_type" "factorio.bp.yaml" \
+    "Native blueprint path should be factorio.bp.yaml"
 
   # Container blueprint: vrising (if Docker available)
   if ! is_docker_available; then
@@ -501,7 +501,7 @@ function test_blueprint_type_reflected_in_instance_runtime() {
 
   local bp_path
   bp_path=$("$BLUEPRINTS_MODULE" find vrising 2>&1)
-  assert_contains "$bp_path" "docker-compose.yml" \
-    "Container blueprint path should contain docker-compose.yml"
+  assert_contains "$bp_path" "vrising.bp.yaml" \
+    "Container blueprint path should be vrising.bp.yaml"
 }
 

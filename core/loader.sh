@@ -29,118 +29,38 @@ function __find_or_fail() {
 
 export -f __find_or_fail
 
-# Function to load native, default blueprints
-function __find_native_default_blueprint() {
-  local blueprint=$1
-  [[ "$blueprint" != *.bp ]] && blueprint="${blueprint}.bp"
-  __find_or_fail "$blueprint" "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR"
-}
-
-export -f __find_native_default_blueprint
-
-# Function to load container, default blueprints
-function __find_default_container_blueprint() {
-  local blueprint=$1
-  [[ "$blueprint" != *.docker-compose.yml ]] && blueprint="${blueprint}.docker-compose.yml"
-  __find_or_fail "$blueprint" "$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR"
-}
-
-export -f __find_default_container_blueprint
-
-# Function to load default blueprints, both native and container
-function __find_default_blueprint() {
-  local blueprint=$1
-
-  # First try to find a native blueprint
-  local loaded_blueprint
-  loaded_blueprint=$(__find_native_default_blueprint "$blueprint")
-
-  # If not found, try to find a container blueprint
-  if [[ -z "$loaded_blueprint" ]]; then
-    loaded_blueprint=$(__find_default_container_blueprint "$blueprint")
-  fi
-
-  # Don't print an error if no blueprint is found, just return empty
-  echo "$loaded_blueprint"
-}
-
-export -f __find_default_blueprint
-
-# Function to load native, custom blueprints
-function __find_custom_native_blueprint() {
-  local blueprint=$1
-  [[ "$blueprint" != *.bp ]] && blueprint="${blueprint}.bp"
-  __find_or_fail "$blueprint" "$KGSM_USER_BLUEPRINTS_NATIVE_DIR"
-}
-
-export -f __find_custom_native_blueprint
-
-# Function to load container, custom blueprints
-function __find_custom_container_blueprint() {
-  local blueprint=$1
-  [[ "$blueprint" != *.docker-compose.yml ]] && blueprint="${blueprint}.docker-compose.yml"
-  __find_or_fail "$blueprint" "$KGSM_USER_BLUEPRINTS_CONTAINER_DIR"
-}
-
-export -f __find_custom_container_blueprint
-
-# Function to load custom blueprints, both native and container
-function __find_custom_blueprint() {
-  local blueprint=$1
-
-  # First try to find a custom native blueprint
-  local loaded_blueprint
-  loaded_blueprint=$(__find_custom_native_blueprint "$blueprint")
-
-  # If not found, try to find a custom container blueprint
-  if [[ -z "$loaded_blueprint" ]]; then
-    loaded_blueprint=$(__find_custom_container_blueprint "$blueprint")
-  fi
-
-  # Don't print an error if no blueprint is found, just return empty
-  echo "$loaded_blueprint"
-}
-
-export -f __find_custom_blueprint
-
-# This function needs to look in both the native blueprints directory
-# and the container blueprints directory and return the first match,
-# or if there is a match in each directory, return the native one.
-# It will return the absolute path to the blueprint file.
+# Locate a unified blueprint by name and return its absolute path.
+# Blueprints are `<name>.bp.yaml` files in a single flat directory; the runtime
+# (native|container) is a field inside the file, not a subdirectory. A user
+# blueprint ($KGSM_USER_BLUEPRINTS_DIR) shadows a system blueprint
+# ($KGSM_SYSTEM_BLUEPRINTS_DIR) of the same name.
+# Accepts a bare name, a filename, or an absolute path (the basename is used).
 # Usage: __find_blueprint <blueprint_name>
-# The blueprint name can be either an absolute path or just the name.
+# Returns: absolute path via echo, or EC_FILE_NOT_FOUND.
 function __find_blueprint() {
   local blueprint=$1
 
-  # $blueprint can be either an absolute path, or simply the blueprint name.
-  # If it's an absolute path, we extract the name from it.
   if [[ "$blueprint" == /* ]]; then
-    # If it's an absolute path, we just use the basename
     blueprint=$(basename "$blueprint")
   fi
 
-  # Load the blueprint file in this order:
-  # 1. Custom native blueprint
-  # 2. Custom container blueprint
-  # 3. Default native blueprint
-  # 4. Default container blueprint
+  # Normalize to the canonical "<name>.bp.yaml" filename.
+  local name
+  name=$(__extract_blueprint_name "$blueprint")
+  local filename="${name}.bp.yaml"
 
-  # First try to find a custom blueprint
-  local loaded_blueprint
-  loaded_blueprint=$(__find_custom_blueprint "$blueprint" 2> /dev/null)
-
-  # If no custom blueprint is found, try to find the default blueprint
-  if [[ -z "$loaded_blueprint" ]]; then
-    loaded_blueprint=$(__find_default_blueprint "$blueprint" 2> /dev/null)
+  # User blueprints shadow system blueprints.
+  if [[ -f "${KGSM_USER_BLUEPRINTS_DIR}/${filename}" ]]; then
+    echo "${KGSM_USER_BLUEPRINTS_DIR}/${filename}"
+    return 0
   fi
 
-  # If no blueprint is found, we return an error code
-  if [[ -z "$loaded_blueprint" ]]; then
-    return $EC_FILE_NOT_FOUND
+  if [[ -f "${KGSM_SYSTEM_BLUEPRINTS_DIR}/${filename}" ]]; then
+    echo "${KGSM_SYSTEM_BLUEPRINTS_DIR}/${filename}"
+    return 0
   fi
 
-  # If we found a blueprint, we return it
-  echo "$loaded_blueprint"
+  return $EC_FILE_NOT_FOUND
 }
 
 export -f __find_blueprint
@@ -259,17 +179,11 @@ function __find_override() {
     exit $EC_INVALID_ARG
   fi
 
-  # Extract the blueprint name from the blueprint file's "name" variable
-  # This works for native blueprints, but not for container blueprints
+  # Extract the blueprint's logical name (the override-binding key). In the
+  # unified format `name` is an explicit top-level field for every runtime, so
+  # the old grep / container "first service name" workaround is no longer needed.
   local blueprint_name
-  blueprint_name=$(grep -E '^name\s*=' "$instance_blueprint_file" | cut -d'=' -f2 | tr -d '"' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-
-  # For container blueprints, we need to extract the blueprint name from the first service name
-  # found right after the "services:" line in the docker-compose.yml file
-  # This is a workaround for the fact that the blueprint name is not stored in the blueprint file.
-  if [[ "$instance_blueprint_file" == *.docker-compose.yml ]]; then
-    blueprint_name=$(grep -C 1 -E '^services:' "$instance_blueprint_file" | tail -n1 | cut -d ':' -f1 | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-  fi
+  blueprint_name=$(yq -r '.name // ""' "$instance_blueprint_file" 2>/dev/null)
 
   if [[ -z "$blueprint_name" ]]; then
     __print_error "No 'name' variable found in blueprint file '$instance_blueprint_file'."
@@ -297,10 +211,26 @@ function __find_override() {
 
 export -f __find_override
 
-# This function sources a blueprint file and prefixes all variables with "blueprint_".
-# It also checks if the blueprint file exists and is readable.
-# If the blueprint file is not found, it returns an error.
-# Usage: __source_blueprint <blueprint_file> [<prefix>] [--force-reload]
+# Read a single yq path from a file, mapping an absent/null result to the empty
+# string. Unlike `yq '... // ""'` (jq semantics, which also collapses `false`
+# and would mangle boolean fields), this preserves literal `false` and `0`.
+# Usage: __bp_yaml_field <file> <yq_path>
+function __bp_yaml_field() {
+  local value
+  value=$(yq -r "$2" "$1" 2>/dev/null)
+  [[ "$value" == "null" ]] && value=""
+  printf '%s' "$value"
+}
+
+export -f __bp_yaml_field
+
+# Read a unified blueprint and export its fields as `blueprint_*` globals.
+# Replaces the legacy key=value sourcing: the on-disk format is YAML, read via
+# yq. The exported variable set is the stable contract consumers rely on
+# (blueprint_name, blueprint_runtime, and the native field family). For a
+# container blueprint, blueprint_ports is DERIVED from the embedded compose and
+# the native-only fields are emptied so a prior source never leaks through.
+# Usage: __source_blueprint <blueprint_file>
 function __source_blueprint() {
   local blueprint_file="$1"
 
@@ -309,21 +239,60 @@ function __source_blueprint() {
     exit $EC_INVALID_ARG
   fi
 
-  # Use the __find_blueprint function to find the blueprint file.
-  # This gives the absolute path to the blueprint file.
-  local blueprint_absolute_path
-  if ! blueprint_absolute_path=$(__find_blueprint "$blueprint_file"); then
+  local bp
+  if ! bp=$(__find_blueprint "$blueprint_file"); then
     __print_error "Blueprint file '$blueprint_file' not found."
     exit $EC_FILE_NOT_FOUND
   fi
 
-  # Check if the blueprint file is readable
-  if [[ ! -r "$blueprint_absolute_path" ]]; then
+  if [[ ! -r "$bp" ]]; then
     __print_error "Blueprint file '$blueprint_file' is not readable."
     exit $EC_PERMISSION
   fi
 
-  __source_with_prefix "$blueprint_absolute_path" "blueprint_"
+  # Common fields (both runtimes).
+  declare -g blueprint_name; blueprint_name=$(__bp_yaml_field "$bp" '.name')
+  declare -g blueprint_runtime; blueprint_runtime=$(__bp_yaml_field "$bp" '.runtime')
+
+  # Native field family — default everything empty so a container source (or a
+  # re-source of a different blueprint) cannot leak stale values.
+  declare -g blueprint_ports=""
+  declare -g blueprint_steam_app_id=""
+  declare -g blueprint_steamcmd_arguments=""
+  declare -g blueprint_is_steam_account_required=""
+  declare -g blueprint_platform=""
+  declare -g blueprint_level_name=""
+  declare -g blueprint_executable_subdirectory=""
+  declare -g blueprint_executable_file=""
+  declare -g blueprint_executable_arguments=""
+  declare -g blueprint_stop_command=""
+  declare -g blueprint_save_command=""
+  declare -g blueprint_startup_success_regex=""
+
+  if [[ "$blueprint_runtime" == "native" ]]; then
+    blueprint_ports=$(__bp_yaml_field "$bp" '.native.ports')
+    blueprint_steam_app_id=$(__bp_yaml_field "$bp" '.native.steam_app_id')
+    blueprint_steamcmd_arguments=$(__bp_yaml_field "$bp" '.native.steamcmd_arguments')
+    blueprint_is_steam_account_required=$(__bp_yaml_field "$bp" '.native.is_steam_account_required')
+    blueprint_platform=$(__bp_yaml_field "$bp" '.native.platform')
+    blueprint_level_name=$(__bp_yaml_field "$bp" '.native.level_name')
+    blueprint_executable_subdirectory=$(__bp_yaml_field "$bp" '.native.executable_subdirectory')
+    blueprint_executable_file=$(__bp_yaml_field "$bp" '.native.executable_file')
+    blueprint_executable_arguments=$(__bp_yaml_field "$bp" '.native.executable_arguments')
+    blueprint_stop_command=$(__bp_yaml_field "$bp" '.native.stop_command')
+    blueprint_save_command=$(__bp_yaml_field "$bp" '.native.save_command')
+    blueprint_startup_success_regex=$(__bp_yaml_field "$bp" '.native.startup_success_regex')
+  elif [[ "$blueprint_runtime" == "container" ]]; then
+    blueprint_ports=$(__derive_ufw_ports_from_compose "$bp")
+  fi
+
+  export blueprint_name blueprint_runtime blueprint_ports \
+    blueprint_steam_app_id blueprint_steamcmd_arguments \
+    blueprint_is_steam_account_required blueprint_platform \
+    blueprint_level_name blueprint_executable_subdirectory \
+    blueprint_executable_file blueprint_executable_arguments \
+    blueprint_stop_command blueprint_save_command \
+    blueprint_startup_success_regex
 }
 
 export -f __source_blueprint

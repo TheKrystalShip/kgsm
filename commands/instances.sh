@@ -72,7 +72,7 @@ ${UNDERLINE}Usage:${END}
   $self create <blueprint> [options]
 
 ${UNDERLINE}Arguments:${END}
-  blueprint                   Blueprint name (with or without .bp extension)
+  blueprint                   Blueprint name (with or without the .bp.yaml extension)
 
 ${UNDERLINE}Options:${END}
   --install-dir <path>        Installation directory (required)
@@ -88,7 +88,7 @@ all instance data, saves, backups, and logs.
 ${UNDERLINE}Examples:${END}
   $self create factorio --install-dir /opt/gameservers
   $self create terraria --install-dir /home/user/servers --name terraria-main
-  $self create minecraft.bp --install-dir /var/games
+  $self create minecraft.bp.yaml --install-dir /var/games
 "
 }
 
@@ -260,7 +260,7 @@ a random numeric suffix.
 
 ${UNDERLINE}Examples:${END}
   $self generate-id factorio
-  $self generate-id terraria.bp
+  $self generate-id terraria.bp.yaml
 "
 }
 

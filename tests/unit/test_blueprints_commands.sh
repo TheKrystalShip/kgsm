@@ -195,10 +195,10 @@ function test_info_native_blueprint() {
   assert_command_succeeds "$MODULE info factorio" \
     "info factorio should succeed"
 
-  assert_command_output "$MODULE info factorio" "name=factorio" \
-    "info factorio output should contain name=factorio"
+  assert_command_output "$MODULE info factorio" "name: factorio" \
+    "info factorio output should contain name: factorio"
 
-  assert_command_output "$MODULE info factorio" "executable_file=" \
+  assert_command_output "$MODULE info factorio" "executable_file:" \
     "info factorio output should contain executable_file"
 }
 
@@ -263,8 +263,8 @@ function test_find_native_blueprint() {
   assert_command_succeeds "$MODULE find factorio" \
     "find factorio should succeed"
 
-  assert_command_output "$MODULE find factorio" "factorio.bp" \
-    "find factorio output should contain factorio.bp"
+  assert_command_output "$MODULE find factorio" "factorio.bp.yaml" \
+    "find factorio output should contain factorio.bp.yaml"
 }
 
 function test_find_container_blueprint() {
@@ -273,8 +273,8 @@ function test_find_container_blueprint() {
   assert_command_succeeds "$MODULE find vrising" \
     "find vrising should succeed"
 
-  assert_command_output "$MODULE find vrising" "vrising.docker-compose.yml" \
-    "find vrising output should contain vrising.docker-compose.yml"
+  assert_command_output "$MODULE find vrising" "vrising.bp.yaml" \
+    "find vrising output should contain vrising.bp.yaml"
 }
 
 function test_find_path_is_valid_file() {

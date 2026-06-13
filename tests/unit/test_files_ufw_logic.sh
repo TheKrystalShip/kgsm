@@ -38,7 +38,7 @@ function __create_ufw_instance_config() {
 
   cat > "$output_path" << EOF
 name=${instance_name}
-blueprint_file=${KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR}/factorio.bp
+blueprint_file=${KGSM_SYSTEM_BLUEPRINTS_DIR}/factorio.bp.yaml
 runtime=native
 working_dir=/tmp/kgsm_test_${instance_name}
 install_dir=/tmp/kgsm_test_${instance_name}/install
@@ -125,7 +125,7 @@ function test_enable_ufw_missing_name_in_config() {
   temp_config=$(mktemp)
 
   # Config with no 'name' field
-  echo "blueprint_file=/some/path/factorio.bp" > "$temp_config"
+  echo "blueprint_file=/some/path/factorio.bp.yaml" > "$temp_config"
   echo "runtime=native" >> "$temp_config"
 
   __logic_enable_ufw_integration "$temp_config" 2>/dev/null
@@ -223,7 +223,7 @@ function test_disable_ufw_missing_name_in_config() {
   temp_config=$(mktemp)
 
   # Config without 'name' field
-  echo "blueprint_file=/some/path/factorio.bp" > "$temp_config"
+  echo "blueprint_file=/some/path/factorio.bp.yaml" > "$temp_config"
   echo "runtime=native" >> "$temp_config"
 
   __logic_disable_ufw_integration "$temp_config" 2>/dev/null

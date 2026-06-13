@@ -116,11 +116,11 @@ function __logic_create_base_instance() {
     return $EC_INVALID_ARG
   fi
 
-  # Source the blueprint file for native instances
-  if [[ "$blueprint_abs_path" == *.bp ]]; then
-    if ! __source_blueprint "$blueprint_abs_path" >/dev/null 2>&1; then
-      return $EC_FAILED_SOURCE
-    fi
+  # Read the unified blueprint (yq-backed). Populates blueprint_* for both
+  # runtimes, including blueprint_runtime and — for containers — the UFW
+  # blueprint_ports derived from the embedded compose.
+  if ! __source_blueprint "$blueprint_abs_path" >/dev/null 2>&1; then
+    return $EC_FAILED_SOURCE
   fi
 
   # Set instance variables
@@ -146,7 +146,7 @@ function __logic_create_base_instance() {
   export instance_startup_success_regex="${blueprint_startup_success_regex:-}"
 
   export instance_install_subdir
-  instance_install_subdir=$(grep "executable_subdirectory=" <"$blueprint_abs_path" | cut -d "=" -f2 | tr -d '"')
+  instance_install_subdir="${blueprint_executable_subdirectory:-}"
 
   export instance_launch_dir="${instance_working_dir}/install"
   if [[ -n "$instance_install_subdir" ]]; then
@@ -186,9 +186,11 @@ function __logic_create_base_instance() {
   # but because of the way container based blueprints are set up, we need
   # different logic for native and container instances.
 
-  if [[ "$blueprint_abs_path" == *.bp ]]; then
+  # Runtime is now an explicit blueprint field, not inferred from the extension.
+  # blueprint_ports already holds the correct UFW spec for both runtimes (the
+  # native `ports` field, or the compose-derived ports for containers).
+  if [[ "${blueprint_runtime:-}" == "native" ]]; then
 
-    # Native instance
     instance_runtime="native"
     instance_compose_file=""
 
@@ -199,24 +201,14 @@ function __logic_create_base_instance() {
       fi
     fi
 
-  elif
-    [[ "$blueprint_abs_path" == *.docker-compose.yml ]] || [[ "$blueprint_abs_path" == *.yaml ]]
-  then
+  elif [[ "${blueprint_runtime:-}" == "container" ]]; then
 
-    # Container instance
     instance_runtime="container"
     instance_compose_file="${instance_working_dir}/${_instance_name}.docker-compose.yml"
 
-    local blueprint_parsed_ports
-    if ! blueprint_parsed_ports=$(__parse_docker_compose_to_ufw_ports "$blueprint_abs_path"); then
-      return $EC_INVALID_ARG
-    fi
-
-    export instance_ports="$blueprint_parsed_ports"
-
     instance_upnp_ports=()
-    if [[ -n "${blueprint_parsed_ports:-}" ]]; then
-      if ! output=$(__parse_ufw_to_upnp_ports "$blueprint_parsed_ports") || ! read -ra instance_upnp_ports <<<"$output"; then
+    if [[ -n "${blueprint_ports:-}" ]]; then
+      if ! output=$(__parse_ufw_to_upnp_ports "$blueprint_ports") || ! read -ra instance_upnp_ports <<<"$output"; then
         export instance_enable_port_forwarding="false"
       fi
     fi

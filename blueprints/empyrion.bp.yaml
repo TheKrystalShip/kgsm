@@ -1,0 +1,59 @@
+schema_version: 1
+name: empyrion
+runtime: container
+metadata:
+  # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
+  display_name: null
+  description: null
+  max_players: null
+  min_ram_mb: null
+  recommended_ram_mb: null
+  base_disk_mb: null
+container:
+  compose: |-
+    services:
+      empyrion:
+
+        # Official KGSM Empyrion Docker image
+        image: ghcr.io/thekrystalship/empyrion:latest
+
+        # Dynamic container name
+        container_name: ${instance_name}
+
+        # Use the host’s network stack directly
+        network_mode: host
+
+        # Ensure these ports are forwarded to allow external access
+        ports:
+          - 30000:30000/udp
+          - 30001:30001/udp
+          - 30002:30002/udp
+          - 30003:30003/udp
+          - 27015:27015/udp
+          - 27016:27016/udp
+
+        # Bind mount volumes for persistent storage
+        volumes:
+          - type: bind
+            source: ${instance_backups_dir}
+            target: /opt/empyrion/backups
+          - type: bind
+            source: ${instance_install_dir}
+            target: /opt/empyrion/install
+          - type: bind
+            source: ${instance_logs_dir}
+            target: /opt/empyrion/logs
+          - type: bind
+            source: ${instance_saves_dir}
+            target: /opt/empyrion/saves
+          - type: bind
+            source: ${instance_temp_dir}
+            target: /opt/empyrion/temp
+
+        # Environment variables for the game server
+        environment:
+          INSTANCE_AUTO_UPDATE: ${instance_auto_update}
+          STEAMCMD_ADDITIONAL_ARGS: ""
+
+        # Restart policy to ensure the container restarts automatically
+        restart: unless-stopped

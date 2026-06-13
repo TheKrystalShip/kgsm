@@ -361,7 +361,7 @@ function test_create_base_instance_native_blueprint() {
   config_path=$(__logic_create_instance_config_file "$instance_name" "$blueprint")
 
   # Get blueprint path
-  local blueprint_path="$KGSM_ROOT/blueprints/native/$blueprint.bp"
+  local blueprint_path="$KGSM_ROOT/blueprints/$blueprint.bp.yaml"
 
   # Create base instance
   __logic_create_base_instance "$config_path" "$instance_name" "$blueprint_path" "$TEST_INSTALL_DIR"
@@ -392,7 +392,7 @@ function test_create_base_instance_container_blueprint() {
   config_path=$(__logic_create_instance_config_file "$instance_name" "$blueprint")
 
   # Get blueprint path
-  local blueprint_path="$KGSM_ROOT/blueprints/container/$blueprint.docker-compose.yml"
+  local blueprint_path="$KGSM_ROOT/blueprints/$blueprint.bp.yaml"
 
   # Create base instance
   __logic_create_base_instance "$config_path" "$instance_name" "$blueprint_path" "$TEST_INSTALL_DIR"
@@ -408,7 +408,7 @@ function test_create_base_instance_container_blueprint() {
 function test_create_base_instance_empty_config_path() {
   log_test_step "Testing __logic_create_base_instance with empty config path"
 
-  __logic_create_base_instance "" "test" "$KGSM_ROOT/blueprints/native/factorio.bp" "$TEST_INSTALL_DIR" 2>/dev/null
+  __logic_create_base_instance "" "test" "$KGSM_ROOT/blueprints/factorio.bp.yaml" "$TEST_INSTALL_DIR" 2>/dev/null
   local exit_code=$?
 
   assert_equals "$EC_INVALID_ARG" "$exit_code" \
@@ -418,7 +418,7 @@ function test_create_base_instance_empty_config_path() {
 function test_create_base_instance_empty_instance_name() {
   log_test_step "Testing __logic_create_base_instance with empty instance name"
 
-  __logic_create_base_instance "/tmp/config" "" "$KGSM_ROOT/blueprints/native/factorio.bp" "$TEST_INSTALL_DIR" 2>/dev/null
+  __logic_create_base_instance "/tmp/config" "" "$KGSM_ROOT/blueprints/factorio.bp.yaml" "$TEST_INSTALL_DIR" 2>/dev/null
   local exit_code=$?
 
   assert_equals "$EC_INVALID_ARG" "$exit_code" \
@@ -438,7 +438,7 @@ function test_create_base_instance_empty_blueprint_path() {
 function test_create_base_instance_empty_install_dir() {
   log_test_step "Testing __logic_create_base_instance with empty install directory"
 
-  __logic_create_base_instance "/tmp/config" "test" "$KGSM_ROOT/blueprints/native/factorio.bp" "" 2>/dev/null
+  __logic_create_base_instance "/tmp/config" "test" "$KGSM_ROOT/blueprints/factorio.bp.yaml" "" 2>/dev/null
   local exit_code=$?
 
   assert_equals "$EC_INVALID_ARG" "$exit_code" \
@@ -460,7 +460,7 @@ function test_create_base_instance_invalid_blueprint() {
   config_path=$(__logic_create_instance_config_file "$instance_name" "$blueprint")
 
   # Use non-existent blueprint path - this will fail parameter validation first
-  __logic_create_base_instance "" "$instance_name" "/nonexistent.bp" "$TEST_INSTALL_DIR" 2>/dev/null
+  __logic_create_base_instance "" "$instance_name" "/nonexistent.bp.yaml" "$TEST_INSTALL_DIR" 2>/dev/null
   local exit_code=$?
 
   assert_equals "$EC_INVALID_ARG" "$exit_code" \

@@ -18,9 +18,9 @@ export KGSM_HANDLERS_DIR="${KGSM_ROOT}/commands/handlers"
 export KGSM_TEMPLATES_DIR="${KGSM_ROOT}/templates"
 export KGSM_MIGRATIONS_DIR="${KGSM_ROOT}/migrations"
 
+# Unified blueprints live in a single flat directory; runtime (native|container)
+# is a field inside each `<name>.bp.yaml`, not a subdirectory.
 export KGSM_SYSTEM_BLUEPRINTS_DIR="${KGSM_ROOT}/blueprints"
-export KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR="${KGSM_SYSTEM_BLUEPRINTS_DIR}/native"
-export KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR="${KGSM_SYSTEM_BLUEPRINTS_DIR}/container"
 
 export KGSM_SYSTEM_OVERRIDES_DIR="${KGSM_ROOT}/overrides"
 
@@ -39,8 +39,6 @@ export KGSM_INSTANCES_DIR="${KGSM_DATA_DIR}/instances"
 export KGSM_LOGS_DIR="${KGSM_DATA_DIR}/logs"
 
 export KGSM_USER_BLUEPRINTS_DIR="${KGSM_DATA_DIR}/blueprints"
-export KGSM_USER_BLUEPRINTS_NATIVE_DIR="${KGSM_USER_BLUEPRINTS_DIR}/native"
-export KGSM_USER_BLUEPRINTS_CONTAINER_DIR="${KGSM_USER_BLUEPRINTS_DIR}/container"
 
 export KGSM_USER_OVERRIDES_DIR="${KGSM_DATA_DIR}/overrides"
 
@@ -55,8 +53,6 @@ function __init_user_directories() {
     "$KGSM_INSTANCES_DIR"
     "$KGSM_LOGS_DIR"
     "$KGSM_USER_BLUEPRINTS_DIR"
-    "$KGSM_USER_BLUEPRINTS_NATIVE_DIR"
-    "$KGSM_USER_BLUEPRINTS_CONTAINER_DIR"
     "$KGSM_USER_OVERRIDES_DIR"
   )
 

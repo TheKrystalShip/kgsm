@@ -1,10 +1,10 @@
-# KGSM Blueprint Template
+# KGSM Blueprint Template (unified YAML format)
 #
 # Krystal Game Server Manager (KGSM) Blueprint Template
-# This template defines the configuration for a game server that can be managed by KGSM.
+# This template defines the configuration for a game server managed by KGSM.
 #
 # Author: Cristian Moraru <cristian.moraru@live.com>
-# Version: 2.0
+# Version: 3.0
 #
 # Copyright (c) 2025 The Krystal Ship
 # Licensed under the GNU General Public License v3.0
@@ -14,160 +14,125 @@
 # ABOUT KGSM BLUEPRINTS
 # =============================================================================
 #
-# A KGSM blueprint is a configuration file that defines how to install, configure,
-# and manage a specific game server. Blueprints contain all the necessary
-# information for KGSM to:
+# A blueprint is a single YAML file that is the COMPLETE identity of a game
+# server: presentation metadata plus everything needed to install, configure,
+# and run it. One file per game, named "<name>.bp.yaml", in a single flat
+# blueprints/ directory. The `runtime` field — native or container — decides
+# how the server runs; there is no native/ vs container/ split anymore.
 #
-# - Install the game server from Steam or other sources
-# - Configure the server with appropriate settings
-# - Manage the server lifecycle (start, stop, restart, save)
-# - Handle backups and updates
-# - Configure networking and firewall rules
-#
-# Blueprints are stored in the blueprints/ directory and can be either:
-# - Default blueprints (included with KGSM)
-# - Custom blueprints (created by users)
+# Blueprints can be:
+# - Default blueprints (included with KGSM, under the system blueprints dir)
+# - Custom blueprints (yours, under ~/.local/share/kgsm/blueprints/), which
+#   shadow a same-named default blueprint.
 #
 # =============================================================================
 # CREATING A NEW BLUEPRINT
 # =============================================================================
 #
-# To create a new blueprint:
-# 1. Copy this template file to blueprints/custom/native/your_game.bp
-# 2. Fill in all required fields (marked with comments)
-# 3. Test the blueprint with: ./kgsm.sh --create your_game --install-dir /path/to/install
+# 1. Copy this file to your user blueprints dir as <your_game>.bp.yaml
+# 2. Set `runtime` and fill the matching block (native: OR container:)
+# 3. Fill the metadata you know; leave anything unknown as null (NEVER 0).
+# 4. Test:  ./kgsm.sh blueprints info <your_game>
+#           ./kgsm.sh create <your_game> --install-dir /path/to/install
 #
 # Required fields:
-# - name: Unique identifier for the game
-# - executable_file: The main executable that starts the server
-# - level_name: Default world/map name
+#   - schema_version (currently 1)
+#   - name           (unique, lowercase, no spaces — also the override key)
+#   - runtime        (native | container)
+#   - native:        executable_file        (when runtime: native)
+#   - container:     compose                (when runtime: container)
 #
-# Optional fields:
-# - ports: Network ports the server uses
-# - steam_app_id: Steam App ID for automatic installation
-# - executable_subdirectory: Subdirectory containing the executable
-# - executable_arguments: Command line arguments for the server
-# - stop_command: Command to gracefully stop the server
-# - save_command: Command to save the server state
+# DO NOT MODIFY THIS TEMPLATE FILE. Copy it instead.
+
+# Blueprint schema version (do not change unless migrating formats).
+schema_version: 1
+
+# Unique name, lowercase, no spaces. Also the override-binding key: a blueprint
+# named "terraria" uses overrides/terraria/ regardless of the file name.
+name: example
+
+# How the server runs: native (a Linux process supervised by kgsm-watchdog) or
+# container (a Docker Compose stack). Pick one and fill the matching block.
+runtime: native
+
+# -----------------------------------------------------------------------------
+# Presentation metadata (advisory — for catalogs / the control panel)
+# -----------------------------------------------------------------------------
+# All values are nullable. `null` means "unknown / unbounded" — it is NEVER a
+# substitute for a real 0. The resource numbers are vendor-declared estimates,
+# not measured guarantees, and storage in particular grows after install.
+metadata:
+  display_name: null        # e.g. "7 Days to Die"
+  description: null          # one-line blurb
+  max_players: null          # integer, or null if unbounded/configurable
+  min_ram_mb: null           # advisory minimum RAM (MB)
+  recommended_ram_mb: null   # advisory recommended RAM (MB)
+  base_disk_mb: null         # install footprint (MB); grows with saves/mods
+
+# -----------------------------------------------------------------------------
+# NATIVE runtime (delete this block for container blueprints)
+# -----------------------------------------------------------------------------
+native:
+  # Port(s) in UFW format, single string, pipe-separated.
+  # Example: '1111:2222/tcp|3333/udp'
+  ports: ''
+
+  # Steam App ID of the DEDICATED SERVER (0 if not a Steam download).
+  steam_app_id: 0
+
+  # Extra steamcmd arguments, e.g. "+beta <branch>". Empty if none.
+  steamcmd_arguments: ""
+
+  # Only relevant when steam_app_id != 0: true if a Steam account is required.
+  is_steam_account_required: false
+
+  # Target platform: linux | windows | macos (linux unless using compatibility).
+  platform: linux
+
+  # Default world/save/level name.
+  level_name: default
+
+  # Optional subdirectory (relative to the install dir) the binary runs from,
+  # e.g. /bin/x86_64. Empty if the binary sits at the install root.
+  executable_subdirectory: ""
+
+  # The executable that starts the server (required).
+  executable_file: start_server.sh
+
+  # Arguments passed to the executable. $instance_* variables are resolved at
+  # instance-creation time (see docs/blueprints.md for the full list). Use
+  # single quotes so the literal '$' is preserved.
+  executable_arguments: ''
+
+  # Optional command sent to the input socket to gracefully stop the server.
+  stop_command: ""
+
+  # Optional command sent to the input socket to save the game state.
+  save_command: ""
+
+  # Optional regex matched against server output to detect successful startup.
+  # If empty, KGSM waits for the server to listen on its ports.
+  startup_success_regex: ""
+
+# -----------------------------------------------------------------------------
+# CONTAINER runtime (use INSTEAD of the native block; set runtime: container)
+# -----------------------------------------------------------------------------
+# Embed the Docker Compose definition VERBATIM as a literal block scalar (the
+# "|" below). KGSM extracts it to the instance's docker-compose.yml and expands
+# any ${instance_*} placeholders. UFW ports are derived from the compose ports —
+# do not add a separate top-level ports field for containers.
 #
-# =============================================================================
-# BLUEPRINT CONFIGURATION
-# =============================================================================
-
-# DO NOT MODIFY THIS FILE
-# Instead, make a copy of it in the blueprints directory and change all the
-# desired parameters there.
-# The name of the new file can be the same as this one, acting as an override.
-
-# Unique name, lowercase with no spaces
-name=
-
-# Port(s), used by UFW
-# Wrap in single quotes (')
-# Example: '1111:2222/tcp|1111:2222/udp'
-ports=
-
-# Steam APP_ID
-# Values: 0 if not applicable, Valid Steam app id otherwise
-# Default: 0
-steam_app_id=
-
-# (Optional) Only applicable if steam_app_id != 0
-# Values: false for anonymous, true for account required
-# Default: false
-is_steam_account_required=
-
-# (Optional) If the blueprint is not native to the platform
-# If the blueprint is native to the platform, leave this empty
-# Values: windows / linux / macos
-# Default: linux
-platform=
-
-# Savefile name or world name, level, whichever is applicable
-# Values: my_world / de_dust2 / my_cool_factorio_map
-level_name=
-
-# (Optional)
-# If the executable happens to be in a subdirectory from the main install
-# and needs to be ran from inside that subdirectory
-# Values: Relative path from inside install directory
-# Example: /bin/x86_64 | /DedicatedServer
-executable_subdirectory=
-
-# Name of the executable that will start the service
-# Values: start.sh / my_game.x86_64 / start_server
-executable_file=
-
-# Any args passed onto the executable
-# Available variables that can be used (all prefixed with $instance_):
-#
-# Basic Instance Information:
-#  $instance_name - The instance identifier
-#  $instance_blueprint_file - Absolute path to the blueprint file
-#  $instance_install_datetime - Timestamp when the instance was installed
-#
-# Directory and File Paths:
-#  $instance_working_dir - Absolute path to the working directory
-#  $instance_backups_dir - Absolute path to the backups directory
-#  $instance_install_dir - Absolute path to the installation directory
-#  $instance_saves_dir - Absolute path to the saves directory
-#  $instance_temp_dir - Absolute path to the temp directory
-#  $instance_logs_dir - Absolute path to the logs directory
-#  $instance_launch_dir - Directory from which to launch the instance binary
-#  $instance_executable_subdirectory - Subdirectory containing the executable
-#  $instance_management_file - Path to the management script
-#  $instance_compose_file - Path to docker-compose file (container only)
-#
-# Process Management Files:
-#  $instance_version_file - Path to the version file
-#  $instance_pid_file - Path to the PID file
-#  $instance_tail_pid_file - Path to the tail PID file
-#  $instance_socket_file - Path to the input socket file
-#
-# Runtime Configuration:
-#  $instance_runtime - Runtime type (native, container)
-#  $instance_platform - Target platform (linux, windows, macos)
-#  $instance_auto_update - Whether to auto-update before starting
-#  $instance_logs_redirect - Log redirection pattern
-#
-# Game Server Configuration:
-#  $instance_level_name - Default level/world name
-#  $instance_executable_file - The executable filename
-#  $instance_executable_arguments - The command line arguments
-#
-# Steam Integration:
-#  $instance_steam_app_id - Steam App ID for downloads
-#  $instance_is_steam_account_required - Whether Steam account is required
-#
-# Network Configuration:
-#  $instance_ports - Network ports in UFW format
-#  $instance_enable_port_forwarding - Whether UPnP is enabled
-#  $instance_upnp_ports - Array of ports to forward via UPnP
-#  $instance_enable_firewall_management - Whether firewall management is enabled
-#  $instance_firewall_rule_file - Path to firewall rule file
-#
-# Server Control:
-#  $instance_stop_command - Command to gracefully stop the server
-#  $instance_save_command - Command to save the game state
-#  $instance_save_command_timeout_seconds - Timeout for save command
-#  $instance_stop_command_timeout_seconds - Timeout for stop command
-#
-# Backup Configuration:
-#  $instance_compress_backups - Whether to compress backups
-#
-# Management Features:
-#  $instance_enable_command_shortcuts - Whether command shortcuts are enabled
-#  $instance_command_shortcut_file - Path to command shortcut file
-executable_arguments=
-
-# (Optional) Stop command sent to the input socket
-stop_command=
-
-# (Optional) Save command sent to the input socket
-save_command=
-
-# (Optional) Regex to match the startup success message
-# This is used to determine if the instance is ready
-# If not set, KGSM will wait for the instance to listen on the ports
-# and then consider it ready
-startup_success_regex=
+# container:
+#   compose: |
+#     services:
+#       example:
+#         image: ghcr.io/thekrystalship/example:latest
+#         container_name: ${instance_name}
+#         network_mode: host
+#         ports:
+#           - 1234:1234/udp
+#         volumes:
+#           - type: bind
+#             source: ${instance_install_dir}
+#             target: /opt/example/install
+#         restart: unless-stopped

@@ -2,671 +2,299 @@
 
 # KGSM Blueprint Logic Handler Unit Tests
 #
-# Tests all __logic_* functions from [blueprints.sh](http://_vscodecontentref_/0)
-# Uses real blueprints: factorio, terraria, starbound, necesse (native)
-# and vrising (container) to cover all blueprint variations.
+# Test Type: UNIT
+# Target: commands/handlers/blueprints.sh — the unified blueprint logic layer.
+#
+# Blueprints are unified `<name>.bp.yaml` files in a single flat directory; the
+# `runtime` field (native|container) discriminates the body. These tests cover
+# the unified handler API: type detection (from the runtime field), validation,
+# path resolution, listing (all/custom/default with user-shadows-system), and
+# the canonical info JSON (PascalCase + the nested, nullable Metadata block).
 
 # =============================================================================
 # TEST SETUP
 # =============================================================================
 
-# Test variables
 readonly TEST_NAME="blueprints_logic"
 readonly HANDLER="$KGSM_ROOT/commands/handlers/blueprints.sh"
-
-# =============================================================================
-# TEST FUNCTIONS
-# =============================================================================
 
 function setup_file() {
   log_test_step "Setting up blueprint logic tests"
 
-  # Verify environment
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
   assert_file_exists "$HANDLER" "Blueprint handler should exist"
 
-  # Source the handler
+  # shellcheck disable=SC1090
   source "$HANDLER"
 
-  # Verify required error codes are defined
   assert_not_null "$EC_INVALID_ARG" "EC_INVALID_ARG should be defined"
   assert_not_null "$EC_BLUEPRINT_NOT_FOUND" "EC_BLUEPRINT_NOT_FOUND should be defined"
   assert_not_null "$EC_INVALID_BLUEPRINT" "EC_INVALID_BLUEPRINT should be defined"
   assert_not_null "$EC_PERMISSION" "EC_PERMISSION should be defined"
-  assert_not_null "$EC_SUCCESS_BLUEPRINT_FOUND" "EC_SUCCESS_BLUEPRINT_FOUND should be defined"
   assert_not_null "$EC_SUCCESS_BLUEPRINT_LISTED" "EC_SUCCESS_BLUEPRINT_LISTED should be defined"
   assert_not_null "$EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED" "EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED should be defined"
 
-  # Verify blueprint directories exist
-  assert_dir_exists "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR" "Native default blueprints should exist"
-  assert_dir_exists "$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR" "Container default blueprints should exist"
+  # Single flat blueprints dir; runtime is a field, not a subdirectory.
+  assert_dir_exists "$KGSM_SYSTEM_BLUEPRINTS_DIR" "System blueprints dir should exist"
+  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_DIR/factorio.bp.yaml" "factorio.bp.yaml should exist"
+  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_DIR/terraria.bp.yaml" "terraria.bp.yaml should exist"
+  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_DIR/vrising.bp.yaml" "vrising.bp.yaml should exist"
 
-  # Verify test blueprints exist
-  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/factorio.bp" "Factorio blueprint should exist"
-  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/terraria.bp" "Terraria blueprint should exist"
-  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/starbound.bp" "Starbound blueprint should exist"
-  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/necesse.bp" "Necesse blueprint should exist"
-  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR/vrising.docker-compose.yml" "VRising blueprint should exist"
-
-  # Verify logic functions are exported
+  # Unified handler API.
   assert_function_exists "__logic_get_blueprint_type" "get_blueprint_type should be exported"
   assert_function_exists "__logic_validate_blueprint" "validate_blueprint should be exported"
   assert_function_exists "__logic_get_blueprint_path" "get_blueprint_path should be exported"
   assert_function_exists "__logic_list_blueprints" "list_blueprints should be exported"
-  assert_function_exists "__logic_find_native_blueprint" "find_native_blueprint should be exported"
-  assert_function_exists "__logic_list_native_blueprints" "list_native_blueprints should be exported"
-  assert_function_exists "__logic_get_native_blueprint_info" "get_native_blueprint_info should be exported"
-  assert_function_exists "__logic_find_container_blueprint" "find_container_blueprint should be exported"
-  assert_function_exists "__logic_list_container_blueprints" "list_container_blueprints should be exported"
-  assert_function_exists "__logic_get_container_blueprint_info" "get_container_blueprint_info should be exported"
+  assert_function_exists "__logic_get_blueprint_info_json" "get_blueprint_info_json should be exported"
 
   log_test_step "Blueprint logic test environment validated"
 }
 
 # =============================================================================
-# __logic_get_blueprint_type() TESTS
+# __logic_get_blueprint_type()  (reads the `runtime` field)
 # =============================================================================
 
 function test_get_blueprint_type_native() {
-  log_test_step "Testing __logic_get_blueprint_type with native blueprint"
-
   local output
   output=$(__logic_get_blueprint_type "factorio")
-  local exit_code=$?
-
-  assert_equals "0" "$exit_code" "Should return success for native blueprint"
-  assert_equals "native" "$output" "Should identify factorio as native type"
+  assert_equals "0" "$?" "Should return success for native blueprint"
+  assert_equals "native" "$output" "Should identify factorio as native"
 }
 
 function test_get_blueprint_type_container() {
-  log_test_step "Testing __logic_get_blueprint_type with container blueprint"
-
   local output
   output=$(__logic_get_blueprint_type "vrising")
-  local exit_code=$?
-
-  assert_equals "0" "$exit_code" "Should return success for container blueprint"
-  assert_equals "container" "$output" "Should identify vrising as container type"
+  assert_equals "0" "$?" "Should return success for container blueprint"
+  assert_equals "container" "$output" "Should identify vrising as container"
 }
 
 function test_get_blueprint_type_not_found() {
-  log_test_step "Testing __logic_get_blueprint_type with non-existent blueprint"
-
   __logic_get_blueprint_type "nonexistent-blueprint-xyz" 2> /dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_BLUEPRINT_NOT_FOUND" "$exit_code" "Should return blueprint not found error"
+  assert_equals "$EC_BLUEPRINT_NOT_FOUND" "$?" "Should return blueprint not found error"
 }
 
 function test_get_blueprint_type_empty_param() {
-  log_test_step "Testing __logic_get_blueprint_type with empty parameter"
-
   __logic_get_blueprint_type "" 2> /dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_INVALID_ARG" "$exit_code" "Should return invalid argument error"
+  assert_equals "$EC_INVALID_ARG" "$?" "Should return invalid argument error"
 }
 
 # =============================================================================
-# __logic_validate_blueprint() TESTS
+# __logic_validate_blueprint()
 # =============================================================================
 
 function test_validate_blueprint_valid_native() {
-  log_test_step "Testing __logic_validate_blueprint with valid native blueprint"
-
   __logic_validate_blueprint "terraria" 2> /dev/null
-  local exit_code=$?
-
-  assert_equals "0" "$exit_code" "Should validate terraria blueprint successfully"
+  assert_equals "0" "$?" "Should validate terraria successfully"
 }
 
 function test_validate_blueprint_valid_container() {
-  log_test_step "Testing __logic_validate_blueprint with valid container blueprint"
-
   __logic_validate_blueprint "vrising" 2> /dev/null
-  local exit_code=$?
-
-  assert_equals "0" "$exit_code" "Should validate vrising blueprint successfully"
+  assert_equals "0" "$?" "Should validate vrising successfully"
 }
 
 function test_validate_blueprint_not_found() {
-  log_test_step "Testing __logic_validate_blueprint with non-existent blueprint"
-
   __logic_validate_blueprint "does-not-exist" 2> /dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_BLUEPRINT_NOT_FOUND" "$exit_code" "Should return blueprint not found error"
+  assert_equals "$EC_BLUEPRINT_NOT_FOUND" "$?" "Should return blueprint not found error"
 }
 
 function test_validate_blueprint_empty_param() {
-  log_test_step "Testing __logic_validate_blueprint with empty parameter"
-
   __logic_validate_blueprint "" 2> /dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_INVALID_ARG" "$exit_code" "Should return invalid argument error"
+  assert_equals "$EC_INVALID_ARG" "$?" "Should return invalid argument error"
 }
 
 # =============================================================================
-# __logic_get_blueprint_path() TESTS
+# __logic_get_blueprint_path()
 # =============================================================================
 
 function test_get_blueprint_path_native() {
-  log_test_step "Testing __logic_get_blueprint_path with native blueprint"
-
   local output
   output=$(__logic_get_blueprint_path "starbound")
-  local exit_code=$?
-
-  assert_equals "0" "$exit_code" "Should return success for starbound"
-  assert_contains "$output" "starbound.bp" "Path should contain blueprint filename"
+  assert_equals "0" "$?" "Should return success for starbound"
+  assert_contains "$output" "starbound.bp.yaml" "Path should contain the unified filename"
   assert_file_exists "$output" "Returned path should exist"
 }
 
 function test_get_blueprint_path_container() {
-  log_test_step "Testing __logic_get_blueprint_path with container blueprint"
-
   local output
   output=$(__logic_get_blueprint_path "vrising")
-  local exit_code=$?
-
-  assert_equals "0" "$exit_code" "Should return success for vrising"
-  assert_contains "$output" "vrising.docker-compose.yml" "Path should contain docker-compose filename"
+  assert_equals "0" "$?" "Should return success for vrising"
+  assert_contains "$output" "vrising.bp.yaml" "Path should contain the unified filename"
   assert_file_exists "$output" "Returned path should exist"
 }
 
 function test_get_blueprint_path_not_found() {
-  log_test_step "Testing __logic_get_blueprint_path with non-existent blueprint"
-
   __logic_get_blueprint_path "missing-blueprint" 2> /dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_BLUEPRINT_NOT_FOUND" "$exit_code" "Should return blueprint not found error"
+  assert_equals "$EC_BLUEPRINT_NOT_FOUND" "$?" "Should return blueprint not found error"
 }
 
 function test_get_blueprint_path_empty_param() {
-  log_test_step "Testing __logic_get_blueprint_path with empty parameter"
-
   __logic_get_blueprint_path "" 2> /dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_INVALID_ARG" "$exit_code" "Should return invalid argument error"
+  assert_equals "$EC_INVALID_ARG" "$?" "Should return invalid argument error"
 }
 
 function test_get_blueprint_path_permission_denied() {
-  log_test_step "Testing __logic_get_blueprint_path with unreadable blueprint"
-
-  local blueprint_path="$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/necesse.bp"
-  local original_perms=$(stat -c "%a" "$blueprint_path")
-
-  # Make unreadable
+  local blueprint_path="$KGSM_SYSTEM_BLUEPRINTS_DIR/necesse.bp.yaml"
+  local original_perms
+  original_perms=$(stat -c "%a" "$blueprint_path")
   chmod 000 "$blueprint_path"
-
-  # Test
   __logic_get_blueprint_path "necesse" 2> /dev/null
   local exit_code=$?
-
-  # Restore immediately
   chmod "$original_perms" "$blueprint_path"
-
   assert_equals "$EC_INVALID_BLUEPRINT" "$exit_code" "Should return invalid blueprint error for unreadable file"
 }
 
 # =============================================================================
-# __logic_list_blueprints() TESTS
+# __logic_list_blueprints()  (single flat dir; user shadows system)
 # =============================================================================
 
 function test_list_blueprints_all() {
-  log_test_step "Testing __logic_list_blueprints with 'all' source"
-
   local output
   output=$(__logic_list_blueprints "all")
-  local exit_code=$?
-
-  assert_equals "$EC_SUCCESS_BLUEPRINT_LISTED" "$exit_code" "Should return success code"
+  assert_equals "$EC_SUCCESS_BLUEPRINT_LISTED" "$?" "Should return success code"
   assert_contains "$output" "factorio" "Should list factorio"
   assert_contains "$output" "terraria" "Should list terraria"
   assert_contains "$output" "starbound" "Should list starbound"
   assert_contains "$output" "necesse" "Should list necesse"
-  assert_contains "$output" "vrising" "Should list vrising"
+  assert_contains "$output" "vrising" "Should list vrising (container, same dir)"
 }
 
-function test_list_blueprints_default_source() {
-  log_test_step "Testing __logic_list_blueprints with default source parameter"
-
+function test_list_blueprints_default_source_arg() {
   local output
   output=$(__logic_list_blueprints)
-  local exit_code=$?
+  assert_equals "$EC_SUCCESS_BLUEPRINT_LISTED" "$?" "Should return success code"
+  assert_not_null "$output" "Should return a blueprint list"
+}
 
+function test_list_blueprints_default_filter() {
+  local output
+  output=$(__logic_list_blueprints "default")
+  assert_equals "$EC_SUCCESS_BLUEPRINT_LISTED" "$?" "Should return success code"
+  assert_contains "$output" "factorio" "Default set should include shipped blueprints"
+}
+
+function test_list_blueprints_custom() {
+  local custom_bp="$KGSM_USER_BLUEPRINTS_DIR/test-custom.bp.yaml"
+  cat > "$custom_bp" << 'EOF'
+schema_version: 1
+name: test-custom
+runtime: native
+metadata:
+  display_name: null
+  description: null
+  max_players: null
+  min_ram_mb: null
+  recommended_ram_mb: null
+  base_disk_mb: null
+native:
+  executable_file: test.sh
+EOF
+  local output
+  output=$(__logic_list_blueprints "custom")
+  local exit_code=$?
+  rm -f "$custom_bp"
   assert_equals "$EC_SUCCESS_BLUEPRINT_LISTED" "$exit_code" "Should return success code"
-  assert_not_null "$output" "Should return blueprint list"
+  assert_contains "$output" "test-custom" "Should list the custom blueprint"
+}
+
+function test_list_blueprints_invalid_source() {
+  __logic_list_blueprints "invalid" 2> /dev/null
+  assert_equals "$EC_INVALID_ARG" "$?" "Should return invalid argument error"
 }
 
 function test_list_blueprints_sorted() {
-  log_test_step "Testing __logic_list_blueprints output is sorted"
-
-  local output
+  local output sorted_output
   output=$(__logic_list_blueprints "all")
-
-  # Check if output is sorted (compare with sorted version)
-  local sorted_output
   sorted_output=$(echo "$output" | sort)
-
   assert_equals "$sorted_output" "$output" "Output should be sorted alphabetically"
 }
 
-# =============================================================================
-# __logic_find_native_blueprint() TESTS
-# =============================================================================
-
-function test_find_native_blueprint_exists() {
-  log_test_step "Testing __logic_find_native_blueprint with existing blueprint"
-
-  local output
-  output=$(__logic_find_native_blueprint "factorio")
-  local exit_code=$?
-
-  assert_equals "$EC_SUCCESS_BLUEPRINT_FOUND" "$exit_code" "Should return success code"
-  assert_contains "$output" "factorio.bp" "Path should contain factorio.bp"
-  assert_file_exists "$output" "Returned path should exist"
-}
-
-function test_find_native_blueprint_with_extension() {
-  log_test_step "Testing __logic_find_native_blueprint with .bp extension"
-
-  local output
-  output=$(__logic_find_native_blueprint "terraria.bp")
-  local exit_code=$?
-
-  assert_equals "$EC_SUCCESS_BLUEPRINT_FOUND" "$exit_code" "Should return success code"
-  assert_contains "$output" "terraria.bp" "Path should contain terraria.bp"
-}
-
-function test_find_native_blueprint_not_found() {
-  log_test_step "Testing __logic_find_native_blueprint with non-existent blueprint"
-
-  __logic_find_native_blueprint "nonexistent" 2> /dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_BLUEPRINT_NOT_FOUND" "$exit_code" "Should return blueprint not found error"
-}
-
-function test_find_native_blueprint_empty_param() {
-  log_test_step "Testing __logic_find_native_blueprint with empty parameter"
-
-  __logic_find_native_blueprint "" 2> /dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_INVALID_ARG" "$exit_code" "Should return invalid argument error"
-}
-
-function test_find_native_blueprint_priority() {
-  log_test_step "Testing __logic_find_native_blueprint custom > default priority"
-
-  # Create custom blueprint
-  local custom_blueprint="$KGSM_USER_BLUEPRINTS_NATIVE_DIR/test-priority.bp"
-  cat > "$custom_blueprint" << EOF
-name=test-priority
-executable_file=test.sh
-executable_arguments=""
+function test_list_blueprints_user_shadows_system() {
+  # A user blueprint named like a system one must shadow it (appear once, from
+  # the user dir).
+  local shadow="$KGSM_USER_BLUEPRINTS_DIR/factorio.bp.yaml"
+  cat > "$shadow" << 'EOF'
+schema_version: 1
+name: factorio
+runtime: native
+metadata:
+  display_name: null
+native:
+  executable_file: factorio
 EOF
-
-  # Find it
-  local output
-  output=$(__logic_find_native_blueprint "test-priority")
-  local exit_code=$?
-
-  # Clean up
-  rm -f "$custom_blueprint"
-
-  assert_equals "$EC_SUCCESS_BLUEPRINT_FOUND" "$exit_code" "Should find custom blueprint"
-  assert_contains "$output" "$KGSM_USER_BLUEPRINTS_NATIVE_DIR" "Should return user directory path"
+  local path count
+  path=$(__logic_get_blueprint_path "factorio")
+  count=$(__logic_list_blueprints "all" | grep -c '^factorio$')
+  rm -f "$shadow"
+  assert_contains "$path" "$KGSM_USER_BLUEPRINTS_DIR" "Resolved path should be the user blueprint"
+  assert_equals "1" "$count" "Shadowed blueprint should appear exactly once"
 }
 
 # =============================================================================
-# __logic_list_native_blueprints() TESTS
+# __logic_get_blueprint_info_json()
 # =============================================================================
 
-function test_list_native_blueprints_all() {
-  log_test_step "Testing __logic_list_native_blueprints with 'all' source"
-
+function test_info_json_native() {
   local output
-  output=$(__logic_list_native_blueprints "all")
-  local exit_code=$?
-
-  assert_equals "$EC_SUCCESS_BLUEPRINT_LISTED" "$exit_code" "Should return success code"
-  assert_contains "$output" "factorio" "Should list factorio"
-  assert_contains "$output" "terraria" "Should list terraria"
-  assert_contains "$output" "starbound" "Should list starbound"
-  assert_contains "$output" "necesse" "Should list necesse"
+  output=$(__logic_get_blueprint_info_json "factorio")
+  assert_equals "$EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED" "$?" "Should return success code"
+  assert_equals "factorio" "$(echo "$output" | jq -r '.Name')" "Name should be factorio"
+  assert_equals "Native" "$(echo "$output" | jq -r '.BlueprintType')" "BlueprintType should be Native"
+  assert_not_null "$(echo "$output" | jq -r '.ExecutableFile')" "ExecutableFile should be present"
 }
 
-function test_list_native_blueprints_default() {
-  log_test_step "Testing __logic_list_native_blueprints with 'default' source"
-
+function test_info_json_container_derives_ports() {
   local output
-  output=$(__logic_list_native_blueprints "default")
-  local exit_code=$?
-
-  assert_equals "$EC_SUCCESS_BLUEPRINT_LISTED" "$exit_code" "Should return success code"
-  assert_contains "$output" "factorio" "Should list default factorio"
+  output=$(__logic_get_blueprint_info_json "vrising")
+  assert_equals "$EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED" "$?" "Should return success code"
+  assert_equals "Container" "$(echo "$output" | jq -r '.BlueprintType')" "BlueprintType should be Container"
+  # Ports are derived from the embedded compose (host/proto, pipe-joined).
+  assert_contains "$(echo "$output" | jq -r '.Ports')" "9876/udp" "Container ports should be derived from compose"
+  assert_equals "" "$(echo "$output" | jq -r '.ExecutableFile')" "Native-only fields should be empty for containers"
 }
 
-function test_list_native_blueprints_custom() {
-  log_test_step "Testing __logic_list_native_blueprints with 'custom' source"
+function test_info_json_has_metadata_block() {
+  local output meta
+  output=$(__logic_get_blueprint_info_json "factorio")
+  meta=$(echo "$output" | jq -r '.Metadata | keys | sort | join(",")')
+  assert_equals "BaseDiskMb,Description,DisplayName,MaxPlayers,MinRamMb,RecommendedRamMb" "$meta" \
+    "Metadata should expose the full PascalCase key set"
+}
 
-  # Create a custom blueprint
-  local custom_bp="$KGSM_USER_BLUEPRINTS_NATIVE_DIR/test-custom.bp"
-  cat > "$custom_bp" << EOF
-name=test-custom
-executable_file=test.sh
-executable_arguments=""
-EOF
-
+function test_info_json_uncurated_metadata_is_null_not_zero() {
+  # The no-fabricate invariant: an uncurated numeric field is JSON null, NEVER 0.
   local output
-  output=$(__logic_list_native_blueprints "custom")
-  local exit_code=$?
-
-  # Clean up
-  rm -f "$custom_bp"
-
-  assert_equals "$EC_SUCCESS_BLUEPRINT_LISTED" "$exit_code" "Should return success code"
-  assert_contains "$output" "test-custom" "Should list custom blueprint"
+  output=$(__logic_get_blueprint_info_json "factorio")
+  assert_equals "null" "$(echo "$output" | jq -r '.Metadata.MaxPlayers')" \
+    "Uncurated MaxPlayers must be null, not 0"
+  assert_equals "true" "$(echo "$output" | jq '.Metadata.MinRamMb == null')" \
+    "Uncurated MinRamMb must be JSON null"
 }
 
-function test_list_native_blueprints_invalid_source() {
-  log_test_step "Testing __logic_list_native_blueprints with invalid source"
-
-  __logic_list_native_blueprints "invalid" 2> /dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_INVALID_ARG" "$exit_code" "Should return invalid argument error"
-}
-
-function test_list_native_blueprints_empty_source() {
-  log_test_step "Testing __logic_list_native_blueprints with empty source"
-
-  __logic_list_native_blueprints "" 2> /dev/null
-  local exit_code=$?
-
-  # When no argument is passed, it defaults to "all", so output is still expected
-  assert_equals "$EC_SUCCESS_BLUEPRINT_LISTED" "$exit_code" "Should return success code"
-}
-
-function test_list_native_blueprints_sorted() {
-  log_test_step "Testing __logic_list_native_blueprints output is sorted"
-
+function test_info_json_steam_fields_preserved() {
+  # Top-level fields keep their existing string shape (consumers bind unchanged).
   local output
-  output=$(__logic_list_native_blueprints "all")
-
-  local sorted_output
-  sorted_output=$(echo "$output" | sort)
-
-  assert_equals "$sorted_output" "$output" "Output should be sorted alphabetically"
+  output=$(__logic_get_blueprint_info_json "7dtd")
+  assert_equals "294420" "$(echo "$output" | jq -r '.SteamAppId')" "SteamAppId preserved as string"
+  assert_equals "false" "$(echo "$output" | jq -r '.IsSteamAccountRequired')" "Bool false preserved (not blanked)"
 }
 
-# =============================================================================
-# __logic_get_native_blueprint_info() TESTS
-# =============================================================================
-
-function test_get_native_blueprint_info_factorio() {
-  log_test_step "Testing __logic_get_native_blueprint_info with factorio (non-Steam)"
-
-  local output
-  output=$(__logic_get_native_blueprint_info "factorio")
-  local exit_code=$?
-
-  assert_equals "$EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED" "$exit_code" "Should return success code"
-  assert_contains "$output" "name=factorio" "Should contain blueprint name"
-  assert_contains "$output" "blueprint_type=native" "Should identify as native type"
-  assert_contains "$output" "executable_file=" "Should contain executable_file field"
-  assert_contains "$output" "blueprint_path=" "Should contain blueprint_path field"
+function test_info_json_not_found() {
+  __logic_get_blueprint_info_json "nonexistent" 2> /dev/null
+  assert_equals "$EC_BLUEPRINT_NOT_FOUND" "$?" "Should return blueprint not found error"
 }
 
-function test_get_native_blueprint_info_starbound() {
-  log_test_step "Testing __logic_get_native_blueprint_info with starbound (Steam with account)"
-
-  local output
-  output=$(__logic_get_native_blueprint_info "starbound")
-  local exit_code=$?
-
-  assert_equals "$EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED" "$exit_code" "Should return success code"
-  assert_contains "$output" "name=starbound" "Should contain blueprint name"
-  assert_contains "$output" "steam_app_id=" "Should contain steam_app_id field"
-  assert_contains "$output" "is_steam_account_required=" "Should contain account requirement field"
+function test_info_json_empty_param() {
+  __logic_get_blueprint_info_json "" 2> /dev/null
+  assert_equals "$EC_INVALID_ARG" "$?" "Should return invalid argument error"
 }
 
-function test_get_native_blueprint_info_necesse() {
-  log_test_step "Testing __logic_get_native_blueprint_info with necesse (Steam no account)"
-
-  local output
-  output=$(__logic_get_native_blueprint_info "necesse")
-  local exit_code=$?
-
-  assert_equals "$EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED" "$exit_code" "Should return success code"
-  assert_contains "$output" "name=necesse" "Should contain blueprint name"
-  assert_contains "$output" "steam_app_id=" "Should contain steam_app_id field"
-}
-
-function test_get_native_blueprint_info_not_found() {
-  log_test_step "Testing __logic_get_native_blueprint_info with non-existent blueprint"
-
-  __logic_get_native_blueprint_info "nonexistent" 2> /dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_BLUEPRINT_NOT_FOUND" "$exit_code" "Should return blueprint not found error"
-}
-
-function test_get_native_blueprint_info_empty_param() {
-  log_test_step "Testing __logic_get_native_blueprint_info with empty parameter"
-
-  __logic_get_native_blueprint_info "" 2> /dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_INVALID_ARG" "$exit_code" "Should return invalid argument error"
-}
-
-function test_get_native_blueprint_info_permission_denied() {
-  log_test_step "Testing __logic_get_native_blueprint_info with unreadable blueprint"
-
-  local blueprint_path="$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/terraria.bp"
-  local original_perms=$(stat -c "%a" "$blueprint_path")
-
-  # Make unreadable
+function test_info_json_permission_denied() {
+  local blueprint_path="$KGSM_SYSTEM_BLUEPRINTS_DIR/terraria.bp.yaml"
+  local original_perms
+  original_perms=$(stat -c "%a" "$blueprint_path")
   chmod 000 "$blueprint_path"
-
-  # Test
-  __logic_get_native_blueprint_info "terraria" 2> /dev/null
+  __logic_get_blueprint_info_json "terraria" 2> /dev/null
   local exit_code=$?
-
-  # Restore immediately
   chmod "$original_perms" "$blueprint_path"
-
   assert_equals "$EC_PERMISSION" "$exit_code" "Should return permission error"
 }
-
-function test_get_native_blueprint_info_output_format() {
-  log_test_step "Testing __logic_get_native_blueprint_info output format"
-
-  local output
-  output=$(__logic_get_native_blueprint_info "factorio")
-
-  # Verify all required fields are present
-  assert_contains "$output" "name=" "Should contain name field"
-  assert_contains "$output" "ports=" "Should contain ports field"
-  assert_contains "$output" "steam_app_id=" "Should contain steam_app_id field"
-  assert_contains "$output" "is_steam_account_required=" "Should contain is_steam_account_required field"
-  assert_contains "$output" "executable_file=" "Should contain executable_file field"
-  assert_contains "$output" "level_name=" "Should contain level_name field"
-  assert_contains "$output" "executable_subdirectory=" "Should contain executable_subdirectory field"
-  assert_contains "$output" "executable_arguments=" "Should contain executable_arguments field"
-  assert_contains "$output" "stop_command=" "Should contain stop_command field"
-  assert_contains "$output" "save_command=" "Should contain save_command field"
-  assert_contains "$output" "blueprint_type=native" "Should contain blueprint_type field"
-  assert_contains "$output" "blueprint_path=" "Should contain blueprint_path field"
-}
-
-# =============================================================================
-# __logic_find_container_blueprint() TESTS
-# =============================================================================
-
-function test_find_container_blueprint_exists() {
-  log_test_step "Testing __logic_find_container_blueprint with existing blueprint"
-
-  local output
-  output=$(__logic_find_container_blueprint "vrising")
-  local exit_code=$?
-
-  assert_equals "$EC_SUCCESS_BLUEPRINT_FOUND" "$exit_code" "Should return success code"
-  assert_contains "$output" "vrising.docker-compose.yml" "Path should contain docker-compose file"
-  assert_file_exists "$output" "Returned path should exist"
-}
-
-function test_find_container_blueprint_with_extension() {
-  log_test_step "Testing __logic_find_container_blueprint with .docker-compose.yml extension"
-
-  local output
-  output=$(__logic_find_container_blueprint "vrising.docker-compose.yml")
-  local exit_code=$?
-
-  assert_equals "$EC_SUCCESS_BLUEPRINT_FOUND" "$exit_code" "Should return success code"
-  assert_contains "$output" "vrising.docker-compose.yml" "Path should contain docker-compose file"
-}
-
-function test_find_container_blueprint_not_found() {
-  log_test_step "Testing __logic_find_container_blueprint with non-existent blueprint"
-
-  __logic_find_container_blueprint "nonexistent" 2> /dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_BLUEPRINT_NOT_FOUND" "$exit_code" "Should return blueprint not found error"
-}
-
-function test_find_container_blueprint_empty_param() {
-  log_test_step "Testing __logic_find_container_blueprint with empty parameter"
-
-  __logic_find_container_blueprint "" 2> /dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_INVALID_ARG" "$exit_code" "Should return invalid argument error"
-}
-
-# =============================================================================
-# __logic_list_container_blueprints() TESTS
-# =============================================================================
-
-function test_list_container_blueprints_all() {
-  log_test_step "Testing __logic_list_container_blueprints with 'all' source"
-
-  local output
-  output=$(__logic_list_container_blueprints "all")
-  local exit_code=$?
-
-  assert_equals "$EC_SUCCESS_BLUEPRINT_LISTED" "$exit_code" "Should return success code"
-  assert_contains "$output" "vrising" "Should list vrising"
-}
-
-function test_list_container_blueprints_default() {
-  log_test_step "Testing __logic_list_container_blueprints with 'default' source"
-
-  local output
-  output=$(__logic_list_container_blueprints "default")
-  local exit_code=$?
-
-  assert_equals "$EC_SUCCESS_BLUEPRINT_LISTED" "$exit_code" "Should return success code"
-}
-
-function test_list_container_blueprints_custom() {
-  log_test_step "Testing __logic_list_container_blueprints with 'custom' source"
-
-  local output
-  output=$(__logic_list_container_blueprints "custom")
-  local exit_code=$?
-
-  assert_equals "$EC_SUCCESS_BLUEPRINT_LISTED" "$exit_code" "Should return success code (even if empty)"
-}
-
-function test_list_container_blueprints_invalid_source() {
-  log_test_step "Testing __logic_list_container_blueprints with invalid source"
-
-  __logic_list_container_blueprints "invalid" 2> /dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_INVALID_ARG" "$exit_code" "Should return invalid argument error"
-}
-
-# =============================================================================
-# __logic_get_container_blueprint_info() TESTS
-# =============================================================================
-
-function test_get_container_blueprint_info_vrising() {
-  log_test_step "Testing __logic_get_container_blueprint_info with vrising"
-
-  local output
-  output=$(__logic_get_container_blueprint_info "vrising")
-  local exit_code=$?
-
-  assert_equals "$EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED" "$exit_code" "Should return success code"
-  assert_contains "$output" "name=vrising" "Should contain blueprint name"
-  assert_contains "$output" "blueprint_type=container" "Should identify as container type"
-  assert_contains "$output" "blueprint_path=" "Should contain blueprint_path field"
-}
-
-function test_get_container_blueprint_info_not_found() {
-  log_test_step "Testing __logic_get_container_blueprint_info with non-existent blueprint"
-
-  __logic_get_container_blueprint_info "nonexistent" 2> /dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_BLUEPRINT_NOT_FOUND" "$exit_code" "Should return blueprint not found error"
-}
-
-function test_get_container_blueprint_info_empty_param() {
-  log_test_step "Testing __logic_get_container_blueprint_info with empty parameter"
-
-  __logic_get_container_blueprint_info "" 2> /dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_INVALID_ARG" "$exit_code" "Should return invalid argument error"
-}
-
-function test_get_container_blueprint_info_output_format() {
-  log_test_step "Testing __logic_get_container_blueprint_info output format"
-
-  local output
-  output=$(__logic_get_container_blueprint_info "vrising")
-
-  # Verify all required fields are present (even if empty)
-  assert_contains "$output" "name=" "Should contain name field"
-  assert_contains "$output" "ports=" "Should contain ports field"
-  assert_contains "$output" "steam_app_id=" "Should contain steam_app_id field (empty)"
-  assert_contains "$output" "is_steam_account_required=" "Should contain is_steam_account_required field (empty)"
-  assert_contains "$output" "executable_file=" "Should contain executable_file field (empty)"
-  assert_contains "$output" "level_name=" "Should contain level_name field (empty)"
-  assert_contains "$output" "executable_subdirectory=" "Should contain executable_subdirectory field (empty)"
-  assert_contains "$output" "executable_arguments=" "Should contain executable_arguments field (empty)"
-  assert_contains "$output" "stop_command=" "Should contain stop_command field (empty)"
-  assert_contains "$output" "save_command=" "Should contain save_command field (empty)"
-  assert_contains "$output" "blueprint_type=container" "Should contain blueprint_type field"
-  assert_contains "$output" "blueprint_path=" "Should contain blueprint_path field"
-}
-
-function test_get_container_blueprint_info_permission_denied() {
-  log_test_step "Testing __logic_get_container_blueprint_info with unreadable blueprint"
-
-  local blueprint_path="$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR/vrising.docker-compose.yml"
-  local original_perms=$(stat -c "%a" "$blueprint_path")
-
-  # Make unreadable
-  chmod 000 "$blueprint_path"
-
-  # Test
-  __logic_get_container_blueprint_info "vrising" 2> /dev/null
-  local exit_code=$?
-
-  # Restore immediately
-  chmod "$original_perms" "$blueprint_path"
-
-  assert_equals "$EC_PERMISSION" "$exit_code" "Should return permission error"
-}
-

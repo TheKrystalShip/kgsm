@@ -69,7 +69,7 @@ function validate_blueprint() {
 
 export -f validate_blueprint
 
-# Check if a blueprint exists (handles both native .bp and container .docker-compose.yml)
+# Check if a blueprint exists (unified `<name>.bp.yaml`, either runtime)
 # Usage: validate_blueprint_exists <blueprint_name_or_path>
 # Returns: 0 if exists, prints path to stdout; non-zero if not found
 function validate_blueprint_exists() {
@@ -90,10 +90,8 @@ function validate_blueprint_exists() {
     # Blueprint not found, provide helpful error message
     __print_error "Blueprint '$blueprint_input' not found"
     __print_error "Searched in:"
-    __print_error "  - Custom native: $KGSM_USER_BLUEPRINTS_NATIVE_DIR"
-    __print_error "  - Custom container: $KGSM_USER_BLUEPRINTS_CONTAINER_DIR"
-    __print_error "  - Default native: $KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR"
-    __print_error "  - Default container: $KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR"
+    __print_error "  - User: $KGSM_USER_BLUEPRINTS_DIR"
+    __print_error "  - System: $KGSM_SYSTEM_BLUEPRINTS_DIR"
     return $EC_FILE_NOT_FOUND
   fi
 }
@@ -127,7 +125,12 @@ function validate_blueprint_readable() {
 
 export -f validate_blueprint_readable
 
-# Validate blueprint format based on file type
+# Validate a unified blueprint's format and required fields.
+# All blueprints are YAML (`<name>.bp.yaml`); `runtime` discriminates the body.
+# Required: `name`, `runtime` (native|container); native requires
+# `native.executable_file`; container requires a `container.compose` with at
+# least one service. (`level_name` / `executable_arguments` are optional — they
+# default during instance creation.)
 # Usage: validate_blueprint_format <blueprint_path>
 # Returns: 0 if valid format, non-zero if invalid
 function validate_blueprint_format() {
@@ -138,116 +141,60 @@ function validate_blueprint_format() {
     return $EC_INVALID_ARG
   fi
 
-  # Determine blueprint type by extension
-  if [[ "$blueprint_path" == *.bp ]]; then
-    validate_native_blueprint_format "$blueprint_path"
-  elif [[ "$blueprint_path" == *.docker-compose.yml ]] || [[ "$blueprint_path" == *.docker-compose.yaml ]]; then
-    validate_container_blueprint_format "$blueprint_path"
-  else
-    __print_error "Unknown blueprint format: $blueprint_path"
-    __print_error "Supported formats: .bp, .docker-compose.yml, .docker-compose.yaml"
+  # Check if file is empty
+  if [[ ! -s "$blueprint_path" ]]; then
+    __print_error "Blueprint file is empty: $blueprint_path"
     return $EC_INVALID_ARG
   fi
+
+  # YAML syntax (yq is a hard dependency)
+  if ! yq eval '.' "$blueprint_path" >/dev/null 2>&1; then
+    __print_error "Invalid YAML syntax in blueprint: $blueprint_path"
+    return $EC_INVALID_ARG
+  fi
+
+  # Required common fields
+  local name runtime
+  name=$(yq -r '.name // ""' "$blueprint_path" 2>/dev/null)
+  runtime=$(yq -r '.runtime // ""' "$blueprint_path" 2>/dev/null)
+
+  if [[ -z "$name" ]]; then
+    __print_error "Blueprint missing required field 'name': $blueprint_path"
+    return $EC_INVALID_ARG
+  fi
+
+  case "$runtime" in
+    native)
+      local executable_file
+      executable_file=$(yq -r '.native.executable_file // ""' "$blueprint_path" 2>/dev/null)
+      if [[ -z "$executable_file" ]]; then
+        __print_error "Native blueprint missing required field 'native.executable_file': $blueprint_path"
+        return $EC_INVALID_ARG
+      fi
+      ;;
+    container)
+      local compose service_count
+      compose=$(yq -r '.container.compose // ""' "$blueprint_path" 2>/dev/null)
+      if [[ -z "$compose" ]]; then
+        __print_error "Container blueprint missing required field 'container.compose': $blueprint_path"
+        return $EC_INVALID_ARG
+      fi
+      service_count=$(printf '%s' "$compose" | yq -r '.services | length' 2>/dev/null)
+      if [[ ! "$service_count" =~ ^[0-9]+$ ]] || ((service_count < 1)); then
+        __print_error "Container blueprint 'container.compose' defines no services: $blueprint_path"
+        return $EC_INVALID_ARG
+      fi
+      ;;
+    *)
+      __print_error "Blueprint has invalid or missing 'runtime' (expected native|container): $blueprint_path"
+      return $EC_INVALID_ARG
+      ;;
+  esac
+
+  return 0
 }
 
 export -f validate_blueprint_format
-
-# Validate native blueprint (.bp) format
-# Usage: validate_native_blueprint_format <blueprint_path>
-# Returns: 0 if valid, non-zero if invalid
-function validate_native_blueprint_format() {
-  local blueprint_path="$1"
-
-  if [[ -z "$blueprint_path" ]]; then
-    __print_error "validate_native_blueprint_format: Blueprint path cannot be empty"
-    return $EC_INVALID_ARG
-  fi
-
-  # Check if file is empty
-  if [[ ! -s "$blueprint_path" ]]; then
-    __print_error "Blueprint file is empty: $blueprint_path"
-    return $EC_INVALID_ARG
-  fi
-
-  # Check for basic required fields in native blueprints
-  local required_fields=(
-    "name"
-    "executable_file"
-    "executable_arguments"
-  )
-
-  local missing_fields=()
-
-  for field in "${required_fields[@]}"; do
-    if ! grep -q "^${field}=" "$blueprint_path"; then
-      missing_fields+=("$field")
-    fi
-  done
-
-  if [[ ${#missing_fields[@]} -gt 0 ]]; then
-    __print_error "Blueprint missing required fields: ${missing_fields[*]}"
-    __print_error "Blueprint path: $blueprint_path"
-    return $EC_INVALID_ARG
-  fi
-
-  # Check for malformed key=value pairs
-  local line_number=0
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    ((line_number++))
-
-    # Skip empty lines and comments
-    [[ -z "$line" ]] && continue
-    [[ "$line" =~ ^[[:space:]]*# ]] && continue
-
-    # Check if line follows key=value format
-    if [[ ! "$line" =~ ^[a-zA-Z_][a-zA-Z0-9_]*= ]]; then
-      __print_error "Invalid format at line $line_number: $line"
-      __print_error "Expected format: key=value"
-      __print_error "Blueprint path: $blueprint_path"
-      return $EC_INVALID_ARG
-    fi
-  done <"$blueprint_path"
-
-  return 0
-}
-
-export -f validate_native_blueprint_format
-
-# Validate container blueprint (docker-compose.yml) format
-# Usage: validate_container_blueprint_format <blueprint_path>
-# Returns: 0 if valid, non-zero if invalid
-function validate_container_blueprint_format() {
-  local blueprint_path="$1"
-
-  if [[ -z "$blueprint_path" ]]; then
-    __print_error "validate_container_blueprint_format: Blueprint path cannot be empty"
-    return $EC_INVALID_ARG
-  fi
-
-  # Check if file is empty
-  if [[ ! -s "$blueprint_path" ]]; then
-    __print_error "Blueprint file is empty: $blueprint_path"
-    return $EC_INVALID_ARG
-  fi
-
-  # Basic YAML syntax validation if yq is available
-  if command -v yq >/dev/null 2>&1; then
-    if ! yq eval '.' "$blueprint_path" >/dev/null 2>&1; then
-      __print_error "Invalid YAML syntax in blueprint: $blueprint_path"
-      return $EC_INVALID_ARG
-    fi
-  else
-    # Fallback: basic checks without yq
-    if ! grep -q "services:" "$blueprint_path"; then
-      __print_error "Missing 'services:' field in docker-compose blueprint: $blueprint_path"
-      return $EC_INVALID_ARG
-    fi
-  fi
-
-  return 0
-}
-
-export -f validate_container_blueprint_format
 
 # =============================================================================
 # UTILITY VALIDATION FUNCTIONS

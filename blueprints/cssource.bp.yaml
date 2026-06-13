@@ -1,0 +1,24 @@
+schema_version: 1
+name: cssource
+runtime: native
+metadata:
+  # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
+  display_name: null
+  description: null
+  max_players: null
+  min_ram_mb: null
+  recommended_ram_mb: null
+  base_disk_mb: null
+native:
+  ports: 26900/udp|27015/tcp|27015/udp|27020/udp|27005/udp
+  steam_app_id: 232330
+  steamcmd_arguments: ""
+  is_steam_account_required: false
+  platform: linux
+  level_name: de_dust
+  executable_subdirectory: DedicatedServer
+  executable_file: srcds_run
+  executable_arguments: -console -game cstrike -secure +maxplayers 22 +map $instance_level_name
+  stop_command: exit
+  save_command: ""
+  startup_success_regex: Server started

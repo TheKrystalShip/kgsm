@@ -9,9 +9,9 @@
 # - 0: Success (no event needed)
 # - Standard error codes: EC_BLUEPRINT_NOT_FOUND, EC_INVALID_BLUEPRINT, EC_PERMISSION, etc.
 #
-# Note: The blueprint module is primarily an orchestration layer that combines
-# results from blueprints.native.sh and blueprints.container.sh modules.
-# Most blueprint operations are delegated to those specialized modules.
+# Blueprints are unified `<name>.bp.yaml` files in a single flat directory; the
+# `runtime` field (native|container) discriminates the body. This handler reads
+# them via yq — there is no longer a native/container split at the file level.
 
 # Disabling SC2086 globally:
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
@@ -47,16 +47,22 @@ function __logic_get_blueprint_type() {
     return $EC_BLUEPRINT_NOT_FOUND
   fi
 
-  # Determine blueprint type based on file extension
-  if [[ "$blueprint_path" == *.bp ]]; then
-    echo "$KGSM_BLUEPRINT_TYPE_NATIVE"
-    return 0
-  elif [[ "$blueprint_path" == *docker-compose.yml ]] || [[ "$blueprint_path" == *docker-compose.yaml ]]; then
-    echo "$KGSM_BLUEPRINT_TYPE_CONTAINER"
-    return 0
-  else
-    return $EC_INVALID_BLUEPRINT
-  fi
+  # Determine blueprint type from the `runtime` field (no longer the extension)
+  local runtime
+  runtime=$(yq -r '.runtime // ""' "$blueprint_path" 2>/dev/null)
+  case "$runtime" in
+    native)
+      echo "$KGSM_BLUEPRINT_TYPE_NATIVE"
+      return 0
+      ;;
+    container)
+      echo "$KGSM_BLUEPRINT_TYPE_CONTAINER"
+      return 0
+      ;;
+    *)
+      return $EC_INVALID_BLUEPRINT
+      ;;
+  esac
 }
 
 export -f __logic_get_blueprint_type
@@ -117,35 +123,36 @@ function __logic_get_blueprint_path() {
 
 export -f __logic_get_blueprint_path
 
-# Lists all blueprints (both native and container)
+# Lists blueprints by logical name from the unified flat directory.
 # Args: $1 = source ("custom", "default", or "all") - optional, defaults to "all"
-# Returns: Success code and echoes newline-separated list, or error code
+#       custom  -> user blueprints only ($KGSM_USER_BLUEPRINTS_DIR)
+#       default -> system blueprints only ($KGSM_SYSTEM_BLUEPRINTS_DIR)
+#       all     -> both (a user blueprint shadows a same-named system one)
+# Returns: Success code and echoes newline-separated, de-duplicated list.
 function __logic_list_blueprints() {
   local source="${1:-all}"
 
-  local -a all_blueprints=()
+  local -a dirs=()
+  case "$source" in
+    custom) dirs=("$KGSM_USER_BLUEPRINTS_DIR") ;;
+    default) dirs=("$KGSM_SYSTEM_BLUEPRINTS_DIR") ;;
+    all | "") dirs=("$KGSM_USER_BLUEPRINTS_DIR" "$KGSM_SYSTEM_BLUEPRINTS_DIR") ;;
+    *) return $EC_INVALID_ARG ;;
+  esac
 
-  # Get native blueprints
-  local native_list
-  native_list=$(__logic_list_native_blueprints "$source" 2>/dev/null)
-  if [[ -n "$native_list" ]]; then
-    while IFS= read -r blueprint; do
-      [[ -n "$blueprint" ]] && all_blueprints+=("$blueprint")
-    done <<< "$native_list"
-  fi
+  local -a names=()
+  local dir file base
+  for dir in "${dirs[@]}"; do
+    [[ -d "$dir" ]] || continue
+    while IFS= read -r -d '' file; do
+      base="${file##*/}"
+      base="${base%.bp.yaml}"
+      [[ -n "$base" ]] && names+=("$base")
+    done < <(find "$dir" -maxdepth 1 -name "*.bp.yaml" -type f -print0 2>/dev/null)
+  done
 
-  # Get container blueprints
-  local container_list
-  container_list=$(__logic_list_container_blueprints "$source" 2>/dev/null)
-  if [[ -n "$container_list" ]]; then
-    while IFS= read -r blueprint; do
-      [[ -n "$blueprint" ]] && all_blueprints+=("$blueprint")
-    done <<< "$container_list"
-  fi
-
-  # Remove duplicates and sort
-  if [[ ${#all_blueprints[@]} -gt 0 ]]; then
-    printf "%s\n" "${all_blueprints[@]}" | sort -u
+  if [[ ${#names[@]} -gt 0 ]]; then
+    printf "%s\n" "${names[@]}" | sort -u
   fi
 
   return $EC_SUCCESS_BLUEPRINT_LISTED
@@ -154,335 +161,87 @@ function __logic_list_blueprints() {
 export -f __logic_list_blueprints
 
 # =============================================================================
-# NATIVE BLUEPRINT LOGIC FUNCTIONS
+# UNIFIED BLUEPRINT INFO
 # =============================================================================
 
-# Finds a native blueprint file path
+# Emits a blueprint's info as the canonical PascalCase JSON object, including the
+# nested `Metadata` block. Reads the unified `.bp.yaml` directly (yq + jq) so the
+# advisory metadata numbers keep their real types — unknown values serialize as
+# JSON `null`, never an empty string or a fabricated 0.
 # Args: $1 = blueprint_name
-# Returns: Success code and echoes path, or EC_BLUEPRINT_NOT_FOUND
-function __logic_find_native_blueprint() {
+# Returns: EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED and echoes JSON, or an error code.
+# The blueprint_* variables below are populated dynamically by __source_blueprint.
+# shellcheck disable=SC2154
+function __logic_get_blueprint_info_json() {
   local blueprint="$1"
 
   if [[ -z "$blueprint" ]]; then
     return $EC_INVALID_ARG
   fi
 
-  # Strip .bp extension if present
-  [[ "$blueprint" == *.bp ]] && blueprint="${blueprint%.bp}"
-
-  # Check custom blueprints first (user-made blueprints take priority)
-  local bp_path="$KGSM_USER_BLUEPRINTS_NATIVE_DIR/$blueprint.bp"
-  if [[ -f "$bp_path" ]]; then
-    echo "$bp_path"
-    return $EC_SUCCESS_BLUEPRINT_FOUND
-  fi
-
-  # Check default blueprints (included with KGSM)
-  bp_path="$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/$blueprint.bp"
-  if [[ -f "$bp_path" ]]; then
-    echo "$bp_path"
-    return $EC_SUCCESS_BLUEPRINT_FOUND
-  fi
-
-  return $EC_BLUEPRINT_NOT_FOUND
-}
-
-export -f __logic_find_native_blueprint
-
-# Lists native blueprints from a specific location
-# Args: $1 = source ("custom", "default", or "all")
-# Returns: Success code and echoes newline-separated list, or error code
-function __logic_list_native_blueprints() {
-  local source="${1:-all}"
-
-  if [[ -z "$source" ]]; then
-    return $EC_INVALID_ARG
-  fi
-
-  local source_dir=""
-  case "$source" in
-    custom)
-      source_dir="$KGSM_USER_BLUEPRINTS_NATIVE_DIR"
-      ;;
-    default)
-      source_dir="$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR"
-      ;;
-    all)
-      # Will be handled by combining both
-      ;;
-    *)
-      return $EC_INVALID_ARG
-      ;;
-  esac
-
-  if [[ "$source" == "all" ]]; then
-    # Combine both sources
-    local -a blueprints=()
-
-    # Get custom blueprints
-    if [[ -d "$KGSM_USER_BLUEPRINTS_NATIVE_DIR" ]]; then
-      while IFS= read -r -d '' file; do
-        local basename="${file##*/}"
-        basename="${basename%.bp}"
-        [[ -n "$basename" ]] && blueprints+=("$basename")
-      done < <(find "$KGSM_USER_BLUEPRINTS_NATIVE_DIR" -maxdepth 1 -name "*.bp" -type f -print0 2>/dev/null)
-    fi
-
-    # Get default blueprints
-    if [[ -d "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR" ]]; then
-      while IFS= read -r -d '' file; do
-        local basename="${file##*/}"
-        basename="${basename%.bp}"
-        [[ -n "$basename" ]] && blueprints+=("$basename")
-      done < <(find "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR" -maxdepth 1 -name "*.bp" -type f -print0 2>/dev/null)
-    fi
-
-    # Remove duplicates and sort
-    if [[ ${#blueprints[@]} -gt 0 ]]; then
-      printf "%s\n" "${blueprints[@]}" | sort -u
-      return $EC_SUCCESS_BLUEPRINT_LISTED
-    fi
-
-    return $EC_SUCCESS_BLUEPRINT_LISTED  # Empty list is still success
-  else
-    # Single source
-    if [[ ! -d "$source_dir" ]]; then
-      return $EC_SUCCESS_BLUEPRINT_LISTED  # Empty list is success
-    fi
-
-    local -a blueprints=()
-    while IFS= read -r -d '' file; do
-      local basename="${file##*/}"
-      basename="${basename%.bp}"
-      [[ -n "$basename" ]] && blueprints+=("$basename")
-    done < <(find "$source_dir" -maxdepth 1 -name "*.bp" -type f -print0 2>/dev/null)
-
-    if [[ ${#blueprints[@]} -gt 0 ]]; then
-      printf "%s\n" "${blueprints[@]}" | sort -u
-    fi
-
-    return $EC_SUCCESS_BLUEPRINT_LISTED
-  fi
-}
-
-export -f __logic_list_native_blueprints
-
-# Gets native blueprint metadata
-# Args: $1 = blueprint_name
-# Returns: Success code and echoes structured data (key=value format), or error code
-function __logic_get_native_blueprint_info() {
-  local blueprint="$1"
-
-  if [[ -z "$blueprint" ]]; then
-    return $EC_INVALID_ARG
-  fi
-
-  # Find the blueprint
   local blueprint_path
-  blueprint_path=$(__logic_find_native_blueprint "$blueprint")
-  local result=$?
-
-  if [[ $result -ne $EC_SUCCESS_BLUEPRINT_FOUND ]]; then
+  if ! blueprint_path=$(__find_blueprint "$blueprint"); then
     return $EC_BLUEPRINT_NOT_FOUND
   fi
 
-  # Validate it's readable
   if [[ ! -r "$blueprint_path" ]]; then
     return $EC_PERMISSION
   fi
 
-  # Source the blueprint to get variables
-  if ! __source_blueprint "$blueprint" >/dev/null 2>&1; then
+  # Populate blueprint_* (runtime-aware: native fields filled for native, empty
+  # for container; ports derived from the embedded compose for container).
+  if ! __source_blueprint "$blueprint_path" >/dev/null 2>&1; then
     return $EC_INVALID_BLUEPRINT
   fi
 
-  # Return structured data (key=value format, parseable by module layer)
-  # shellcheck disable=SC2154
-  # The blueprint_* variables are created dynamically when sourcing the blueprint file
-  cat <<EOF
-name=$blueprint_name
-ports=$blueprint_ports
-steam_app_id=$blueprint_steam_app_id
-is_steam_account_required=$blueprint_is_steam_account_required
-executable_file=$blueprint_executable_file
-level_name=$blueprint_level_name
-executable_subdirectory=$blueprint_executable_subdirectory
-executable_arguments=$blueprint_executable_arguments
-stop_command=$blueprint_stop_command
-save_command=$blueprint_save_command
-blueprint_type=native
-blueprint_path=$blueprint_path
-EOF
+  local blueprint_type="Native"
+  [[ "$blueprint_runtime" == "container" ]] && blueprint_type="Container"
+
+  # Metadata: remap snake_case -> PascalCase while preserving null / int types.
+  local metadata_json
+  metadata_json=$(yq -o=json '.metadata // {}' "$blueprint_path" 2>/dev/null | jq '{
+    DisplayName: .display_name,
+    Description: .description,
+    MaxPlayers: .max_players,
+    MinRamMb: .min_ram_mb,
+    RecommendedRamMb: .recommended_ram_mb,
+    BaseDiskMb: .base_disk_mb
+  }')
+
+  # Top-level fields are emitted exactly as before (strings via --arg) so existing
+  # C# consumers bind unchanged; only the Metadata object is added.
+  jq -n \
+    --arg name "$blueprint_name" \
+    --arg ports "$blueprint_ports" \
+    --arg blueprint_type "$blueprint_type" \
+    --arg steam_app_id "$blueprint_steam_app_id" \
+    --arg is_steam_account_required "$blueprint_is_steam_account_required" \
+    --arg executable_file "$blueprint_executable_file" \
+    --arg level_name "$blueprint_level_name" \
+    --arg executable_subdirectory "$blueprint_executable_subdirectory" \
+    --arg executable_arguments "$blueprint_executable_arguments" \
+    --arg stop_command "$blueprint_stop_command" \
+    --arg save_command "$blueprint_save_command" \
+    --argjson metadata "$metadata_json" \
+    '{
+      Name: $name,
+      Ports: $ports,
+      BlueprintType: $blueprint_type,
+      SteamAppId: $steam_app_id,
+      IsSteamAccountRequired: $is_steam_account_required,
+      ExecutableFile: $executable_file,
+      LevelName: $level_name,
+      ExecutableSubdirectory: $executable_subdirectory,
+      ExecutableArguments: $executable_arguments,
+      StopCommand: $stop_command,
+      SaveCommand: $save_command,
+      Metadata: $metadata
+    }'
 
   return $EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED
 }
 
-export -f __logic_get_native_blueprint_info
-
-# =============================================================================
-# CONTAINER BLUEPRINT LOGIC FUNCTIONS
-# =============================================================================
-
-# Finds a container blueprint file path
-# Args: $1 = blueprint_name
-# Returns: Success code and echoes path, or EC_BLUEPRINT_NOT_FOUND
-function __logic_find_container_blueprint() {
-  local blueprint="$1"
-
-  if [[ -z "$blueprint" ]]; then
-    return $EC_INVALID_ARG
-  fi
-
-  # Strip .docker-compose.yml extension if present
-  [[ "$blueprint" == *.docker-compose.yml ]] && blueprint="${blueprint%.docker-compose.yml}"
-
-  # Check custom blueprints first
-  local bp_path="$KGSM_USER_BLUEPRINTS_CONTAINER_DIR/$blueprint.docker-compose.yml"
-  if [[ -f "$bp_path" ]]; then
-    echo "$bp_path"
-    return $EC_SUCCESS_BLUEPRINT_FOUND
-  fi
-
-  # Check default blueprints
-  bp_path="$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR/$blueprint.docker-compose.yml"
-  if [[ -f "$bp_path" ]]; then
-    echo "$bp_path"
-    return $EC_SUCCESS_BLUEPRINT_FOUND
-  fi
-
-  return $EC_BLUEPRINT_NOT_FOUND
-}
-
-export -f __logic_find_container_blueprint
-
-# Lists container blueprints from a specific location
-# Args: $1 = source ("custom", "default", or "all")
-# Returns: Success code and echoes newline-separated list, or error code
-function __logic_list_container_blueprints() {
-  local source="${1:-all}"
-
-  if [[ -z "$source" ]]; then
-    return $EC_INVALID_ARG
-  fi
-
-  local source_dir=""
-  case "$source" in
-    custom)
-      source_dir="$KGSM_USER_BLUEPRINTS_CONTAINER_DIR"
-      ;;
-    default)
-      source_dir="$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR"
-      ;;
-    all)
-      # Will be handled by combining both
-      ;;
-    *)
-      return $EC_INVALID_ARG
-      ;;
-  esac
-
-  if [[ "$source" == "all" ]]; then
-    # Combine both sources
-    local -a blueprints=()
-
-    # Get custom blueprints
-    if [[ -d "$KGSM_USER_BLUEPRINTS_CONTAINER_DIR" ]]; then
-      while IFS= read -r -d '' file; do
-        local basename="${file##*/}"
-        basename="${basename%.docker-compose.yml}"
-        [[ -n "$basename" ]] && blueprints+=("$basename")
-      done < <(find "$KGSM_USER_BLUEPRINTS_CONTAINER_DIR" -maxdepth 1 -name "*.docker-compose.yml" -type f -print0 2>/dev/null)
-    fi
-
-    # Get default blueprints
-    if [[ -d "$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR" ]]; then
-      while IFS= read -r -d '' file; do
-        local basename="${file##*/}"
-        basename="${basename%.docker-compose.yml}"
-        [[ -n "$basename" ]] && blueprints+=("$basename")
-      done < <(find "$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR" -maxdepth 1 -name "*.docker-compose.yml" -type f -print0 2>/dev/null)
-    fi
-
-    # Remove duplicates and sort
-    if [[ ${#blueprints[@]} -gt 0 ]]; then
-      printf "%s\n" "${blueprints[@]}" | sort -u
-      return $EC_SUCCESS_BLUEPRINT_LISTED
-    fi
-
-    return $EC_SUCCESS_BLUEPRINT_LISTED  # Empty list is still success
-  else
-    # Single source
-    if [[ ! -d "$source_dir" ]]; then
-      return $EC_SUCCESS_BLUEPRINT_LISTED  # Empty list is success
-    fi
-
-    local -a blueprints=()
-    while IFS= read -r -d '' file; do
-      local basename="${file##*/}"
-      basename="${basename%.docker-compose.yml}"
-      [[ -n "$basename" ]] && blueprints+=("$basename")
-    done < <(find "$source_dir" -maxdepth 1 -name "*.docker-compose.yml" -type f -print0 2>/dev/null)
-
-    if [[ ${#blueprints[@]} -gt 0 ]]; then
-      printf "%s\n" "${blueprints[@]}" | sort -u
-    fi
-
-    return $EC_SUCCESS_BLUEPRINT_LISTED
-  fi
-}
-
-export -f __logic_list_container_blueprints
-
-# Gets container blueprint metadata
-# Args: $1 = blueprint_name
-# Returns: Success code and echoes structured data (key=value format), or error code
-function __logic_get_container_blueprint_info() {
-  local blueprint="$1"
-
-  if [[ -z "$blueprint" ]]; then
-    return $EC_INVALID_ARG
-  fi
-
-  # Find the blueprint
-  local blueprint_path
-  blueprint_path=$(__logic_find_container_blueprint "$blueprint")
-  local result=$?
-
-  if [[ $result -ne $EC_SUCCESS_BLUEPRINT_FOUND ]]; then
-    return $EC_BLUEPRINT_NOT_FOUND
-  fi
-
-  # Validate it's readable
-  if [[ ! -r "$blueprint_path" ]]; then
-    return $EC_PERMISSION
-  fi
-
-  # Extract ports from docker-compose.yml using existing parser
-  local ports=""
-  if command -v __parse_docker_compose_to_ufw_ports >/dev/null 2>&1; then
-    ports=$(__parse_docker_compose_to_ufw_ports "$blueprint_path" 2>/dev/null || echo "")
-  fi
-
-  # Return structured data (key=value format)
-  cat <<EOF
-name=$blueprint
-ports=$ports
-steam_app_id=
-is_steam_account_required=
-executable_file=
-level_name=
-executable_subdirectory=
-executable_arguments=
-stop_command=
-save_command=
-blueprint_type=container
-blueprint_path=$blueprint_path
-EOF
-
-  return $EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED
-}
-
-export -f __logic_get_container_blueprint_info
+export -f __logic_get_blueprint_info_json
 
 # Mark module as loaded
 export KGSM_LOGIC_BLUEPRINTS_LOADED=1

@@ -1,0 +1,24 @@
+schema_version: 1
+name: minecraft
+runtime: native
+metadata:
+  # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
+  display_name: null
+  description: null
+  max_players: null
+  min_ram_mb: null
+  recommended_ram_mb: null
+  base_disk_mb: null
+native:
+  ports: 25565/udp
+  steam_app_id: 0
+  steamcmd_arguments: ""
+  is_steam_account_required: false
+  platform: linux
+  level_name: default
+  executable_subdirectory: ""
+  executable_file: java
+  executable_arguments: -Xmx4096M -Xms4096M -XX:+UseG1GC -XX:+ParallelRefProcEnabled -XX:MaxGCPauseMillis=200 -XX:+UnlockExperimentalVMOptions -XX:+DisableExplicitGC -XX:+AlwaysPreTouch -XX:G1NewSizePercent=30 -XX:G1MaxNewSizePercent=40 -XX:G1HeapRegionSize=8M -XX:G1ReservePercent=20 -XX:G1HeapWastePercent=5 -XX:G1MixedGCCountTarget=4 -XX:InitiatingHeapOccupancyPercent=15 -XX:G1MixedGCLiveThresholdPercent=90 -XX:G1RSetUpdatingPauseTimePercent=5 -XX:SurvivorRatio=32 -XX:+PerfDisableSharedMem -XX:MaxTenuringThreshold=1 -jar release.jar nogui
+  stop_command: /stop
+  save_command: /save-all
+  startup_success_regex: For help, type \"help\"

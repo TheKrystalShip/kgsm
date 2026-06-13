@@ -1,0 +1,24 @@
+schema_version: 1
+name: valheim
+runtime: native
+metadata:
+  # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
+  display_name: null
+  description: null
+  max_players: null
+  min_ram_mb: null
+  recommended_ram_mb: null
+  base_disk_mb: null
+native:
+  ports: 2456:2458/tcp|2456:2458/udp
+  steam_app_id: 896660
+  steamcmd_arguments: ""
+  is_steam_account_required: false
+  platform: linux
+  level_name: default
+  executable_subdirectory: ""
+  executable_file: start_server_bepinex.sh
+  executable_arguments: -nographics -batchmode -name $instance_level_name -port 2456 -public 1
+  stop_command: exit
+  save_command: ""
+  startup_success_regex: Opened Steam server

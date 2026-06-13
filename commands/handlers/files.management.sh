@@ -57,9 +57,18 @@ function __logic_create_container_compose_file() {
 
   local container_file="${_instance_working_dir}/${_instance_name}.docker-compose.yml"
 
-  # Expand template with environment variables
+  # Extract ONLY the embedded compose (a literal block scalar) — never the whole
+  # unified blueprint, which would leak schema_version/metadata/runtime into the
+  # docker-compose.yml. Then expand ${instance_*} placeholders against the
+  # sourced instance variables exactly as before.
+  local compose_body
+  compose_body=$(yq -r '.container.compose' "$_instance_blueprint_file" 2>/dev/null)
+  if [[ -z "$compose_body" || "$compose_body" == "null" ]]; then
+    return $EC_INVALID_BLUEPRINT
+  fi
+
   if ! eval "cat <<EOF
-$(<"$_instance_blueprint_file")
+$compose_body
 EOF
 " >"$container_file" 2>/dev/null; then
     return $EC_FAILED_TEMPLATE
@@ -96,10 +105,11 @@ function __logic_create_management_file() {
     return $EC_INVALID_CONFIG
   fi
 
-  # Extract blueprint_name from the blueprint file's 'name' field (not the filename)
+  # Extract blueprint_name from the blueprint's 'name' field (not the filename).
+  # The blueprint is YAML, so read it with yq rather than the INI config reader.
   local blueprint_name=""
   if [[ -n "$_instance_blueprint_file" && -f "$_instance_blueprint_file" ]]; then
-    blueprint_name=$(__get_config_value "$_instance_blueprint_file" "name" 2>/dev/null)
+    blueprint_name=$(yq -r '.name // ""' "$_instance_blueprint_file" 2>/dev/null)
   fi
 
   # Assemble management file from modules, resolving overrides per module

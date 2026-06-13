@@ -97,10 +97,10 @@ function setup_file() {
   assert_function_exists "__logic_set_file_ownership" "__logic_set_file_ownership should be exported"
 
   # Verify test blueprints exist
-  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/factorio.bp" "Factorio blueprint should exist"
-  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/terraria.bp" "Terraria blueprint should exist"
-  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/necesse.bp" "Necesse blueprint should exist"
-  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR/vrising.docker-compose.yml" "VRising blueprint should exist"
+  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_DIR/factorio.bp.yaml" "Factorio blueprint should exist"
+  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_DIR/terraria.bp.yaml" "Terraria blueprint should exist"
+  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_DIR/necesse.bp.yaml" "Necesse blueprint should exist"
+  assert_file_exists "$KGSM_SYSTEM_BLUEPRINTS_DIR/vrising.bp.yaml" "VRising blueprint should exist"
 
   # Verify module override directories for testing (new directory-based structure)
   assert_dir_exists "$KGSM_SYSTEM_OVERRIDES_DIR/factorio" "Factorio override directory should exist"

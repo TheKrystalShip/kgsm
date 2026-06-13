@@ -51,8 +51,6 @@ function test_system_paths_exported() {
   assert_not_null "$KGSM_TEMPLATES_DIR" "KGSM_TEMPLATES_DIR should be set"
   assert_not_null "$KGSM_MIGRATIONS_DIR" "KGSM_MIGRATIONS_DIR should be set"
   assert_not_null "$KGSM_SYSTEM_BLUEPRINTS_DIR" "KGSM_SYSTEM_BLUEPRINTS_DIR should be set"
-  assert_not_null "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR" "KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR should be set"
-  assert_not_null "$KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR" "KGSM_SYSTEM_BLUEPRINTS_CONTAINER_DIR should be set"
   assert_not_null "$KGSM_SYSTEM_OVERRIDES_DIR" "KGSM_SYSTEM_OVERRIDES_DIR should be set"
   assert_not_null "$KGSM_DEFAULT_CONFIG_FILE" "KGSM_DEFAULT_CONFIG_FILE should be set"
 }
@@ -70,8 +68,6 @@ function test_user_paths_exported() {
   assert_not_null "$KGSM_INSTANCES_DIR" "KGSM_INSTANCES_DIR should be set"
   assert_not_null "$KGSM_LOGS_DIR" "KGSM_LOGS_DIR should be set"
   assert_not_null "$KGSM_USER_BLUEPRINTS_DIR" "KGSM_USER_BLUEPRINTS_DIR should be set"
-  assert_not_null "$KGSM_USER_BLUEPRINTS_NATIVE_DIR" "KGSM_USER_BLUEPRINTS_NATIVE_DIR should be set"
-  assert_not_null "$KGSM_USER_BLUEPRINTS_CONTAINER_DIR" "KGSM_USER_BLUEPRINTS_CONTAINER_DIR should be set"
   assert_not_null "$KGSM_USER_OVERRIDES_DIR" "KGSM_USER_OVERRIDES_DIR should be set"
 }
 
@@ -108,8 +104,6 @@ function test_init_user_directories() {
   assert_dir_exists "$KGSM_INSTANCES_DIR" "KGSM_INSTANCES_DIR should exist"
   assert_dir_exists "$KGSM_LOGS_DIR" "KGSM_LOGS_DIR should exist"
   assert_dir_exists "$KGSM_USER_BLUEPRINTS_DIR" "KGSM_USER_BLUEPRINTS_DIR should exist"
-  assert_dir_exists "$KGSM_USER_BLUEPRINTS_NATIVE_DIR" "KGSM_USER_BLUEPRINTS_NATIVE_DIR should exist"
-  assert_dir_exists "$KGSM_USER_BLUEPRINTS_CONTAINER_DIR" "KGSM_USER_BLUEPRINTS_CONTAINER_DIR should exist"
   assert_dir_exists "$KGSM_USER_OVERRIDES_DIR" "KGSM_USER_OVERRIDES_DIR should exist"
 }
 
@@ -120,9 +114,9 @@ function test_init_user_directories() {
 function test_legacy_aliases_exported() {
   log_test_step "Testing legacy compatibility variables are exported"
 
-  # Test that legacy variables still exist
-  assert_not_null "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR" "KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR should be set"
-  assert_not_null "$KGSM_USER_BLUEPRINTS_NATIVE_DIR" "KGSM_USER_BLUEPRINTS_NATIVE_DIR should be set"
+  # Core path variables still exist
+  assert_not_null "$KGSM_SYSTEM_BLUEPRINTS_DIR" "KGSM_SYSTEM_BLUEPRINTS_DIR should be set"
+  assert_not_null "$KGSM_USER_BLUEPRINTS_DIR" "KGSM_USER_BLUEPRINTS_DIR should be set"
   assert_not_null "$KGSM_SYSTEM_OVERRIDES_DIR" "KGSM_SYSTEM_OVERRIDES_DIR should be set"
   assert_not_null "$KGSM_TEMPLATES_DIR" "KGSM_TEMPLATES_DIR should be set"
   assert_not_null "$KGSM_COMMANDS_DIR" "KGSM_COMMANDS_DIR should be set"

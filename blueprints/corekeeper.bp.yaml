@@ -1,0 +1,24 @@
+schema_version: 1
+name: corekeeper
+runtime: native
+metadata:
+  # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
+  display_name: null
+  description: null
+  max_players: null
+  min_ram_mb: null
+  recommended_ram_mb: null
+  base_disk_mb: null
+native:
+  ports: "22420"
+  steam_app_id: 1963720
+  steamcmd_arguments: ""
+  is_steam_account_required: false
+  platform: linux
+  level_name: default
+  executable_subdirectory: ""
+  executable_file: _launch.sh
+  executable_arguments: ""
+  stop_command: ""
+  save_command: ""
+  startup_success_regex: Game ID

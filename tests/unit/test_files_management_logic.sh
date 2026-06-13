@@ -148,12 +148,17 @@ function test_create_container_compose_template_expansion_fails() {
   local test_dir="$KGSM_TEST_SANDBOX/compose_test_template_fail"
   mkdir -p "$test_dir"
 
-  # Create a blueprint with invalid template syntax
-  local blueprint_file="$test_dir/bad_template.yml"
+  # Unified container blueprint whose embedded compose has invalid expansion
+  # syntax (unterminated command substitution) so eval-cat fails.
+  local blueprint_file="$test_dir/bad_template.bp.yaml"
   cat > "$blueprint_file" << 'EOF'
-version: "3"
-services:
-  invalid_syntax: $(this will cause expansion to fail
+schema_version: 1
+name: testinstance
+runtime: container
+container:
+  compose: |
+    services:
+      invalid_syntax: $(this will cause expansion to fail
 EOF
 
   local config_file="$test_dir/test.ini"
@@ -178,11 +183,15 @@ function test_create_container_compose_readonly_working_dir() {
   mkdir -p "$test_dir"
   chmod 555 "$test_dir"
 
-  local blueprint_file="$KGSM_TEST_SANDBOX/test_blueprint.yml"
+  local blueprint_file="$KGSM_TEST_SANDBOX/test_blueprint.bp.yaml"
   cat > "$blueprint_file" << EOF
-version: "3"
-services:
-  test: {}
+schema_version: 1
+name: testinstance
+runtime: container
+container:
+  compose: |
+    services:
+      test: {}
 EOF
 
   local config_file="$KGSM_TEST_SANDBOX/readonly_test.ini"
@@ -209,15 +218,19 @@ function test_create_container_compose_success() {
   local test_dir="$KGSM_TEST_SANDBOX/compose_test_success"
   mkdir -p "$test_dir"
 
-  # Create a simple blueprint
-  local blueprint_file="$test_dir/blueprint.yml"
+  # Create a simple unified container blueprint (compose embedded verbatim)
+  local blueprint_file="$test_dir/blueprint.bp.yaml"
   cat > "$blueprint_file" << EOF
-version: "3"
-services:
-  gameserver:
-    image: test/image:latest
-    ports:
-      - "27015:27015"
+schema_version: 1
+name: testinstance
+runtime: container
+container:
+  compose: |
+    services:
+      gameserver:
+        image: test/image:latest
+        ports:
+          - "27015:27015"
 EOF
 
   local config_file="$test_dir/test.ini"
@@ -242,15 +255,19 @@ function test_create_container_compose_with_env_vars() {
   local test_dir="$KGSM_TEST_SANDBOX/compose_test_env_vars"
   mkdir -p "$test_dir"
 
-  # Create blueprint with variable references
-  local blueprint_file="$test_dir/blueprint.yml"
+  # Unified container blueprint with ${instance_*} placeholders in the compose
+  local blueprint_file="$test_dir/blueprint.bp.yaml"
   cat > "$blueprint_file" << 'EOF'
-version: "3"
-services:
-  gameserver:
-    image: test/image:${instance_name}
-    environment:
-      - SERVER_NAME=${instance_name}
+schema_version: 1
+name: myserver
+runtime: container
+container:
+  compose: |
+    services:
+      gameserver:
+        image: test/image:${instance_name}
+        environment:
+          - SERVER_NAME=${instance_name}
 EOF
 
   local config_file="$test_dir/test.ini"
@@ -360,7 +377,7 @@ function test_create_management_file_invalid_runtime() {
   local test_dir="$KGSM_TEST_SANDBOX/mgmt_test_invalid_runtime_$$"
   mkdir -p "$test_dir"
 
-  local blueprint_file="$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/factorio.bp"
+  local blueprint_file="$KGSM_SYSTEM_BLUEPRINTS_DIR/factorio.bp.yaml"
   local config_file="$test_dir/test.ini"
   cat > "$config_file" << EOF
 name=testinstance
@@ -414,7 +431,7 @@ function test_create_management_file_replaces_existing() {
   local test_dir="$KGSM_TEST_SANDBOX/mgmt_test_replace_$$"
   mkdir -p "$test_dir"
 
-  local blueprint_file="$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/factorio.bp"
+  local blueprint_file="$KGSM_SYSTEM_BLUEPRINTS_DIR/factorio.bp.yaml"
   local mgmt_file="$test_dir/manage.sh"
   local config_file="$test_dir/test.ini"
 
@@ -449,7 +466,7 @@ function test_create_management_file_native_success() {
   mkdir -p "$test_dir"
 
   # Use necesse blueprint (no module overrides)
-  local blueprint_file="$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/necesse.bp"
+  local blueprint_file="$KGSM_SYSTEM_BLUEPRINTS_DIR/necesse.bp.yaml"
   local mgmt_file="$test_dir/manage.sh"
   local config_file="$test_dir/test.ini"
 
@@ -478,7 +495,7 @@ function test_create_management_file_native_with_module_overrides() {
   mkdir -p "$test_dir"
 
   # Use factorio blueprint which has module overrides (05-version.sh, 06-download.sh, 07-deploy.sh)
-  local blueprint_file="$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/factorio.bp"
+  local blueprint_file="$KGSM_SYSTEM_BLUEPRINTS_DIR/factorio.bp.yaml"
   local mgmt_file="$test_dir/manage.sh"
   local config_file="$test_dir/test.ini"
 
@@ -531,7 +548,7 @@ function test_create_management_file_assembles_all_modules() {
   local test_dir="$KGSM_TEST_SANDBOX/mgmt_test_modules_$$"
   mkdir -p "$test_dir"
 
-  local blueprint_file="$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR/factorio.bp"
+  local blueprint_file="$KGSM_SYSTEM_BLUEPRINTS_DIR/factorio.bp.yaml"
   local mgmt_file="$test_dir/manage.sh"
   local config_file="$test_dir/test.ini"
 

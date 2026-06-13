@@ -1,0 +1,24 @@
+schema_version: 1
+name: left4dead
+runtime: native
+metadata:
+  # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
+  display_name: null
+  description: null
+  max_players: null
+  min_ram_mb: null
+  recommended_ram_mb: null
+  base_disk_mb: null
+native:
+  ports: 27015:27020/udp
+  steam_app_id: 222840
+  steamcmd_arguments: ""
+  is_steam_account_required: false
+  platform: linux
+  level_name: l4d_hospital01_apartment
+  executable_subdirectory: ""
+  executable_file: srcds_run
+  executable_arguments: -console -game left4dead +map $instance_level_name +maxplayers 4
+  stop_command: exit
+  save_command: ""
+  startup_success_regex: ""

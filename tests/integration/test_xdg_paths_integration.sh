@@ -38,18 +38,18 @@ function setup_file() {
   assert_function_exists "__logic_assemble_management_file" "__logic_assemble_management_file should be defined"
 
   # Verify required directories exist
-  assert_not_null "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR" "System blueprints directory variable should be set"
-  assert_not_null "$KGSM_USER_BLUEPRINTS_NATIVE_DIR" "User blueprints directory variable should be set"
+  assert_not_null "$KGSM_SYSTEM_BLUEPRINTS_DIR" "System blueprints directory variable should be set"
+  assert_not_null "$KGSM_USER_BLUEPRINTS_DIR" "User blueprints directory variable should be set"
   assert_not_null "$KGSM_SYSTEM_OVERRIDES_DIR" "System overrides directory variable should be set"
   assert_not_null "$KGSM_USER_OVERRIDES_DIR" "User overrides directory variable should be set"
 
   # Create test blueprints in system directory
-  mkdir -p "${KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR}"
-  echo 'name=test-system' > "${KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR}/test-system.bp"
+  mkdir -p "${KGSM_SYSTEM_BLUEPRINTS_DIR}"
+  echo 'name: test-system' > "${KGSM_SYSTEM_BLUEPRINTS_DIR}/test-system.bp.yaml"
 
   # Create test blueprints in user directory
-  mkdir -p "${KGSM_USER_BLUEPRINTS_NATIVE_DIR}"
-  echo 'name=test-user' > "${KGSM_USER_BLUEPRINTS_NATIVE_DIR}/test-user.bp"
+  mkdir -p "${KGSM_USER_BLUEPRINTS_DIR}"
+  echo 'name: test-user' > "${KGSM_USER_BLUEPRINTS_DIR}/test-user.bp.yaml"
 
   # Create legacy .overrides.sh test files (for __find_override backward compat testing)
   mkdir -p "${KGSM_SYSTEM_OVERRIDES_DIR}"
@@ -65,18 +65,18 @@ function test_find_blueprint_user_first() {
   log_test_step "Testing __find_blueprint searches user directory first"
 
   # Create same-named blueprint in both locations
-  echo 'name=shared' > "${KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR}/shared.bp"
-  echo 'name=shared-user-version' > "${KGSM_USER_BLUEPRINTS_NATIVE_DIR}/shared.bp"
+  echo 'name: shared' > "${KGSM_SYSTEM_BLUEPRINTS_DIR}/shared.bp.yaml"
+  echo 'name: shared-user-version' > "${KGSM_USER_BLUEPRINTS_DIR}/shared.bp.yaml"
 
   # Find should return user version
   local found
   found=$(__find_blueprint "shared")
 
-  assert_equals "${KGSM_USER_BLUEPRINTS_NATIVE_DIR}/shared.bp" "$found" "User blueprint should take precedence"
+  assert_equals "${KGSM_USER_BLUEPRINTS_DIR}/shared.bp.yaml" "$found" "User blueprint should take precedence"
 
   # Cleanup
-  rm -f "${KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR}/shared.bp"
-  rm -f "${KGSM_USER_BLUEPRINTS_NATIVE_DIR}/shared.bp"
+  rm -f "${KGSM_SYSTEM_BLUEPRINTS_DIR}/shared.bp.yaml"
+  rm -f "${KGSM_USER_BLUEPRINTS_DIR}/shared.bp.yaml"
 }
 
 function test_find_blueprint_system_fallback() {
@@ -86,7 +86,7 @@ function test_find_blueprint_system_fallback() {
   local found
   found=$(__find_blueprint "test-system")
 
-  assert_equals "${KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR}/test-system.bp" "$found" "Should find system blueprint"
+  assert_equals "${KGSM_SYSTEM_BLUEPRINTS_DIR}/test-system.bp.yaml" "$found" "Should find system blueprint"
 }
 
 function test_find_blueprint_user_only() {
@@ -95,7 +95,7 @@ function test_find_blueprint_user_only() {
   local found
   found=$(__find_blueprint "test-user")
 
-  assert_equals "${KGSM_USER_BLUEPRINTS_NATIVE_DIR}/test-user.bp" "$found" "Should find user blueprint"
+  assert_equals "${KGSM_USER_BLUEPRINTS_DIR}/test-user.bp.yaml" "$found" "Should find user blueprint"
 }
 
 function test_find_blueprint_not_found() {
@@ -155,11 +155,11 @@ function test_blueprints_list_includes_both() {
   log_test_step "Testing blueprint listing includes both user and system blueprints"
 
   # Verify both directories exist and contain blueprints
-  assert_dir_exists "$KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR" "System blueprints directory should exist"
-  assert_dir_exists "$KGSM_USER_BLUEPRINTS_NATIVE_DIR" "User blueprints directory should exist"
+  assert_dir_exists "$KGSM_SYSTEM_BLUEPRINTS_DIR" "System blueprints directory should exist"
+  assert_dir_exists "$KGSM_USER_BLUEPRINTS_DIR" "User blueprints directory should exist"
 
-  assert_file_exists "${KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR}/test-system.bp" "System blueprint should exist"
-  assert_file_exists "${KGSM_USER_BLUEPRINTS_NATIVE_DIR}/test-user.bp" "User blueprint should exist"
+  assert_file_exists "${KGSM_SYSTEM_BLUEPRINTS_DIR}/test-system.bp.yaml" "System blueprint should exist"
+  assert_file_exists "${KGSM_USER_BLUEPRINTS_DIR}/test-user.bp.yaml" "User blueprint should exist"
 }
 
 # =============================================================================
@@ -174,13 +174,13 @@ function test_user_override_precedence() {
   echo '# User override - custom' > "${KGSM_USER_OVERRIDES_DIR}/game.overrides.sh"
 
   # Update test-system blueprint to have the right name for this test
-  echo 'name=game' > "${KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR}/test-system.bp"
+  echo 'name: game' > "${KGSM_SYSTEM_BLUEPRINTS_DIR}/test-system.bp.yaml"
 
   # Create mock instance config to test __find_override
   # The structure must be: $KGSM_INSTANCES_DIR/<blueprint>/<instance>/<instance>.config.ini
   mkdir -p "${KGSM_INSTANCES_DIR}/test-system/test-instance"
   cat > "${KGSM_INSTANCES_DIR}/test-system/test-instance/test-instance.config.ini" <<EOF
-blueprint_file=${KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR}/test-system.bp
+blueprint_file=${KGSM_SYSTEM_BLUEPRINTS_DIR}/test-system.bp.yaml
 EOF
 
   # Find override
@@ -195,7 +195,7 @@ EOF
   rm -f "${KGSM_SYSTEM_OVERRIDES_DIR}/game.overrides.sh"
   rm -f "${KGSM_USER_OVERRIDES_DIR}/game.overrides.sh"
   # Restore original test-system blueprint
-  echo 'name=test-system' > "${KGSM_SYSTEM_BLUEPRINTS_NATIVE_DIR}/test-system.bp"
+  echo 'name: test-system' > "${KGSM_SYSTEM_BLUEPRINTS_DIR}/test-system.bp.yaml"
 }
 
 # =============================================================================

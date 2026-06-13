@@ -1,0 +1,57 @@
+schema_version: 1
+name: vrising
+runtime: container
+metadata:
+  # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
+  display_name: null
+  description: null
+  max_players: null
+  min_ram_mb: null
+  recommended_ram_mb: null
+  base_disk_mb: null
+container:
+  compose: |-
+    services:
+      vrising:
+
+        # Official image for V Rising
+        image: ghcr.io/thekrystalship/vrising:latest
+
+        # Dynamic container name
+        container_name: ${instance_name}
+
+        # Use the host’s network stack directly.
+        network_mode: host
+
+        # Ensure these ports are forwarded to allow external access
+        ports:
+          - 9876:9876/udp
+          - 9877:9877/udp
+          - 27015:27015/udp
+          - 27016:27016/udp
+
+        # Bind mount volumes for persistent storage
+        volumes:
+          - type: bind
+            source: ${instance_backups_dir}
+            target: /opt/vrising/backups
+          - type: bind
+            source: ${instance_install_dir}
+            target: /opt/vrising/install
+          - type: bind
+            source: ${instance_logs_dir}
+            target: /opt/vrising/logs
+          - type: bind
+            source: ${instance_saves_dir}
+            target: /opt/vrising/saves
+          - type: bind
+            source: ${instance_temp_dir}
+            target: /opt/vrising/temp
+
+        # Environment variables passed onto the container
+        environment:
+          INSTANCE_AUTO_UPDATE: ${instance_auto_update}
+          STEAMCMD_ADDITIONAL_ARGS: ""
+
+        # Restart policy to keep the container running
+        restart: unless-stopped

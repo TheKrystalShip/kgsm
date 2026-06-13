@@ -104,8 +104,8 @@ ${UNDERLINE}Options:${END}
 
 ${UNDERLINE}Description:${END}
 Displays the complete contents of a blueprint file, including all
-configuration parameters. The blueprint name can refer to either a
-native (.bp) or container (docker-compose.yml) blueprint.
+configuration parameters. Blueprints are unified <name>.bp.yaml files;
+the runtime field distinguishes native from container.
 
 ${UNDERLINE}Examples:${END}
   $self info factorio
@@ -179,66 +179,48 @@ function _cmd_list() {
     esac
   done
 
-  # Build command args for native and container modules
-  local cmd_args="list"
+  # Map the user-facing filter to a discovery source. `detailed` is a
+  # presentation mode over the full (all) set.
+  local source="all"
+  case "$filter" in
+    default) source="default" ;;
+    custom) source="custom" ;;
+  esac
 
-  if [[ -n "$filter" ]]; then
-    cmd_args="$cmd_args $filter"
-  fi
+  local names
+  names=$(__logic_list_blueprints "$source" 2> /dev/null)
 
-  if [[ -n "$json_opt" ]]; then
-    cmd_args="$cmd_args --json"
-  fi
-
-  # Get results from both modules
-  local native_result
-  native_result=$(blueprints.native.sh $cmd_args 2> /dev/null)
-  local native_exit=$?
-
-  local container_result
-  container_result=$(blueprints.container.sh $cmd_args 2> /dev/null)
-  local container_exit=$?
-
-  # Combine results based on format
-  if [[ -n "$json_opt" ]]; then
-    # JSON format - merge arrays or objects
-    if [[ "$filter" == "detailed" ]]; then
-      # Detailed returns objects, not arrays
-      if [[ $native_exit -eq 0 && $container_exit -eq 0 && -n "$native_result" && -n "$container_result" ]]; then
-        jq -s '.[0] * .[1] | with_entries(select(.key != ""))' <(echo "$native_result") <(echo "$container_result")
-      elif [[ $native_exit -eq 0 && -n "$native_result" ]]; then
-        jq 'with_entries(select(.key != ""))' <(echo "$native_result")
-      elif [[ $container_exit -eq 0 && -n "$container_result" ]]; then
-        jq 'with_entries(select(.key != ""))' <(echo "$container_result")
-      else
-        echo "{}"
-      fi
+  if [[ "$filter" == "detailed" ]]; then
+    local name info
+    if [[ -n "$json_opt" ]]; then
+      # Object keyed by blueprint name -> full info object.
+      local obj="{}"
+      while IFS= read -r name; do
+        [[ -z "$name" ]] && continue
+        info=$(__logic_get_blueprint_info_json "$name" 2> /dev/null) || continue
+        obj=$(jq --arg k "$name" --argjson v "$info" '. + {($k): $v}' <<< "$obj")
+      done <<< "$names"
+      echo "$obj"
     else
-      # Regular list returns arrays
-      if [[ $native_exit -eq 0 && $container_exit -eq 0 && -n "$native_result" && -n "$container_result" ]]; then
-        jq -s 'add | map(select(length > 0)) | unique' <(echo "$native_result") <(echo "$container_result")
-      elif [[ $native_exit -eq 0 && -n "$native_result" ]]; then
-        jq 'map(select(length > 0)) | unique' <(echo "$native_result")
-      elif [[ $container_exit -eq 0 && -n "$container_result" ]]; then
-        jq 'map(select(length > 0)) | unique' <(echo "$container_result")
-      else
-        echo "[]"
-      fi
+      # One human-readable line per blueprint: name, runtime, display name.
+      while IFS= read -r name; do
+        [[ -z "$name" ]] && continue
+        info=$(__logic_get_blueprint_info_json "$name" 2> /dev/null) || continue
+        echo "$info" | jq -r '"\(.Name)\t\(.BlueprintType)\t\(.Metadata.DisplayName // "—")"'
+      done <<< "$names"
+    fi
+  elif [[ -n "$json_opt" ]]; then
+    if [[ -z "$names" ]]; then
+      echo "[]"
+    else
+      printf '%s\n' "$names" | jq -R . | jq -s 'map(select(length > 0))'
     fi
   else
-    # Text format - combine and sort
-    if [[ $native_exit -eq 0 || $container_exit -eq 0 ]]; then
-      printf "%s\n%s\n" "$native_result" "$container_result" | grep -v '^$' | sort -u
-    fi
+    [[ -n "$names" ]] && printf '%s\n' "$names"
   fi
 
-  # Return success if at least one module succeeded
-  if [[ $native_exit -eq 0 || $container_exit -eq 0 ]]; then
-    __dispatch_event_from_exit_code $EC_SUCCESS_BLUEPRINT_LISTED "system" "all" > /dev/null 2>&1
-    return 0
-  fi
-
-  return $EC_NOT_FOUND
+  __dispatch_event_from_exit_code $EC_SUCCESS_BLUEPRINT_LISTED "system" "all" > /dev/null 2>&1
+  return 0
 }
 
 function _cmd_info() {
@@ -262,7 +244,6 @@ function _cmd_info() {
         ;;
       *)
         blueprint="$1"
-        break
         ;;
     esac
     shift
@@ -282,34 +263,25 @@ function _cmd_info() {
     return $validation_result
   fi
 
-  # Try native module first
-  local cmd_args="info $blueprint"
   if [[ -n "$json_opt" ]]; then
-    cmd_args="$cmd_args --json"
+    # Canonical JSON object (with the nested Metadata block).
+    __logic_get_blueprint_info_json "$blueprint"
+    if [[ $? -ne $EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED ]]; then
+      __print_error "Blueprint not found: $blueprint"
+      return $EC_BLUEPRINT_NOT_FOUND
+    fi
+  else
+    # Human view: the raw unified blueprint file.
+    local blueprint_path
+    if ! blueprint_path=$(__find_blueprint "$blueprint"); then
+      __print_error "Blueprint not found: $blueprint"
+      return $EC_BLUEPRINT_NOT_FOUND
+    fi
+    cat "$blueprint_path"
   fi
 
-  local result
-  result=$(blueprints.native.sh $cmd_args 2> /dev/null)
-  local exit_code=$?
-
-  if [[ $exit_code -eq 0 && -n "$result" ]]; then
-    echo "$result"
-    __dispatch_event_from_exit_code $EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED "system" "$blueprint" > /dev/null 2>&1
-    return 0
-  fi
-
-  # Try container module
-  result=$(blueprints.container.sh $cmd_args 2> /dev/null)
-  exit_code=$?
-
-  if [[ $exit_code -eq 0 && -n "$result" ]]; then
-    echo "$result"
-    __dispatch_event_from_exit_code $EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED "system" "$blueprint" > /dev/null 2>&1
-    return 0
-  fi
-
-  __print_error "Blueprint not found: $blueprint"
-  return $EC_BLUEPRINT_NOT_FOUND
+  __dispatch_event_from_exit_code $EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED "system" "$blueprint" > /dev/null 2>&1
+  return 0
 }
 
 function _cmd_find() {
