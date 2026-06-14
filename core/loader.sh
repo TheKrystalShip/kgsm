@@ -388,9 +388,22 @@ function __get_instance_config_value() {
     exit $EC_FILE_NOT_FOUND
   fi
 
-  # Extract the specific value using grep with proper anchoring
+  # Extract the specific value using grep with proper anchoring.
+  # Split on the FIRST '=' only (cut -f2-) so values that themselves contain
+  # '=' (e.g. executable_arguments="--foo=bar baz") are preserved intact.
   local value
-  value=$(grep -E "^${config_key}\s*=" "$instance_config_file" 2> /dev/null | cut -d'=' -f2 | tr -d '"' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//' || echo "")
+  value=$(grep -E "^${config_key}[[:space:]]*=" "$instance_config_file" 2> /dev/null | head -n1 | cut -d'=' -f2-)
+
+  # Trim surrounding whitespace, then strip a single layer of wrapper quotes.
+  # This mirrors how KGSM itself parses .config.ini (see __source_with_prefix
+  # and the management script's __source_instance_config) — only the wrapping
+  # quote is removed, so quotes inside the value are left untouched.
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  value="${value#\"}"
+  value="${value%\"}"
+  value="${value#\'}"
+  value="${value%\'}"
 
   echo "$value"
 }

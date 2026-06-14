@@ -371,3 +371,145 @@ function test_remove_nonexistent_instance() {
   assert_not_equals 0 "$?" "remove with nonexistent instance should fail"
 }
 
+# =============================================================================
+# TEST: config-set / config-get
+# =============================================================================
+
+function test_config_set_get_roundtrip() {
+  log_test_step "Testing config-set then config-get round-trips a simple value"
+
+  local instance_name="test-cfg-roundtrip-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
+
+  local output
+  output=$("$MODULE" config-set "$instance_name" "auto_update=true" 2>&1)
+  assert_equals 0 "$?" "config-set should succeed"
+  assert_contains "$output" "Set" "config-set should report success"
+
+  output=$("$MODULE" config-get "$instance_name" "auto_update" 2>&1)
+  assert_equals 0 "$?" "config-get should succeed"
+  assert_equals "true" "$output" "config-get should return the value just set"
+}
+
+function test_config_set_complex_value_roundtrip() {
+  log_test_step "Testing config-set preserves spaces, '=', and backslashes via the CLI"
+
+  local instance_name="test-cfg-complex-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
+
+  # The whole key=value rides as a single argv element; the value contains
+  # spaces, an embedded '=', and a backslash.
+  local value='--start-server saves/my=world.zip --regex \d+'
+  "$MODULE" config-set "$instance_name" "executable_arguments=$value" >/dev/null 2>&1
+  assert_equals 0 "$?" "config-set should succeed with a complex value"
+
+  local output
+  output=$("$MODULE" config-get "$instance_name" "executable_arguments" 2>&1)
+  assert_equals 0 "$?" "config-get should succeed"
+  assert_equals "$value" "$output" \
+    "Complex value must round-trip verbatim through the CLI"
+}
+
+function test_config_set_value_with_dashdash_flag() {
+  log_test_step "Testing config-set value containing '--json' is not consumed as a flag"
+
+  local instance_name="test-cfg-flagval-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
+
+  local value='--json --verbose'
+  "$MODULE" config-set "$instance_name" "executable_arguments=$value" >/dev/null 2>&1
+  assert_equals 0 "$?" "config-set should succeed even when the value contains --json"
+
+  local output
+  output=$("$MODULE" config-get "$instance_name" "executable_arguments" 2>&1)
+  assert_equals "$value" "$output" \
+    "A value containing --json must not be stripped by global flag parsing"
+}
+
+function test_config_set_refuses_protected_key() {
+  log_test_step "Testing config-set refuses an identity key and leaves it unchanged"
+
+  local instance_name="test-cfg-protected-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
+
+  "$MODULE" config-set "$instance_name" "name=hacked" 2>/dev/null
+  assert_not_equals 0 "$?" "config-set should refuse the identity key 'name'"
+
+  local output
+  output=$("$MODULE" config-get "$instance_name" "name" 2>&1)
+  assert_equals "$instance_name" "$output" "'name' must be unchanged after refusal"
+}
+
+function test_config_set_toggle_key_hints_dedicated_flow() {
+  log_test_step "Testing config-set refuses a toggle and points to the files flow"
+
+  local instance_name="test-cfg-toggle-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
+
+  local output
+  output=$("$MODULE" config-set "$instance_name" "enable_firewall_management=true" 2>&1)
+  assert_not_equals 0 "$?" "config-set should refuse the integration toggle"
+  assert_contains "$output" "files ufw" \
+    "Refusal should point to the dedicated 'files ufw' flow"
+}
+
+function test_config_set_rejects_missing_assignment() {
+  log_test_step "Testing config-set with a non-assignment argument fails"
+
+  local instance_name="test-cfg-noassign-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
+
+  "$MODULE" config-set "$instance_name" "auto_update" 2>/dev/null
+  assert_not_equals 0 "$?" "config-set without '=' should fail"
+}
+
+function test_config_set_missing_args() {
+  log_test_step "Testing config-set with missing arguments fails"
+
+  "$MODULE" config-set 2>/dev/null
+  assert_not_equals 0 "$?" "config-set with no arguments should fail"
+}
+
+function test_config_get_missing_args() {
+  log_test_step "Testing config-get with missing arguments fails"
+
+  "$MODULE" config-get 2>/dev/null
+  assert_not_equals 0 "$?" "config-get with no arguments should fail"
+}
+
+function test_config_get_unknown_instance() {
+  log_test_step "Testing config-get on an unknown instance fails"
+
+  "$MODULE" config-get totally_nonexistent_instance_xyz auto_update 2>/dev/null
+  assert_not_equals 0 "$?" "config-get on a missing instance should fail"
+}
+
+function test_help_config_subcommands() {
+  log_test_step "Testing help output covers config-get and config-set"
+
+  local output
+  output=$("$MODULE" help 2>&1)
+  assert_contains "$output" "config-get" "main help should mention config-get"
+  assert_contains "$output" "config-set" "main help should mention config-set"
+
+  output=$("$MODULE" help config-set 2>&1)
+  assert_equals 0 "$?" "help config-set should exit 0"
+  assert_contains "$output" "config-set" "help config-set should describe the command"
+
+  output=$("$MODULE" help config-get 2>&1)
+  assert_equals 0 "$?" "help config-get should exit 0"
+  assert_contains "$output" "config-get" "help config-get should describe the command"
+}
+

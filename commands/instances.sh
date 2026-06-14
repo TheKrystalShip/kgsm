@@ -31,6 +31,9 @@ ${UNDERLINE}Commands:${END}
   generate-id <blueprint>     Generate unique instance identifier
   save <instance>             Send save command to instance
   input <instance> <command>  Send command to instance console
+  config-get <instance> <key> Read a value from the instance config
+  config-set <instance> <key>=<value>
+                              Set a runtime value in the instance config
   help [command]              Show help information
 
 ${UNDERLINE}Options:${END}
@@ -50,6 +53,9 @@ ${UNDERLINE}Examples:${END}
   $self find terraria-01
   $self save factorio-01
   $self input factorio-01 \"/say Hello players!\"
+  $self config-get factorio-01 auto_update
+  $self config-set factorio-01 auto_update=true
+  $self config-set factorio-01 \"executable_arguments=--start-server saves/world.zip\"
   $self help create
 
 ${UNDERLINE}Notes:${END}
@@ -316,6 +322,75 @@ Sends a command directly to the instance's console and displays the last
 ${UNDERLINE}Examples:${END}
   $self input factorio-01 \"/say Hello world\"
   $self input terraria-main \"save-all\"
+"
+}
+
+function show_usage_config_get() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Get Instance Config Value${END}
+
+Read a single value from an instance's configuration file.
+
+${UNDERLINE}Usage:${END}
+  $self config-get <instance> <key>
+
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
+  key                         Configuration key to read
+
+${UNDERLINE}Options:${END}
+  --help                      Display this help information
+
+${UNDERLINE}Description:${END}
+Prints the value for <key> from the instance's .config.ini. Any key may be
+read. Prints an empty line if the key is not present.
+
+${UNDERLINE}Examples:${END}
+  $self config-get factorio-01 auto_update
+  $self config-get factorio-01 executable_arguments
+"
+}
+
+function show_usage_config_set() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Set Instance Config Value${END}
+
+Set a single runtime value in an instance's configuration file.
+
+${UNDERLINE}Usage:${END}
+  $self config-set <instance> <key>=<value>
+
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
+  key=value                   Assignment; split on the first '=' so the value
+                              may itself contain '=', spaces, or a leading '-'
+                              (quote the whole token in your shell)
+
+${UNDERLINE}Options:${END}
+  --help                      Display this help information
+
+${UNDERLINE}Description:${END}
+Updates an existing key (or adds it if absent) and writes it back as
+key=\"value\". Only plain runtime values are settable — auto_update,
+executable_arguments, level_name, stop_command, save_command, the
+*_timeout_seconds values, startup_success_regex, and similar.
+
+Identity and path keys (name, runtime, every *_dir/*_file, …) are managed by
+KGSM and are refused. The integration toggles (enable_firewall_management,
+enable_port_forwarding, enable_command_shortcuts) are also refused — use the
+dedicated flow instead:
+  $self files ufw     enable|disable <instance>
+  $self files upnp    enable|disable <instance>
+  $self files symlink enable|disable <instance>
+
+${UNDERLINE}Examples:${END}
+  $self config-set factorio-01 auto_update=true
+  $self config-set factorio-01 \"executable_arguments=--start-server saves/world.zip\"
+  $self config-set factorio-01 stop_command_timeout_seconds=30
 "
 }
 
@@ -924,6 +999,149 @@ function _cmd_input() {
   "$instance_management_file" input "$command"
 }
 
+function _cmd_config_get() {
+  local instance=""
+  local key=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_config_get
+        return 0
+        ;;
+      -*)
+        __print_error "Invalid option for config-get command: $1"
+        __print_error "Use '$self config-get --help' for usage information"
+        return $EC_INVALID_ARG
+        ;;
+      *)
+        if [[ -z "$instance" ]]; then
+          instance="$1"
+        elif [[ -z "$key" ]]; then
+          key="$1"
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self config-get --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  if [[ -z "$key" ]]; then
+    __print_error "Missing required argument: <key>"
+    __print_error "Use '$self config-get --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  # Resolve the instance up front so a missing instance is a clean error
+  # rather than an empty value.
+  local config_file
+  config_file="$(__find_instance_config "$instance")"
+  if [[ -z "$config_file" ]]; then
+    __print_error "Instance '$instance' not found"
+    exit $EC_FILE_NOT_FOUND
+  fi
+
+  __get_instance_config_value "$instance" "$key"
+  exit $?
+}
+
+function _cmd_config_set() {
+  local instance=""
+  local assignment=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_config_set
+        return 0
+        ;;
+      -*)
+        __print_error "Invalid option for config-set command: $1"
+        __print_error "Use '$self config-set --help' for usage information"
+        return $EC_INVALID_ARG
+        ;;
+      *)
+        # First positional is the instance; the second is the whole key=value
+        # token (a leading '-' inside the value never reaches here because the
+        # token starts with the key).
+        if [[ -z "$instance" ]]; then
+          instance="$1"
+        elif [[ -z "$assignment" ]]; then
+          assignment="$1"
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self config-set --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  if [[ -z "$assignment" ]]; then
+    __print_error "Missing required argument: <key>=<value>"
+    __print_error "Use '$self config-set --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  if [[ "$assignment" != *=* ]]; then
+    __print_error "Invalid argument '$assignment': expected <key>=<value>"
+    __print_error "Use '$self config-set --help' for usage information"
+    exit $EC_INVALID_ARG
+  fi
+
+  # Split on the FIRST '=' only, so the value may itself contain '='.
+  local key="${assignment%%=*}"
+  local value="${assignment#*=}"
+
+  __set_instance_config_value "$instance" "$key" "$value"
+  local exit_code=$?
+
+  case $exit_code in
+    0)
+      __print_success "Set '$key' on instance '$instance'"
+      exit 0
+      ;;
+    $EC_FILE_NOT_FOUND)
+      __print_error "Instance '$instance' not found"
+      exit $exit_code
+      ;;
+    $EC_INVALID_ARG)
+      if __is_protected_instance_config_key "$key"; then
+        __print_error "'$key' is a protected key and cannot be set with config-set"
+        case "$key" in
+          enable_firewall_management)
+            __print_error "Use: $self files ufw enable|disable $instance"
+            ;;
+          enable_port_forwarding)
+            __print_error "Use: $self files upnp enable|disable $instance"
+            ;;
+          enable_command_shortcuts)
+            __print_error "Use: $self files symlink enable|disable $instance"
+            ;;
+          *)
+            __print_error "Identity and path keys are managed by KGSM and must not be edited directly"
+            ;;
+        esac
+      else
+        __print_error "Invalid key '$key' (must match ^[a-zA-Z_][a-zA-Z0-9_]*\$)"
+      fi
+      exit $exit_code
+      ;;
+    *)
+      __print_error "Failed to set '$key' on instance '$instance' ($exit_code)"
+      exit $exit_code
+      ;;
+  esac
+}
+
 function _cmd_help() {
   local command="$1"
 
@@ -959,6 +1177,12 @@ function _cmd_help() {
       ;;
     input)
       show_usage_input
+      ;;
+    config-get)
+      show_usage_config_get
+      ;;
+    config-set)
+      show_usage_config_set
       ;;
     *)
       __print_error "Unknown command: $command"
@@ -1036,6 +1260,12 @@ case "$command" in
     ;;
   input)
     _cmd_input "$@"
+    ;;
+  config-get)
+    _cmd_config_get "$@"
+    ;;
+  config-set)
+    _cmd_config_set "$@"
     ;;
   *)
     __print_error "Unknown command: $command"

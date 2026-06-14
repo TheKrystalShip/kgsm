@@ -95,6 +95,14 @@ function setup_file() {
   assert_function_exists "__logic_remove_instance" "__logic_remove_instance should be exported"
   assert_function_exists "__logic_get_instances" "__logic_get_instances should be exported"
   assert_function_exists "__logic_get_instance_paths" "__logic_get_instance_paths should be exported"
+  assert_function_exists "__set_instance_config_value" "__set_instance_config_value should be exported"
+  assert_function_exists "__is_protected_instance_config_key" "__is_protected_instance_config_key should be exported"
+  assert_function_exists "__get_instance_config_value" "__get_instance_config_value should be available"
+
+  # Error codes used by the config setter
+  assert_not_null "$EC_FILE_NOT_FOUND" "EC_FILE_NOT_FOUND should be defined"
+  assert_not_null "$EC_FAILED_SED" "EC_FAILED_SED should be defined"
+  assert_not_null "$EC_FAILED_MV" "EC_FAILED_MV should be defined"
 
   log_test_step "Test environment validated"
 }
@@ -983,5 +991,230 @@ function test_get_instance_paths_container_blueprint() {
   assert_equals 0 "$exit_code" "Should succeed"
   assert_contains "$paths" "$instance_name.config.ini" \
     "Should contain container instance config path"
+}
+
+# =============================================================================
+# __is_protected_instance_config_key() TESTS
+# =============================================================================
+
+function test_protected_key_classification() {
+  log_test_step "Testing __is_protected_instance_config_key classifies keys correctly"
+
+  # Keys that must be refused (identity/structural, managed paths, toggles)
+  local protected=(
+    name blueprint_file runtime platform install_datetime
+    is_steam_account_required steam_app_id ports upnp_ports
+    install_dir working_dir logs_dir saves_dir backups_dir temp_dir launch_dir
+    management_file pid_file log_file socket_file version_file
+    executable_file compose_file firewall_rule_file command_shortcut_file
+    port_forwarding_state_file executable_subdirectory
+    enable_firewall_management enable_port_forwarding enable_command_shortcuts
+  )
+  local key
+  for key in "${protected[@]}"; do
+    __is_protected_instance_config_key "$key"
+    assert_equals 0 "$?" "'$key' should be classified as protected"
+  done
+
+  # Plain runtime values that must remain settable
+  local settable=(
+    auto_update executable_arguments level_name compress_backups
+    save_command stop_command save_command_timeout_seconds
+    stop_command_timeout_seconds startup_success_regex steamcmd_arguments
+    wget_timeout_seconds
+  )
+  for key in "${settable[@]}"; do
+    __is_protected_instance_config_key "$key"
+    assert_equals 1 "$?" "'$key' should be classified as settable"
+  done
+}
+
+# =============================================================================
+# __set_instance_config_value() TESTS
+# =============================================================================
+
+function test_set_config_updates_existing_key() {
+  log_test_step "Testing __set_instance_config_value updates an existing key (quoted)"
+
+  local blueprint="factorio"
+  local instance_name="test-set-existing"
+  create_test_instance "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
+  __set_instance_config_value "$instance_name" "auto_update" "true"
+  local exit_code=$?
+  assert_equals 0 "$exit_code" "Should succeed with no event (return 0)"
+
+  local config_path="$KGSM_INSTANCES_DIR/$blueprint/$instance_name/$instance_name.config.ini"
+  assert_file_contains "$config_path" 'auto_update="true"' \
+    "Value should be written in quoted key=\"value\" form"
+
+  local got
+  got=$(__get_instance_config_value "$instance_name" "auto_update")
+  assert_equals "true" "$got" "Round-trip should return the new value"
+}
+
+function test_set_config_value_with_spaces_equals_backslash() {
+  log_test_step "Testing __set_instance_config_value preserves spaces, '=', and backslashes"
+
+  local blueprint="factorio"
+  local instance_name="test-set-complex"
+  create_test_instance "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
+  # The headline use case: executable_arguments with spaces, an embedded '='
+  # and a backslash (as in a regex). Must round-trip byte-for-byte.
+  local value='--start-server saves/my=world.zip --regex \d+'
+  __set_instance_config_value "$instance_name" "executable_arguments" "$value"
+  assert_equals 0 "$?" "Should succeed"
+
+  local got
+  got=$(__get_instance_config_value "$instance_name" "executable_arguments")
+  assert_equals "$value" "$got" \
+    "Complex value (spaces + '=' + backslash) must round-trip verbatim"
+}
+
+function test_set_config_adds_absent_key() {
+  log_test_step "Testing __set_instance_config_value adds a key that is absent"
+
+  local blueprint="factorio"
+  local instance_name="test-set-absent"
+  create_test_instance "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
+  local config_path="$KGSM_INSTANCES_DIR/$blueprint/$instance_name/$instance_name.config.ini"
+  # A settable (non-protected) key that the template does not define
+  if grep -q "^custom_runtime_flag=" "$config_path"; then
+    assert_false "true" "custom_runtime_flag should be absent before the test"
+  fi
+
+  __set_instance_config_value "$instance_name" "custom_runtime_flag" "on"
+  assert_equals 0 "$?" "Should succeed adding an absent key"
+
+  local got
+  got=$(__get_instance_config_value "$instance_name" "custom_runtime_flag")
+  assert_equals "on" "$got" "Added key should be readable"
+}
+
+function test_set_config_preserves_other_keys() {
+  log_test_step "Testing __set_instance_config_value leaves other keys untouched"
+
+  local blueprint="factorio"
+  local instance_name="test-set-preserve"
+  create_test_instance "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
+  local name_before runtime_before
+  name_before=$(__get_instance_config_value "$instance_name" "name")
+  runtime_before=$(__get_instance_config_value "$instance_name" "runtime")
+
+  __set_instance_config_value "$instance_name" "level_name" "my-world"
+  assert_equals 0 "$?" "Should succeed"
+
+  assert_equals "$name_before" "$(__get_instance_config_value "$instance_name" name)" \
+    "name should be unchanged"
+  assert_equals "$runtime_before" "$(__get_instance_config_value "$instance_name" runtime)" \
+    "runtime should be unchanged"
+}
+
+function test_set_config_refuses_identity_key() {
+  log_test_step "Testing __set_instance_config_value refuses an identity key"
+
+  local blueprint="factorio"
+  local instance_name="test-refuse-identity"
+  create_test_instance "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
+  local before
+  before=$(__get_instance_config_value "$instance_name" "name")
+
+  __set_instance_config_value "$instance_name" "name" "hacked" 2>/dev/null
+  assert_equals "$EC_INVALID_ARG" "$?" "Should refuse identity key 'name'"
+
+  assert_equals "$before" "$(__get_instance_config_value "$instance_name" name)" \
+    "'name' must be unchanged after a refused set"
+}
+
+function test_set_config_refuses_path_keys() {
+  log_test_step "Testing __set_instance_config_value refuses managed path keys"
+
+  local blueprint="factorio"
+  local instance_name="test-refuse-paths"
+  create_test_instance "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
+  local key
+  for key in install_dir working_dir management_file pid_file executable_subdirectory; do
+    local before
+    before=$(__get_instance_config_value "$instance_name" "$key")
+    __set_instance_config_value "$instance_name" "$key" "/tmp/evil" 2>/dev/null
+    assert_equals "$EC_INVALID_ARG" "$?" "Should refuse managed path key '$key'"
+    assert_equals "$before" "$(__get_instance_config_value "$instance_name" "$key")" \
+      "'$key' must be unchanged after a refused set"
+  done
+}
+
+function test_set_config_refuses_toggle_keys() {
+  log_test_step "Testing __set_instance_config_value refuses integration toggles"
+
+  local blueprint="factorio"
+  local instance_name="test-refuse-toggles"
+  create_test_instance "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
+  local key
+  for key in enable_firewall_management enable_port_forwarding enable_command_shortcuts; do
+    __set_instance_config_value "$instance_name" "$key" "true" 2>/dev/null
+    assert_equals "$EC_INVALID_ARG" "$?" "Should refuse integration toggle '$key'"
+  done
+}
+
+function test_set_config_rejects_invalid_key_format() {
+  log_test_step "Testing __set_instance_config_value rejects malformed keys"
+
+  # These return before any instance lookup, so no instance is required.
+  local badkey
+  for badkey in "bad key" "1leading" "has-dash" "has.dot" "with\$dollar" ""; do
+    __set_instance_config_value "any-instance" "$badkey" "x" 2>/dev/null
+    assert_equals "$EC_INVALID_ARG" "$?" "Should reject malformed key '$badkey'"
+  done
+}
+
+function test_set_config_empty_instance() {
+  log_test_step "Testing __set_instance_config_value with empty instance name"
+
+  __set_instance_config_value "" "auto_update" "true" 2>/dev/null
+  assert_equals "$EC_INVALID_ARG" "$?" \
+    "Should return EC_INVALID_ARG for empty instance name"
+}
+
+function test_set_config_unknown_instance() {
+  log_test_step "Testing __set_instance_config_value with unknown instance"
+
+  __set_instance_config_value "nonexistent-instance-xyz" "auto_update" "true" 2>/dev/null
+  assert_equals "$EC_FILE_NOT_FOUND" "$?" \
+    "Should return EC_FILE_NOT_FOUND for unknown instance"
+}
+
+# =============================================================================
+# __get_instance_config_value() REGRESSION TEST
+# =============================================================================
+
+function test_get_config_value_preserves_embedded_equals() {
+  log_test_step "Testing __get_instance_config_value preserves '=' in values"
+
+  local blueprint="factorio"
+  local instance_name="test-get-equals"
+  create_test_instance "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
+  local config_path="$KGSM_INSTANCES_DIR/$blueprint/$instance_name/$instance_name.config.ini"
+  # Write a raw line directly (bypassing the setter) to isolate the getter.
+  printf 'getter_probe="a=b=c"\n' >> "$config_path"
+
+  local got
+  got=$(__get_instance_config_value "$instance_name" "getter_probe")
+  assert_equals "a=b=c" "$got" \
+    "Getter must not truncate at the second '=' (split on first '=' only)"
 }
 

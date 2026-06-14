@@ -424,6 +424,116 @@ function __logic_get_instance_paths() {
 
 export -f __logic_get_instance_paths
 
+# Determine whether a key is unsafe to set through the instance config setter.
+# Args: $1 = key
+# Returns: 0 if the key is protected (must not be set), 1 otherwise.
+#
+# Three classes are refused:
+#   - identity/structural keys, where a raw edit corrupts the instance;
+#   - the filesystem paths KGSM owns and manages (every *_dir / *_file, plus
+#     executable_subdirectory);
+#   - the side-effecting toggles, which have dedicated enable/disable flows
+#     (`kgsm files <ufw|upnp|symlink> enable|disable <instance>`) — writing the
+#     flag alone would desync KGSM from the actual firewall/UPnP/symlink state.
+# Everything else (auto_update, executable_arguments, level_name, stop_command,
+# the *_timeout_seconds values, startup_success_regex, …) is a plain runtime
+# value that KGSM simply re-reads, and is therefore settable.
+function __is_protected_instance_config_key() {
+  local key="$1"
+
+  case "$key" in
+    name | blueprint_file | runtime | platform | install_datetime | \
+      is_steam_account_required | steam_app_id | ports | upnp_ports)
+      return 0
+      ;;
+    *_dir | *_file | executable_subdirectory)
+      return 0
+      ;;
+    enable_firewall_management | enable_port_forwarding | enable_command_shortcuts)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+export -f __is_protected_instance_config_key
+
+# Set a single key=value in an instance's .config.ini.
+# Args: $1 = instance_name, $2 = key, $3 = value (may be the empty string)
+# Returns: 0 on success (no event), EC_* on failure.
+#
+# The value is written as key="value" (quoted) to match the format KGSM's own
+# parsers expect (__source_with_prefix / the management script's
+# __source_instance_config), and is handed to awk through the environment rather
+# than via -v so that backslashes and other escapes in the value — e.g. a
+# startup_success_regex — are written verbatim instead of being interpreted by
+# awk's -v assignment processing.
+function __set_instance_config_value() {
+  local _instance_name="$1"
+  local key="$2"
+  local value="$3"
+
+  if [[ -z "$_instance_name" || -z "$key" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  # The key must be a valid identifier. The management script refuses to source
+  # a config containing any other key shape, so writing one would brick the
+  # instance — reject it up front.
+  if [[ ! "$key" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  # Refuse keys that are unsafe to set directly.
+  if __is_protected_instance_config_key "$key"; then
+    return $EC_INVALID_ARG
+  fi
+
+  local config_file
+  config_file="$(__find_instance_config "$_instance_name")"
+  if [[ -z "$config_file" ]]; then
+    return $EC_FILE_NOT_FOUND
+  fi
+
+  # The instance directory is a symlink to the working dir; resolve it so the
+  # write lands on the real file and the temp file shares its filesystem.
+  local target_file="$config_file"
+  if [[ -L "$config_file" ]]; then
+    target_file="$(readlink -f "$config_file")"
+  fi
+
+  # Write to a temp file in the SAME directory so the final mv is an atomic,
+  # same-filesystem rename, and copy the original's permissions onto it (mktemp
+  # creates 0600, which would otherwise regress the config's mode).
+  local tmp_file
+  tmp_file="$(mktemp "${target_file}.XXXXXX")" || return $EC_FAILED_TOUCH
+  chmod --reference="$target_file" "$tmp_file" 2>/dev/null || true
+
+  if ! KGSM_CONFIG_SET_VALUE="$value" awk -v key="$key" '
+    BEGIN { value = ENVIRON["KGSM_CONFIG_SET_VALUE"]; found = 0 }
+    $0 ~ ("^" key "[ \t]*=") {
+      print key "=\"" value "\""
+      found = 1
+      next
+    }
+    { print }
+    END { if (!found) print key "=\"" value "\"" }
+  ' "$target_file" > "$tmp_file"; then
+    rm -f "$tmp_file"
+    return $EC_FAILED_SED
+  fi
+
+  if ! mv "$tmp_file" "$target_file"; then
+    rm -f "$tmp_file"
+    return $EC_FAILED_MV
+  fi
+
+  return 0
+}
+
+export -f __set_instance_config_value
+
 # Mark module as loaded
 declare -g KGSM_LOGIC_INSTANCES_LOADED=1
 export KGSM_LOGIC_INSTANCES_LOADED
