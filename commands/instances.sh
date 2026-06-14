@@ -422,7 +422,20 @@ function _print_info_json() {
   local instance_config_file
   instance_config_file=$(__find_instance_config "$instance")
 
-  # Parse INI file and convert to JSON
+  # Derive the per-instance native cgroup path (e.g. kgsm.slice/<name>) and surface it
+  # as a `cgroup_path` field. This is runtime-determined state, not stored config:
+  # kgsm-watchdog (re)creates this exact directory on every native start, and
+  # core/cgroup.sh:__cgroup_path is the single source of the layout — so it is derived
+  # here rather than persisted (covers pre-existing instances, never goes stale if the
+  # cgroup base is reconfigured). kgsm-monitor reads it to sample native cgroup counters
+  # directly, falling back to the /proc tree when the directory is absent (cgroups
+  # disabled, or the instance not yet placed in its cgroup). Emitted only for native
+  # instances; containers carry "" (Docker owns their cgroup).
+  local cgroup_path
+  cgroup_path="$(__cgroup_path "$instance" 2>/dev/null)" || cgroup_path=""
+
+  # Parse INI file and convert to JSON, then attach cgroup_path keyed on the instance's
+  # own runtime field (native -> derived path, anything else -> "").
   {
     while IFS='=' read -r key value || [[ -n "$key" ]]; do
       # Skip comments and empty lines
@@ -435,7 +448,9 @@ function _print_info_json() {
       # Output tab-separated key-value pairs for jq processing
       printf '%s\t%s\n' "$key" "$value"
     done < <(grep -v '^[[:space:]]*$' "$instance_config_file" | grep -v '^[[:space:]]*#')
-  } | jq -R 'split("\t") | {(.[0]): .[1]}' | jq -s 'add'
+  } | jq -R 'split("\t") | {(.[0]): .[1]}' | jq -s 'add' \
+    | jq --arg cg "$cgroup_path" \
+        '. + {cgroup_path: (if .runtime == "native" then $cg else "" end)}'
 }
 
 function _list_instances() {

@@ -233,6 +233,41 @@ function test_info_json_instance() {
   assert_equals 0 "$?" "info --json output should be valid JSON"
 }
 
+# A native instance must surface a derived cgroup_path (kgsm.slice/<name>) so kgsm-monitor
+# can sample its cgroup counters directly instead of falling back to the /proc tree.
+function test_info_json_native_emits_cgroup_path() {
+  log_test_step "Testing 'info --json' emits cgroup_path for a native instance"
+
+  local instance_name="test-cgpath-native-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Native instance should be created for cgroup_path test"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
+
+  local cgroup_path
+  cgroup_path=$("$MODULE" info "$instance_name" --json 2>/dev/null | jq -r '.cgroup_path')
+
+  assert_not_null "$cgroup_path" "native cgroup_path should be present"
+  assert_not_equals "" "$cgroup_path" "native cgroup_path should be non-empty"
+  assert_contains "$cgroup_path" "kgsm.slice" "native cgroup_path should sit under the cgroup base"
+  assert_contains "$cgroup_path" "$instance_name" "native cgroup_path should end in the instance name"
+}
+
+# A container instance is supervised by Docker, which owns its cgroup; KGSM must NOT
+# claim one, so cgroup_path is the empty string (the monitor reads the Docker cgroup).
+function test_info_json_container_cgroup_path_empty() {
+  log_test_step "Testing 'info --json' emits empty cgroup_path for a container instance"
+
+  local instance_name="test-cgpath-container-$$"
+  create_test_instance "vrising" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Container instance should be created for cgroup_path test"
+  _TEARDOWN_INSTANCES+=("vrising:$instance_name")
+
+  local cgroup_path
+  cgroup_path=$("$MODULE" info "$instance_name" --json 2>/dev/null | jq -r '.cgroup_path')
+
+  assert_equals "" "$cgroup_path" "container cgroup_path should be empty (Docker owns the cgroup)"
+}
+
 function test_info_missing_instance() {
   log_test_step "Testing 'info' with missing instance argument fails"
 
