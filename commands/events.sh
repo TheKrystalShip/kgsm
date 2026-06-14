@@ -60,7 +60,8 @@ ${UNDERLINE}Notes:${END}
   • Use 'status' to verify system health after configuration changes
   • Transport-specific help: ${self} socket help or ${self} webhook help
   • Event types use dash-separated names (instance-created, instance-started, etc.)
-  • All events include timestamp, hostname, and KGSM version metadata
+  • All events include timestamp, actor, hostname, and KGSM version metadata
+  • Actor (who triggered the event) comes from \$KGSM_EVENT_ACTOR, else the OS user
 "
 }
 
@@ -183,7 +184,13 @@ ${UNDERLINE}Instance Removal:${END}
 
 ${UNDERLINE}Description:${END}
 Events are broadcast to all enabled transports in parallel. The JSON payload
-includes the event type, event-specific data, timestamp, hostname, and KGSM version.
+includes the event type, event-specific data, timestamp, actor, hostname, and
+KGSM version.
+
+The actor (who triggered the event) is taken from the \$KGSM_EVENT_ACTOR
+environment variable when set — the caller (bot/assistant/watchdog) supplies the
+principal — otherwise it falls back to the invoking OS user. KGSM never fabricates
+an identity.
 
 Optional parameters (shown in brackets) can be omitted or left as empty strings.
 
@@ -320,9 +327,23 @@ function _build_event_payload() {
     param_names+=("--arg" "$param_name" "$param_value")
   done
 
+  # Resolve the actor (who triggered this event) for audit/correlation downstream.
+  # KGSM is a stateless, multi-entrypoint CLI: it cannot itself know the semantic
+  # principal, so the caller (bot/assistant/watchdog) supplies it via KGSM_EVENT_ACTOR.
+  # For a bare CLI invocation that sets nothing, fall back to the OS user — an honest
+  # "who ran this", never a fabricated identity.
+  local actor="${KGSM_EVENT_ACTOR:-}"
+  if [[ -z "$actor" ]]; then
+    actor="${SUDO_USER:-${USER:-}}"
+  fi
+  if [[ -z "$actor" ]]; then
+    actor="$(id -un 2>/dev/null || echo "system")"
+  fi
+
   # Generate JSON payload
   local jq_args=("${param_names[@]}"
     --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    --arg actor "$actor"
     --arg hostname "$(hostname 2>/dev/null || cat /etc/hostname 2>/dev/null || echo "${HOSTNAME:-localhost}")"
     --arg kgsm_version "$(${KGSM_ROOT}/installer.sh --version 2>/dev/null || echo 'unknown')")
 
@@ -366,6 +387,7 @@ function _build_event_payload() {
     EventType: \"$event_type\",
     Data: $data_object,
     Timestamp: \$timestamp,
+    Actor: \$actor,
     Hostname: \$hostname,
     KGSMVersion: \$kgsm_version
   }"); then

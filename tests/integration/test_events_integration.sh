@@ -591,3 +591,80 @@ function test_socket_file_path_within_kgsm_root() {
     "Socket status should show socket file path within KGSM_ROOT"
 }
 
+# =============================================================================
+# TEST 24: emitted event payload carries the Actor field (audit enrichment)
+# A real event emitted over the socket transport must include a top-level
+# Actor field, and KGSM_EVENT_ACTOR must override the OS-user default. Captures
+# the actual _build_event_payload output via a one-shot socat listener.
+# =============================================================================
+
+function test_emit_payload_includes_actor() {
+  log_test_step "Testing: emitted payload includes Actor and honors KGSM_EVENT_ACTOR"
+
+  if ! command -v socat > /dev/null 2>&1; then
+    skip_test "socat not available - skipping payload capture test"
+    return
+  fi
+
+  # Deterministic socket path (don't depend on sandbox config defaults).
+  export config_event_socket_filenames=""
+  export config_event_socket_filename="kgsm.sock"
+  local socket_file="$KGSM_ROOT/kgsm.sock"
+  local capture="$KGSM_TEST_SANDBOX/actor-capture.json"
+  rm -f "$socket_file" "$capture"
+
+  # One-shot listener: accept a single connection, copy its bytes to the file.
+  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
+  local listener_pid=$!
+
+  # Bounded wait for the socket node to exist (listen() has run by then, so a
+  # connect from emit queues in the backlog — no accept race on Unix sockets).
+  local i=0
+  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  # A Unix socket is type -S, not a regular file (-f), so assert_file_exists
+  # would wrongly fail here — assert the socket node via assert_true instead.
+  local sock_ready="false"
+  [[ -S "$socket_file" ]] && sock_ready="true"
+  assert_true "$sock_ready" "socat listener should create the socket node"
+
+  _enable_broadcasting
+  _enable_socket_events
+
+  # Emit a real lifecycle event with an explicit actor supplied via the env var.
+  KGSM_EVENT_ACTOR="discord:tester" "$EVENTS_MODULE" emit instance-started actor-test-server > /dev/null 2>&1 || true
+
+  # Bounded wait for the captured payload to land.
+  i=0
+  while [[ ! -s "$capture" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+
+  # Tear down the listener and restore transport config before asserting.
+  kill "$listener_pid" 2> /dev/null || true
+  wait "$listener_pid" 2> /dev/null || true
+  _disable_socket_events
+  _disable_broadcasting
+  rm -f "$socket_file"
+
+  local payload
+  payload=$(cat "$capture" 2> /dev/null)
+
+  assert_not_null "$payload" "Captured event payload should not be empty"
+  assert_contains "$payload" '"Actor"' \
+    "Emitted payload should include a top-level Actor field"
+
+  local actor
+  actor=$(echo "$payload" | jq -r '.Actor' 2> /dev/null)
+  assert_equals "discord:tester" "$actor" \
+    "Actor should reflect the supplied KGSM_EVENT_ACTOR value"
+
+  # Timestamp is also part of the audit enrichment contract.
+  local timestamp
+  timestamp=$(echo "$payload" | jq -r '.Timestamp' 2> /dev/null)
+  assert_not_null "$timestamp" "Emitted payload should include a Timestamp"
+}
+
