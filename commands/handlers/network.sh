@@ -199,20 +199,17 @@ function __logic_find_port_conflicts() {
       continue
     fi
 
-    # Parse ports (format: "port1:port2/tcp|port3/udp")
-    IFS='|' read -ra port_entries <<< "$ports"
-    for entry in "${port_entries[@]}"; do
-      # Extract port and protocol
-      local port protocol
-      if [[ "$entry" =~ ([0-9]+)/([a-z]+) ]]; then
-        port="${BASH_REMATCH[1]}"
-        protocol="${BASH_REMATCH[2]}"
-      elif [[ "$entry" =~ ^[0-9]+$ ]]; then
-        port="$entry"
-        protocol="tcp"
-      else
-        continue
-      fi
+    # Expand ports via the canonical UFW parser: ranges are unrolled to individual ports
+    # and a proto-less entry covers BOTH tcp and udp. This fixes the old inline regex,
+    # which silently dropped all but the last port of a `27015:27020/udp` range and
+    # treated a bare port as tcp-only (missing udp conflicts).
+    local -a port_pairs=()
+    read -ra port_pairs <<<"$(__parse_ufw_to_upnp_ports "$ports")"
+
+    local idx port protocol
+    for ((idx = 0; idx + 1 < ${#port_pairs[@]}; idx += 2)); do
+      port="${port_pairs[idx]}"
+      protocol="${port_pairs[idx + 1]}"
 
       local key="${port}/${protocol}"
 

@@ -8,57 +8,91 @@ if [[ -n "${KGSM_PARSER_LOADED:-}" ]]; then
   return 0
 fi
 
-function __parse_ufw_to_upnp_ports() {
+# Parse a UFW-style port spec into canonical "<start> <end> <proto>" triples, one per
+# line. This is the SINGLE source of truth for UFW-port parsing; every other port form
+# (the structured JSON surface, the flat expanded list) derives from it. Range-preserving
+# (a `start:end` stays one triple) and a proto-less entry expands to BOTH tcp and udp
+# (UFW's implicit-both semantics). Pipe-separated entries. An empty spec echoes nothing
+# and succeeds; a malformed entry returns EC_ERROR.
+# Usage: __parse_ufw_port_spec <ufw_ports>
+function __parse_ufw_port_spec() {
   local ufw_ports=$1
-  local grouped_ports=()
+  [[ -z "$ufw_ports" ]] && return $EC_SUCCESS
 
-  # Split the input into individual port ranges
+  local -a ranges
   IFS='|' read -ra ranges <<<"$ufw_ports"
 
+  local range
   for range in "${ranges[@]}"; do
-
-    # Port range with protocol specified
+    # Port range with protocol
     if [[ "$range" =~ ^([0-9]+):([0-9]+)/([a-z]+)$ ]]; then
-      local start_port="${BASH_REMATCH[1]}"
-      local end_port="${BASH_REMATCH[2]}"
-      local protocol="${BASH_REMATCH[3]}"
-
-      for port in $(seq "$start_port" "$end_port"); do
-        grouped_ports+=("$port" "$protocol")
-      done
-
-    # Single port with protocol specified
+      echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]} ${BASH_REMATCH[3]}"
+    # Single port with protocol
     elif [[ "$range" =~ ^([0-9]+)/([a-z]+)$ ]]; then
-      local port="${BASH_REMATCH[1]}"
-      local protocol="${BASH_REMATCH[2]}"
-
-      grouped_ports+=("$port" "$protocol")
-
-    # Port range without protocol (assume both TCP and UDP)
+      echo "${BASH_REMATCH[1]} ${BASH_REMATCH[1]} ${BASH_REMATCH[2]}"
+    # Port range without protocol -> both tcp and udp
     elif [[ "$range" =~ ^([0-9]+):([0-9]+)$ ]]; then
-      local start_port="${BASH_REMATCH[1]}"
-      local end_port="${BASH_REMATCH[2]}"
-
-      for port in $(seq "$start_port" "$end_port"); do
-        for protocol in tcp udp; do
-          grouped_ports+=("$port" "$protocol")
-        done
-      done
-
-    # Single port without protocol (assume both TCP and UDP)
+      echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]} tcp"
+      echo "${BASH_REMATCH[1]} ${BASH_REMATCH[2]} udp"
+    # Single port without protocol -> both tcp and udp
     elif [[ "$range" =~ ^([0-9]+)$ ]]; then
-      local port="${BASH_REMATCH[1]}"
-
-      grouped_ports+=("$port" "tcp" "$port" "udp")
-
-    # Nothing mathes, definition might be wrongly formatted
+      echo "${BASH_REMATCH[1]} ${BASH_REMATCH[1]} tcp"
+      echo "${BASH_REMATCH[1]} ${BASH_REMATCH[1]} udp"
+    # Nothing matches, definition is malformed
     else
       __print_error "Invalid port definition: $range"
       return $EC_ERROR
     fi
   done
 
+  return $EC_SUCCESS
+}
+
+export -f __parse_ufw_port_spec
+
+# Convert a UFW-style port spec to the canonical structured JSON array that machine
+# consumers read off `instances info --json` (kgsm-lib Instance.Ports, kgsm-firewall,
+# kgsm-api): [ { "start": <int>, "end": <int>, "protocol": "tcp|udp" }, ... ],
+# range-preserving. An empty OR malformed spec yields "[]" (never an empty string, so the
+# value is always valid JSON for `jq --argjson`).
+# Usage: __ufw_ports_to_json <ufw_ports>
+function __ufw_ports_to_json() {
+  local ufw_ports=$1
+  local triples
+  if ! triples=$(__parse_ufw_port_spec "$ufw_ports") || [[ -z "$triples" ]]; then
+    echo "[]"
+    return $EC_SUCCESS
+  fi
+
+  echo "$triples" \
+    | jq -R 'split(" ") | {start: (.[0] | tonumber), end: (.[1] | tonumber), protocol: .[2]}' \
+    | jq -sc .
+}
+
+export -f __ufw_ports_to_json
+
+# Expand a UFW-style port spec to the flat "port proto port proto ..." form (every port
+# in a range listed individually) — what UPnP (`upnpc`) and the port-conflict scan need.
+# Derived from __parse_ufw_port_spec so parsing lives in exactly one place. KGSM persists
+# this (as a bash array) in an instance's `upnp_ports`, consumed by the non-watchdog
+# fallback's embedded `_enable_upnp`; the watchdog expands the structured form itself.
+# Usage: __parse_ufw_to_upnp_ports <ufw_ports>
+function __parse_ufw_to_upnp_ports() {
+  local ufw_ports=$1
+  local triples
+  triples=$(__parse_ufw_port_spec "$ufw_ports") || return $EC_ERROR
+
+  local -a grouped_ports=()
+  local start end proto port
+  while read -r start end proto; do
+    [[ -z "$start" ]] && continue
+    for ((port = start; port <= end; port++)); do
+      grouped_ports+=("$port" "$proto")
+    done
+  done <<<"$triples"
+
   echo "${grouped_ports[@]}"
+  return $EC_SUCCESS
 }
 
 export -f __parse_ufw_to_upnp_ports
