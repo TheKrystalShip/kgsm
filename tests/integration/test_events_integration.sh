@@ -837,3 +837,83 @@ function test_emit_crashed_payload_carries_fields_and_system_provenance() {
   assert_equals "system" "$origin" "Origin should reflect KGSM_EVENT_ORIGIN=system"
 }
 
+function test_emit_ports_opened_payload_carries_structured_ports() {
+  log_test_step "Testing: instance_ports_opened payload carries structured [{start,end,protocol}] ports"
+
+  if ! command -v socat > /dev/null 2>&1; then
+    skip_test "socat not available - skipping payload capture test"
+    return
+  fi
+
+  # Deterministic socket path (don't depend on sandbox config defaults).
+  export config_event_socket_filenames=""
+  export config_event_socket_filename="kgsm.sock"
+  local socket_file="$KGSM_ROOT/kgsm.sock"
+  local capture="$KGSM_TEST_SANDBOX/ports-opened-capture.json"
+  rm -f "$socket_file" "$capture"
+
+  # One-shot listener: accept a single connection, copy its bytes to the file.
+  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
+  local listener_pid=$!
+
+  # Bounded wait for the socket node to exist.
+  local i=0
+  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  local sock_ready="false"
+  [[ -S "$socket_file" ]] && sock_ready="true"
+  assert_true "$sock_ready" "socat listener should create the socket node"
+
+  _enable_broadcasting
+  _enable_socket_events
+
+  # Emit exactly as the firewall command layer does: the instance, then the
+  # UFW-format port spec as the single 'ports' positional param.
+  "$EVENTS_MODULE" emit instance-ports-opened ports-test-server '34197/udp|27015:27020/tcp' \
+    > /dev/null 2>&1 || true
+
+  # Bounded wait for the captured payload to land.
+  i=0
+  while [[ ! -s "$capture" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+
+  # Tear down the listener and restore transport config before asserting.
+  kill "$listener_pid" 2> /dev/null || true
+  wait "$listener_pid" 2> /dev/null || true
+  _disable_socket_events
+  _disable_broadcasting
+  rm -f "$socket_file"
+
+  local payload
+  payload=$(cat "$capture" 2> /dev/null)
+  assert_not_null "$payload" "Captured event payload should not be empty"
+
+  local event_type instance
+  event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)
+  instance=$(echo "$payload" | jq -r '.Data.InstanceName' 2> /dev/null)
+  assert_equals "instance_ports_opened" "$event_type" \
+    "EventType should be instance_ports_opened"
+  assert_equals "ports-test-server" "$instance" \
+    "Data.InstanceName should carry the instance"
+
+  # Ports must be the canonical STRUCTURED array, range-preserving — never the
+  # opaque UFW string. This is the one non-string Data field built via --argjson.
+  local ports_type ports_len
+  ports_type=$(echo "$payload" | jq -r '.Data.Ports | type' 2> /dev/null)
+  ports_len=$(echo "$payload" | jq -r '.Data.Ports | length' 2> /dev/null)
+  assert_equals "array" "$ports_type" "Data.Ports should be a JSON array, not a string"
+  assert_equals "2" "$ports_len" "Data.Ports should carry both entries"
+
+  local p0 p1
+  p0=$(echo "$payload" | jq -c '.Data.Ports[0]' 2> /dev/null)
+  p1=$(echo "$payload" | jq -c '.Data.Ports[1]' 2> /dev/null)
+  assert_equals '{"start":34197,"end":34197,"protocol":"udp"}' "$p0" \
+    "First entry should be the single udp port"
+  assert_equals '{"start":27015,"end":27020,"protocol":"tcp"}' "$p1" \
+    "Second entry should preserve the tcp range"
+}
+

@@ -5,17 +5,17 @@
 # Test Type: UNIT
 # Target: commands/handlers/files.ufw.sh
 #
-# Tests all logic functions from files.ufw.sh:
+# Tests the two logic functions after the Inc 3 cutover — kgsm no longer renders
+# a ufw profile or shells `ufw` itself; it hands ports to the kgsm-firewall
+# authority via the handlers/firewall.sh chokepoint:
 # - __logic_enable_ufw_integration()
 # - __logic_disable_ufw_integration()
 #
-# Note: Tests requiring actual UFW system tools or root access are skipped
-# when those conditions are unavailable. This test suite focuses on:
-# - Input validation (EC_INVALID_ARG, EC_FILE_NOT_FOUND)
-# - Configuration validation (EC_INVALID_CONFIG)
-# - State validation (EC_ERROR when rule already exists)
-# - Disable idempotency (EC_SUCCESS_UFW_DISABLED when nothing configured)
-# - Config update verification for disable path
+# A stub kgsm-firewall binary (a real collaborator, injected via
+# KGSM_FIREWALL_BIN) returns canned exit codes so the cutover's behaviour is
+# exercised without a live daemon — covering the exit-code mapping, the
+# asymmetric hard-fail (enable aborts on unreachable; disable warns + continues),
+# the empty-ports skip, and the config updates.
 
 # =============================================================================
 # TEST SETUP
@@ -25,330 +25,277 @@
 readonly TEST_NAME="files_ufw_logic"
 readonly HANDLER="$KGSM_ROOT/commands/handlers/files.ufw.sh"
 
-# =============================================================================
-# TEST HELPER FUNCTIONS
-# =============================================================================
+# Path to the injected stub binary (created in setup_file).
+FW_STUB=""
 
-# Create a minimal instance config file for UFW testing
-# Args: $1 = output_path, $2 = instance_name (optional)
-# Returns: 0 on success
-function __create_ufw_instance_config() {
+# Creates the kgsm-firewall stub binary. Records its argv to $STUB_ARGS_FILE
+# (when set) and exits with $STUB_EXIT (default 0) — both read from the env.
+function __make_fw_stub() {
+  local path="$1"
+  cat > "$path" << 'STUB'
+#!/usr/bin/env bash
+[[ -n "${STUB_ARGS_FILE:-}" ]] && printf '%s\n' "$*" >> "$STUB_ARGS_FILE"
+exit "${STUB_EXIT:-0}"
+STUB
+  chmod +x "$path"
+}
+
+# Writes a minimal native instance config with a name and a UFW-format port spec.
+# Args: $1 = output_path, $2 = instance_name, $3 = ufw port spec (may be empty)
+function __write_instance_config() {
   local output_path="$1"
-  local instance_name="${2:-test_ufw_instance_$$}"
+  local instance_name="$2"
+  local ports="${3:-}"
 
   cat > "$output_path" << EOF
 name=${instance_name}
-blueprint_file=${KGSM_SYSTEM_BLUEPRINTS_DIR}/factorio.bp.yaml
 runtime=native
-working_dir=/tmp/kgsm_test_${instance_name}
-install_dir=/tmp/kgsm_test_${instance_name}/install
-management_file=/tmp/kgsm_test_${instance_name}/manage.sh
+ports=${ports}
 EOF
-  return 0
-}
-
-# Create a minimal KGSM config file with custom firewall_rules_dir
-# Args: $1 = output_path, $2 = firewall_rules_dir (optional, empty to omit)
-# Returns: 0 on success
-function __create_ufw_kgsm_config() {
-  local output_path="$1"
-  local firewall_rules_dir="${2:-}"
-
-  if [[ -n "$firewall_rules_dir" ]]; then
-    echo "firewall_rules_dir=${firewall_rules_dir}" > "$output_path"
-  else
-    echo "# no firewall_rules_dir configured" > "$output_path"
-  fi
-  return 0
 }
 
 # =============================================================================
-# TEST FUNCTIONS
+# SETUP
 # =============================================================================
 
 function setup_file() {
   log_test_step "Setting up files.ufw logic tests"
 
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
-  assert_dir_exists "$KGSM_ROOT" "KGSM_ROOT directory should exist"
   assert_file_exists "$HANDLER" "UFW handler file should exist"
 
-  # Source the handler (pulls in files.common.sh automatically)
+  # Sourcing files.ufw.sh pulls in files.common.sh AND handlers/firewall.sh.
   # shellcheck disable=SC1090
   source "$HANDLER"
 
   assert_not_null "$KGSM_LOGIC_FILES_UFW_LOADED" "UFW handler should be loaded"
+  assert_not_null "$KGSM_LOGIC_FIREWALL_LOADED" "Firewall routing handler should be loaded"
 
-  # Verify required error codes
-  assert_not_null "$EC_INVALID_ARG"   "EC_INVALID_ARG should be defined"
-  assert_not_null "$EC_FILE_NOT_FOUND" "EC_FILE_NOT_FOUND should be defined"
-  assert_not_null "$EC_INVALID_CONFIG" "EC_INVALID_CONFIG should be defined"
-  assert_not_null "$EC_ERROR"         "EC_ERROR should be defined"
+  assert_not_null "$EC_INVALID_ARG"          "EC_INVALID_ARG should be defined"
+  assert_not_null "$EC_FILE_NOT_FOUND"       "EC_FILE_NOT_FOUND should be defined"
+  assert_not_null "$EC_INVALID_CONFIG"       "EC_INVALID_CONFIG should be defined"
+  assert_not_null "$EC_FIREWALL_UNREACHABLE" "EC_FIREWALL_UNREACHABLE should be defined"
+  assert_not_null "$EC_UFW"                  "EC_UFW should be defined"
   assert_not_null "$EC_SUCCESS_UFW_ENABLED"  "EC_SUCCESS_UFW_ENABLED should be defined"
   assert_not_null "$EC_SUCCESS_UFW_DISABLED" "EC_SUCCESS_UFW_DISABLED should be defined"
 
-  # Verify functions are exported
-  assert_function_exists "__logic_enable_ufw_integration"  "__logic_enable_ufw_integration should be exported"
-  assert_function_exists "__logic_disable_ufw_integration" "__logic_disable_ufw_integration should be exported"
+  assert_function_exists "__logic_enable_ufw_integration"  "enable logic should be exported"
+  assert_function_exists "__logic_disable_ufw_integration" "disable logic should be exported"
 
-  log_test_step "UFW test environment validated"
+  FW_STUB="${KGSM_TEST_SANDBOX:-/tmp}/kgsm-firewall-ufw-stub-$$"
+  __make_fw_stub "$FW_STUB"
+  assert_file_executable "$FW_STUB" "Stub kgsm-firewall binary should be executable"
 }
 
 # =============================================================================
-# __logic_enable_ufw_integration() TESTS
+# __logic_enable_ufw_integration() — input validation
 # =============================================================================
 
-function test_enable_ufw_empty_arg() {
-  log_test_step "Testing __logic_enable_ufw_integration with empty argument"
-
-  __logic_enable_ufw_integration "" 2>/dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_INVALID_ARG" "$exit_code" \
-    "Should return EC_INVALID_ARG for empty instance_config_file"
+function test_enable_empty_arg() {
+  log_test_step "enable: empty argument -> EC_INVALID_ARG"
+  __logic_enable_ufw_integration "" 2> /dev/null
+  assert_equals "$EC_INVALID_ARG" "$?" "Empty config path should return EC_INVALID_ARG"
 }
 
-function test_enable_ufw_file_not_found() {
-  log_test_step "Testing __logic_enable_ufw_integration with non-existent config file"
-
-  __logic_enable_ufw_integration "/nonexistent/path/to/instance.config.ini" 2>/dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_FILE_NOT_FOUND" "$exit_code" \
-    "Should return EC_FILE_NOT_FOUND for missing config file"
+function test_enable_file_not_found() {
+  log_test_step "enable: missing config file -> EC_FILE_NOT_FOUND"
+  __logic_enable_ufw_integration "/nonexistent/instance.ini" 2> /dev/null
+  assert_equals "$EC_FILE_NOT_FOUND" "$?" "Missing config should return EC_FILE_NOT_FOUND"
 }
 
-function test_enable_ufw_missing_name_in_config() {
-  log_test_step "Testing __logic_enable_ufw_integration with config missing 'name' field"
+function test_enable_missing_name() {
+  log_test_step "enable: config without 'name' -> EC_INVALID_CONFIG"
+  unset instance_name instance_ports
 
-  local temp_config
-  temp_config=$(mktemp)
+  local cfg
+  cfg=$(mktemp)
+  printf 'runtime=native\nports=7777/tcp\n' > "$cfg"
 
-  # Config with no 'name' field
-  echo "blueprint_file=/some/path/factorio.bp.yaml" > "$temp_config"
-  echo "runtime=native" >> "$temp_config"
+  KGSM_FIREWALL_BIN="$FW_STUB" __logic_enable_ufw_integration "$cfg" 2> /dev/null
+  local rc=$?
+  rm -f "$cfg"
 
-  __logic_enable_ufw_integration "$temp_config" 2>/dev/null
-  local exit_code=$?
-
-  rm -f "$temp_config"
-
-  assert_equals "$EC_INVALID_CONFIG" "$exit_code" \
-    "Should return EC_INVALID_CONFIG when 'name' is missing from instance config"
-}
-
-function test_enable_ufw_missing_firewall_rules_dir() {
-  log_test_step "Testing __logic_enable_ufw_integration when firewall_rules_dir not configured"
-
-  local temp_instance_config temp_kgsm_config
-  temp_instance_config=$(mktemp)
-  temp_kgsm_config=$(mktemp)
-
-  __create_ufw_instance_config "$temp_instance_config" "test_ufw_no_dir_$$"
-  # Create a KGSM config WITHOUT firewall_rules_dir
-  __create_ufw_kgsm_config "$temp_kgsm_config" ""
-
-  # Temporarily override CONFIG_FILE for this test
-  local orig_config_file="$CONFIG_FILE"
-  CONFIG_FILE="$temp_kgsm_config"
-
-  __logic_enable_ufw_integration "$temp_instance_config" 2>/dev/null
-  local exit_code=$?
-
-  CONFIG_FILE="$orig_config_file"
-  rm -f "$temp_instance_config" "$temp_kgsm_config"
-
-  assert_equals "$EC_INVALID_CONFIG" "$exit_code" \
-    "Should return EC_INVALID_CONFIG when firewall_rules_dir is not configured"
-}
-
-function test_enable_ufw_rule_already_exists() {
-  log_test_step "Testing __logic_enable_ufw_integration when firewall rule file already exists"
-
-  local temp_instance_config temp_kgsm_config temp_firewall_dir temp_rule_file
-  temp_instance_config=$(mktemp)
-  temp_kgsm_config=$(mktemp)
-  temp_firewall_dir=$(mktemp -d)
-
-  local instance_name="test_ufw_exists_$$"
-  __create_ufw_instance_config "$temp_instance_config" "$instance_name"
-  __create_ufw_kgsm_config "$temp_kgsm_config" "$temp_firewall_dir"
-
-  # Pre-create the rule file to simulate "already exists"
-  temp_rule_file="${temp_firewall_dir}/kgsm-${instance_name}"
-  touch "$temp_rule_file"
-
-  local orig_config_file="$CONFIG_FILE"
-  CONFIG_FILE="$temp_kgsm_config"
-
-  __logic_enable_ufw_integration "$temp_instance_config" 2>/dev/null
-  local exit_code=$?
-
-  CONFIG_FILE="$orig_config_file"
-  rm -f "$temp_instance_config" "$temp_kgsm_config" "$temp_rule_file"
-  rmdir "$temp_firewall_dir" 2>/dev/null
-
-  assert_equals "$EC_ERROR" "$exit_code" \
-    "Should return EC_ERROR when firewall rule file already exists"
+  assert_equals "$EC_INVALID_CONFIG" "$rc" "Missing 'name' should return EC_INVALID_CONFIG"
 }
 
 # =============================================================================
-# __logic_disable_ufw_integration() TESTS
+# __logic_enable_ufw_integration() — authority routing
 # =============================================================================
 
-function test_disable_ufw_empty_arg() {
-  log_test_step "Testing __logic_disable_ufw_integration with empty argument"
+function test_enable_success_calls_authority_and_updates_config() {
+  log_test_step "enable: authority OK -> EC_SUCCESS_UFW_ENABLED + config on + ensure-open argv"
+  unset instance_name instance_ports
 
-  __logic_disable_ufw_integration "" 2>/dev/null
-  local exit_code=$?
+  local cfg args_file
+  cfg=$(mktemp)
+  args_file=$(mktemp)
+  __write_instance_config "$cfg" "ufw_ok_$$" "34197/udp|27015:27020/tcp"
 
-  assert_equals "$EC_INVALID_ARG" "$exit_code" \
-    "Should return EC_INVALID_ARG for empty instance_config_file"
+  STUB_EXIT=0 STUB_ARGS_FILE="$args_file" KGSM_FIREWALL_BIN="$FW_STUB" \
+    __logic_enable_ufw_integration "$cfg" 2> /dev/null
+  local rc=$?
+
+  assert_equals "$EC_SUCCESS_UFW_ENABLED" "$rc" "A clean enable should return EC_SUCCESS_UFW_ENABLED"
+  assert_file_contains "$cfg" "enable_firewall_management=true" \
+    "Config should record firewall management as enabled"
+  assert_file_contains "$args_file" "ensure-open ufw_ok_$$ 34197/udp 27015:27020/tcp" \
+    "The authority should receive ensure-open with the canonical port tokens"
+
+  rm -f "$cfg" "$args_file"
 }
 
-function test_disable_ufw_file_not_found() {
-  log_test_step "Testing __logic_disable_ufw_integration with non-existent config file"
+function test_enable_hard_fail_when_authority_unreachable() {
+  log_test_step "enable: authority unreachable -> EC_FIREWALL_UNREACHABLE, config NOT enabled"
+  unset instance_name instance_ports
 
-  __logic_disable_ufw_integration "/nonexistent/path/to/instance.config.ini" 2>/dev/null
-  local exit_code=$?
+  local cfg
+  cfg=$(mktemp)
+  __write_instance_config "$cfg" "ufw_unreach_$$" "34197/udp"
 
-  assert_equals "$EC_FILE_NOT_FOUND" "$exit_code" \
-    "Should return EC_FILE_NOT_FOUND for missing config file"
+  STUB_EXIT=3 KGSM_FIREWALL_BIN="$FW_STUB" \
+    __logic_enable_ufw_integration "$cfg" 2> /dev/null
+  local rc=$?
+
+  assert_equals "$EC_FIREWALL_UNREACHABLE" "$rc" \
+    "An unreachable authority must hard-fail the enable (§7g)"
+
+  local content
+  content=$(cat "$cfg")
+  assert_not_contains "$content" "enable_firewall_management=true" \
+    "A hard-failed enable must NOT mark the instance firewall-enabled"
+
+  rm -f "$cfg"
 }
 
-function test_disable_ufw_missing_name_in_config() {
-  log_test_step "Testing __logic_disable_ufw_integration with config missing 'name' field"
+function test_enable_op_failed_maps_ufw() {
+  log_test_step "enable: backend op-failed -> EC_UFW"
+  unset instance_name instance_ports
 
-  local temp_config
-  temp_config=$(mktemp)
+  local cfg
+  cfg=$(mktemp)
+  __write_instance_config "$cfg" "ufw_opfail_$$" "34197/udp"
 
-  # Config without 'name' field
-  echo "blueprint_file=/some/path/factorio.bp.yaml" > "$temp_config"
-  echo "runtime=native" >> "$temp_config"
+  STUB_EXIT=5 KGSM_FIREWALL_BIN="$FW_STUB" \
+    __logic_enable_ufw_integration "$cfg" 2> /dev/null
+  local rc=$?
+  rm -f "$cfg"
 
-  __logic_disable_ufw_integration "$temp_config" 2>/dev/null
-  local exit_code=$?
-
-  rm -f "$temp_config"
-
-  assert_equals "$EC_INVALID_CONFIG" "$exit_code" \
-    "Should return EC_INVALID_CONFIG when 'name' is missing from instance config"
+  assert_equals "$EC_UFW" "$rc" "A reachable-but-failed apply should map to EC_UFW"
 }
 
-function test_disable_ufw_no_rule_configured() {
-  log_test_step "Testing __logic_disable_ufw_integration when no firewall rule is configured"
+function test_enable_empty_ports_skips_authority() {
+  log_test_step "enable: no ports -> authority NOT called, still EC_SUCCESS_UFW_ENABLED"
+  unset instance_name instance_ports
 
-  local temp_config
-  temp_config=$(mktemp)
+  local cfg args_file
+  cfg=$(mktemp)
+  args_file=$(mktemp)
+  __write_instance_config "$cfg" "ufw_noports_$$" ""
 
-  # Config with name but no firewall_rule_file
-  cat > "$temp_config" << EOF
-name=test_ufw_nocfg_$$
-runtime=native
-EOF
+  # STUB_EXIT=3 would hard-fail IF the authority were called — proving the skip.
+  STUB_EXIT=3 STUB_ARGS_FILE="$args_file" KGSM_FIREWALL_BIN="$FW_STUB" \
+    __logic_enable_ufw_integration "$cfg" 2> /dev/null
+  local rc=$?
 
-  __logic_disable_ufw_integration "$temp_config" 2>/dev/null
-  local exit_code=$?
+  assert_equals "$EC_SUCCESS_UFW_ENABLED" "$rc" \
+    "An instance with no ports has nothing to open and should succeed"
+  assert_file_contains "$cfg" "enable_firewall_management=true" \
+    "The firewall toggle should still be recorded"
 
-  rm -f "$temp_config"
+  local called
+  called=$(cat "$args_file" 2> /dev/null)
+  assert_null "$called" "The authority must NOT be invoked for a port-less instance"
 
-  assert_equals "$EC_SUCCESS_UFW_DISABLED" "$exit_code" \
-    "Should return EC_SUCCESS_UFW_DISABLED when no firewall_rule_file is configured (no-op)"
+  rm -f "$cfg" "$args_file"
 }
 
-function test_disable_ufw_rule_file_not_exist() {
-  log_test_step "Testing __logic_disable_ufw_integration when rule file path set but file doesn't exist"
+# =============================================================================
+# __logic_disable_ufw_integration() — input validation
+# =============================================================================
 
-  # This test triggers 'sudo ufw delete allow' which requires passwordless sudo or root.
-  # Skip if not running as root and sudo is not passwordless.
-  if [[ "$EUID" -ne 0 ]] && ! sudo -n true 2>/dev/null; then
-    log_test_step "Skipping: test requires root or passwordless sudo (to avoid interactive sudo prompt)"
-    return 0
-  fi
-
-  local temp_config
-  temp_config=$(mktemp)
-
-  local instance_name="test_ufw_notexist_$$"
-  cat > "$temp_config" << EOF
-name=${instance_name}
-runtime=native
-enable_firewall_management=true
-firewall_rule_file=/nonexistent/ufw/kgsm-${instance_name}
-EOF
-
-  __logic_disable_ufw_integration "$temp_config" 2>/dev/null
-  local exit_code=$?
-
-  rm -f "$temp_config"
-
-  assert_equals "$EC_SUCCESS_UFW_DISABLED" "$exit_code" \
-    "Should return EC_SUCCESS_UFW_DISABLED when rule file doesn't exist (UFW delete fails silently)"
+function test_disable_empty_arg() {
+  log_test_step "disable: empty argument -> EC_INVALID_ARG"
+  __logic_disable_ufw_integration "" 2> /dev/null
+  assert_equals "$EC_INVALID_ARG" "$?" "Empty config path should return EC_INVALID_ARG"
 }
 
-function test_disable_ufw_updates_config() {
-  log_test_step "Testing __logic_disable_ufw_integration updates config after disable"
-
-  # This test triggers 'sudo ufw delete allow' which requires passwordless sudo or root.
-  # Skip if not running as root and sudo is not passwordless.
-  if [[ "$EUID" -ne 0 ]] && ! sudo -n true 2>/dev/null; then
-    log_test_step "Skipping: test requires root or passwordless sudo (to avoid interactive sudo prompt)"
-    return 0
-  fi
-
-  local temp_config
-  temp_config=$(mktemp)
-
-  local instance_name="test_ufw_cfgupdate_$$"
-  cat > "$temp_config" << EOF
-name=${instance_name}
-runtime=native
-enable_firewall_management=true
-firewall_rule_file=/nonexistent/ufw/kgsm-${instance_name}
-EOF
-
-  __logic_disable_ufw_integration "$temp_config" 2>/dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_SUCCESS_UFW_DISABLED" "$exit_code" \
-    "Should return EC_SUCCESS_UFW_DISABLED"
-
-  assert_file_contains "$temp_config" "enable_firewall_management=false" \
-    "Config should have enable_firewall_management=false after disable"
-
-  rm -f "$temp_config"
+function test_disable_file_not_found() {
+  log_test_step "disable: missing config file -> EC_FILE_NOT_FOUND"
+  __logic_disable_ufw_integration "/nonexistent/instance.ini" 2> /dev/null
+  assert_equals "$EC_FILE_NOT_FOUND" "$?" "Missing config should return EC_FILE_NOT_FOUND"
 }
 
-function test_disable_ufw_clears_rule_file_in_config() {
-  log_test_step "Testing __logic_disable_ufw_integration clears firewall_rule_file in config"
+function test_disable_missing_name() {
+  log_test_step "disable: config without 'name' -> EC_INVALID_CONFIG"
+  local cfg
+  cfg=$(mktemp)
+  printf 'runtime=native\n' > "$cfg"
 
-  # This test triggers 'sudo ufw delete allow' which requires passwordless sudo or root.
-  # Skip if not running as root and sudo is not passwordless.
-  if [[ "$EUID" -ne 0 ]] && ! sudo -n true 2>/dev/null; then
-    log_test_step "Skipping: test requires root or passwordless sudo (to avoid interactive sudo prompt)"
-    return 0
-  fi
+  KGSM_FIREWALL_BIN="$FW_STUB" __logic_disable_ufw_integration "$cfg" 2> /dev/null
+  local rc=$?
+  rm -f "$cfg"
 
-  local temp_config
-  temp_config=$(mktemp)
-
-  local instance_name="test_ufw_clearrule_$$"
-  cat > "$temp_config" << EOF
-name=${instance_name}
-runtime=native
-enable_firewall_management=true
-firewall_rule_file=/nonexistent/ufw/kgsm-${instance_name}
-EOF
-
-  __logic_disable_ufw_integration "$temp_config" 2>/dev/null
-  local exit_code=$?
-
-  assert_equals "$EC_SUCCESS_UFW_DISABLED" "$exit_code" \
-    "Should return EC_SUCCESS_UFW_DISABLED"
-
-  assert_file_contains "$temp_config" "firewall_rule_file=" \
-    "Config should have firewall_rule_file cleared after disable"
-
-  rm -f "$temp_config"
+  assert_equals "$EC_INVALID_CONFIG" "$rc" "Missing 'name' should return EC_INVALID_CONFIG"
 }
 
+# =============================================================================
+# __logic_disable_ufw_integration() — authority routing (best-effort)
+# =============================================================================
+
+function test_disable_success_flips_config_and_calls_remove() {
+  log_test_step "disable: authority OK -> EC_SUCCESS_UFW_DISABLED + config off + remove argv"
+  local cfg args_file
+  cfg=$(mktemp)
+  args_file=$(mktemp)
+  __write_instance_config "$cfg" "ufw_dis_ok_$$" "34197/udp"
+  echo "enable_firewall_management=true" >> "$cfg"
+
+  STUB_EXIT=0 STUB_ARGS_FILE="$args_file" KGSM_FIREWALL_BIN="$FW_STUB" \
+    __logic_disable_ufw_integration "$cfg" 2> /dev/null
+  local rc=$?
+
+  assert_equals "$EC_SUCCESS_UFW_DISABLED" "$rc" "A clean removal should return EC_SUCCESS_UFW_DISABLED"
+  assert_file_contains "$cfg" "enable_firewall_management=false" \
+    "Config should record firewall management as disabled"
+  assert_file_contains "$args_file" "remove ufw_dis_ok_$$" \
+    "The authority should receive a remove for the instance"
+
+  rm -f "$cfg" "$args_file"
+}
+
+function test_disable_unreachable_is_soft_but_flips_config() {
+  log_test_step "disable: authority unreachable -> soft EC_FIREWALL_UNREACHABLE, config still off"
+  local cfg
+  cfg=$(mktemp)
+  __write_instance_config "$cfg" "ufw_dis_unreach_$$" "34197/udp"
+  echo "enable_firewall_management=true" >> "$cfg"
+
+  STUB_EXIT=3 KGSM_FIREWALL_BIN="$FW_STUB" \
+    __logic_disable_ufw_integration "$cfg" 2> /dev/null
+  local rc=$?
+
+  assert_equals "$EC_FIREWALL_UNREACHABLE" "$rc" \
+    "Disable must surface the unreachable outcome (the command layer warns + continues)"
+  assert_file_contains "$cfg" "enable_firewall_management=false" \
+    "Disable must still flip the toggle so uninstall is never wedged"
+
+  rm -f "$cfg"
+}
+
+function test_disable_op_failed_is_soft_but_flips_config() {
+  log_test_step "disable: backend op-failed -> soft EC_UFW, config still off"
+  local cfg
+  cfg=$(mktemp)
+  __write_instance_config "$cfg" "ufw_dis_opfail_$$" "34197/udp"
+  echo "enable_firewall_management=true" >> "$cfg"
+
+  STUB_EXIT=5 KGSM_FIREWALL_BIN="$FW_STUB" \
+    __logic_disable_ufw_integration "$cfg" 2> /dev/null
+  local rc=$?
+
+  assert_equals "$EC_UFW" "$rc" "A backend remove failure should surface as EC_UFW (soft)"
+  assert_file_contains "$cfg" "enable_firewall_management=false" \
+    "Disable must still flip the toggle even on a backend error"
+
+  rm -f "$cfg"
+}

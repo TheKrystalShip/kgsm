@@ -120,6 +120,19 @@ export EVENT_INSTANCE_UNINSTALL_FAILED
 declare -g -r EVENT_INSTANCE_UNINSTALLED="instance_uninstalled"
 export EVENT_INSTANCE_UNINSTALLED
 
+# Host-firewall audit events. Emitted when kgsm asks the kgsm-firewall authority
+# to open/close an instance's ports (firewall enable/disable, and install/
+# uninstall). The `ports` parameter carries the instance's UFW-format spec; the
+# payload renders it as the canonical structured array. Only a confirmed
+# open/close emits — a down authority warns and emits nothing (never a
+# fabricated outcome). The C# path (kgsm-api via kgsm-lib) emits the same types
+# with EmitWithProvenance once it consumes them.
+declare -g -r EVENT_INSTANCE_PORTS_OPENED="instance_ports_opened"
+export EVENT_INSTANCE_PORTS_OPENED
+
+declare -g -r EVENT_INSTANCE_PORTS_CLOSED="instance_ports_closed"
+export EVENT_INSTANCE_PORTS_CLOSED
+
 # Event parameter specifications
 declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_CREATED"]="instance blueprint"
@@ -155,6 +168,8 @@ declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_UNINSTALL_FINISHED"]="instance"
   ["$EVENT_INSTANCE_UNINSTALL_FAILED"]="instance"
   ["$EVENT_INSTANCE_UNINSTALLED"]="instance"
+  ["$EVENT_INSTANCE_PORTS_OPENED"]="instance ports"
+  ["$EVENT_INSTANCE_PORTS_CLOSED"]="instance ports"
 )
 
 # Validates that an event type is supported

@@ -148,6 +148,13 @@ export EC_CGROUP
 declare -g -r EC_CGROUP_UNSUPPORTED=48
 export EC_CGROUP_UNSUPPORTED
 
+# The kgsm-firewall authority (host-firewall owner) could not be reached: its
+# socket is missing/refused or its binary is absent. Distinct from EC_UFW (a
+# reachable backend that rejected the rule) — this is the §7g hard-fail trigger:
+# a firewall-enabled install aborts here rather than silently proceeding.
+declare -g -r EC_FIREWALL_UNREACHABLE=49
+export EC_FIREWALL_UNREACHABLE
+
 # =============================================================================
 # EVENT SUCCESS CODES (200-255 range)
 # =============================================================================
@@ -348,6 +355,7 @@ declare -A EXIT_CODES=(
    [$EC_WATCHER_LOG_FILE_MISSING]="Log file not found for instance"
    [$EC_CGROUP]="Error with cgroup operation"
    [$EC_CGROUP_UNSUPPORTED]="cgroup v2 not available, not delegated, or kernel too old"
+   [$EC_FIREWALL_UNREACHABLE]="kgsm-firewall authority not reachable"
 )
 
 declare -g KGSM_ERRORS_LOADED=1

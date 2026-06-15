@@ -200,6 +200,8 @@ ${UNDERLINE}Examples:${END}
   ${self} emit instance-version-updated myserver 1.0.0 1.1.1
   ${self} emit instance-backup-created myserver auto 1.2.3
   ${self} emit instance-stopped myserver manual
+  ${self} emit instance-ports-opened myserver '34197/udp|27015:27020/tcp'
+  ${self} emit instance-ports-closed myserver '34197/udp|27015:27020/tcp'
 "
 }
 
@@ -389,6 +391,19 @@ function _build_event_payload() {
         InstanceName: $instance,
         ExitCode: $exit_code,
         Restarts: $restarts
+      }'
+      ;;
+    "$EVENT_INSTANCE_PORTS_OPENED" | "$EVENT_INSTANCE_PORTS_CLOSED")
+      # The `ports` param is the UFW-format spec; surface it as the canonical
+      # structured array [{start,end,protocol}] — the same shape `instances
+      # info --json` emits — never the opaque UFW string. Converted here and
+      # passed via --argjson (the one non-string Data field in this builder).
+      local ports_json
+      ports_json="$(__ufw_ports_to_json "${params[1]:-}")" || ports_json="[]"
+      jq_args+=(--argjson ports_json "$ports_json")
+      data_object='{
+        InstanceName: $instance,
+        Ports: $ports_json
       }'
       ;;
     *)

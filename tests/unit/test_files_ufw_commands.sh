@@ -21,6 +21,21 @@ readonly MODULE="$KGSM_ROOT/commands/files.ufw.sh"
 
 TEST_INSTALL_DIR=""
 
+# Path to the injected stub kgsm-firewall binary (created in setup_file). Subprocess
+# invocations of $MODULE pass KGSM_FIREWALL_BIN=$FW_STUB + STUB_EXIT to exercise the
+# command layer's exit-code handling without a live authority.
+FW_STUB=""
+
+# Creates the kgsm-firewall stub binary: exits with $STUB_EXIT (default 0).
+function __make_fw_stub() {
+  local path="$1"
+  cat > "$path" << 'STUB'
+#!/usr/bin/env bash
+exit "${STUB_EXIT:-0}"
+STUB
+  chmod +x "$path"
+}
+
 # =============================================================================
 # TEST FUNCTIONS
 # =============================================================================
@@ -35,6 +50,10 @@ function setup_file() {
   assert_dir_exists "$KGSM_ROOT" "KGSM root directory should exist"
   assert_file_exists "$MODULE" "files.ufw.sh module should exist"
   assert_file_executable "$MODULE" "files.ufw.sh should be executable"
+
+  FW_STUB="${KGSM_TEST_SANDBOX:-/tmp}/kgsm-firewall-cmd-stub-$$"
+  __make_fw_stub "$FW_STUB"
+  assert_file_executable "$FW_STUB" "Stub kgsm-firewall binary should be executable"
 
   log_test_step "Test environment validated"
 }
@@ -224,52 +243,93 @@ function test_disable_help_flag() {
 # VALID INSTANCE BEHAVIOR TESTS
 # =============================================================================
 
-function test_disable_on_fresh_instance() {
-  log_test_step "Testing disable on fresh instance with no UFW rule configured"
+# The command layer is where Inc 3's two headline behaviors actually live — the
+# asymmetric hard-fail and the audit emit. These drive the real `files.ufw.sh`
+# command as a subprocess against an injected stub authority (a real factorio
+# instance, so `ports="34197/udp"` is read from a realistically-quoted config).
+
+function test_enable_succeeds_when_authority_ok() {
+  log_test_step "enable: authority OK (stub exit 0) -> success + config enabled"
 
   local blueprint="factorio"
   local instance_name
   instance_name=$(create_test_instance "$blueprint" "$(generate_test_id)" "$TEST_INSTALL_DIR" 2>/dev/null)
-
   if [[ -z "$instance_name" ]]; then
     skip_test "Instance creation failed - skipping test"
     return
   fi
 
-  # A fresh instance has no firewall_rule_file configured,
-  # so disable should succeed (no-op path, no UFW interaction needed)
-  local output
-  output=$("$MODULE" disable "$instance_name" 2>&1)
-  local exit_code=$?
+  local output exit_code
+  output=$(KGSM_FIREWALL_BIN="$FW_STUB" STUB_EXIT=0 "$MODULE" enable "$instance_name" 2>&1)
+  exit_code=$?
 
-  assert_equals 0 "$exit_code" "disable on fresh instance (no UFW rule configured) should succeed"
+  assert_equals 0 "$exit_code" "enable should succeed when the authority accepts the rule"
+  assert_contains "$output" "enabled successfully" "Should report the firewall integration enabled"
 
   remove_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
-function test_enable_on_instance_fails_without_ufw() {
-  log_test_step "Testing enable on valid instance fails when UFW not available"
-
-  # Skip if UFW is installed and available (test environment has UFW)
-  if command -v ufw &>/dev/null; then
-    skip_test "UFW is available in this environment - skipping unavailability test"
-    return
-  fi
+function test_enable_hard_fails_when_authority_unreachable() {
+  log_test_step "enable: authority unreachable (stub exit 3) -> hard-fail (non-zero) + explicit message"
 
   local blueprint="factorio"
   local instance_name
   instance_name=$(create_test_instance "$blueprint" "$(generate_test_id)" "$TEST_INSTALL_DIR" 2>/dev/null)
-
   if [[ -z "$instance_name" ]]; then
     skip_test "Instance creation failed - skipping test"
     return
   fi
 
-  # Enable requires UFW - should fail when UFW is unavailable
-  "$MODULE" enable "$instance_name" 2>/dev/null
-  local exit_code=$?
+  local output exit_code
+  output=$(KGSM_FIREWALL_BIN="$FW_STUB" STUB_EXIT=3 "$MODULE" enable "$instance_name" 2>&1)
+  exit_code=$?
 
-  assert_not_equals 0 "$exit_code" "enable should fail when UFW is not available"
+  # §7g hard-fail: a firewall-enabled enable must NOT silently proceed when the
+  # authority is down.
+  assert_not_equals 0 "$exit_code" "enable must hard-fail when the authority is unreachable"
+  assert_contains "$output" "not reachable" "Should surface the explicit authority-unreachable message"
+
+  remove_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR"
+}
+
+function test_disable_continues_when_authority_unreachable() {
+  log_test_step "disable: authority unreachable (stub exit 3) -> warns but EXITS 0 (never wedge uninstall)"
+
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$(generate_test_id)" "$TEST_INSTALL_DIR" 2>/dev/null)
+  if [[ -z "$instance_name" ]]; then
+    skip_test "Instance creation failed - skipping test"
+    return
+  fi
+
+  local output exit_code
+  output=$(KGSM_FIREWALL_BIN="$FW_STUB" STUB_EXIT=3 "$MODULE" disable "$instance_name" 2>&1)
+  exit_code=$?
+
+  # The load-bearing asymmetry: disable is best-effort, so a down authority must
+  # return 0 — a non-zero here would wedge `kgsm uninstall` (files.sh disable || return).
+  assert_equals 0 "$exit_code" "disable must exit 0 even when the authority is unreachable"
+
+  remove_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR"
+}
+
+function test_disable_succeeds_when_authority_ok() {
+  log_test_step "disable: authority OK (stub exit 0) -> success"
+
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$(generate_test_id)" "$TEST_INSTALL_DIR" 2>/dev/null)
+  if [[ -z "$instance_name" ]]; then
+    skip_test "Instance creation failed - skipping test"
+    return
+  fi
+
+  local output exit_code
+  output=$(KGSM_FIREWALL_BIN="$FW_STUB" STUB_EXIT=0 "$MODULE" disable "$instance_name" 2>&1)
+  exit_code=$?
+
+  assert_equals 0 "$exit_code" "disable on a reachable authority should succeed"
 
   remove_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR"
 }

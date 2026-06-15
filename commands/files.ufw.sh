@@ -155,32 +155,36 @@ function _cmd_enable() {
   # Handle result
   case $exit_code in
     $EC_SUCCESS_UFW_ENABLED)
-      __print_success "UFW firewall integration enabled successfully"
-      __print_info "Firewall rules created and activated for instance ports"
+      __print_success "Firewall integration enabled successfully"
+      __print_info "Ports opened via the kgsm-firewall authority"
+      # Audit event: record which ports were opened. The payload carries them as
+      # the canonical structured array; an instance with no ports opens nothing,
+      # so no event is emitted.
+      local _ports
+      _ports=$(__get_config_value "$instance_config_file" "ports" 2> /dev/null)
+      if [[ -n "$_ports" ]]; then
+        events.sh emit instance-ports-opened "$instance_name" "$_ports"
+      fi
       return 0
       ;;
     $EC_INVALID_CONFIG)
       __print_error "Invalid instance configuration - missing required fields"
       return $exit_code
       ;;
-    $EC_ERROR)
-      __print_error "Firewall rule file already exists"
-      return $exit_code
-      ;;
-    $EC_FAILED_TEMPLATE)
-      __print_error "Failed to generate UFW rule file from template"
-      return $exit_code
-      ;;
-    $EC_FAILED_MV)
-      __print_error "Failed to move UFW rule file to firewall directory"
-      return $exit_code
-      ;;
-    $EC_PERMISSION)
-      __print_error "Failed to set proper ownership on UFW rule file"
+    $EC_FIREWALL_UNREACHABLE)
+      # Hard-fail (B): a firewall-enabled install must NOT silently proceed when
+      # the authority is down — be explicit and self-explanatory.
+      __print_error "kgsm-firewall authority not reachable — cannot open ports for '$instance_name'"
+      __print_error "The authority at $(__firewall_socket_path) is down or not installed"
+      __print_error "Start/install kgsm-firewall (or disable firewall management) and retry"
       return $exit_code
       ;;
     $EC_UFW)
-      __print_error "Failed to enable UFW rule"
+      __print_error "The firewall backend could not apply the rules for '$instance_name'"
+      return $exit_code
+      ;;
+    $EC_ERROR)
+      __print_error "Invalid port definition in instance configuration"
       return $exit_code
       ;;
     $EC_FAILED_UPDATE_CONFIG)
@@ -188,7 +192,7 @@ function _cmd_enable() {
       return $exit_code
       ;;
     *)
-      __print_error "Failed to enable UFW integration (exit code: $exit_code)"
+      __print_error "Failed to enable firewall integration (exit code: $exit_code)"
       return $exit_code
       ;;
   esac
@@ -239,27 +243,40 @@ function _cmd_disable() {
   __logic_disable_ufw_integration "$instance_config_file"
   local exit_code=$?
 
-  # Handle result
+  # Handle result. Disable is best-effort: a down authority or backend error
+  # warns but does NOT fail (it must never wedge uninstall) — and only a
+  # confirmed removal emits the close event (never fabricate a closed port).
   case $exit_code in
     $EC_SUCCESS_UFW_DISABLED)
-      __print_success "UFW firewall integration disabled successfully"
-      __print_info "Firewall rules removed for instance"
+      __print_success "Firewall integration disabled successfully"
+      __print_info "Ports closed via the kgsm-firewall authority"
+      local _ports
+      _ports=$(__get_config_value "$instance_config_file" "ports" 2> /dev/null)
+      if [[ -n "$_ports" ]]; then
+        events.sh emit instance-ports-closed "$instance_name" "$_ports"
+      fi
       return 0
       ;;
     $EC_INVALID_CONFIG)
       __print_error "Invalid instance configuration"
       return $exit_code
       ;;
-    $EC_FAILED_RM)
-      __print_error "Failed to remove UFW rule file"
-      return $exit_code
+    $EC_FIREWALL_UNREACHABLE)
+      __print_warning "kgsm-firewall authority not reachable — host rules for '$instance_name' were left in place"
+      __print_info "Instance marked firewall-disabled; remove the rule manually if needed"
+      return 0
+      ;;
+    $EC_UFW)
+      __print_warning "The firewall backend could not remove the rules for '$instance_name'"
+      __print_info "Instance marked firewall-disabled; remove the rule manually if needed"
+      return 0
       ;;
     $EC_FAILED_UPDATE_CONFIG)
       __print_error "Failed to update instance configuration"
       return $exit_code
       ;;
     *)
-      __print_error "Failed to disable UFW integration (exit code: $exit_code)"
+      __print_error "Failed to disable firewall integration (exit code: $exit_code)"
       return $exit_code
       ;;
   esac

@@ -24,7 +24,18 @@ if [[ -z "${KGSM_LOGIC_FILES_COMMON_LOADED}" ]]; then
   source "$(__find_command_handler files.common.sh)" || return $EC_FAILED_SOURCE
 fi
 
-# Enable UFW firewall integration for an instance
+# Load the firewall-authority routing chokepoint (kgsm-firewall IPC client).
+if [[ -z "${KGSM_LOGIC_FIREWALL_LOADED}" ]]; then
+  # shellcheck source=firewall.sh
+  source "$(__find_command_handler firewall.sh)" || return $EC_FAILED_SOURCE
+fi
+
+# Enable firewall integration for an instance by handing its ports to the
+# kgsm-firewall authority (the host-firewall owner). kgsm no longer renders a
+# ufw profile or shells `ufw` itself — the authority owns rule rendering and the
+# backend, tagging rules `kgsm-<instance>`. Hard-fail (B): if the authority is
+# unreachable the original EC_FIREWALL_UNREACHABLE propagates so the install
+# aborts rather than silently proceeding.
 # Args: $1 = instance_config_file
 # Returns: EC_SUCCESS_UFW_ENABLED on success, error code on failure
 function __logic_enable_ufw_integration() {
@@ -39,67 +50,38 @@ function __logic_enable_ufw_integration() {
     return $EC_FILE_NOT_FOUND
   fi
 
-  # Get required variables from instance config
-  local _instance_name
-  _instance_name=$(__get_config_value "$instance_config_file" "name" 2>/dev/null)
+  # Source the instance config to expose its name + UFW-format port spec
+  # (instance_name / instance_ports).
+  # shellcheck disable=SC1090
+  __source_instance "$instance_config_file" || return $EC_FAILED_SOURCE
 
+  local _instance_name="${instance_name:-}"
   if [[ -z "$_instance_name" ]]; then
     return $EC_INVALID_CONFIG
   fi
 
-  # Get firewall rules directory from KGSM config
-  local config_firewall_rules_dir
-  config_firewall_rules_dir=$(__get_config_value "$CONFIG_FILE" "firewall_rules_dir" 2>/dev/null)
-
-  if [[ -z "$config_firewall_rules_dir" ]]; then
-    return $EC_INVALID_CONFIG
-  fi
-
-  local instance_firewall_rule_file="${config_firewall_rules_dir}/kgsm-${_instance_name}"
-  local temp_ufw_file="/tmp/kgsm-${_instance_name}"
-
-  # If firewall rule file already exists, return error
-  if [[ -f "$instance_firewall_rule_file" ]]; then
+  # Convert the UFW spec into the kgsm-firewall CLI's port tokens. An instance
+  # with no ports has nothing to open: record the toggle and return without
+  # bothering the authority (`ensure-open` requires >=1 port).
+  local _tokens
+  if ! _tokens=$(__firewall_ports_to_tokens "${instance_ports:-}"); then
     return $EC_ERROR
   fi
 
-  # Source instance config to make variables available for template expansion
-  # shellcheck disable=SC1090
-  __source_instance "$instance_config_file" || return $EC_FAILED_SOURCE
-
-  # Create UFW rule file from template
-  if ! __logic_expand_template "ufw" "$temp_ufw_file"; then
-    return $EC_FAILED_TEMPLATE
+  if [[ -n "$_tokens" ]]; then
+    local -a _token_arr
+    read -ra _token_arr <<< "$_tokens"
+    __firewall_ensure_open "$_instance_name" "${_token_arr[@]}"
+    local _rc=$?
+    if [[ $_rc -ne $EC_SUCCESS ]]; then
+      return $_rc
+    fi
   fi
 
-  # Determine sudo requirement
-  local SUDO=""
-  [[ "$EUID" -ne 0 ]] && SUDO="sudo -E"
-
-  # Move to UFW directory
-  if ! $SUDO mv "$temp_ufw_file" "$instance_firewall_rule_file" 2>/dev/null; then
-    rm -f "$temp_ufw_file" 2>/dev/null
-    return $EC_FAILED_MV
-  fi
-
-  # Set proper ownership (UFW expects root:root)
-  if ! $SUDO chown root:root "$instance_firewall_rule_file" 2>/dev/null; then
-    $SUDO rm -f "$instance_firewall_rule_file" 2>/dev/null
-    return $EC_PERMISSION
-  fi
-
-  # Enable firewall rule
-  if ! $SUDO ufw allow "$_instance_name" &>/dev/null; then
-    $SUDO rm -f "$instance_firewall_rule_file" 2>/dev/null
-    return $EC_UFW
-  fi
-
-  # Update instance config with UFW integration details
+  # Record that firewall management is on for this instance. The authority owns
+  # the host rule now (tagged kgsm-<instance>), so firewall_rule_file — the path
+  # of the old kgsm-rendered ufw profile — is no longer written.
   if ! __add_or_update_config "$instance_config_file" "enable_firewall_management" "true"; then
-    return $EC_FAILED_UPDATE_CONFIG
-  fi
-
-  if ! __add_or_update_config "$instance_config_file" "firewall_rule_file" "$instance_firewall_rule_file"; then
     return $EC_FAILED_UPDATE_CONFIG
   fi
 
@@ -108,9 +90,16 @@ function __logic_enable_ufw_integration() {
 
 export -f __logic_enable_ufw_integration
 
-# Disable UFW firewall integration for an instance
+# Disable firewall integration for an instance by asking the kgsm-firewall
+# authority to remove every rule it owns for it. Deliberately best-effort
+# (mirrors the old `ufw delete ... || true`): an unreachable authority or a
+# backend error must NOT wedge uninstall, so the instance is always flipped to
+# firewall-disabled and the remove outcome is reported up for the command layer
+# to warn-and-continue on. The §7g hard-fail is scoped to enable/install only.
 # Args: $1 = instance_config_file
-# Returns: EC_SUCCESS_UFW_DISABLED on success, error code on failure
+# Returns: EC_SUCCESS_UFW_DISABLED on a clean removal; EC_FIREWALL_UNREACHABLE /
+#          EC_UFW (soft — config still flipped) when the authority could not
+#          confirm removal; EC_FAILED_UPDATE_CONFIG only on a genuine failure.
 function __logic_disable_ufw_integration() {
   local instance_config_file="$1"
 
@@ -123,41 +112,29 @@ function __logic_disable_ufw_integration() {
     return $EC_FILE_NOT_FOUND
   fi
 
-  # Get firewall rule file path from instance config
-  local _instance_name instance_firewall_rule_file
+  local _instance_name
   _instance_name=$(__get_config_value "$instance_config_file" "name" 2>/dev/null)
-  instance_firewall_rule_file=$(__get_config_value "$instance_config_file" "firewall_rule_file" 2>/dev/null)
 
   if [[ -z "$_instance_name" ]]; then
     return $EC_INVALID_CONFIG
   fi
 
-  # If no firewall rule configured, nothing to disable
-  if [[ -z "$instance_firewall_rule_file" ]]; then
-    return $EC_SUCCESS_UFW_DISABLED
-  fi
+  # Ask the authority to remove its rules (idempotent — a no-op is success).
+  __firewall_remove "$_instance_name"
+  local _remove_rc=$?
 
-  # Determine sudo requirement
-  local SUDO=""
-  [[ "$EUID" -ne 0 ]] && SUDO="sudo -E"
-
-  # Remove UFW rule (may not exist, ignore errors)
-  $SUDO ufw delete allow "$_instance_name" &>/dev/null || true
-
-  # Delete firewall rule file if it exists
-  if [[ -f "$instance_firewall_rule_file" ]]; then
-    if ! $SUDO rm -f "$instance_firewall_rule_file" 2>/dev/null; then
-      return $EC_FAILED_RM
-    fi
-  fi
-
-  # Update instance config to reflect disabled state
+  # Flip the instance to disabled regardless of the remove outcome: the user's
+  # intent is "stop managing this instance's firewall", and a lingering host
+  # rule (authority down) must not block uninstall.
   if ! __add_or_update_config "$instance_config_file" "enable_firewall_management" "false"; then
     return $EC_FAILED_UPDATE_CONFIG
   fi
 
-  if ! __add_or_update_config "$instance_config_file" "firewall_rule_file" ""; then
-    return $EC_FAILED_UPDATE_CONFIG
+  # Surface a soft remove failure (EC_FIREWALL_UNREACHABLE / EC_UFW) so the
+  # command layer can warn-and-continue; a clean removal returns the success
+  # event code.
+  if [[ $_remove_rc -ne $EC_SUCCESS ]]; then
+    return $_remove_rc
   fi
 
   return $EC_SUCCESS_UFW_DISABLED
