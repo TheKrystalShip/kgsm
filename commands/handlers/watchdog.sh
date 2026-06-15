@@ -66,7 +66,7 @@ export -f __watchdog_curl
 
 # Is the watchdog present AND ready to supervise?
 # True only when: routing is not disabled, curl exists, the socket is a live
-# unix-domain socket, and GET /ready returns 200. A stale socket file (daemon
+# unix-domain socket, and GET /health returns 200. A stale socket file (daemon
 # dead) yields a connection failure, not a hang (curl --max-time), so the caller
 # falls back to the direct path.
 # Returns: 0 if the watchdog is usable, non-zero otherwise
@@ -83,7 +83,7 @@ function __watchdog_available() {
   [[ -S "$_sock" ]] || return 1
 
   local _code
-  _code="$(__watchdog_curl GET ready 2)" || return 1
+  _code="$(__watchdog_curl GET health 2)" || return 1
   [[ "$_code" == "200" ]]
 }
 
