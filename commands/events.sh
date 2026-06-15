@@ -340,10 +340,19 @@ function _build_event_payload() {
     actor="$(id -un 2>/dev/null || echo "system")"
   fi
 
+  # Resolve the origin: the surface that drove this event
+  # (ui|assistant|discord|system|api), the companion to the actor for downstream
+  # audit/correlation. The caller (bot/assistant/watchdog/API) supplies it via
+  # KGSM_EVENT_ORIGIN. Unlike the actor there is NO honest fallback — a bare CLI
+  # invocation has no product surface — so an unset origin stays empty and is
+  # emitted as JSON null below, never a fabricated surface.
+  local origin="${KGSM_EVENT_ORIGIN:-}"
+
   # Generate JSON payload
   local jq_args=("${param_names[@]}"
     --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     --arg actor "$actor"
+    --arg origin "$origin"
     --arg hostname "$(hostname 2>/dev/null || cat /etc/hostname 2>/dev/null || echo "${HOSTNAME:-localhost}")"
     --arg kgsm_version "$(${KGSM_ROOT}/installer.sh --version 2>/dev/null || echo 'unknown')")
 
@@ -388,6 +397,7 @@ function _build_event_payload() {
     Data: $data_object,
     Timestamp: \$timestamp,
     Actor: \$actor,
+    Origin: (\$origin | if . == \"\" then null else . end),
     Hostname: \$hostname,
     KGSMVersion: \$kgsm_version
   }"); then

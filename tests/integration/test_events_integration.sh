@@ -666,5 +666,82 @@ function test_emit_payload_includes_actor() {
   local timestamp
   timestamp=$(echo "$payload" | jq -r '.Timestamp' 2> /dev/null)
   assert_not_null "$timestamp" "Emitted payload should include a Timestamp"
+
+  # Origin is the companion provenance field (which surface drove the event). It was
+  # NOT supplied on this emit, so it must serialize as JSON null — an undeclared
+  # surface is never fabricated, unlike the actor's honest OS-user fallback.
+  assert_contains "$payload" '"Origin"' \
+    "Emitted payload should include a top-level Origin field"
+  local origin
+  origin=$(echo "$payload" | jq -r '.Origin' 2> /dev/null)
+  assert_equals "null" "$origin" \
+    "Origin must be null when KGSM_EVENT_ORIGIN is unset (never fabricated)"
+}
+
+# =============================================================================
+# TEST 25: emitted event payload honors KGSM_EVENT_ORIGIN (provenance override)
+# The companion to TEST 24: when a caller supplies a driving surface via
+# KGSM_EVENT_ORIGIN, the emitted payload's top-level Origin must reflect it.
+# =============================================================================
+
+function test_emit_payload_honors_event_origin() {
+  log_test_step "Testing: emitted payload honors KGSM_EVENT_ORIGIN"
+
+  if ! command -v socat > /dev/null 2>&1; then
+    skip_test "socat not available - skipping payload capture test"
+    return
+  fi
+
+  # Deterministic socket path (don't depend on sandbox config defaults).
+  export config_event_socket_filenames=""
+  export config_event_socket_filename="kgsm.sock"
+  local socket_file="$KGSM_ROOT/kgsm.sock"
+  local capture="$KGSM_TEST_SANDBOX/origin-capture.json"
+  rm -f "$socket_file" "$capture"
+
+  # One-shot listener: accept a single connection, copy its bytes to the file.
+  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
+  local listener_pid=$!
+
+  # Bounded wait for the socket node to exist.
+  local i=0
+  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  local sock_ready="false"
+  [[ -S "$socket_file" ]] && sock_ready="true"
+  assert_true "$sock_ready" "socat listener should create the socket node"
+
+  _enable_broadcasting
+  _enable_socket_events
+
+  # Emit with both provenance fields supplied via env vars.
+  KGSM_EVENT_ACTOR="discord:tester" KGSM_EVENT_ORIGIN="assistant" \
+    "$EVENTS_MODULE" emit instance-started origin-test-server > /dev/null 2>&1 || true
+
+  # Bounded wait for the captured payload to land.
+  i=0
+  while [[ ! -s "$capture" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+
+  # Tear down the listener and restore transport config before asserting.
+  kill "$listener_pid" 2> /dev/null || true
+  wait "$listener_pid" 2> /dev/null || true
+  _disable_socket_events
+  _disable_broadcasting
+  rm -f "$socket_file"
+
+  local payload
+  payload=$(cat "$capture" 2> /dev/null)
+
+  assert_not_null "$payload" "Captured event payload should not be empty"
+
+  local origin
+  origin=$(echo "$payload" | jq -r '.Origin' 2> /dev/null)
+  assert_equals "assistant" "$origin" \
+    "Origin should reflect the supplied KGSM_EVENT_ORIGIN value"
 }
 
