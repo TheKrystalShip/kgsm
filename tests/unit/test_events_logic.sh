@@ -114,8 +114,8 @@ function test_validate_event_type_empty_returns_error() {
     "Should return EC_EVENT_TYPE_INVALID for empty parameter"
 }
 
-function test_validate_event_type_all_31_constants() {
-  log_test_step "Testing __logic_validate_event_type with all 31 event constants"
+function test_validate_event_type_all_33_constants() {
+  log_test_step "Testing __logic_validate_event_type with all 33 event constants"
 
   local event_types=(
     "instance_created"
@@ -139,6 +139,8 @@ function test_validate_event_type_all_31_constants() {
     "instance_started"
     "instance_stopped"
     "instance_restarted"
+    "instance_crashed"
+    "instance_failed"
     "instance_ready"
     "instance_backup_created"
     "instance_backup_restored"
@@ -160,7 +162,7 @@ function test_validate_event_type_all_31_constants() {
   done
 
   assert_equals "${#failed_events[@]}" "0" \
-    "All 31 event types should be valid. Failed: ${failed_events[*]}"
+    "All 33 event types should be valid. Failed: ${failed_events[*]}"
 }
 
 function test_validate_event_type_case_sensitive() {
@@ -425,8 +427,8 @@ function test_get_param_spec_output_format_space_separated() {
     "Should contain spaces between parameters"
 }
 
-function test_get_param_spec_all_31_events() {
-  log_test_step "Testing __logic_get_event_param_spec for all 31 events"
+function test_get_param_spec_all_33_events() {
+  log_test_step "Testing __logic_get_event_param_spec for all 33 events"
 
   local event_types=(
     "instance_created"
@@ -450,6 +452,8 @@ function test_get_param_spec_all_31_events() {
     "instance_started"
     "instance_stopped"
     "instance_restarted"
+    "instance_crashed"
+    "instance_failed"
     "instance_ready"
     "instance_backup_created"
     "instance_backup_restored"
@@ -474,7 +478,7 @@ function test_get_param_spec_all_31_events() {
   done
 
   assert_equals "${#failed_events[@]}" "0" \
-    "All 31 events should return valid specs. Failed: ${failed_events[*]}"
+    "All 33 events should return valid specs. Failed: ${failed_events[*]}"
 }
 
 # =============================================================================
@@ -560,8 +564,8 @@ function test_event_name_to_type_validates_converted_exists() {
     "Should return EC_EVENT_TYPE_INVALID even after conversion if type doesn't exist"
 }
 
-function test_event_name_to_type_all_27_events() {
-  log_test_step "Testing __logic_event_name_to_type for all 27 events with dash conversion"
+function test_event_name_to_type_all_29_events() {
+  log_test_step "Testing __logic_event_name_to_type for all 29 events with dash conversion"
 
   local dash_events=(
     "instance-created:instance_created"
@@ -582,6 +586,8 @@ function test_event_name_to_type_all_27_events() {
     "instance-installed:instance_installed"
     "instance-started:instance_started"
     "instance-stopped:instance_stopped"
+    "instance-crashed:instance_crashed"
+    "instance-failed:instance_failed"
     "instance-ready:instance_ready"
     "instance-backup-created:instance_backup_created"
     "instance-backup-restored:instance_backup_restored"
@@ -608,7 +614,7 @@ function test_event_name_to_type_all_27_events() {
   done
 
   assert_equals "${#failed_conversions[@]}" "0" \
-    "All 27 dash-to-underscore conversions should succeed. Failed: ${failed_conversions[*]}"
+    "All 29 dash-to-underscore conversions should succeed. Failed: ${failed_conversions[*]}"
 }
 
 function test_event_name_to_type_mixed_dash_underscore() {
@@ -701,12 +707,12 @@ function test_edge_case_all_events_have_configs() {
 }
 
 function test_edge_case_event_count_matches_configs() {
-  log_test_step "Testing EVENT_CONFIGS count matches expected 31 events"
+  log_test_step "Testing EVENT_CONFIGS count matches expected 33 events"
 
   local config_count="${#EVENT_CONFIGS[@]}"
 
-  assert_equals "$config_count" "31" \
-    "EVENT_CONFIGS should contain exactly 31 entries (found: $config_count)"
+  assert_equals "$config_count" "33" \
+    "EVENT_CONFIGS should contain exactly 33 entries (found: $config_count)"
 }
 
 # Conformance guard: every event a call site actually emits must be registered

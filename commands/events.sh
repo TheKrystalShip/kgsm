@@ -384,6 +384,13 @@ function _build_event_payload() {
         InstanceName: $instance
       }'
       ;;
+    "$EVENT_INSTANCE_CRASHED" | "$EVENT_INSTANCE_FAILED")
+      data_object='{
+        InstanceName: $instance,
+        ExitCode: $exit_code,
+        Restarts: $restarts
+      }'
+      ;;
     *)
       data_object='{
         InstanceName: $instance

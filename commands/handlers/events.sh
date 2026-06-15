@@ -79,6 +79,17 @@ export EVENT_INSTANCE_STOPPED
 declare -g -r EVENT_INSTANCE_RESTARTED="instance_restarted"
 export EVENT_INSTANCE_RESTARTED
 
+# Autonomous supervisor (kgsm-watchdog) lifecycle events. Emitted by the daemon
+# (via kgsm-lib EmitWithProvenance, stamped actor=system/origin=system), never from
+# a kgsm exit-code dispatch — the watchdog is the only component that observes a
+# crash. instance_crashed: a desired-running process died and is being auto-restarted.
+# instance_failed: the supervisor exhausted its restart retries and gave up.
+declare -g -r EVENT_INSTANCE_CRASHED="instance_crashed"
+export EVENT_INSTANCE_CRASHED
+
+declare -g -r EVENT_INSTANCE_FAILED="instance_failed"
+export EVENT_INSTANCE_FAILED
+
 declare -g -r EVENT_INSTANCE_READY="instance_ready"
 export EVENT_INSTANCE_READY
 
@@ -132,6 +143,8 @@ declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_STARTED"]="instance"
   ["$EVENT_INSTANCE_STOPPED"]="instance"
   ["$EVENT_INSTANCE_RESTARTED"]="instance"
+  ["$EVENT_INSTANCE_CRASHED"]="instance exit_code restarts"
+  ["$EVENT_INSTANCE_FAILED"]="instance exit_code restarts"
   ["$EVENT_INSTANCE_READY"]="instance"
   ["$EVENT_INSTANCE_BACKUP_CREATED"]="instance source version"
   ["$EVENT_INSTANCE_BACKUP_RESTORED"]="instance source version"

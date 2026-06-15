@@ -745,3 +745,95 @@ function test_emit_payload_honors_event_origin() {
     "Origin should reflect the supplied KGSM_EVENT_ORIGIN value"
 }
 
+# =============================================================================
+# TEST 26: watchdog crash event payload — structured fields + system provenance
+# The autonomous supervisor event instance_crashed carries the structured
+# ExitCode/Restarts Data fields, and when the watchdog stamps
+# KGSM_EVENT_ACTOR/ORIGIN=system the payload reflects actor=system / origin=system.
+# Exercises the EVENT_CONFIGS param-spec -> jq-var mapping AND the env -> payload
+# provenance derivation end-to-end over the real socket transport (not just the
+# jq template), capturing the actual _build_event_payload output.
+# =============================================================================
+
+function test_emit_crashed_payload_carries_fields_and_system_provenance() {
+  log_test_step "Testing: instance_crashed payload carries ExitCode/Restarts + actor/origin=system"
+
+  if ! command -v socat > /dev/null 2>&1; then
+    skip_test "socat not available - skipping payload capture test"
+    return
+  fi
+
+  # Deterministic socket path (don't depend on sandbox config defaults).
+  export config_event_socket_filenames=""
+  export config_event_socket_filename="kgsm.sock"
+  local socket_file="$KGSM_ROOT/kgsm.sock"
+  local capture="$KGSM_TEST_SANDBOX/crashed-capture.json"
+  rm -f "$socket_file" "$capture"
+
+  # One-shot listener: accept a single connection, copy its bytes to the file.
+  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
+  local listener_pid=$!
+
+  # Bounded wait for the socket node to exist.
+  local i=0
+  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  local sock_ready="false"
+  [[ -S "$socket_file" ]] && sock_ready="true"
+  assert_true "$sock_ready" "socat listener should create the socket node"
+
+  _enable_broadcasting
+  _enable_socket_events
+
+  # Emit the crash event exactly as the watchdog does: actor+origin=system, with the
+  # instance, exit code, and restart-attempt count as the three positional params.
+  KGSM_EVENT_ACTOR="system" KGSM_EVENT_ORIGIN="system" \
+    "$EVENTS_MODULE" emit instance-crashed crash-test-server 139 2 > /dev/null 2>&1 || true
+
+  # Bounded wait for the captured payload to land.
+  i=0
+  while [[ ! -s "$capture" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+
+  # Tear down the listener and restore transport config before asserting.
+  kill "$listener_pid" 2> /dev/null || true
+  wait "$listener_pid" 2> /dev/null || true
+  _disable_socket_events
+  _disable_broadcasting
+  rm -f "$socket_file"
+
+  local payload
+  payload=$(cat "$capture" 2> /dev/null)
+  assert_not_null "$payload" "Captured event payload should not be empty"
+
+  # Event type round-trips to the underscore wire form.
+  local event_type
+  event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)
+  assert_equals "instance_crashed" "$event_type" \
+    "EventType should be instance_crashed"
+
+  # The structured Data fields: the EVENT_CONFIGS 'instance exit_code restarts' spec
+  # maps positionally to jq $instance/$exit_code/$restarts -> Data
+  # InstanceName/ExitCode/Restarts.
+  local instance exit_code restarts
+  instance=$(echo "$payload" | jq -r '.Data.InstanceName' 2> /dev/null)
+  exit_code=$(echo "$payload" | jq -r '.Data.ExitCode' 2> /dev/null)
+  restarts=$(echo "$payload" | jq -r '.Data.Restarts' 2> /dev/null)
+  assert_equals "crash-test-server" "$instance" \
+    "Data.InstanceName should carry the instance"
+  assert_equals "139" "$exit_code" "Data.ExitCode should carry the exit code"
+  assert_equals "2" "$restarts" "Data.Restarts should carry the restart count"
+
+  # Provenance: the env -> payload derivation must yield actor=system / origin=system
+  # (the autonomous-engine stamp the watchdog applies via EmitWithProvenance).
+  local actor origin
+  actor=$(echo "$payload" | jq -r '.Actor' 2> /dev/null)
+  origin=$(echo "$payload" | jq -r '.Origin' 2> /dev/null)
+  assert_equals "system" "$actor" "Actor should reflect KGSM_EVENT_ACTOR=system"
+  assert_equals "system" "$origin" "Origin should reflect KGSM_EVENT_ORIGIN=system"
+}
+
