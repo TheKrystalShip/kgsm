@@ -61,8 +61,8 @@ export EC_FAILED_SED
 
 # 18 retired: was EC_SYSTEMD (systemd is no longer a lifecycle manager).
 
-declare -g -r EC_UFW=19
-export EC_UFW
+declare -g -r EC_FIREWALL=19
+export EC_FIREWALL
 
 declare -g -r EC_MALFORMED_INSTANCE=20
 export EC_MALFORMED_INSTANCE
@@ -149,7 +149,7 @@ declare -g -r EC_CGROUP_UNSUPPORTED=48
 export EC_CGROUP_UNSUPPORTED
 
 # The kgsm-firewall authority (host-firewall owner) could not be reached: its
-# socket is missing/refused or its binary is absent. Distinct from EC_UFW (a
+# socket is missing/refused or its binary is absent. Distinct from EC_FIREWALL (a
 # reachable backend that rejected the rule) — this is the §7g hard-fail trigger:
 # a firewall-enabled install aborts here rather than silently proceeding.
 declare -g -r EC_FIREWALL_UNREACHABLE=49
@@ -213,11 +213,11 @@ declare -g -r EC_SUCCESS_INSTANCE_REMOVED=214
 export EC_SUCCESS_INSTANCE_REMOVED
 
 # Additional file integration events (215-219)
-declare -g -r EC_SUCCESS_UFW_ENABLED=215
-export EC_SUCCESS_UFW_ENABLED
+declare -g -r EC_SUCCESS_FIREWALL_ENABLED=215
+export EC_SUCCESS_FIREWALL_ENABLED
 
-declare -g -r EC_SUCCESS_UFW_DISABLED=216
-export EC_SUCCESS_UFW_DISABLED
+declare -g -r EC_SUCCESS_FIREWALL_DISABLED=216
+export EC_SUCCESS_FIREWALL_DISABLED
 
 declare -g -r EC_SUCCESS_SYMLINK_CREATED=217
 export EC_SUCCESS_SYMLINK_CREATED
@@ -326,7 +326,7 @@ declare -A EXIT_CODES=(
    [$EC_FAILED_MKDIR]="Failed mkdir"
    [$EC_PERMISSION]="Permission issue"
    [$EC_FAILED_SED]="Error with 'sed' command"
-   [$EC_UFW]="Error with 'ufw' command"
+   [$EC_FIREWALL]="Firewall backend operation failed"
    [$EC_MALFORMED_INSTANCE]="Malformed instance config file"
    [$EC_MISSING_DEPENDENCY]="Missing required dependency"
    [$EC_FAILED_LN]="Failed to create symlink"

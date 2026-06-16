@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
 
-# KGSM Pure Logic Layer - UFW Firewall Integration Operations
+# KGSM Pure Logic Layer - Firewall Integration Operations
 #
-# This module contains pure business logic functions for UFW firewall integration operations.
+# This module contains pure business logic functions for firewall integration
+# operations, routed through the kgsm-firewall authority (backend-agnostic).
 # These functions have no user-facing I/O and communicate results only via exit codes.
 #
 # Exit Code Conventions:
-# - EC_SUCCESS_UFW_ENABLED (215): UFW integration enabled successfully
-# - EC_SUCCESS_UFW_DISABLED (216): UFW integration disabled successfully
-# - Standard error codes: EC_INVALID_ARG, EC_FILE_NOT_FOUND, EC_UFW, etc.
+# - EC_SUCCESS_FIREWALL_ENABLED (215): firewall integration enabled successfully
+# - EC_SUCCESS_FIREWALL_DISABLED (216): firewall integration disabled successfully
+# - Standard error codes: EC_INVALID_ARG, EC_FILE_NOT_FOUND, EC_FIREWALL, etc.
 
 # Disabling SC2086 globally:
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
-if [[ -n "${KGSM_LOGIC_FILES_UFW_LOADED}" ]]; then
+if [[ -n "${KGSM_LOGIC_FILES_FIREWALL_LOADED}" ]]; then
   return 0
 fi
 
@@ -37,8 +38,8 @@ fi
 # unreachable the original EC_FIREWALL_UNREACHABLE propagates so the install
 # aborts rather than silently proceeding.
 # Args: $1 = instance_config_file
-# Returns: EC_SUCCESS_UFW_ENABLED on success, error code on failure
-function __logic_enable_ufw_integration() {
+# Returns: EC_SUCCESS_FIREWALL_ENABLED on success, error code on failure
+function __logic_enable_firewall_integration() {
   local instance_config_file="$1"
 
   # Validate input
@@ -85,10 +86,10 @@ function __logic_enable_ufw_integration() {
     return $EC_FAILED_UPDATE_CONFIG
   fi
 
-  return $EC_SUCCESS_UFW_ENABLED
+  return $EC_SUCCESS_FIREWALL_ENABLED
 }
 
-export -f __logic_enable_ufw_integration
+export -f __logic_enable_firewall_integration
 
 # Disable firewall integration for an instance by asking the kgsm-firewall
 # authority to remove every rule it owns for it. Deliberately best-effort
@@ -97,10 +98,10 @@ export -f __logic_enable_ufw_integration
 # firewall-disabled and the remove outcome is reported up for the command layer
 # to warn-and-continue on. The §7g hard-fail is scoped to enable/install only.
 # Args: $1 = instance_config_file
-# Returns: EC_SUCCESS_UFW_DISABLED on a clean removal; EC_FIREWALL_UNREACHABLE /
-#          EC_UFW (soft — config still flipped) when the authority could not
+# Returns: EC_SUCCESS_FIREWALL_DISABLED on a clean removal; EC_FIREWALL_UNREACHABLE /
+#          EC_FIREWALL (soft — config still flipped) when the authority could not
 #          confirm removal; EC_FAILED_UPDATE_CONFIG only on a genuine failure.
-function __logic_disable_ufw_integration() {
+function __logic_disable_firewall_integration() {
   local instance_config_file="$1"
 
   # Validate input
@@ -130,18 +131,18 @@ function __logic_disable_ufw_integration() {
     return $EC_FAILED_UPDATE_CONFIG
   fi
 
-  # Surface a soft remove failure (EC_FIREWALL_UNREACHABLE / EC_UFW) so the
+  # Surface a soft remove failure (EC_FIREWALL_UNREACHABLE / EC_FIREWALL) so the
   # command layer can warn-and-continue; a clean removal returns the success
   # event code.
   if [[ $_remove_rc -ne $EC_SUCCESS ]]; then
     return $_remove_rc
   fi
 
-  return $EC_SUCCESS_UFW_DISABLED
+  return $EC_SUCCESS_FIREWALL_DISABLED
 }
 
-export -f __logic_disable_ufw_integration
+export -f __logic_disable_firewall_integration
 
 # Mark module as loaded
-declare -g KGSM_LOGIC_FILES_UFW_LOADED=1
-export KGSM_LOGIC_FILES_UFW_LOADED
+declare -g KGSM_LOGIC_FILES_FIREWALL_LOADED=1
+export KGSM_LOGIC_FILES_FIREWALL_LOADED

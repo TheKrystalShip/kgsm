@@ -9,11 +9,11 @@ source "$(dirname "$(readlink -f "$0")")/../core/bootstrap.sh"
 
 self="$(basename "$0")"
 
-# Load UFW firewall logic library
-logic_library=$(__find_command_handler files.ufw.sh)
-# shellcheck source=handlers/files.ufw.sh
+# Load firewall logic library
+logic_library=$(__find_command_handler files.firewall.sh)
+# shellcheck source=handlers/files.firewall.sh
 source "$logic_library" || {
-  __print_error "Failed to load files.ufw logic library"
+  __print_error "Failed to load files.firewall logic library"
   exit $EC_FAILED_SOURCE
 }
 
@@ -21,16 +21,16 @@ function show_usage() {
   local UNDERLINE="\e[4m"
   local END="\e[0m"
 
-  echo -e "${UNDERLINE}UFW Firewall Integration for Krystal Game Server Manager${END}
+  echo -e "${UNDERLINE}Firewall Integration for Krystal Game Server Manager${END}
 
-Enable and disable UFW firewall integration for game server instances.
+Enable and disable firewall integration for game server instances.
 
 ${UNDERLINE}Usage:${END}
   ${self} <command> <instance>
 
 ${UNDERLINE}Commands:${END}
-  enable <instance>           Enable UFW firewall rules for the instance
-  disable <instance>          Disable UFW firewall rules for the instance
+  enable <instance>           Open the instance's ports via kgsm-firewall
+  disable <instance>          Close the instance's ports via kgsm-firewall
   help [command]              Display help for a specific command
 
 ${UNDERLINE}Arguments:${END}
@@ -42,10 +42,10 @@ ${UNDERLINE}Examples:${END}
   ${self} help enable
 
 ${UNDERLINE}Notes:${END}
-  • UFW integration is optional for game server instances
-  • Enable creates UFW rule file and enables the rule for instance ports
-  • Disable removes UFW rules and deletes the rule file
-  • Requires root/sudo permissions for UFW operations
+  • Firewall integration is optional for game server instances
+  • Rules are owned by the kgsm-firewall authority, tagged kgsm-<instance>
+  • KGSM renders no rules itself and needs no local root or firewall tooling
+  • Enabling hard-fails if the kgsm-firewall authority is unreachable
   • All operations require a valid instance configuration
 "
 }
@@ -54,17 +54,17 @@ function show_usage_enable() {
   local UNDERLINE="\e[4m"
   local END="\e[0m"
 
-  echo -e "${UNDERLINE}Enable UFW Firewall Integration${END}
+  echo -e "${UNDERLINE}Enable Firewall Integration${END}
 
-Creates UFW firewall rules for the instance's network ports.
+Opens the instance's network ports via the kgsm-firewall authority.
 
 ${UNDERLINE}Usage:${END}
   ${self} enable <instance>
 
 ${UNDERLINE}Description:${END}
-  Enables UFW firewall integration for the specified instance by creating
-  a UFW application rule file and allowing traffic through the firewall.
-  This ensures proper network connectivity for the game server.
+  Hands the instance's ports to the kgsm-firewall authority, which owns
+  the host firewall and opens them under a rule tagged kgsm-<instance>.
+  KGSM renders no rules itself and needs no local firewall privileges.
 
   The instance configuration is updated to reflect that firewall
   management is enabled.
@@ -74,8 +74,7 @@ ${UNDERLINE}Examples:${END}
   ${self} enable minecraft-modded
 
 ${UNDERLINE}Requirements:${END}
-  • Root/sudo permissions
-  • UFW installed and enabled
+  • A reachable kgsm-firewall authority (enable hard-fails without it)
   • Valid instance configuration with port information
 "
 }
@@ -84,26 +83,27 @@ function show_usage_disable() {
   local UNDERLINE="\e[4m"
   local END="\e[0m"
 
-  echo -e "${UNDERLINE}Disable UFW Firewall Integration${END}
+  echo -e "${UNDERLINE}Disable Firewall Integration${END}
 
-Removes UFW firewall rules for the instance.
+Closes the instance's ports via the kgsm-firewall authority.
 
 ${UNDERLINE}Usage:${END}
   ${self} disable <instance>
 
 ${UNDERLINE}Description:${END}
-  Disables UFW firewall integration for the specified instance by
-  removing the UFW rule and deleting the application rule file.
-  The instance configuration is updated to reflect that firewall
-  management is disabled.
+  Asks the kgsm-firewall authority to remove the rule it owns for the
+  instance (tagged kgsm-<instance>). The instance configuration is
+  updated to reflect that firewall management is disabled.
+
+  Best-effort: if the authority is unreachable the instance is still
+  marked disabled, so it never blocks uninstall.
 
 ${UNDERLINE}Examples:${END}
   ${self} disable factorio-server
   ${self} disable minecraft-modded
 
 ${UNDERLINE}Requirements:${END}
-  • Root/sudo permissions
-  • UFW installed and enabled
+  • Valid instance configuration
 "
 }
 
@@ -146,15 +146,15 @@ function _cmd_enable() {
     return $EC_INVALID_INSTANCE
   fi
 
-  __print_info "Enabling UFW firewall integration for instance '$instance_name'..."
+  __print_info "Enabling firewall integration for instance '$instance_name'..."
 
   # Call logic function
-  __logic_enable_ufw_integration "$instance_config_file"
+  __logic_enable_firewall_integration "$instance_config_file"
   local exit_code=$?
 
   # Handle result
   case $exit_code in
-    $EC_SUCCESS_UFW_ENABLED)
+    $EC_SUCCESS_FIREWALL_ENABLED)
       __print_success "Firewall integration enabled successfully"
       __print_info "Ports opened via the kgsm-firewall authority"
       # Audit event: record which ports were opened. The payload carries them as
@@ -179,7 +179,7 @@ function _cmd_enable() {
       __print_error "Start/install kgsm-firewall (or disable firewall management) and retry"
       return $exit_code
       ;;
-    $EC_UFW)
+    $EC_FIREWALL)
       __print_error "The firewall backend could not apply the rules for '$instance_name'"
       return $exit_code
       ;;
@@ -237,17 +237,17 @@ function _cmd_disable() {
     return $EC_INVALID_INSTANCE
   fi
 
-  __print_info "Disabling UFW firewall integration for instance '$instance_name'..."
+  __print_info "Disabling firewall integration for instance '$instance_name'..."
 
   # Call logic function
-  __logic_disable_ufw_integration "$instance_config_file"
+  __logic_disable_firewall_integration "$instance_config_file"
   local exit_code=$?
 
   # Handle result. Disable is best-effort: a down authority or backend error
   # warns but does NOT fail (it must never wedge uninstall) — and only a
   # confirmed removal emits the close event (never fabricate a closed port).
   case $exit_code in
-    $EC_SUCCESS_UFW_DISABLED)
+    $EC_SUCCESS_FIREWALL_DISABLED)
       __print_success "Firewall integration disabled successfully"
       __print_info "Ports closed via the kgsm-firewall authority"
       local _ports
@@ -266,7 +266,7 @@ function _cmd_disable() {
       __print_info "Instance marked firewall-disabled; remove the rule manually if needed"
       return 0
       ;;
-    $EC_UFW)
+    $EC_FIREWALL)
       __print_warning "The firewall backend could not remove the rules for '$instance_name'"
       __print_info "Instance marked firewall-disabled; remove the rule manually if needed"
       return 0

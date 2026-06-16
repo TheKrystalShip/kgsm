@@ -10,7 +10,6 @@ Templates in KGSM are standardized files that provide consistent structure for g
   - [instance.tp](#instancetp)
   - [manage.native.d/](#managenativedd)
   - [manage.container.d/](#managecontainerd)
-  - [ufw.tp](#ufwtp)
   - [overrides.tp](#overridestown)
 - [Template Variables Reference](#template-variables-reference)
 - [Usage Guidelines](#usage-guidelines)
@@ -133,30 +132,6 @@ For a container blueprint (`runtime: container`), the body is instead a `contain
 ```
 
 **Format:** Same numbered module structure as `manage.native.d/`. Reads `$instance_compose_file` and delegates container operations to Docker Compose.
-
----
-
-### ufw.tp
-
-**Purpose:** Template for the UFW application profile file that defines the firewall rules for a game server instance.
-
-**Used by:** `commands/handlers/files.ufw.sh`.
-
-**Variables used:**
-
-| Variable | Description |
-|---|---|
-| `$instance_name` | UFW profile title and description |
-| `$instance_ports` | Port specification in UFW format |
-
-**Generated profile excerpt:**
-
-```ini
-[$instance_name]
-title=$instance_name
-description=$instance_name
-ports=$instance_ports
-```
 
 ---
 

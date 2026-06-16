@@ -229,13 +229,13 @@ function test_management_component_routes_to_submodule() {
   assert_not_null "$output" "management component routing should produce output"
 }
 
-function test_ufw_component_routes_to_submodule() {
-  log_test_step "Testing 'ufw' routes to files.ufw.sh"
+function test_firewall_component_routes_to_submodule() {
+  log_test_step "Testing 'firewall' routes to files.firewall.sh"
 
   local output
-  output=$("$MODULE" ufw 2>&1 || true)
+  output=$("$MODULE" firewall 2>&1 || true)
 
-  assert_not_null "$output" "ufw component routing should produce output"
+  assert_not_null "$output" "firewall component routing should produce output"
 }
 
 function test_symlink_component_routes_to_submodule() {

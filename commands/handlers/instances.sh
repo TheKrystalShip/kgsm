@@ -433,7 +433,7 @@ export -f __logic_get_instance_paths
 #   - the filesystem paths KGSM owns and manages (every *_dir / *_file, plus
 #     executable_subdirectory);
 #   - the side-effecting toggles, which have dedicated enable/disable flows
-#     (`kgsm files <ufw|upnp|symlink> enable|disable <instance>`) — writing the
+#     (`kgsm files <firewall|upnp|symlink> enable|disable <instance>`) — writing the
 #     flag alone would desync KGSM from the actual firewall/UPnP/symlink state.
 # Everything else (auto_update, executable_arguments, level_name, stop_command,
 # the *_timeout_seconds values, startup_success_regex, …) is a plain runtime

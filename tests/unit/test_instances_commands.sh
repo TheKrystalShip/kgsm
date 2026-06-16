@@ -494,8 +494,8 @@ function test_config_set_toggle_key_hints_dedicated_flow() {
   local output
   output=$("$MODULE" config-set "$instance_name" "enable_firewall_management=true" 2>&1)
   assert_not_equals 0 "$?" "config-set should refuse the integration toggle"
-  assert_contains "$output" "files ufw" \
-    "Refusal should point to the dedicated 'files ufw' flow"
+  assert_contains "$output" "files firewall" \
+    "Refusal should point to the dedicated 'files firewall' flow"
 }
 
 function test_config_set_rejects_missing_assignment() {

@@ -113,7 +113,7 @@ function _uninstall() {
 
   events.sh emit instance-uninstall-started "${instance}"
 
-  # Remove instance files (ufw, symlinks, etc.)
+  # Remove instance files (firewall, symlinks, etc.)
   files.sh remove "$instance" || {
     __print_warning "Failed to remove some instance files"
     # Continue with uninstall even if file removal fails

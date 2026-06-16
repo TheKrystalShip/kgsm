@@ -4,14 +4,14 @@
 #
 # Test Type: E2E
 # Target: Complete file management workflow - files.sh, files.management.sh,
-#         files.ufw.sh, files.upnp.sh, files.symlink.sh
+#         files.firewall.sh, files.upnp.sh, files.symlink.sh
 #
 # Validates the full lifecycle:
 #   1. Instance creation (prerequisite)
 #   2. Directory creation (prerequisite for files)
 #   3. Management file creation, verification, and removal
 #   4. Orchestrated file creation and removal via files.sh
-#   5. Config-dependent integrations (ufw, upnp, symlink)
+#   5. Config-dependent integrations (firewall, upnp, symlink)
 #   6. Error handling for invalid instances
 
 # =============================================================================
@@ -22,7 +22,7 @@ readonly TEST_NAME="files_management_e2e"
 
 readonly FILES_MODULE="$KGSM_ROOT/commands/files.sh"
 readonly FILES_MANAGEMENT_MODULE="$KGSM_ROOT/commands/files.management.sh"
-readonly FILES_UFW_MODULE="$KGSM_ROOT/commands/files.ufw.sh"
+readonly FILES_FIREWALL_MODULE="$KGSM_ROOT/commands/files.firewall.sh"
 readonly FILES_UPNP_MODULE="$KGSM_ROOT/commands/files.upnp.sh"
 readonly FILES_SYMLINK_MODULE="$KGSM_ROOT/commands/files.symlink.sh"
 readonly DIRECTORIES_MODULE="$KGSM_ROOT/commands/directories.sh"
@@ -48,8 +48,8 @@ function setup_file() {
   assert_file_exists "$FILES_MANAGEMENT_MODULE" "files.management.sh should exist"
   assert_file_executable "$FILES_MANAGEMENT_MODULE" "files.management.sh should be executable"
 
-  assert_file_exists "$FILES_UFW_MODULE" "files.ufw.sh should exist"
-  assert_file_executable "$FILES_UFW_MODULE" "files.ufw.sh should be executable"
+  assert_file_exists "$FILES_FIREWALL_MODULE" "files.firewall.sh should exist"
+  assert_file_executable "$FILES_FIREWALL_MODULE" "files.firewall.sh should be executable"
 
   assert_file_exists "$FILES_UPNP_MODULE" "files.upnp.sh should exist"
   assert_file_executable "$FILES_UPNP_MODULE" "files.upnp.sh should be executable"
@@ -253,17 +253,17 @@ function test_files_orchestrator_fails_for_invalid_instance() {
 }
 
 # =============================================================================
-# TEST 9: UFW integration fails for nonexistent instance
+# TEST 9: Firewall integration fails for nonexistent instance
 # =============================================================================
 
-function test_ufw_fails_for_invalid_instance() {
-  log_test_step "Testing: files.ufw.sh fails for nonexistent instance"
+function test_firewall_fails_for_invalid_instance() {
+  log_test_step "Testing: files.firewall.sh fails for nonexistent instance"
 
-  assert_command_fails "$FILES_UFW_MODULE enable nonexistent-instance-xyz-$$" \
-    "files.ufw.sh enable should fail for nonexistent instance"
+  assert_command_fails "$FILES_FIREWALL_MODULE enable nonexistent-instance-xyz-$$" \
+    "files.firewall.sh enable should fail for nonexistent instance"
 
-  assert_command_fails "$FILES_UFW_MODULE disable nonexistent-instance-xyz-$$" \
-    "files.ufw.sh disable should fail for nonexistent instance"
+  assert_command_fails "$FILES_FIREWALL_MODULE disable nonexistent-instance-xyz-$$" \
+    "files.firewall.sh disable should fail for nonexistent instance"
 }
 
 # =============================================================================

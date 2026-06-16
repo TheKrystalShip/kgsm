@@ -81,7 +81,7 @@ export -f __firewall_available
 # set, then maps its exit-code contract (kgsm-firewall ExitCodes) to a kgsm EC:
 #   0 Success      -> EC_SUCCESS              (applied / removed / noop)
 #   3 Unreachable  -> EC_FIREWALL_UNREACHABLE (authority down — §7g hard-fail)
-#   2/4/5          -> EC_UFW                  (reachable, but unsuccessful)
+#   2/4/5          -> EC_FIREWALL                  (reachable, but unsuccessful)
 # An absent binary is itself "unreachable" (the authority is unavailable).
 # Args: $@ = verb + args (e.g. ensure-open <instance> <token>...)
 # Returns: the mapped EC.
@@ -107,7 +107,7 @@ function __firewall_invoke() {
   case "$_rc" in
     0) return $EC_SUCCESS ;;
     3) return $EC_FIREWALL_UNREACHABLE ;;
-    *) return $EC_UFW ;;
+    *) return $EC_FIREWALL ;;
   esac
 }
 

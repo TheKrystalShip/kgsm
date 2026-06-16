@@ -522,7 +522,7 @@ These codes are returned by handler functions to signal that a specific event sh
 
 KGSM integrates with external systems through dedicated sub-commands and optional configuration:
 
-- **UFW**: Firewall rule management (`files.ufw.sh`, enabled via `config_enable_firewall_management`)
+- **UFW**: Firewall rule management (`files.firewall.sh`, enabled via `config_enable_firewall_management`)
 - **UPnP**: Port forwarding (`files.upnp.sh`, enabled via `config_enable_port_forwarding`)
 - **Steam**: Game file downloading via SteamCMD (implemented in override `_download()` functions)
 - **Docker**: Container-based servers declare `runtime: container` and embed their Docker Compose under `container.compose` in the unified `.bp.yaml` blueprint

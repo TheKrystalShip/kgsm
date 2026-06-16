@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
 
-# KGSM Files UFW Command CLI Tests
+# KGSM Files Firewall Command CLI Tests
 #
 # Test Type: UNIT
-# Target: commands/files.ufw.sh - CLI interface and argument handling
+# Target: commands/files.firewall.sh - CLI interface and argument handling
 #
-# Tests the CLI interface of files.ufw.sh including help system,
+# Tests the CLI interface of files.firewall.sh including help system,
 # error handling for missing/invalid args, and behavior on valid instances.
 #
-# Note: Tests that require UFW installed or root access are either
+# Note: Tests requiring a reachable kgsm-firewall authority are either
 # skipped or test only up to the point of the external dependency.
-# The disable path on an unconfigured instance succeeds without UFW.
+# The disable path is best-effort and does not require the authority.
 
 # =============================================================================
 # TEST SETUP
 # =============================================================================
 
-readonly TEST_NAME="files_ufw_commands"
-readonly MODULE="$KGSM_ROOT/commands/files.ufw.sh"
+readonly TEST_NAME="files_firewall_commands"
+readonly MODULE="$KGSM_ROOT/commands/files.firewall.sh"
 
 TEST_INSTALL_DIR=""
 
@@ -41,15 +41,15 @@ STUB
 # =============================================================================
 
 function setup_file() {
-  log_test_step "Setting up files.ufw commands tests"
+  log_test_step "Setting up files.firewall commands tests"
 
   TEST_INSTALL_DIR="$KGSM_ROOT/test-installs"
   mkdir -p "$TEST_INSTALL_DIR"
 
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
   assert_dir_exists "$KGSM_ROOT" "KGSM root directory should exist"
-  assert_file_exists "$MODULE" "files.ufw.sh module should exist"
-  assert_file_executable "$MODULE" "files.ufw.sh should be executable"
+  assert_file_exists "$MODULE" "files.firewall.sh module should exist"
+  assert_file_executable "$MODULE" "files.firewall.sh should be executable"
 
   FW_STUB="${KGSM_TEST_SANDBOX:-/tmp}/kgsm-firewall-cmd-stub-$$"
   __make_fw_stub "$FW_STUB"
@@ -72,7 +72,7 @@ function test_help_top_level() {
   assert_equals 0 "$exit_code" "help command should succeed"
   assert_contains "$output" "enable" "Help should mention enable command"
   assert_contains "$output" "disable" "Help should mention disable command"
-  assert_contains "$output" "UFW" "Help should mention UFW"
+  assert_contains "$output" "Firewall" "Help should mention firewall"
 }
 
 function test_help_flag() {
@@ -244,7 +244,7 @@ function test_disable_help_flag() {
 # =============================================================================
 
 # The command layer is where Inc 3's two headline behaviors actually live — the
-# asymmetric hard-fail and the audit emit. These drive the real `files.ufw.sh`
+# asymmetric hard-fail and the audit emit. These drive the real `files.firewall.sh`
 # command as a subprocess against an injected stub authority (a real factorio
 # instance, so `ports="34197/udp"` is read from a realistically-quoted config).
 

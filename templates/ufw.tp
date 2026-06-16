@@ -1,4 +1,0 @@
-[$instance_name]
-title=$instance_name
-description=$instance_name
-ports=$instance_ports

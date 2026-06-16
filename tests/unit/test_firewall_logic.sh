@@ -50,7 +50,7 @@ function setup_file() {
 
   assert_not_null "$KGSM_LOGIC_FIREWALL_LOADED" "Firewall handler should be loaded"
   assert_not_null "$EC_FIREWALL_UNREACHABLE" "EC_FIREWALL_UNREACHABLE should be defined"
-  assert_not_null "$EC_UFW" "EC_UFW should be defined"
+  assert_not_null "$EC_FIREWALL" "EC_FIREWALL should be defined"
 
   assert_function_exists "__firewall_socket_path" "__firewall_socket_path should be exported"
   assert_function_exists "__firewall_bin" "__firewall_bin should be exported"
@@ -160,18 +160,18 @@ function test_invoke_unreachable_maps_ec_firewall_unreachable() {
     "CLI exit 3 should map to EC_FIREWALL_UNREACHABLE (the hard-fail trigger)"
 }
 
-function test_invoke_unsupported_maps_ec_ufw() {
-  log_test_step "Exit-code mapping: 4 (unsupported) -> EC_UFW"
+function test_invoke_unsupported_maps_ec_firewall() {
+  log_test_step "Exit-code mapping: 4 (unsupported) -> EC_FIREWALL"
   STUB_EXIT=4 KGSM_FIREWALL_BIN="$FW_STUB" __firewall_invoke backend
   local rc=$?
-  assert_equals "$EC_UFW" "$rc" "CLI exit 4 should map to EC_UFW"
+  assert_equals "$EC_FIREWALL" "$rc" "CLI exit 4 should map to EC_FIREWALL"
 }
 
-function test_invoke_opfailed_maps_ec_ufw() {
-  log_test_step "Exit-code mapping: 5 (op-failed) -> EC_UFW"
+function test_invoke_opfailed_maps_ec_firewall() {
+  log_test_step "Exit-code mapping: 5 (op-failed) -> EC_FIREWALL"
   STUB_EXIT=5 KGSM_FIREWALL_BIN="$FW_STUB" __firewall_invoke backend
   local rc=$?
-  assert_equals "$EC_UFW" "$rc" "CLI exit 5 should map to EC_UFW"
+  assert_equals "$EC_FIREWALL" "$rc" "CLI exit 5 should map to EC_FIREWALL"
 }
 
 function test_invoke_missing_binary_maps_unreachable() {

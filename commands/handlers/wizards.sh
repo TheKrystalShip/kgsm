@@ -132,8 +132,8 @@ export -f __logic_wizard_install
 # Example:
 #   mapfile -t options < <(__logic_get_modify_options "factorio-01")
 #   # Returns lines like:
-#   # Enable firewall rules|--add ufw
-#   # Disable firewall rules|--remove ufw
+#   # Enable firewall rules|--add firewall
+#   # Disable firewall rules|--remove firewall
 function __logic_get_modify_options() {
   local _instance_name="$1"
 
@@ -155,9 +155,9 @@ function __logic_get_modify_options() {
 
   # Build modification options based on current state
   if [[ "$instance_enable_firewall_management" == "true" ]]; then
-    echo "Disable firewall rules|--remove ufw"
+    echo "Disable firewall rules|--remove firewall"
   else
-    echo "Enable firewall rules|--add ufw"
+    echo "Enable firewall rules|--add firewall"
   fi
 
   if [[ "$instance_enable_command_shortcuts" == "true" ]]; then
@@ -180,14 +180,14 @@ export -f __logic_get_modify_options
 #
 # Args:
 #   $1 - _instance_name
-#   $2 - modification_command (e.g., "--add ufw", "--remove ufw")
+#   $2 - modification_command (e.g., "--add firewall", "--remove firewall")
 #
 # Returns:
 #   0 on success
 #   Error codes on failure
 #
 # Example:
-#   __logic_wizard_modify "factorio-01" "--add ufw"
+#   __logic_wizard_modify "factorio-01" "--add firewall"
 function __logic_wizard_modify() {
   local _instance_name="$1"
   local modification_command="$2"

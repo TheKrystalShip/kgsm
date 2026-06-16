@@ -383,9 +383,9 @@ Identity and path keys (name, runtime, every *_dir/*_file, …) are managed by
 KGSM and are refused. The integration toggles (enable_firewall_management,
 enable_port_forwarding, enable_command_shortcuts) are also refused — use the
 dedicated flow instead:
-  $self files ufw     enable|disable <instance>
-  $self files upnp    enable|disable <instance>
-  $self files symlink enable|disable <instance>
+  $self files firewall enable|disable <instance>
+  $self files upnp     enable|disable <instance>
+  $self files symlink  enable|disable <instance>
 
 ${UNDERLINE}Examples:${END}
   $self config-set factorio-01 auto_update=true
@@ -1143,7 +1143,7 @@ function _cmd_config_set() {
         __print_error "'$key' is a protected key and cannot be set with config-set"
         case "$key" in
           enable_firewall_management)
-            __print_error "Use: $self files ufw enable|disable $instance"
+            __print_error "Use: $self files firewall enable|disable $instance"
             ;;
           enable_port_forwarding)
             __print_error "Use: $self files upnp enable|disable $instance"

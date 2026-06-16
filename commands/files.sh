@@ -25,7 +25,7 @@ ${UNDERLINE}Usage:${END}
 ${UNDERLINE}Components:${END}
   management                  Management file operations (create, remove)
   config                      Standalone config operations (install, uninstall)
-  ufw                         UFW firewall integration (enable, disable)
+  firewall                    Firewall integration (enable, disable)
   symlink                     Command shortcut integration (enable, disable)
   upnp                        UPnP port forwarding integration (enable, disable)
 
@@ -38,13 +38,13 @@ ${UNDERLINE}Examples:${END}
   ${self} create factorio-server
   ${self} remove factorio-server
   ${self} management create factorio-server
-  ${self} ufw disable factorio-server
+  ${self} firewall disable factorio-server
   ${self} help management
 
 ${UNDERLINE}Notes:${END}
   • Quick commands are configuration-aware and respect config.ini settings
   • Management file and config file are ALWAYS created (required for operation)
-  • Optional integrations (ufw, symlink, upnp) follow config.ini defaults
+  • Optional integrations (firewall, symlink, upnp) follow config.ini defaults
   • Component commands allow manual control after initial instance creation
   • Use 'help <component>' for component-specific documentation
 "
@@ -73,12 +73,12 @@ ${UNDERLINE}Description:${END}
     • Standalone configuration file
 
   ${UNDERLINE}Optional Integrations (Config-Dependent):${END}
-    • UFW firewall rules (if enable_firewall_management=true)
+    • Firewall rules via kgsm-firewall (if enable_firewall_management=true)
     • Command shortcuts/symlinks (if enable_command_shortcuts=true)
     • UPnP port forwarding rules (if enable_port_forwarding=true)
 
   After initial creation, you can manually enable/disable optional integrations
-  using the component-specific commands (e.g., 'files.sh ufw enable').
+  using the component-specific commands (e.g., 'files.sh firewall enable').
 
 ${UNDERLINE}Examples:${END}
   ${self} create factorio-server
@@ -87,7 +87,7 @@ ${UNDERLINE}Examples:${END}
 ${UNDERLINE}Requirements:${END}
   • Valid instance configuration file
   • Write permissions in instance directories
-  • Root/sudo permissions (only if UFW is enabled)
+  • A reachable kgsm-firewall authority (only if firewall management is on)
 "
 }
 
@@ -111,7 +111,7 @@ ${UNDERLINE}Description:${END}
   integrations are currently enabled and removes them accordingly.
 
   ${UNDERLINE}Removed Components:${END}
-    • UFW firewall rules (if enable_firewall_management=true)
+    • Firewall rules via kgsm-firewall (if enable_firewall_management=true)
     • Command shortcuts/symlinks (if enable_command_shortcuts=true)
     • UPnP port forwarding rules (if enable_port_forwarding=true)
     • Management script (instance.manage.sh)
@@ -130,7 +130,7 @@ ${UNDERLINE}Warning:${END}
 
 ${UNDERLINE}Requirements:${END}
   • Valid instance configuration file
-  • Root/sudo permissions (only if UFW integration is enabled)
+  • A reachable kgsm-firewall authority (only if firewall management is on)
 "
 }
 
@@ -186,7 +186,7 @@ function _cmd_create() {
   # command shortcuts.
 
   if [[ "$config_enable_firewall_management" == "true" ]]; then
-    files.ufw.sh enable "$instance_name" || return $?
+    files.firewall.sh enable "$instance_name" || return $?
   fi
 
   if [[ "$config_enable_command_shortcuts" == "true" ]]; then
@@ -250,7 +250,7 @@ function _cmd_remove() {
 
   if [[ "$instance_enable_firewall_management" == "true" ]]; then
     __print_info "Disabling firewall integration for instance '$instance_name'..."
-    files.ufw.sh disable "$instance_name" || return $?
+    files.firewall.sh disable "$instance_name" || return $?
   fi
 
   if [[ "$instance_enable_command_shortcuts" == "true" ]]; then
@@ -319,8 +319,8 @@ case "$command" in
     files.management.sh "$@"
     exit $?
     ;;
-  ufw)
-    files.ufw.sh "$@"
+  firewall)
+    files.firewall.sh "$@"
     exit $?
     ;;
   symlink)

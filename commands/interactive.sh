@@ -107,7 +107,7 @@ ${UNDERLINE}Description:${END}
   - Config - Manage KGSM configuration
   - Directories - Manage directory structures
   - Events - Manage event system
-  - Files - Manage instance files (ufw, symlinks)
+  - Files - Manage instance files (firewall, symlinks)
   - Instances - Manage server instances
   - Lifecycle - Control server lifecycle (start, stop, restart, logs)
   - Network - Manage network and ports
@@ -340,7 +340,7 @@ function __show_files_menu() {
   __ui_draw_box "Files Module"
   __ui_print_box_line "Equivalent to: kgsm.sh files <command>" "$UI_COLOR_INFO"
   __ui_print_empty_line
-  __ui_print_menu_item "1" "Create UFW Rules" "Generate UFW firewall rules"
+  __ui_print_menu_item "1" "Enable Firewall" "Open ports via kgsm-firewall"
   __ui_print_menu_item "2" "Create Symlinks" "Create command shortcuts"
   __ui_print_menu_item "3" "Remove Files" "Remove generated files"
   __ui_print_empty_line
@@ -1234,7 +1234,7 @@ function __action_system_restart() {
 
 # Files module actions
 
-function __action_files_create_ufw() {
+function __action_files_enable_firewall() {
   local instances
   local selected_instance
 
@@ -1253,11 +1253,11 @@ function __action_files_create_ufw() {
   esac
 
   __ui_clear_screen
-  echo -e "${UI_COLOR_INFO}Creating UFW firewall rules...${UI_COLOR_RESET}" >&2
+  echo -e "${UI_COLOR_INFO}Enabling firewall integration...${UI_COLOR_RESET}" >&2
 
   local files_module
   files_module=$(__find_command files.sh)
-  "$files_module" create ufw --instance "$selected_instance"
+  "$files_module" firewall enable "$selected_instance"
 
   __ui_wait_for_key
   return 0
@@ -1312,7 +1312,7 @@ function __action_files_remove() {
     2) return 2 ;; # Quit
   esac
 
-  file_types=("ufw" "symlink")
+  file_types=("firewall" "symlink")
   selected_type=$(__ui_select_from_list "Select File Type to Remove" file_types)
   case $? in
     1) return 0 ;; # Back
@@ -1941,7 +1941,7 @@ function __handle_files_choice() {
 
   case "$choice" in
     1)
-      __menu_execute_action "__action_files_create_ufw"
+      __menu_execute_action "__action_files_enable_firewall"
       return $?
       ;;
     2)

@@ -4,7 +4,7 @@
 #
 # Test Type: INTEGRATION
 # Target: Interaction between files.sh, files.management.sh, files.symlink.sh,
-#         files.upnp.sh, files.ufw.sh and the instances module
+#         files.upnp.sh, files.firewall.sh and the instances module
 #
 # Integration points tested:
 # - Management file creation after an instance is created
@@ -23,7 +23,7 @@ readonly TEST_NAME="files_instances_integration"
 readonly FILES_MODULE="$KGSM_ROOT/commands/files.sh"
 readonly FILES_MANAGEMENT_MODULE="$KGSM_ROOT/commands/files.management.sh"
 readonly FILES_SYMLINK_MODULE="$KGSM_ROOT/commands/files.symlink.sh"
-readonly FILES_UPW_MODULE="$KGSM_ROOT/commands/files.ufw.sh"
+readonly FILES_FIREWALL_MODULE="$KGSM_ROOT/commands/files.firewall.sh"
 readonly FILES_UPNP_MODULE="$KGSM_ROOT/commands/files.upnp.sh"
 readonly INSTANCES_MODULE="$KGSM_ROOT/commands/instances.sh"
 
@@ -60,8 +60,8 @@ function setup_file() {
   assert_file_exists "$FILES_UPNP_MODULE" "files.upnp.sh command should exist"
   assert_file_executable "$FILES_UPNP_MODULE" "files.upnp.sh should be executable"
 
-  assert_file_exists "$FILES_UPW_MODULE" "files.ufw.sh command should exist"
-  assert_file_executable "$FILES_UPW_MODULE" "files.ufw.sh should be executable"
+  assert_file_exists "$FILES_FIREWALL_MODULE" "files.firewall.sh command should exist"
+  assert_file_executable "$FILES_FIREWALL_MODULE" "files.firewall.sh should be executable"
 
   log_test_step "Integration test environment validated"
 }
@@ -606,24 +606,24 @@ function test_upnp_fails_for_nonexistent_instance() {
 }
 
 # =============================================================================
-# TEST 15: UFW commands fail for nonexistent instance
+# TEST 15: Firewall commands fail for nonexistent instance
 # Validates error handling before any system-level operations
 # =============================================================================
 
-function test_ufw_fails_for_nonexistent_instance() {
-  log_test_step "Testing: files.ufw.sh fails for nonexistent instance"
+function test_firewall_fails_for_nonexistent_instance() {
+  log_test_step "Testing: files.firewall.sh fails for nonexistent instance"
 
   local fake="nonexistent_sysufw_xyz_$$"
 
-  "$FILES_UPW_MODULE" enable "$fake" 2>/dev/null
-  local ufw_enable_code=$?
-  assert_not_equals 0 "$ufw_enable_code" \
-    "files.ufw.sh enable should fail for nonexistent instance"
+  "$FILES_FIREWALL_MODULE" enable "$fake" 2>/dev/null
+  local fw_enable_code=$?
+  assert_not_equals 0 "$fw_enable_code" \
+    "files.firewall.sh enable should fail for nonexistent instance"
 
-  "$FILES_UPW_MODULE" disable "$fake" 2>/dev/null
-  local ufw_disable_code=$?
-  assert_not_equals 0 "$ufw_disable_code" \
-    "files.ufw.sh disable should fail for nonexistent instance"
+  "$FILES_FIREWALL_MODULE" disable "$fake" 2>/dev/null
+  local fw_disable_code=$?
+  assert_not_equals 0 "$fw_disable_code" \
+    "files.firewall.sh disable should fail for nonexistent instance"
 }
 
 # =============================================================================
