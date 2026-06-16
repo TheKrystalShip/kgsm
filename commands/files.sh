@@ -190,7 +190,24 @@ function _cmd_create() {
   fi
 
   if [[ "$config_enable_command_shortcuts" == "true" ]]; then
-    files.symlink.sh enable "$instance_name" || return $?
+    # Command shortcuts are a convenience, not a security control. If the
+    # configured directory can't be used — not writable (EC_PERMISSION) or
+    # absent and not auto-creatable, i.e. outside $HOME (EC_FILE_NOT_FOUND) —
+    # skip with a warning instead of escalating to sudo or aborting the whole
+    # creation. The management file and instance config already exist by this
+    # point, so those are the only ways the symlink step yields those two codes
+    # here; any other failure still aborts. Contrast the firewall step above,
+    # which hard-fails by design.
+    files.symlink.sh enable "$instance_name"
+    local _symlink_rc=$?
+    if [[ $_symlink_rc -ne 0 ]]; then
+      if [[ $_symlink_rc -eq $EC_PERMISSION ]] ||
+        [[ $_symlink_rc -eq $EC_FILE_NOT_FOUND ]]; then
+        __print_warning "Command shortcuts directory is not usable (not writable or missing); skipping shortcuts (no sudo). Instance created without them."
+      else
+        return $_symlink_rc
+      fi
+    fi
   fi
 
   # Emit event

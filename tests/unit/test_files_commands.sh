@@ -283,6 +283,73 @@ function test_create_with_valid_instance() {
   remove_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
+# Regression: command shortcuts are a convenience, so a non-writable shortcuts
+# directory must NOT abort instance creation and must NOT escalate to sudo — it
+# warns and continues. This is the real upgrade path: existing configs keep
+# command_shortcuts_directory=/usr/local/bin, which a non-root user cannot write,
+# and KGSM no longer prompts for a password there.
+function test_create_skips_shortcuts_when_dir_not_writable() {
+  log_test_step "Testing 'create' warns and continues when shortcuts dir is not writable"
+
+  if [[ "$EUID" -eq 0 ]]; then
+    skip_test "Root bypasses directory write permissions" && return
+  fi
+
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" "$(generate_test_id)" "$TEST_INSTALL_DIR" 2>/dev/null)
+
+  if [[ -z "$instance_name" ]]; then
+    skip_test "Instance creation failed - skipping test"
+    return
+  fi
+
+  # A directory that exists but is not writable by this (non-root) user, and
+  # lives outside $HOME so it is never auto-created.
+  local ro_dir="$TEST_INSTALL_DIR/ro_shortcuts_$$"
+  mkdir -p "$ro_dir"
+  chmod 555 "$ro_dir"
+
+  # Enable shortcuts pointing at the non-writable dir. The config loader takes
+  # the LAST occurrence of a key, but the sandbox config can carry duplicate
+  # keys (created during instance setup), so remove any existing entries and
+  # append a single clean value the `files create` subprocess will read.
+  local orig_dir
+  orig_dir=$(grep -m1 '^command_shortcuts_directory=' "$CONFIG_FILE" 2>/dev/null | cut -d= -f2- || echo "")
+  sed -i '/^enable_command_shortcuts=/d; /^command_shortcuts_directory=/d' "$CONFIG_FILE"
+  printf 'enable_command_shortcuts=true\ncommand_shortcuts_directory=%s\n' "$ro_dir" >> "$CONFIG_FILE"
+
+  # KGSM exports its loaded config into config_* vars and propagates them to
+  # child processes via KGSM_CONFIG_LOADED=1 (children reuse them instead of
+  # re-reading the file). The create gate reads $config_enable_command_shortcuts,
+  # while the symlink handler reads command_shortcuts_directory from the file
+  # itself — so enable the gate via the propagated var and the dir via the file.
+  local output exit_code
+  output=$(KGSM_CONFIG_LOADED=1 config_enable_command_shortcuts=true \
+    "$MODULE" create "$instance_name" 2>&1)
+  exit_code=$?
+
+  # Restore a clean, single-entry shortcuts config so later tests are unaffected
+  sed -i '/^enable_command_shortcuts=/d; /^command_shortcuts_directory=/d' "$CONFIG_FILE"
+  printf 'enable_command_shortcuts=false\ncommand_shortcuts_directory=%s\n' "${orig_dir:-\$HOME/.local/bin}" >> "$CONFIG_FILE"
+  chmod 755 "$ro_dir" 2>/dev/null || true
+
+  assert_equals 0 "$exit_code" \
+    "create should still succeed (exit 0) when shortcuts dir is not writable"
+  assert_contains "$output" "created successfully" \
+    "Instance creation should complete despite unusable shortcuts dir"
+  assert_contains "$output" "skipping shortcuts" \
+    "Should warn that command shortcuts were skipped"
+
+  local created="false"
+  [[ -e "$ro_dir/$instance_name" ]] && created="true"
+  assert_false "$created" \
+    "No shortcut symlink should be created in the non-writable directory (no sudo)"
+
+  remove_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR"
+  rm -rf "$ro_dir" 2>/dev/null || true
+}
+
 function test_remove_with_valid_instance() {
   log_test_step "Testing 'remove' succeeds with a valid test instance"
 

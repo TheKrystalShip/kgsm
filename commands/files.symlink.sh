@@ -147,7 +147,7 @@ function _cmd_enable() {
   fi
 
   __print_info "Enabling command shortcut integration for instance '$instance_name'..."
-  __print_info "This might ask for your password if elevated permissions are required to create symlinks in the shortcuts directory."
+  __print_info "Shortcuts are created in the configured directory (no sudo); it must be writable and on your PATH."
 
   # Call logic function
   __logic_enable_symlink_integration "$instance_config_file"
@@ -170,6 +170,11 @@ function _cmd_enable() {
       ;;
     $EC_DIR_NOT_FOUND)
       __print_error "Command shortcuts directory not found"
+      return $exit_code
+      ;;
+    $EC_PERMISSION)
+      __print_error "Command shortcuts directory is not writable"
+      __print_info "KGSM does not use sudo for shortcuts. Set 'command_shortcuts_directory' to a writable directory on your PATH (e.g. ~/.local/bin), or make the current one writable by this user."
       return $exit_code
       ;;
     $EC_FAILED_SYMLINK)
@@ -228,7 +233,7 @@ function _cmd_disable() {
   fi
 
   __print_info "Disabling command shortcut integration for instance '$instance_name'..."
-  __print_info "This might ask for your password if elevated permissions are required to remove symlinks from the shortcuts directory."
+  __print_info "Removing the shortcut from the configured directory (no sudo)."
 
   # Call logic function
   __logic_disable_symlink_integration "$instance_config_file"

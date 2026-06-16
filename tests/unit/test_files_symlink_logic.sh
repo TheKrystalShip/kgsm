@@ -87,15 +87,6 @@ function __restore_test_shortcuts_dir() {
   _ORIGINAL_CONFIG_SHORTCUTS_VALUE=""
 }
 
-# Check if symlink creation is possible (root or passwordless sudo available)
-function __can_create_symlink() {
-  if [[ "$EUID" -eq 0 ]]; then
-    return 0
-  fi
-  sudo -n true 2>/dev/null
-  return $?
-}
-
 # =============================================================================
 # TEST FUNCTIONS
 # =============================================================================
@@ -119,6 +110,7 @@ function setup_file() {
   assert_not_null "$EC_INVALID_CONFIG" "EC_INVALID_CONFIG should be defined"
   assert_not_null "$EC_FAILED_LN" "EC_FAILED_LN should be defined"
   assert_not_null "$EC_FAILED_RM" "EC_FAILED_RM should be defined"
+  assert_not_null "$EC_PERMISSION" "EC_PERMISSION should be defined"
   assert_not_null "$EC_FAILED_UPDATE_CONFIG" "EC_FAILED_UPDATE_CONFIG should be defined"
   assert_not_null "$EC_SUCCESS_SYMLINK_CREATED" "EC_SUCCESS_SYMLINK_CREATED should be defined"
   assert_not_null "$EC_SUCCESS_SYMLINK_REMOVED" "EC_SUCCESS_SYMLINK_REMOVED should be defined"
@@ -287,11 +279,7 @@ function test_enable_symlink_shortcuts_dir_not_exist() {
 }
 
 function test_enable_symlink_success() {
-  log_test_step "Testing __logic_enable_symlink_integration success path"
-
-  if ! __can_create_symlink; then
-    skip_test "Symlink creation requires root or passwordless sudo" && return
-  fi
+  log_test_step "Testing __logic_enable_symlink_integration success path (writable dir, no sudo)"
 
   local test_dir="$KGSM_TEST_SANDBOX/test_enable_success_$$"
   mkdir -p "$test_dir"
@@ -317,7 +305,9 @@ function test_enable_symlink_success() {
   assert_equals "$EC_SUCCESS_SYMLINK_CREATED" "$exit_code" \
     "Should return EC_SUCCESS_SYMLINK_CREATED on success"
 
-  assert_true "[[ -L '$expected_symlink' ]]" \
+  local is_link="false"
+  [[ -L "$expected_symlink" ]] && is_link="true"
+  assert_true "$is_link" \
     "Symlink should be created at shortcuts directory"
 
   # Verify config was updated
@@ -339,10 +329,6 @@ function test_enable_symlink_success() {
 function test_enable_symlink_recreates_existing() {
   log_test_step "Testing __logic_enable_symlink_integration replaces an existing symlink"
 
-  if ! __can_create_symlink; then
-    skip_test "Symlink creation requires root or passwordless sudo" && return
-  fi
-
   local test_dir="$KGSM_TEST_SANDBOX/test_enable_recreate_$$"
   mkdir -p "$test_dir"
 
@@ -360,7 +346,9 @@ function test_enable_symlink_recreates_existing() {
   local expected_symlink="${_TEST_SHORTCUTS_DIR}/${instance_name}"
   ln -s "/some/old/path" "$expected_symlink" 2>/dev/null || true
 
-  assert_true "[[ -L '$expected_symlink' ]]" "Pre-created stale symlink should exist"
+  local stale_present="false"
+  [[ -L "$expected_symlink" ]] && stale_present="true"
+  assert_true "$stale_present" "Pre-created stale symlink should exist"
 
   # Now enable - should replace the stale symlink
   __logic_enable_symlink_integration "$config_file" 2>/dev/null
@@ -371,7 +359,9 @@ function test_enable_symlink_recreates_existing() {
   assert_equals "$EC_SUCCESS_SYMLINK_CREATED" "$exit_code" \
     "Should return EC_SUCCESS_SYMLINK_CREATED even when symlink already exists"
 
-  assert_true "[[ -L '$expected_symlink' ]]" \
+  local is_link="false"
+  [[ -L "$expected_symlink" ]] && is_link="true"
+  assert_true "$is_link" \
     "New symlink should exist after replacement"
 
   # Verify it now points to the correct management file (not the old stale path)
@@ -382,6 +372,138 @@ function test_enable_symlink_recreates_existing() {
 
   # Cleanup
   rm -f "$expected_symlink" 2>/dev/null || true
+  rm -rf "$test_dir"
+}
+
+# =============================================================================
+# __expand_home_path() + no-escalation TESTS
+# =============================================================================
+
+function test_expand_home_path() {
+  log_test_step "Testing __expand_home_path expands ~ and \$HOME, leaves absolutes alone"
+
+  local result
+
+  # The literal $HOME / ~ inputs are intentional — the function under test is
+  # what does the expansion, so they must reach it unexpanded.
+  # shellcheck disable=SC2016,SC2088
+  result=$(__expand_home_path '$HOME/.local/bin')
+  assert_equals "$HOME/.local/bin" "$result" \
+    "\$HOME prefix should expand to the home directory"
+
+  # shellcheck disable=SC2016
+  result=$(__expand_home_path '${HOME}/bin')
+  assert_equals "$HOME/bin" "$result" \
+    "\${HOME} prefix should expand to the home directory"
+
+  # shellcheck disable=SC2088
+  result=$(__expand_home_path '~/.local/bin')
+  assert_equals "$HOME/.local/bin" "$result" \
+    "Leading ~ should expand to the home directory"
+
+  result=$(__expand_home_path '/usr/local/bin')
+  assert_equals "/usr/local/bin" "$result" \
+    "An absolute path without ~ or \$HOME should be unchanged"
+}
+
+function test_enable_symlink_expands_home_and_autocreates() {
+  log_test_step "Testing enable expands \$HOME and auto-creates a dir under HOME (no sudo)"
+
+  local test_dir="$KGSM_TEST_SANDBOX/test_enable_expand_home_$$"
+  mkdir -p "$test_dir"
+
+  local management_file="$test_dir/manage.sh"
+  __create_symlink_test_management_file "$management_file"
+
+  local instance_name="test_expand_instance_$$"
+  local config_file
+  config_file=$(__create_symlink_test_config \
+    "$test_dir" "$instance_name" "$management_file")
+
+  # Treat a sandbox subdir as HOME so the auto-create-under-home path runs
+  # without touching the real home directory.
+  local fake_home="$test_dir/home"
+  mkdir -p "$fake_home"
+
+  # Store the directory verbatim with a literal $HOME (single-quoted so the
+  # test shell does not expand it) — the handler must expand it on read.
+  # shellcheck disable=SC2016
+  __set_test_shortcuts_dir '$HOME/.local/bin'
+
+  # Run the handler with HOME pointed at the sandbox (subshell isolates it).
+  (
+    export HOME="$fake_home"
+    __logic_enable_symlink_integration "$config_file" 2>/dev/null
+  )
+  local exit_code=$?
+
+  __restore_test_shortcuts_dir
+
+  local expected_dir="${fake_home}/.local/bin"
+  local expected_symlink="${expected_dir}/${instance_name}"
+
+  assert_equals "$EC_SUCCESS_SYMLINK_CREATED" "$exit_code" \
+    "Should return EC_SUCCESS_SYMLINK_CREATED after expanding \$HOME"
+
+  assert_dir_exists "$expected_dir" \
+    "Shortcuts directory under HOME should be auto-created"
+
+  local is_link="false"
+  [[ -L "$expected_symlink" ]] && is_link="true"
+  assert_true "$is_link" \
+    "Symlink should be created in the expanded, auto-created directory"
+
+  # Config should record the fully-expanded shortcut path
+  local shortcut_val
+  shortcut_val=$(grep "^command_shortcut_file=" "$config_file" | cut -d= -f2)
+  assert_equals "$expected_symlink" "$shortcut_val" \
+    "Config should record the expanded symlink path"
+
+  rm -rf "$test_dir"
+}
+
+function test_enable_symlink_dir_not_writable_no_escalation() {
+  log_test_step "Testing enable returns EC_PERMISSION on a non-writable dir (never escalates)"
+
+  if [[ "$EUID" -eq 0 ]]; then
+    skip_test "Root bypasses directory write permissions" && return
+  fi
+
+  local test_dir="$KGSM_TEST_SANDBOX/test_enable_unwritable_$$"
+  mkdir -p "$test_dir"
+
+  local management_file="$test_dir/manage.sh"
+  __create_symlink_test_management_file "$management_file"
+
+  local instance_name="test_unwritable_instance_$$"
+  local config_file
+  config_file=$(__create_symlink_test_config \
+    "$test_dir" "$instance_name" "$management_file")
+
+  # A directory that exists but is not writable by this (non-root) user.
+  # It lives outside HOME, so the auto-create branch never applies.
+  local ro_dir="$test_dir/readonly_shortcuts"
+  mkdir -p "$ro_dir"
+  chmod 555 "$ro_dir"
+
+  __set_test_shortcuts_dir "$ro_dir"
+
+  __logic_enable_symlink_integration "$config_file" 2>/dev/null
+  local exit_code=$?
+
+  __restore_test_shortcuts_dir
+
+  # Restore perms so teardown can clean up
+  chmod 755 "$ro_dir" 2>/dev/null || true
+
+  assert_equals "$EC_PERMISSION" "$exit_code" \
+    "Should return EC_PERMISSION when shortcuts dir is not writable (no sudo)"
+
+  local created="false"
+  [[ -e "$ro_dir/$instance_name" ]] && created="true"
+  assert_false "$created" \
+    "No symlink should be created when the directory is not writable"
+
   rm -rf "$test_dir"
 }
 
@@ -495,11 +617,7 @@ EOF
 }
 
 function test_disable_symlink_success() {
-  log_test_step "Testing __logic_disable_symlink_integration with an actual symlink"
-
-  if ! __can_create_symlink; then
-    skip_test "Symlink removal requires root or passwordless sudo" && return
-  fi
+  log_test_step "Testing __logic_disable_symlink_integration with an actual symlink (no sudo)"
 
   local test_dir="$KGSM_TEST_SANDBOX/test_disable_success_$$"
   mkdir -p "$test_dir"
@@ -511,7 +629,9 @@ function test_disable_symlink_success() {
   local shortcut_path="$_TEST_SHORTCUTS_DIR/test_disable_instance_$$"
   ln -s "$management_file" "$shortcut_path"
 
-  assert_true "[[ -L '$shortcut_path' ]]" "Symlink should exist before disable"
+  local pre_present="false"
+  [[ -L "$shortcut_path" ]] && pre_present="true"
+  assert_true "$pre_present" "Symlink should exist before disable"
 
   local config_file="${test_dir}/test_instance.config.ini"
   cat > "$config_file" << EOF
@@ -527,7 +647,9 @@ EOF
   assert_equals "$EC_SUCCESS_SYMLINK_REMOVED" "$exit_code" \
     "Should return EC_SUCCESS_SYMLINK_REMOVED on success"
 
-  assert_false "[[ -L '$shortcut_path' ]]" \
+  local still_present="false"
+  [[ -L "$shortcut_path" ]] && still_present="true"
+  assert_false "$still_present" \
     "Symlink should be removed after disabling"
 
   # Verify config is updated
@@ -548,7 +670,10 @@ EOF
 # CLEANUP
 # =============================================================================
 
-function teardown_test() {
+# File-level cleanup. The framework invokes teardown_file once after all tests
+# (the per-test hook it calls is bare `teardown`); a `teardown_test` name would
+# never run.
+function teardown_file() {
   log_test_step "Cleaning up test artifacts"
 
   # Remove temp shortcuts directory

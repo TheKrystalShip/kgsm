@@ -24,6 +24,30 @@ if [[ -z "${KGSM_LOGIC_FILES_COMMON_LOADED}" ]]; then
   source "$(__find_command_handler files.common.sh)" || return $EC_FAILED_SOURCE
 fi
 
+# Expand a leading ~ or $HOME/${HOME} in a path to the absolute home directory.
+# Config values are stored verbatim and are not shell-expanded when read, so a
+# user-friendly default like "$HOME/.local/bin" must be resolved here.
+# Args: $1 = path
+# Outputs: echoes the expanded path
+function __expand_home_path() {
+  local path="$1"
+
+  # The leading ~ is matched as a literal here (we resolve it ourselves rather
+  # than relying on shell tilde expansion), so SC2088 does not apply.
+  # shellcheck disable=SC2088
+  case "$path" in
+    "~") path="$HOME" ;;
+    "~/"*) path="${HOME}/${path#\~/}" ;;
+  esac
+
+  path="${path//\$\{HOME\}/$HOME}"
+  path="${path//\$HOME/$HOME}"
+
+  echo "$path"
+}
+
+export -f __expand_home_path
+
 # Enable command shortcut (symlink) integration for an instance
 # Args: $1 = instance_config_file
 # Returns: EC_SUCCESS_SYMLINK_CREATED on success, error code on failure
@@ -60,30 +84,41 @@ function __logic_enable_symlink_integration() {
     return $EC_INVALID_CONFIG
   fi
 
+  # Resolve a leading ~ or $HOME so the directory points at the right place.
+  config_command_shortcuts_directory=$(__expand_home_path "$config_command_shortcuts_directory")
+
+  # Auto-create the shortcuts directory only when it lives under the user's
+  # home (e.g. the default ~/.local/bin); never create or escalate into a
+  # system directory.
+  if [[ ! -d "$config_command_shortcuts_directory" ]] &&
+    [[ "$config_command_shortcuts_directory" == "$HOME"/* ]]; then
+    mkdir -p "$config_command_shortcuts_directory" 2>/dev/null || true
+  fi
+
   # Check if the symlink directory exists
   if [[ ! -d "$config_command_shortcuts_directory" ]]; then
     return $EC_FILE_NOT_FOUND
+  fi
+
+  # KGSM never escalates to create shortcuts: a non-writable directory is a
+  # clear, defined failure rather than a sudo prompt that would block headless
+  # callers. For a system-wide shortcut, make the directory writable by the
+  # KGSM user (or choose a writable directory on your PATH).
+  if [[ ! -w "$config_command_shortcuts_directory" ]]; then
+    return $EC_PERMISSION
   fi
 
   local symlink_path="${config_command_shortcuts_directory}/${_instance_name}"
 
   # If symlink already exists, remove it first
   if [[ -L "$symlink_path" ]]; then
-    # Determine sudo requirement
-    local SUDO=""
-    [[ "$EUID" -ne 0 ]] && SUDO="sudo -E"
-
-    if ! $SUDO rm "$symlink_path" 2>/dev/null; then
+    if ! rm "$symlink_path" 2>/dev/null; then
       return $EC_FAILED_RM
     fi
   fi
 
-  # Determine sudo requirement
-  local SUDO=""
-  [[ "$EUID" -ne 0 ]] && SUDO="sudo -E"
-
-  # Create the symlink
-  if ! $SUDO ln -s "$_instance_management_file" "$symlink_path" 2>/dev/null; then
+  # Create the symlink (no sudo: the directory is writable by us)
+  if ! ln -s "$_instance_management_file" "$symlink_path" 2>/dev/null; then
     return $EC_FAILED_LN
   fi
 
@@ -125,13 +160,10 @@ function __logic_disable_symlink_integration() {
     return $EC_SUCCESS_SYMLINK_REMOVED
   fi
 
-  # Determine sudo requirement
-  local SUDO=""
-  [[ "$EUID" -ne 0 ]] && SUDO="sudo -E"
-
-  # Remove symlink if it exists
+  # Remove symlink if it exists (no sudo: shortcuts live in a user-writable
+  # directory, so removal never escalates).
   if [[ -L "$instance_command_shortcut_file" ]]; then
-    if ! $SUDO rm "$instance_command_shortcut_file" 2>/dev/null; then
+    if ! rm "$instance_command_shortcut_file" 2>/dev/null; then
       return $EC_FAILED_RM
     fi
   fi
