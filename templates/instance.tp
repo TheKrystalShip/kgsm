@@ -72,9 +72,6 @@ socket_file="${instance_socket_file}"
 # File that stores the log of the running server process
 log_file="${instance_log_file}"
 
-# Port forwarding state file
-port_forwarding_state_file="${instance_port_forwarding_state_file}"
-
 #=============================================================================
 # RUNTIME CONFIGURATION
 # How the instance runs and is managed by the system
@@ -124,12 +121,6 @@ is_steam_account_required="${instance_is_steam_account_required:-false}"
 
 # Network ports used by the game server in UFW format
 ports="${instance_ports}"
-
-# Whether to enable UPnP port forwarding (true | false)
-enable_port_forwarding="${config_instance_enable_port_forwarding:-false}"
-
-# List of ports to forward via UPnP
-upnp_ports=(${instance_upnp_ports[*]})
 
 # Whether to enable firewall management (true | false)
 enable_firewall_management="${instance_enable_firewall_management:-false}"

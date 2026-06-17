@@ -67,12 +67,6 @@ function _start() {
     __print_warning "Failed to rotate log file, continuing"
   fi
 
-  if [[ "$instance_enable_port_forwarding" == "true" ]]; then
-    if ! _enable_upnp; then
-      __print_warning "Failed to enable UPnP, continuing without port forwarding"
-    fi
-  fi
-
   if [[ "$instance_auto_update" == "true" ]]; then
     _update
   fi
@@ -97,12 +91,6 @@ function _start_background() {
   if ! _rotate_log_file "$instance_log_file"; then
     __print_error "Failed to rotate latest log file. Aborting to prevent data loss."
     return $EC_ERROR
-  fi
-
-  if [[ "$instance_enable_port_forwarding" == "true" ]]; then
-    if ! _enable_upnp; then
-      __print_warning "Failed to enable UPnP, continuing without port forwarding"
-    fi
   fi
 
   # Use docker compose up -d to start the container in detached mode
@@ -166,11 +154,6 @@ function _stop_server() {
 
   # Clean up PID file
   [[ -f "$instance_pid_file" ]] && rm -f "$instance_pid_file"
-
-  # Disable UPnP if it was enabled
-  if [[ "$instance_enable_port_forwarding" == "true" ]]; then
-    _disable_upnp
-  fi
 
   __print_success "Instance $instance_name stopped"
   return $EC_SUCCESS
@@ -253,11 +236,6 @@ function _kill_all_processes() {
   # Clean up PID file
   [[ -f "$instance_pid_file" ]] && rm -f "$instance_pid_file"
 
-  # Disable UPnP if it was enabled
-  if [[ -f "$instance_port_forwarding_state_file" ]] && [[ "${instance_enable_port_forwarding:-false}" == "true" ]]; then
-    _disable_upnp
-  fi
-
   __print_success "Container and processes killed"
   return $EC_SUCCESS
 }
@@ -270,17 +248,6 @@ function _cleanup_on_exit() {
   if [[ -f "$instance_pid_file" ]]; then
     __print_info "Removing instance PID file $instance_pid_file on exit"
     rm -f "$instance_pid_file"
-  fi
-
-  # Disable UPnP if ALL conditions are met:
-  # 1. Port forwarding is enabled
-  # 2. UPnP state file exists (was enabled at some point)
-  # 3. Instance is NOT running
-  if [[ "${instance_enable_port_forwarding:-false}" == "true" ]] &&
-    [[ -f "$instance_port_forwarding_state_file" ]] &&
-    ! _is_active &>/dev/null; then
-    __print_info "Disabling UPnP ports on exit"
-    _disable_upnp
   fi
 }
 

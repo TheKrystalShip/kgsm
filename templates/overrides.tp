@@ -33,7 +33,6 @@
 #   06-download.sh     File download from remote sources
 #   07-deploy.sh       File deployment from temp dir to install dir
 #   08-backup.sh       Backup creation, listing, and restoration
-#   09-network.sh      UPnP port management
 #   10-logging.sh      Log printing and rotation
 #   11-status.sh       Server status reporting
 #
@@ -143,8 +142,6 @@
 #
 # Network Configuration:
 # $instance_ports                Network ports in UFW format
-# $instance_enable_port_forwarding  Whether UPnP is enabled (true/false)
-# $instance_upnp_ports           Array of ports to manage with UPnP
 # $instance_enable_firewall_management  Whether firewall management is enabled (true/false)
 # $instance_firewall_rule_file   Path to firewall rule file
 #
@@ -170,7 +167,6 @@
 # $config_stop_command_timeout_seconds  Timeout for stop commands (default: 30)
 # $config_enable_logging         Whether logging is enabled (true/false)
 # $config_enable_firewall_management  Whether firewall management is enabled (true/false)
-# $config_enable_port_forwarding Whether port forwarding is enabled (true/false)
 # $config_enable_backup_compression  Whether backup compression is enabled (true/false)
 #
 ################################################################################

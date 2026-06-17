@@ -39,10 +39,6 @@ ${BOLD}${UNDERLINE}Backup Commands:${END}
   backup restore <source>     Restore a specified backup
   backup list                 List available backups
 
-${BOLD}${UNDERLINE}Network Commands:${END}
-  upnp enable                 Enable UPnP port forwarding
-  upnp disable                Disable UPnP port forwarding
-
 ${BOLD}${UNDERLINE}Other:${END}
   help [command]              Display help information
   -h, --help                  Display this help information
@@ -233,27 +229,6 @@ ${UNDERLINE}Examples:${END}
 "
 }
 
-function show_usage_upnp() {
-  local UNDERLINE="\e[4m"
-  local END="\e[0m"
-
-  echo -e "${UNDERLINE}UPnP Command${END}
-
-Manage UPnP port forwarding.
-
-${UNDERLINE}Usage:${END}
-  $self upnp <subcommand>
-
-${UNDERLINE}Subcommands:${END}
-  enable                      Enable UPnP port forwarding
-  disable                     Disable UPnP port forwarding
-
-${UNDERLINE}Examples:${END}
-  $self upnp enable
-  $self upnp disable
-"
-}
-
 function show_usage_download() {
   local UNDERLINE="\e[4m"
   local END="\e[0m"
@@ -320,9 +295,6 @@ function _cmd_help() {
     ;;
   backup)
     show_usage_backup
-    ;;
-  upnp)
-    show_usage_upnp
     ;;
   download)
     show_usage_download

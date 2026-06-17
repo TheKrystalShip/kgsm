@@ -84,12 +84,6 @@ backup)
   exit $?
   ;;
 
-# Network
-upnp)
-  _cmd_upnp "$@"
-  exit $?
-  ;;
-
 *)
   __print_error "Unknown command: $command"
   __print_error "Use '$self help' for available commands"

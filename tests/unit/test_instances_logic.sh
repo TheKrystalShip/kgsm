@@ -1003,12 +1003,12 @@ function test_protected_key_classification() {
   # Keys that must be refused (identity/structural, managed paths, toggles)
   local protected=(
     name blueprint_file runtime platform install_datetime
-    is_steam_account_required steam_app_id ports upnp_ports
+    is_steam_account_required steam_app_id ports
     install_dir working_dir logs_dir saves_dir backups_dir temp_dir launch_dir
     management_file pid_file log_file socket_file version_file
     executable_file compose_file firewall_rule_file command_shortcut_file
-    port_forwarding_state_file executable_subdirectory
-    enable_firewall_management enable_port_forwarding enable_command_shortcuts
+    executable_subdirectory
+    enable_firewall_management enable_command_shortcuts
   )
   local key
   for key in "${protected[@]}"; do
@@ -1163,7 +1163,7 @@ function test_set_config_refuses_toggle_keys() {
   _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
   local key
-  for key in enable_firewall_management enable_port_forwarding enable_command_shortcuts; do
+  for key in enable_firewall_management enable_command_shortcuts; do
     __set_instance_config_value "$instance_name" "$key" "true" 2>/dev/null
     assert_equals "$EC_INVALID_ARG" "$?" "Should refuse integration toggle '$key'"
   done

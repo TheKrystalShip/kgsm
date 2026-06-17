@@ -141,7 +141,6 @@ function __logic_create_base_instance() {
   export instance_pid_file="${instance_working_dir}/.${_instance_name}.pid"
   export instance_socket_file="${instance_working_dir}/.${_instance_name}.sock"
   export instance_log_file="${instance_working_dir}/${_instance_name}.log"
-  export instance_port_forwarding_state_file="${instance_working_dir}/.${_instance_name}.upnp_enabled"
 
   export instance_startup_success_regex="${blueprint_startup_success_regex:-}"
 
@@ -165,7 +164,6 @@ function __logic_create_base_instance() {
   export instance_save_command_timeout_seconds="${config_instance_save_command_timeout_seconds:-5}"
   export instance_stop_command_timeout_seconds="${config_instance_stop_command_timeout_seconds:-30}"
   export instance_compress_backups="${config_enable_backup_compression:-false}"
-  export instance_enable_port_forwarding="${config_instance_enable_port_forwarding:-false}"
 
   local instance_executable_file
 
@@ -194,24 +192,10 @@ function __logic_create_base_instance() {
     instance_runtime="native"
     instance_compose_file=""
 
-    instance_upnp_ports=()
-    if [[ -n "${blueprint_ports:-}" ]]; then
-      if ! output=$(__parse_ufw_to_upnp_ports "$blueprint_ports") || ! read -ra instance_upnp_ports <<<"$output"; then
-        export instance_enable_port_forwarding="false"
-      fi
-    fi
-
   elif [[ "${blueprint_runtime:-}" == "container" ]]; then
 
     instance_runtime="container"
     instance_compose_file="${instance_working_dir}/${_instance_name}.docker-compose.yml"
-
-    instance_upnp_ports=()
-    if [[ -n "${blueprint_ports:-}" ]]; then
-      if ! output=$(__parse_ufw_to_upnp_ports "$blueprint_ports") || ! read -ra instance_upnp_ports <<<"$output"; then
-        export instance_enable_port_forwarding="false"
-      fi
-    fi
 
   else
     return $EC_INVALID_BLUEPRINT
@@ -219,7 +203,6 @@ function __logic_create_base_instance() {
 
   export instance_runtime
   export instance_compose_file
-  export instance_upnp_ports
 
   # Get template
   local instance_config_file_template
@@ -428,34 +411,34 @@ export -f __logic_get_instance_paths
 # Args: $1 = key
 # Returns: 0 if the key is protected (must not be set), 1 otherwise.
 #
-# Three classes are refused:
-#   - identity/structural keys, where a raw edit corrupts the instance;
-#   - the filesystem paths KGSM owns and manages (every *_dir / *_file, plus
-#     executable_subdirectory);
-#   - the side-effecting toggles, which have dedicated enable/disable flows
-#     (`kgsm files <firewall|upnp|symlink> enable|disable <instance>`) — writing the
-#     flag alone would desync KGSM from the actual firewall/UPnP/symlink state.
-# Everything else (auto_update, executable_arguments, level_name, stop_command,
-# the *_timeout_seconds values, startup_success_regex, …) is a plain runtime
-# value that KGSM simply re-reads, and is therefore settable.
-function __is_protected_instance_config_key() {
-  local key="$1"
+  # Three classes are refused:
+  #   - identity/structural keys, where a raw edit corrupts the instance;
+  #   - the filesystem paths KGSM owns and manages (every *_dir / *_file, plus
+  #     executable_subdirectory);
+  #   - the side-effecting toggles, which have dedicated enable/disable flows
+  #     (`kgsm files <firewall|symlink> enable|disable <instance>`) — writing the
+  #     flag alone would desync KGSM from the actual firewall/symlink state.
+  # Everything else (auto_update, executable_arguments, level_name, stop_command,
+  # the *_timeout_seconds values, startup_success_regex, …) is a plain runtime
+  # value that KGSM simply re-reads, and is therefore settable.
+  function __is_protected_instance_config_key() {
+    local key="$1"
 
-  case "$key" in
-    name | blueprint_file | runtime | platform | install_datetime | \
-      is_steam_account_required | steam_app_id | ports | upnp_ports)
-      return 0
-      ;;
-    *_dir | *_file | executable_subdirectory)
-      return 0
-      ;;
-    enable_firewall_management | enable_port_forwarding | enable_command_shortcuts)
-      return 0
-      ;;
-  esac
+    case "$key" in
+      name | blueprint_file | runtime | platform | install_datetime | \
+        is_steam_account_required | steam_app_id | ports)
+        return 0
+        ;;
+      *_dir | *_file | executable_subdirectory)
+        return 0
+        ;;
+      enable_firewall_management | enable_command_shortcuts)
+        return 0
+        ;;
+    esac
 
-  return 1
-}
+    return 1
+  }
 
 export -f __is_protected_instance_config_key
 

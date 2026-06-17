@@ -247,15 +247,6 @@ function test_symlink_component_routes_to_submodule() {
   assert_not_null "$output" "symlink component routing should produce output"
 }
 
-function test_upnp_component_routes_to_submodule() {
-  log_test_step "Testing 'upnp' routes to files.upnp.sh"
-
-  local output
-  output=$("$MODULE" upnp 2>&1 || true)
-
-  assert_not_null "$output" "upnp component routing should produce output"
-}
-
 # =============================================================================
 # CREATE/REMOVE WITH VALID INSTANCE
 # =============================================================================

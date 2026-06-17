@@ -304,7 +304,6 @@ Example: ID generation should either ALWAYS validate blueprints or NEVER validat
 
 - **systemd**: Optional service file generation (`templates/service.tp`)
 - **UFW firewall**: Automatic port rule creation (if `config_enable_firewall_management=true`)
-- **UPnP**: Port forwarding support (if `config_enable_port_forwarding=true`)
 - **Event system**: Webhooks and socket-based notifications (`commands/events.*.sh`)
 
 ---

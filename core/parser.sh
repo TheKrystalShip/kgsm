@@ -72,12 +72,11 @@ function __ufw_ports_to_json() {
 export -f __ufw_ports_to_json
 
 # Expand a UFW-style port spec to the flat "port proto port proto ..." form (every port
-# in a range listed individually) — what UPnP (`upnpc`) and the port-conflict scan need.
-# Derived from __parse_ufw_port_spec so parsing lives in exactly one place. KGSM persists
-# this (as a bash array) in an instance's `upnp_ports`, consumed by the non-watchdog
-# fallback's embedded `_enable_upnp`; the watchdog expands the structured form itself.
-# Usage: __parse_ufw_to_upnp_ports <ufw_ports>
-function __parse_ufw_to_upnp_ports() {
+# in a range listed individually) — used by the port-conflict scan and other callers
+# that need individual port/proto pairs. Derived from __parse_ufw_port_spec so parsing
+# lives in exactly one place.
+# Usage: __expand_ufw_ports_flat <ufw_ports>
+function __expand_ufw_ports_flat() {
   local ufw_ports=$1
   local triples
   triples=$(__parse_ufw_port_spec "$ufw_ports") || return $EC_ERROR
@@ -95,7 +94,7 @@ function __parse_ufw_to_upnp_ports() {
   return $EC_SUCCESS
 }
 
-export -f __parse_ufw_to_upnp_ports
+export -f __expand_ufw_ports_flat
 
 # Derive a UFW port spec from a unified container blueprint's embedded compose.
 # Reads `.container.compose` (a literal block scalar) and converts each

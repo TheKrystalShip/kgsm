@@ -365,8 +365,6 @@ The following variables can be used inside `executable_arguments` and are resolv
 | Variable | Description |
 |----------|-------------|
 | `$instance_ports` | Network ports in UFW format |
-| `$instance_enable_port_forwarding` | Whether UPnP port forwarding is enabled |
-| `$instance_upnp_ports` | Array of ports to forward via UPnP |
 | `$instance_enable_firewall_management` | Whether firewall management is enabled |
 | `$instance_firewall_rule_file` | Path to the firewall rule file |
 

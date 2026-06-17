@@ -76,7 +76,7 @@ User-defined overrides always take precedence over system overrides. To customiz
 
 ### Overridable Modules
 
-Only modules 03–11 may be overridden. The module filenames and their responsibilities are:
+Only modules 03–08 and 10–11 may be overridden. The module filenames and their responsibilities are:
 
 | Module | Filename | Responsibility |
 |--------|----------|----------------|
@@ -86,7 +86,6 @@ Only modules 03–11 may be overridden. The module filenames and their responsib
 | 06 | `06-download.sh` | File download from remote sources |
 | 07 | `07-deploy.sh` | File deployment from temp dir to install dir |
 | 08 | `08-backup.sh` | Backup creation, listing, and restoration |
-| 09 | `09-network.sh` | UPnP port management |
 | 10 | `10-logging.sh` | Log printing and rotation |
 | 11 | `11-status.sh` | Server status reporting |
 
@@ -128,13 +127,6 @@ The following functions are defined across the overridable modules. Override the
 | `_send_save_command` | `() → return 0/1` | Send the in-game save command via `$instance_save_command` |
 | `_send_input` | `($1: input) → return 0/1` | Send arbitrary input to the server's stdin socket |
 | `_is_active` | `() → return 0/1` | Check whether the server process is currently running |
-
-**Port Management** (module `09-network.sh`)
-
-| Function | Signature | Purpose |
-|---|---|---|
-| `_enable_upnp` | `() → return 0/1` | Register UPnP port mappings for `$instance_upnp_ports` |
-| `_disable_upnp` | `() → return 0/1` | Remove UPnP port mappings |
 
 **Log Management** (module `10-logging.sh`)
 
@@ -220,8 +212,6 @@ Override functions have access to all instance and global configuration variable
 | Variable | Description |
 |---|---|
 | `$instance_ports` | Network ports in UFW format |
-| `$instance_enable_port_forwarding` | Whether UPnP port forwarding is enabled (`true`/`false`) |
-| `$instance_upnp_ports` | Array of ports to register with UPnP |
 | `$instance_enable_firewall_management` | Whether firewall (UFW) management is enabled (`true`/`false`) |
 | `$instance_firewall_rule_file` | Path to the UFW rule file |
 
@@ -259,7 +249,6 @@ These come from the KGSM config file and apply across all instances:
 | `$config_stop_command_timeout_seconds` | Default timeout for stop commands (default: `30`) |
 | `$config_enable_logging` | Whether file logging is enabled (`true`/`false`) |
 | `$config_enable_firewall_management` | Whether firewall management is enabled globally (`true`/`false`) |
-| `$config_enable_port_forwarding` | Whether UPnP port forwarding is enabled globally (`true`/`false`) |
 | `$config_enable_backup_compression` | Whether backup compression is enabled globally (`true`/`false`) |
 
 ### Blueprint-Override Linking

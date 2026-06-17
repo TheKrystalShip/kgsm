@@ -77,11 +77,11 @@ For a container blueprint (`runtime: container`), the body is instead a `contain
 |---|---|
 | Basic Instance Information | `name`, `blueprint_file`, `install_datetime` |
 | Directory and File Paths | `working_dir`, `backups_dir`, `install_dir`, `saves_dir`, `temp_dir`, `logs_dir`, `launch_dir`, `executable_subdirectory`, `executable_file`, `management_file`, `compose_file` |
-| Process Management Files | `version_file`, `pid_file`, `socket_file`, `log_file`, `port_forwarding_state_file` |
+| Process Management Files | `version_file`, `pid_file`, `socket_file`, `log_file` |
 | Runtime Configuration | `runtime`, `platform`, `auto_update`, `startup_success_regex` |
 | Game Server Executable Configuration | `level_name`, `executable_arguments` |
 | Steam Integration | `steam_app_id`, `steamcmd_arguments`, `is_steam_account_required` |
-| Network Configuration | `ports`, `enable_port_forwarding`, `upnp_ports`, `enable_firewall_management`, `firewall_rule_file`, `wget_timeout_seconds` |
+| Network Configuration | `ports`, `enable_firewall_management`, `firewall_rule_file`, `wget_timeout_seconds` |
 | Server Control Commands | `stop_command`, `save_command`, `save_command_timeout_seconds`, `stop_command_timeout_seconds` |
 | Backup Configuration | `compress_backups` |
 | Management Features | `enable_command_shortcuts`, `command_shortcut_file` |
@@ -105,13 +105,13 @@ For a container blueprint (`runtime: container`), the body is instead a `contain
 | `06-download.sh` | File download |
 | `07-deploy.sh` | File deployment |
 | `08-backup.sh` | Backup management |
-| `09-network.sh` | UPnP port management |
+| `09-network.sh` | ~~UPnP port management~~ (removed — watchdog owns UPnP lifecycle) |
 | `10-logging.sh` | Log printing and rotation |
 | `11-status.sh` | Server status reporting |
 | `12-commands.sh` | CLI argument dispatch |
 | `13-dispatch.sh` | Main entry point / argument parsing |
 
-**Used by:** `commands/handlers/files.management.sh` (`__logic_create_management_file`) when `instance_runtime=native`. Modules 03–11 may be replaced by per-game override modules from `overrides/{blueprint_name}/`. Can be manually regenerated with:
+**Used by:** `commands/handlers/files.management.sh` (`__logic_create_management_file`) when `instance_runtime=native`. Modules 03–08 and 10–11 may be replaced by per-game override modules from `overrides/{blueprint_name}/`. Can be manually regenerated with:
 
 ```bash
 ./kgsm.sh files management create <instance_name>
@@ -183,7 +183,6 @@ The following `$instance_*` variables are available in templates that are expand
 | `$instance_tail_pid_file` | Path to the tail PID file |
 | `$instance_socket_file` | Path to the named pipe for sending commands to the server |
 | `$instance_log_file` | Path to the active server log file |
-| `$instance_port_forwarding_state_file` | Path to the UPnP state file |
 
 ### Runtime Configuration
 
@@ -215,8 +214,6 @@ The following `$instance_*` variables are available in templates that are expand
 | Variable | Description |
 |---|---|
 | `$instance_ports` | Ports in UFW format, e.g. `27015/udp\|27015/tcp` |
-| `$instance_enable_port_forwarding` | `true` if UPnP port forwarding is enabled |
-| `$instance_upnp_ports` | Array of ports to forward via UPnP |
 | `$instance_enable_firewall_management` | `true` if UFW firewall management is enabled |
 | `$instance_firewall_rule_file` | Path to the generated UFW profile file |
 
@@ -251,7 +248,6 @@ These `$config_*` variables reflect KGSM-wide settings and are also available in
 | `$config_wget_timeout_seconds` | Timeout in seconds for `wget` operations (default: `60`) |
 | `$config_enable_logging` | `true` if file logging is enabled |
 | `$config_enable_firewall_management` | Global UFW management toggle |
-| `$config_enable_port_forwarding` | Global UPnP toggle |
 | `$config_enable_backup_compression` | Global backup compression toggle |
 
 ---

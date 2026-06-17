@@ -4,14 +4,14 @@
 #
 # Test Type: E2E
 # Target: Complete file management workflow - files.sh, files.management.sh,
-#         files.firewall.sh, files.upnp.sh, files.symlink.sh
+#         files.firewall.sh, files.symlink.sh
 #
 # Validates the full lifecycle:
 #   1. Instance creation (prerequisite)
 #   2. Directory creation (prerequisite for files)
 #   3. Management file creation, verification, and removal
 #   4. Orchestrated file creation and removal via files.sh
-#   5. Config-dependent integrations (firewall, upnp, symlink)
+#   5. Config-dependent integrations (firewall, symlink)
 #   6. Error handling for invalid instances
 
 # =============================================================================
@@ -23,7 +23,6 @@ readonly TEST_NAME="files_management_e2e"
 readonly FILES_MODULE="$KGSM_ROOT/commands/files.sh"
 readonly FILES_MANAGEMENT_MODULE="$KGSM_ROOT/commands/files.management.sh"
 readonly FILES_FIREWALL_MODULE="$KGSM_ROOT/commands/files.firewall.sh"
-readonly FILES_UPNP_MODULE="$KGSM_ROOT/commands/files.upnp.sh"
 readonly FILES_SYMLINK_MODULE="$KGSM_ROOT/commands/files.symlink.sh"
 readonly DIRECTORIES_MODULE="$KGSM_ROOT/commands/directories.sh"
 
@@ -50,9 +49,6 @@ function setup_file() {
 
   assert_file_exists "$FILES_FIREWALL_MODULE" "files.firewall.sh should exist"
   assert_file_executable "$FILES_FIREWALL_MODULE" "files.firewall.sh should be executable"
-
-  assert_file_exists "$FILES_UPNP_MODULE" "files.upnp.sh should exist"
-  assert_file_executable "$FILES_UPNP_MODULE" "files.upnp.sh should be executable"
 
   assert_file_exists "$FILES_SYMLINK_MODULE" "files.symlink.sh should exist"
   assert_file_executable "$FILES_SYMLINK_MODULE" "files.symlink.sh should be executable"
@@ -267,63 +263,7 @@ function test_firewall_fails_for_invalid_instance() {
 }
 
 # =============================================================================
-# TEST 10: UPnP integration - enable/disable updates instance config
-# =============================================================================
-
-function test_upnp_enable_disable() {
-  log_test_step "Testing: files.upnp.sh enable/disable updates instance config"
-
-  local instance_name="test-upnp-$$"
-  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
-  local create_exit=$?
-
-  if [[ $create_exit -ne 0 ]]; then
-    skip_test "Instance creation failed - skipping upnp test"
-    return
-  fi
-
-  # Enable UPnP
-  assert_command_succeeds "$FILES_UPNP_MODULE enable $instance_name" \
-    "files.upnp.sh enable should succeed"
-
-  # Verify instance config reflects UPnP enabled
-  local instance_config
-  instance_config=$("$KGSM_ROOT/kgsm.sh" instances find "$instance_name" 2>/dev/null)
-
-  assert_file_contains "$instance_config" "enable_port_forwarding=true" \
-    "Instance config should show port_forwarding=true after upnp enable"
-
-  # Disable UPnP
-  "$FILES_UPNP_MODULE" disable "$instance_name" >/dev/null 2>&1
-  local disable_exit=$?
-  local disable_ok="false"
-  [[ $disable_exit -eq 0 || $disable_exit -eq 219 ]] && disable_ok="true"
-  assert_true "$disable_ok" \
-    "files.upnp.sh disable should succeed (exit 0 or known success code)"
-
-  # Verify instance config reflects UPnP disabled
-  instance_config=$("$KGSM_ROOT/kgsm.sh" instances find "$instance_name" 2>/dev/null)
-
-  assert_file_contains "$instance_config" "enable_port_forwarding=false" \
-    "Instance config should show port_forwarding=false after upnp disable"
-
-  # Cleanup
-  remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
-}
-
-# =============================================================================
-# TEST 11: UPnP integration fails for nonexistent instance
-# =============================================================================
-
-function test_upnp_fails_for_invalid_instance() {
-  log_test_step "Testing: files.upnp.sh fails for nonexistent instance"
-
-  assert_command_fails "$FILES_UPNP_MODULE enable nonexistent-instance-xyz-$$" \
-    "files.upnp.sh enable should fail for nonexistent instance"
-}
-
-# =============================================================================
-# TEST 13: Complete E2E workflow - create instance → directories → files → remove
+# TEST 9: Complete E2E workflow - create instance → directories → files → remove
 # =============================================================================
 
 function test_complete_e2e_workflow() {

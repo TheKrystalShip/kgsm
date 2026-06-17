@@ -321,25 +321,4 @@ function _cmd_backup() {
   esac
 }
 
-function _cmd_upnp() {
-  local subcommand="${1:-}"
-
-  case "$subcommand" in
-  -h | --help | help)
-    show_usage_upnp
-    return $EC_SUCCESS
-    ;;
-  enable) _enable_upnp ;;
-  disable) _disable_upnp ;;
-  "")
-    __print_error "Missing subcommand for upnp"
-    __print_error "Use '$self help upnp' for usage information"
-    return $EC_MISSING_ARG
-    ;;
-  *)
-    __print_error "Unknown upnp subcommand: $subcommand"
-    return $EC_INVALID_ARG
-    ;;
-  esac
-}
 

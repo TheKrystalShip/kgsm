@@ -166,12 +166,6 @@ function __logic_get_modify_options() {
     echo "Create command shortcuts|--add symlink"
   fi
 
-  if [[ "${instance_enable_port_forwarding:-false}" == "true" ]]; then
-    echo "Disable UPnP port forwarding|--remove upnp"
-  else
-    echo "Enable UPnP port forwarding|--add upnp"
-  fi
-
   return 0
 }
 export -f __logic_get_modify_options

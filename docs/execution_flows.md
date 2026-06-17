@@ -258,7 +258,7 @@ graph TD
 1. **Directory bootstrap**: The target `install_dir` is created or validated, then a per-instance subdirectory (`install_dir/BLUEPRINT/INSTANCE`) is created and symlinked into `KGSM_INSTANCES_DIR`.
 2. **Instance config**: `instances.sh create` writes `INSTANCE.config.ini` through the symlink into the working directory.
 3. **Directory structure**: `directories.sh create` creates the full runtime directory set (install, saves, backups, temp, logs).
-4. **Management script assembly**: `files.sh create` assembles the management script by concatenating numbered modules from `templates/manage.{runtime}.d/`, substituting per-game override modules from `overrides/{blueprint_name}/` for modules 03–11 where they exist. The assembled script, plus optional UFW rules and UPnP configuration, are written to the instance directory.
+4. **Management script assembly**: `files.sh create` assembles the management script by concatenating numbered modules from `templates/manage.{runtime}.d/`, substituting per-game override modules from `overrides/{blueprint_name}/` for modules 03–11 where they exist. The assembled script, plus optional UFW rules, are written to the instance directory.
 5. **Download**: The generated management script is called with `--download` to fetch game files via the override's `_download()` function.
 6. **Deploy**: `--deploy` moves files from the temp directory to the install directory via `_deploy()`.
 7. **Version record**: The resolved version string is persisted to the instance config.
@@ -279,7 +279,7 @@ graph TD
     B -->|"Not found"| Z1["❌ EC_FILE_NOT_FOUND"]
     B -->|"Found"| C["events.sh emit instance-uninstallation-started"]
 
-    C --> D["files.sh remove INSTANCE<br/>(management script, UFW, UPnP, symlinks)"]
+    C -->     D["files.sh remove INSTANCE<br/>(management script, UFW, symlinks)"]
     D --> E["directories.sh remove INSTANCE<br/>(install, saves, backups, temp, logs)"]
     E --> F["directories.sh unlink-instance BLUEPRINT INSTANCE<br/>(remove symlink from KGSM_INSTANCES_DIR)"]
     F --> G["instances.sh remove INSTANCE<br/>(remove config file and blueprint dir if empty)"]
@@ -293,7 +293,7 @@ graph TD
 
 ### What Happens:
 1. **Validation**: The instance config file is located via `__find_instance_config`; the command fails immediately if it is not found.
-2. **File removal**: All generated files (management script, optional UFW/UPnP/symlink integrations) are removed by `files.sh remove`.
+2. **File removal**: All generated files (management script, optional UFW/symlink integrations) are removed by `files.sh remove`.
 3. **Directory removal**: All runtime directories are removed by `directories.sh remove`.
 4. **Symlink cleanup**: The symlink in `KGSM_INSTANCES_DIR` is removed by `directories.sh unlink-instance`.
 5. **Config removal**: The config file and, if now empty, the blueprint subdirectory under `KGSM_INSTANCES_DIR`, are removed by `instances.sh remove`.
@@ -523,7 +523,6 @@ These codes are returned by handler functions to signal that a specific event sh
 KGSM integrates with external systems through dedicated sub-commands and optional configuration:
 
 - **UFW**: Firewall rule management (`files.firewall.sh`, enabled via `config_enable_firewall_management`)
-- **UPnP**: Port forwarding (`files.upnp.sh`, enabled via `config_enable_port_forwarding`)
 - **Steam**: Game file downloading via SteamCMD (implemented in override `_download()` functions)
 - **Docker**: Container-based servers declare `runtime: container` and embed their Docker Compose under `container.compose` in the unified `.bp.yaml` blueprint
 - **Webhooks / Unix sockets**: Event delivery via `commands/events.webhook.sh` and `commands/events.socket.sh`

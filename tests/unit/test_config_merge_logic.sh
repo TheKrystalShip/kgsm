@@ -217,7 +217,6 @@ wget_timeout_seconds=60
 
 [network]
 enable_firewall_management=false
-enable_port_forwarding=false
 EOF
 
   # Override global config paths
@@ -242,7 +241,6 @@ EOF
 
   # Verify new keys added
   assert_command_succeeds "grep -q '^wget_timeout_seconds=' '$test_user_config'"
-  assert_command_succeeds "grep -q '^enable_port_forwarding=' '$test_user_config'"
 
   # Verify backup created
   assert_file_exists "${test_user_config}.0"

@@ -8,8 +8,9 @@
 # The single canonical UFW-spec parser (__parse_ufw_port_spec) and the two forms
 # derived from it: the structured JSON array (__ufw_ports_to_json, the machine-readable
 # port format on `instances info --json`) and the flat expanded list
-# (__parse_ufw_to_upnp_ports, consumed by the non-watchdog fallback's UPnP + the
-# port-conflict scan). Fixtures are pinned to output captured from the real functions.
+# (__expand_ufw_ports_flat, consumed by the non-watchdog fallback's port-forwarding
+# + the port-conflict scan). Fixtures are pinned to output captured from the real
+# functions.
 
 # =============================================================================
 # TEST SETUP
@@ -31,7 +32,7 @@ function setup_file() {
 
   assert_function_exists "__parse_ufw_port_spec" "canonical parser should be exported"
   assert_function_exists "__ufw_ports_to_json" "json form should be exported"
-  assert_function_exists "__parse_ufw_to_upnp_ports" "flat form should be exported"
+  assert_function_exists "__expand_ufw_ports_flat" "flat form should be exported"
 
   log_test_step "Parser logic test environment validated"
 }
@@ -124,23 +125,23 @@ function test_json_malformed_is_empty_array() {
 }
 
 # =============================================================================
-# __parse_ufw_to_upnp_ports() — flat expanded form (fallback UPnP + conflict scan)
+# __expand_ufw_ports_flat() — flat expanded form (fallback port-forwarding + conflict scan)
 # =============================================================================
 
 function test_flat_range_is_unrolled() {
   log_test_step "Range unrolled to individual 'port proto' pairs"
   assert_equals "27015 udp 27016 udp 27017 udp" \
-    "$(__parse_ufw_to_upnp_ports '27015:27017/udp')" \
+    "$(__expand_ufw_ports_flat '27015:27017/udp')" \
     "the flat form must list every port of a range"
 }
 
 function test_flat_protoless_covers_both() {
   log_test_step "Proto-less single -> both protocols, flat"
-  assert_equals "80 tcp 80 udp" "$(__parse_ufw_to_upnp_ports '80')" \
+  assert_equals "80 tcp 80 udp" "$(__expand_ufw_ports_flat '80')" \
     "proto-less should expand to both tcp and udp"
 }
 
 function test_flat_empty_is_empty() {
   log_test_step "Empty spec -> empty flat output"
-  assert_equals "" "$(__parse_ufw_to_upnp_ports '')" "empty spec should echo nothing"
+  assert_equals "" "$(__expand_ufw_ports_flat '')" "empty spec should echo nothing"
 }

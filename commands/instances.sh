@@ -381,10 +381,9 @@ executable_arguments, level_name, stop_command, save_command, the
 
 Identity and path keys (name, runtime, every *_dir/*_file, …) are managed by
 KGSM and are refused. The integration toggles (enable_firewall_management,
-enable_port_forwarding, enable_command_shortcuts) are also refused — use the
+enable_command_shortcuts) are also refused — use the
 dedicated flow instead:
   $self files firewall enable|disable <instance>
-  $self files upnp     enable|disable <instance>
   $self files symlink  enable|disable <instance>
 
 ${UNDERLINE}Examples:${END}
@@ -446,15 +445,13 @@ function _print_info_json() {
 
   # Render the UFW-style `ports` spec into the canonical structured array
   # ([{start,end,protocol}], range-preserving) — the single machine-readable port format
-  # on this surface. It REPLACES the opaque `ports` string below AND the derived
-  # `upnp_ports` bash-array literal (dropped from the JSON via del(.upnp_ports); that form
-  # survives only in .config.ini for the non-watchdog fallback's embedded UPnP).
+  # on this surface. It REPLACES the opaque `ports` string below.
   local ports_json
   ports_json=$(__ufw_ports_to_json "$(__get_instance_config_value "$instance" ports)")
 
   # Parse INI file and convert to JSON, then attach cgroup_path keyed on the instance's
   # own runtime field (native -> derived path, anything else -> ""), override `ports` with
-  # the structured array, and drop the now-redundant `upnp_ports`.
+  # the structured array.
   {
     while IFS='=' read -r key value || [[ -n "$key" ]]; do
       # Skip comments and empty lines
@@ -469,8 +466,7 @@ function _print_info_json() {
     done < <(grep -v '^[[:space:]]*$' "$instance_config_file" | grep -v '^[[:space:]]*#')
   } | jq -R 'split("\t") | {(.[0]): .[1]}' | jq -s 'add' \
     | jq --arg cg "$cgroup_path" --argjson ports "$ports_json" \
-        '. + {cgroup_path: (if .runtime == "native" then $cg else "" end), ports: $ports}
-         | del(.upnp_ports)'
+        '. + {cgroup_path: (if .runtime == "native" then $cg else "" end), ports: $ports}'
 }
 
 function _list_instances() {
@@ -1164,9 +1160,6 @@ function _cmd_config_set() {
         case "$key" in
           enable_firewall_management)
             __print_error "Use: $self files firewall enable|disable $instance"
-            ;;
-          enable_port_forwarding)
-            __print_error "Use: $self files upnp enable|disable $instance"
             ;;
           enable_command_shortcuts)
             __print_error "Use: $self files symlink enable|disable $instance"

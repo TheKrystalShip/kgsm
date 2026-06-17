@@ -23,7 +23,6 @@ STEAM_PASSWORD=
 [network]
 enable_firewall_management=false
 firewall_rules_dir=/etc/ufw/applications.d
-enable_port_forwarding=false
 
 [events]
 enable_event_broadcasting=false
@@ -434,7 +433,7 @@ For a complete list of all configuration keys and their meanings, see:
 Common sections:
 - **[system]** - Core KGSM behavior (logging, download timeouts)
 - **[steam]** - Steam integration credentials
-- **[network]** - UFW firewall management, UPnP port forwarding
+- **[network]** - UFW firewall management
 - **[events]** - Event broadcasting (webhooks, Unix Domain Sockets)
 - **[watchers]** - Server readiness detection (log pattern / port monitoring)
 - **[instance_defaults]** - Default settings for new game server instances

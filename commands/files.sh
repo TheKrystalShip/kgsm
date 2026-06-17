@@ -27,7 +27,6 @@ ${UNDERLINE}Components:${END}
   config                      Standalone config operations (install, uninstall)
   firewall                    Firewall integration (enable, disable)
   symlink                     Command shortcut integration (enable, disable)
-  upnp                        UPnP port forwarding integration (enable, disable)
 
 ${UNDERLINE}Quick Commands:${END}
   create <instance>           Create all required files and enabled integrations
@@ -44,7 +43,7 @@ ${UNDERLINE}Examples:${END}
 ${UNDERLINE}Notes:${END}
   • Quick commands are configuration-aware and respect config.ini settings
   • Management file and config file are ALWAYS created (required for operation)
-  • Optional integrations (firewall, symlink, upnp) follow config.ini defaults
+  • Optional integrations (firewall, symlink) follow config.ini defaults
   • Component commands allow manual control after initial instance creation
   • Use 'help <component>' for component-specific documentation
 "
@@ -75,7 +74,6 @@ ${UNDERLINE}Description:${END}
   ${UNDERLINE}Optional Integrations (Config-Dependent):${END}
     • Firewall rules via kgsm-firewall (if enable_firewall_management=true)
     • Command shortcuts/symlinks (if enable_command_shortcuts=true)
-    • UPnP port forwarding rules (if enable_port_forwarding=true)
 
   After initial creation, you can manually enable/disable optional integrations
   using the component-specific commands (e.g., 'files.sh firewall enable').
@@ -113,7 +111,6 @@ ${UNDERLINE}Description:${END}
   ${UNDERLINE}Removed Components:${END}
     • Firewall rules via kgsm-firewall (if enable_firewall_management=true)
     • Command shortcuts/symlinks (if enable_command_shortcuts=true)
-    • UPnP port forwarding rules (if enable_port_forwarding=true)
     • Management script (instance.manage.sh)
 
   ${UNDERLINE}Preserved Components:${END}
@@ -342,10 +339,6 @@ case "$command" in
     ;;
   symlink)
     files.symlink.sh "$@"
-    exit $?
-    ;;
-  upnp)
-    files.upnp.sh "$@"
     exit $?
     ;;
   *)

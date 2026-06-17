@@ -4,14 +4,13 @@
 #
 # Test Type: INTEGRATION
 # Target: Interaction between files.sh, files.management.sh, files.symlink.sh,
-#         files.upnp.sh, files.firewall.sh and the instances module
+#         files.firewall.sh and the instances module
 #
 # Integration points tested:
 # - Management file creation after an instance is created
 # - Management file removal during instance cleanup
 # - files.sh orchestrator creates/removes files respecting config settings
 # - Symlink integration enable/disable with a local shortcuts directory
-# - UPnP integration is config-only and updates instance config correctly
 # - Error cases: invalid/missing instance names are rejected by all file modules
 # - Two instances have independent management files
 
@@ -24,7 +23,6 @@ readonly FILES_MODULE="$KGSM_ROOT/commands/files.sh"
 readonly FILES_MANAGEMENT_MODULE="$KGSM_ROOT/commands/files.management.sh"
 readonly FILES_SYMLINK_MODULE="$KGSM_ROOT/commands/files.symlink.sh"
 readonly FILES_FIREWALL_MODULE="$KGSM_ROOT/commands/files.firewall.sh"
-readonly FILES_UPNP_MODULE="$KGSM_ROOT/commands/files.upnp.sh"
 readonly INSTANCES_MODULE="$KGSM_ROOT/commands/instances.sh"
 
 TEST_INSTALL_DIR=""
@@ -56,9 +54,6 @@ function setup_file() {
 
   assert_file_exists "$FILES_SYMLINK_MODULE" "files.symlink.sh command should exist"
   assert_file_executable "$FILES_SYMLINK_MODULE" "files.symlink.sh should be executable"
-
-  assert_file_exists "$FILES_UPNP_MODULE" "files.upnp.sh command should exist"
-  assert_file_executable "$FILES_UPNP_MODULE" "files.upnp.sh should be executable"
 
   assert_file_exists "$FILES_FIREWALL_MODULE" "files.firewall.sh command should exist"
   assert_file_executable "$FILES_FIREWALL_MODULE" "files.firewall.sh should be executable"
@@ -513,100 +508,7 @@ function test_symlink_fails_for_nonexistent_instance() {
 }
 
 # =============================================================================
-# TEST 12: UPnP enable sets enable_port_forwarding=true in instance config
-# UPnP integration is config-only and should require no root access
-# =============================================================================
-
-function test_upnp_enable_updates_config() {
-  log_test_step "Testing: files.upnp.sh enable sets enable_port_forwarding=true"
-
-  local blueprint="factorio"
-  local instance_name
-  instance_name=$(create_test_instance "$blueprint" "$instance_name")
-  local create_exit=$?
-
-  if [[ $create_exit -ne 0 ]]; then
-    skip_test "Instance creation failed - skipping test"
-    return
-  fi
-
-  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
-
-  # Enable UPnP
-  assert_command_succeeds "$FILES_UPNP_MODULE enable $instance_name" \
-    "files.upnp.sh enable should succeed"
-
-  # Instance config should have enable_port_forwarding=true
-  local instance_config
-  instance_config=$("$KGSM_ROOT/kgsm.sh" instances find "$instance_name" 2>/dev/null)
-  assert_file_contains "$instance_config" "enable_port_forwarding=true" \
-    "Instance config should have enable_port_forwarding=true after upnp enable"
-}
-
-# =============================================================================
-# TEST 13: UPnP disable sets enable_port_forwarding=false in instance config
-# =============================================================================
-
-function test_upnp_disable_updates_config() {
-  log_test_step "Testing: files.upnp.sh disable sets enable_port_forwarding=false"
-
-  local blueprint="factorio"
-  local instance_name
-  instance_name=$(create_test_instance "$blueprint" "$instance_name")
-  local create_exit=$?
-
-  if [[ $create_exit -ne 0 ]]; then
-    skip_test "Instance creation failed - skipping test"
-    return
-  fi
-
-  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
-
-  # Enable then disable UPnP
-  assert_command_succeeds "$FILES_UPNP_MODULE enable $instance_name" \
-    "files.upnp.sh enable must succeed before disable test"
-
-  # Disable UPnP - the command updates config correctly even though it may
-  # return a non-zero exit code (EC_SUCCESS_UPNP_ENABLED=219) due to a known
-  # behavior where the command wrapper checks for EC_SUCCESS_UPNP_DISABLED
-  # which is not defined separately from EC_SUCCESS_UPNP_ENABLED.
-  "$FILES_UPNP_MODULE" disable "$instance_name" 2>/dev/null
-  local disable_exit=$?
-  # Accept exit 0 (standard success) or 219 (EC_SUCCESS_UPNP_ENABLED - known behavior)
-  local disable_ok="false"
-  [[ $disable_exit -eq 0 || $disable_exit -eq 219 ]] && disable_ok="true"
-  assert_true "$disable_ok" \
-    "files.upnp.sh disable should succeed (exit 0 or known success code 219)"
-
-  # Instance config should have enable_port_forwarding=false
-  local instance_config
-  instance_config=$("$KGSM_ROOT/kgsm.sh" instances find "$instance_name" 2>/dev/null)
-  assert_file_contains "$instance_config" "enable_port_forwarding=false" \
-    "Instance config should have enable_port_forwarding=false after upnp disable"
-}
-
-# =============================================================================
-# TEST 14: UPnP commands fail for nonexistent instance
-# =============================================================================
-
-function test_upnp_fails_for_nonexistent_instance() {
-  log_test_step "Testing: files.upnp.sh commands fail for nonexistent instance"
-
-  local fake="nonexistent_upnp_xyz_$$"
-
-  "$FILES_UPNP_MODULE" enable "$fake" 2>/dev/null
-  local enable_code=$?
-  assert_not_equals 0 "$enable_code" \
-    "files.upnp.sh enable should fail for nonexistent instance"
-
-  "$FILES_UPNP_MODULE" disable "$fake" 2>/dev/null
-  local disable_code=$?
-  assert_not_equals 0 "$disable_code" \
-    "files.upnp.sh disable should fail for nonexistent instance"
-}
-
-# =============================================================================
-# TEST 15: Firewall commands fail for nonexistent instance
+# TEST 12: Firewall commands fail for nonexistent instance
 # Validates error handling before any system-level operations
 # =============================================================================
 
@@ -752,49 +654,7 @@ function test_management_file_creation_for_terraria() {
 }
 
 # =============================================================================
-# TEST 19: UPnP enable/disable is idempotent
-# Calling enable or disable multiple times should not fail
-# =============================================================================
-
-function test_upnp_idempotent() {
-  log_test_step "Testing: files.upnp.sh enable/disable are idempotent"
-
-  local blueprint="factorio"
-  local instance_name
-  instance_name=$(create_test_instance "$blueprint" "$instance_name")
-  local create_exit=$?
-
-  if [[ $create_exit -ne 0 ]]; then
-    skip_test "Instance creation failed - skipping test"
-    return
-  fi
-
-  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
-
-  # Enable twice
-  assert_command_succeeds "$FILES_UPNP_MODULE enable $instance_name" \
-    "First upnp enable should succeed"
-  assert_command_succeeds "$FILES_UPNP_MODULE enable $instance_name" \
-    "Second upnp enable should also succeed (idempotent)"
-
-  # Disable twice - same known behavior for exit code
-  "$FILES_UPNP_MODULE" disable "$instance_name" 2>/dev/null
-  local disable1_exit=$?
-  local disable1_ok="false"
-  [[ $disable1_exit -eq 0 || $disable1_exit -eq 219 ]] && disable1_ok="true"
-  assert_true "$disable1_ok" \
-    "First upnp disable should succeed (exit 0 or known success code 219)"
-
-  "$FILES_UPNP_MODULE" disable "$instance_name" 2>/dev/null
-  local disable2_exit=$?
-  local disable2_ok="false"
-  [[ $disable2_exit -eq 0 || $disable2_exit -eq 219 ]] && disable2_ok="true"
-  assert_true "$disable2_ok" \
-    "Second upnp disable should also succeed (idempotent)"
-}
-
-# =============================================================================
-# TEST 20: files.sh workflow: create → verify → remove → verify
+# TEST 13: files.sh workflow: create → verify → remove → verify
 # Full create-then-remove workflow produces correct final state
 # =============================================================================
 

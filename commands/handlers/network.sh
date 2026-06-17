@@ -204,7 +204,7 @@ function __logic_find_port_conflicts() {
     # which silently dropped all but the last port of a `27015:27020/udp` range and
     # treated a bare port as tcp-only (missing udp conflicts).
     local -a port_pairs=()
-    read -ra port_pairs <<<"$(__parse_ufw_to_upnp_ports "$ports")"
+    read -ra port_pairs <<<"$(__expand_ufw_ports_flat "$ports")"
 
     local idx port protocol
     for ((idx = 0; idx + 1 < ${#port_pairs[@]}; idx += 2)); do

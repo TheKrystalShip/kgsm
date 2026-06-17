@@ -72,12 +72,6 @@ function _start_background() {
     return $EC_ERROR
   fi
 
-  if [[ "$instance_enable_port_forwarding" == "true" ]]; then
-    if ! _enable_upnp; then
-      __print_warning "Failed to enable UPnP, continuing without port forwarding"
-    fi
-  fi
-
   # Handle auto-update before changing directory
   if [[ "$instance_auto_update" == "true" ]]; then
     if ! _update; then
@@ -240,10 +234,6 @@ function _stop_server() {
   [[ -f "$instance_pid_file" ]] && rm -f "$instance_pid_file"
   [[ -p "$instance_socket_file" ]] && rm -f "$instance_socket_file"
 
-  if [[ "$instance_enable_port_forwarding" == "true" ]]; then
-    _disable_upnp
-  fi
-
   __print_success "Instance '$instance_name' stopped"
 }
 
@@ -255,7 +245,6 @@ function _timed_stop() {
 
   # Export functions needed by _stop_server in the timeout subshell
   export -f _stop_server _kill_all_processes _is_active _send_save_command
-  export -f _disable_upnp _is_upnp_enabled
   export -f __print_info __print_error __print_success __print_warning
 
   if ! timeout "$instance_stop_command_timeout_seconds" bash -c '_stop_server "$@"' _ ${no_save:+--no-save} ${no_graceful:+--no-graceful}; then
@@ -317,7 +306,7 @@ function _kill_all_processes() {
   fi
 }
 
-# Cleanup function to run on script exit, removing the PID file and disabling UPnP
+# Cleanup function to run on script exit, removing the PID file
 # This function is called on INT, TERM, and EXIT signals, don't call it directly
 # shellcheck disable=SC2329
 function _cleanup_on_exit() {
@@ -327,17 +316,6 @@ function _cleanup_on_exit() {
   if [[ -f "$instance_pid_file" ]]; then
     __print_info "Removing instance PID file $instance_pid_file on exit"
     rm -f "$instance_pid_file"
-  fi
-
-  # Disable UPnP if ALL conditions are met:
-  # 1. Port forwarding is enabled
-  # 2. UPnP state file exists (was enabled at some point)
-  # 3. Instance is NOT running
-  if [[ "${instance_enable_port_forwarding:-false}" == "true" ]] &&
-    [[ -f "$instance_port_forwarding_state_file" ]] &&
-    ! _is_active &>/dev/null; then
-    __print_info "Disabling UPnP ports on exit"
-    _disable_upnp
   fi
 }
 
