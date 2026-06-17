@@ -283,6 +283,65 @@ function __overlay_status_active() {
 
 export -f __overlay_status_active
 
+# Resolves the watchdog's PID for an instance, to enrich status output. The
+# daemon's /status body carries the real PID of the process it cgroup-spawned,
+# which the management script never sees (no PID file), so process.pid is null
+# for watchdog instances even when running. Echoes the PID only when the daemon
+# tracks the instance and it is populated (running); otherwise "" (daemon absent,
+# untracked, or stopped) so the caller keeps the management script's value — a
+# PID for a non-populated instance would be a fabrication.
+# Args: $1 = instance name
+function __watchdog_pid_value() {
+  local _name="$1"
+
+  if ! __watchdog_available; then
+    printf ''
+    return 0
+  fi
+
+  local _body
+  _body=$(__watchdog_status_body "$_name") || { printf ''; return 0; }
+
+  # Only surface a PID for a populated (running) instance.
+  local _compact="${_body//[[:space:]]/}"
+  [[ "$_compact" == *'"populated":true'* ]] || { printf ''; return 0; }
+
+  printf '%s' "$_body" | jq -r '.pid // empty' 2> /dev/null || printf ''
+}
+
+export -f __watchdog_pid_value
+
+# Injects the watchdog's authoritative PID into a status JSON's process.pid. The
+# management script reports process.pid=null for the instances the daemon
+# cgroup-spawns (no PID file); this fills it from the daemon (see
+# __watchdog_pid_value). JSON only — the human-readable form is left as-is. An
+# empty or non-numeric PID passes the output through unchanged (non-watchdog
+# instance, stopped, or daemon down). Pure (no socket I/O) so it is unit-testable.
+# Args: $1 = json_format (non-empty = JSON output), $2 = pid (integer or ""),
+#       $3 = raw status output
+# Outputs: the (possibly enriched) status output
+function __overlay_process_pid() {
+  local _json_format="$1"
+  local _pid="$2"
+  local _raw="$3"
+
+  # Nothing to inject, not JSON, or a non-numeric PID -> pass through untouched.
+  if [[ -z "$_json_format" ]] || [[ -z "$_pid" ]] || [[ ! "$_pid" =~ ^[0-9]+$ ]]; then
+    printf '%s' "$_raw"
+    return 0
+  fi
+
+  local _out
+  if _out=$(printf '%s' "$_raw" | jq --argjson pid "$_pid" '.process.pid = $pid' 2> /dev/null) \
+    && [[ -n "$_out" ]]; then
+    printf '%s' "$_out"
+  else
+    printf '%s' "$_raw"
+  fi
+}
+
+export -f __overlay_process_pid
+
 # ---- boot auto-start (enable/disable) ------------------------------------------------------------
 # The systemctl-style boot axis, orthogonal to start/stop. These drive the daemon's persisted
 # desired-state set (POST /enable, /disable; GET /enabled). Only meaningful WITH the watchdog —

@@ -42,6 +42,8 @@ function setup_file() {
   assert_function_exists "__watchdog_is_active" "__watchdog_is_active should be exported"
   assert_function_exists "__watchdog_active_value" "__watchdog_active_value should be exported"
   assert_function_exists "__overlay_status_active" "__overlay_status_active should be exported"
+  assert_function_exists "__watchdog_pid_value" "__watchdog_pid_value should be exported"
+  assert_function_exists "__overlay_process_pid" "__overlay_process_pid should be exported"
 
   assert_equals 211 "$EC_SUCCESS_INSTANCE_STARTED" "EC_SUCCESS_INSTANCE_STARTED should be 211"
   assert_equals 212 "$EC_SUCCESS_INSTANCE_STOPPED" "EC_SUCCESS_INSTANCE_STOPPED should be 212"
@@ -397,4 +399,99 @@ Version: 1"
   out=$(__overlay_status_active "" "" "$raw")
 
   assert_contains "$out" "Status: ✗ Inactive" "Empty active value preserves the mgmt text"
+}
+
+# =============================================================================
+# PID ENRICHMENT (__watchdog_pid_value / __overlay_process_pid)
+# =============================================================================
+#
+# The daemon's /status body carries the real PID of the process it cgroup-spawned,
+# which the management script (no PID file) reports as null. These fill it in.
+
+function test_pid_value_when_populated() {
+  log_test_step "__watchdog_pid_value -> the daemon's PID for a running instance"
+
+  function __watchdog_available() { return 0; }
+  function __watchdog_status_body() {
+    printf '%s' '{"name":"myinst","populated":true,"pid":1560010,"phase":"running"}'
+    return 0
+  }
+
+  assert_equals "1560010" "$(__watchdog_pid_value myinst)" \
+    "A populated instance surfaces the daemon's PID"
+}
+
+function test_pid_value_empty_when_not_populated() {
+  log_test_step "__watchdog_pid_value -> '' for a tracked-but-stopped instance (no stale PID)"
+
+  function __watchdog_available() { return 0; }
+  function __watchdog_status_body() {
+    printf '%s' '{"name":"myinst","populated":false,"pid":null,"phase":"stopped"}'
+    return 0
+  }
+
+  assert_equals "" "$(__watchdog_pid_value myinst)" \
+    "A non-populated instance surfaces no PID (a stale PID would be a fabrication)"
+}
+
+function test_pid_value_empty_when_untracked() {
+  log_test_step "__watchdog_pid_value -> '' when the daemon does not track it"
+
+  function __watchdog_available() { return 0; }
+  function __watchdog_status_body() { printf '%s' ''; return 1; } # 404
+
+  assert_equals "" "$(__watchdog_pid_value myinst)" \
+    "An untracked instance surfaces no PID"
+}
+
+function test_pid_value_empty_when_daemon_absent() {
+  log_test_step "__watchdog_pid_value -> '' when the daemon is unavailable"
+
+  function __watchdog_available() { return 1; }
+
+  assert_equals "" "$(__watchdog_pid_value myinst)" \
+    "A daemon-down host surfaces no PID"
+}
+
+function test_overlay_pid_fills_null_process_pid() {
+  log_test_step "Overlay fills process.pid from the daemon when status JSON has null"
+
+  local out
+  out=$(__overlay_process_pid "json" "1560010" "$STATUS_JSON_FALSE")
+
+  assert_equals "1560010" "$(printf '%s' "$out" | jq -c '.process.pid')" \
+    "process.pid is filled from the watchdog"
+  assert_equals "false" "$(printf '%s' "$out" | jq -c '.status')" \
+    "Only process.pid is touched; the status field is left to the other overlay"
+}
+
+function test_overlay_pid_passthrough_when_empty() {
+  log_test_step "Overlay leaves process.pid null when there is no PID"
+
+  local out
+  out=$(__overlay_process_pid "json" "" "$STATUS_JSON_FALSE")
+
+  assert_equals "null" "$(printf '%s' "$out" | jq -c '.process.pid')" \
+    "Empty PID preserves the management script's null"
+}
+
+function test_overlay_pid_ignores_nonnumeric() {
+  log_test_step "Overlay rejects a non-numeric PID (defensive — no jq injection)"
+
+  local out
+  out=$(__overlay_process_pid "json" "; rm -rf /" "$STATUS_JSON_FALSE")
+
+  assert_equals "$STATUS_JSON_FALSE" "$out" \
+    "A non-numeric PID passes the output through untouched"
+}
+
+function test_overlay_pid_text_is_passthrough() {
+  log_test_step "Overlay does not touch human-readable output (JSON only)"
+
+  local raw="=== Instance Status: myinst ===
+Status: ✓ Active"
+  local out
+  out=$(__overlay_process_pid "" "1560010" "$raw")
+
+  assert_equals "$raw" "$out" "Text form is left as-is"
 }

@@ -302,11 +302,13 @@ function __logic_instance_status() {
   # inactive). This keeps `status` consistent with is-active; see
   # __overlay_status_active. A no-op for orphans, containers, and a daemon-down
   # host (empty active value -> output passed through unchanged).
-  local _raw _rc _active
+  local _raw _rc _active _pid
   _raw=$("$management_file" status ${json_format:+--json} ${fast_mode:+--fast})
   _rc=$?
   _active=$(__watchdog_active_value "$_instance_name")
-  __overlay_status_active "$json_format" "$_active" "$_raw"
+  _pid=$(__watchdog_pid_value "$_instance_name")
+  _raw=$(__overlay_status_active "$json_format" "$_active" "$_raw")
+  __overlay_process_pid "$json_format" "$_pid" "$_raw"
 
   return $_rc
 }

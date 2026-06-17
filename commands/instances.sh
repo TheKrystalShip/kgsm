@@ -587,10 +587,12 @@ function _get_instance_status() {
       status_args="$status_args --fast"
     fi
 
-    local _raw _active
+    local _raw _active _pid
     _raw=$("$instance_management_file" status $status_args)
     _active=$(__watchdog_active_value "$instance")
-    __overlay_status_active "$json_format" "$_active" "$_raw"
+    _pid=$(__watchdog_pid_value "$instance")
+    _raw=$(__overlay_status_active "$json_format" "$_active" "$_raw")
+    __overlay_process_pid "$json_format" "$_pid" "$_raw"
   else
     # Fallback for older management files that don't support --status
     __print_warning "Instance '$instance' uses an older management file that doesn't support the --status command."
@@ -620,10 +622,12 @@ function _get_instance_status_json() {
       status_args="$status_args --fast"
     fi
 
-    local _raw _active
+    local _raw _active _pid
     _raw=$("$instance_management_file" status $status_args)
     _active=$(__watchdog_active_value "$instance")
-    __overlay_status_active "1" "$_active" "$_raw"
+    _pid=$(__watchdog_pid_value "$instance")
+    _raw=$(__overlay_status_active "1" "$_active" "$_raw")
+    __overlay_process_pid "1" "$_pid" "$_raw"
   else
     # Fallback for older management files that don't support --status
     __print_warning "Instance '$instance' uses an older management file that doesn't support the --status command."
