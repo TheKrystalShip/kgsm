@@ -296,10 +296,19 @@ function __logic_instance_status() {
     return $EC_INVALID_CONFIG
   fi
 
-  # Call the management script's status function with appropriate flags
-  "$management_file" status ${json_format:+--json} ${fast_mode:+--fast}
+  # Call the management script's status function, then reconcile its run-state
+  # with the watchdog — the authority for the native instances it cgroup-spawns
+  # (which carry no PID file, so the management script's own check reads them as
+  # inactive). This keeps `status` consistent with is-active; see
+  # __overlay_status_active. A no-op for orphans, containers, and a daemon-down
+  # host (empty active value -> output passed through unchanged).
+  local _raw _rc _active
+  _raw=$("$management_file" status ${json_format:+--json} ${fast_mode:+--fast})
+  _rc=$?
+  _active=$(__watchdog_active_value "$_instance_name")
+  __overlay_status_active "$json_format" "$_active" "$_raw"
 
-  return $?
+  return $_rc
 }
 
 export -f __logic_instance_status

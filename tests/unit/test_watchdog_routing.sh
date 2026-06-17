@@ -40,6 +40,8 @@ function setup_file() {
   assert_function_exists "__watchdog_available" "__watchdog_available should be exported"
   assert_function_exists "__watchdog_dispatch_lifecycle" "__watchdog_dispatch_lifecycle should be exported"
   assert_function_exists "__watchdog_is_active" "__watchdog_is_active should be exported"
+  assert_function_exists "__watchdog_active_value" "__watchdog_active_value should be exported"
+  assert_function_exists "__overlay_status_active" "__overlay_status_active should be exported"
 
   assert_equals 211 "$EC_SUCCESS_INSTANCE_STARTED" "EC_SUCCESS_INSTANCE_STARTED should be 211"
   assert_equals 212 "$EC_SUCCESS_INSTANCE_STOPPED" "EC_SUCCESS_INSTANCE_STOPPED should be 212"
@@ -266,4 +268,133 @@ function test_tracks_false_when_not_tracked() {
 
   __watchdog_tracks "myinst"
   assert_not_equals 0 "$?" "An untracked orphan must fall through to the direct stop"
+}
+
+# =============================================================================
+# RUN-STATE VALUE (__watchdog_active_value) -> overlay input
+# =============================================================================
+
+function test_active_value_true_when_populated() {
+  log_test_step "__watchdog_active_value -> 'true' when the daemon reports populated"
+
+  function __watchdog_available() { return 0; }
+  function __watchdog_status_body() {
+    printf '%s' '{"name":"myinst","populated":true,"phase":"running"}'
+    return 0
+  }
+
+  assert_equals "true" "$(__watchdog_active_value myinst)" \
+    "A populated tracked instance resolves to true"
+}
+
+function test_active_value_false_when_not_populated() {
+  log_test_step "__watchdog_active_value -> 'false' when tracked but not populated"
+
+  function __watchdog_available() { return 0; }
+  function __watchdog_status_body() {
+    printf '%s' '{"name":"myinst","populated":false,"phase":"stopped"}'
+    return 0
+  }
+
+  assert_equals "false" "$(__watchdog_active_value myinst)" \
+    "A tracked-but-unpopulated instance resolves to false"
+}
+
+function test_active_value_empty_when_untracked() {
+  log_test_step "__watchdog_active_value -> '' when the daemon does not track it"
+
+  function __watchdog_available() { return 0; }
+  function __watchdog_status_body() { printf '%s' ''; return 1; } # 404 -> unknown
+
+  assert_equals "" "$(__watchdog_active_value myinst)" \
+    "An untracked instance yields no value so the caller keeps the mgmt value"
+}
+
+function test_active_value_empty_when_daemon_absent() {
+  log_test_step "__watchdog_active_value -> '' when the daemon is unavailable"
+
+  # No curl is attempted: availability is the gate, so the absent-daemon case
+  # short-circuits (and avoids a per-instance timeout on the fleet path).
+  function __watchdog_available() { return 1; }
+
+  assert_equals "" "$(__watchdog_active_value myinst)" \
+    "A daemon-down host yields no value"
+}
+
+# =============================================================================
+# STATUS OVERLAY (__overlay_status_active) -> status<->is-active reconciliation
+# =============================================================================
+#
+# Fixture: a management script's status for a running, watchdog-spawned native
+# instance reads status:false (it has no PID file) while the daemon reports it
+# active. The overlay is the pure transform that reconciles the two — no socket.
+
+readonly STATUS_JSON_FALSE='{"instance_name":"myinst","status":false,"process":{"pid":null,"status":null,"start_time":null},"version":{"current":"1"}}'
+
+function test_overlay_json_running_overrides_false() {
+  log_test_step "Overlay rewrites status:false -> true for a running watchdog instance"
+
+  local out
+  out=$(__overlay_status_active "json" "true" "$STATUS_JSON_FALSE")
+
+  assert_equals "true" "$(printf '%s' "$out" | jq -c '.status')" \
+    "The status field is overlaid to true"
+  assert_equals '"myinst"' "$(printf '%s' "$out" | jq -c '.instance_name')" \
+    "Other fields are preserved"
+}
+
+function test_overlay_json_passthrough_when_empty() {
+  log_test_step "Overlay leaves output untouched when there is no authoritative value"
+
+  local out
+  out=$(__overlay_status_active "json" "" "$STATUS_JSON_FALSE")
+
+  assert_equals "false" "$(printf '%s' "$out" | jq -c '.status')" \
+    "Empty active value preserves the mgmt-script value (orphan / container / daemon down)"
+}
+
+function test_overlay_json_false_stays_false() {
+  log_test_step "Overlay of false keeps a stopped instance false (no false-positive)"
+
+  local out
+  out=$(__overlay_status_active "json" "false" "$STATUS_JSON_FALSE")
+
+  assert_equals "false" "$(printf '%s' "$out" | jq -c '.status')" \
+    "An inactive daemon state stays false"
+}
+
+function test_overlay_json_falls_back_on_bad_input() {
+  log_test_step "Overlay emits the raw value rather than nothing if jq cannot parse it"
+
+  local raw="not valid json"
+  local out
+  out=$(__overlay_status_active "json" "true" "$raw")
+
+  assert_equals "$raw" "$out" \
+    "Unparseable input is passed through (the un-overlaid truth beats an empty reply)"
+}
+
+function test_overlay_text_inactive_to_active() {
+  log_test_step "Overlay rewrites the human-readable Status line to Active"
+
+  local raw="=== Instance Status: myinst ===
+Status: ✗ Inactive
+Version: 1"
+  local out
+  out=$(__overlay_status_active "" "true" "$raw")
+
+  assert_contains "$out" "Status: ✓ Active" "The Status line is rewritten to Active"
+  assert_not_contains "$out" "Inactive" "The stale Inactive line is gone"
+}
+
+function test_overlay_text_passthrough_when_empty() {
+  log_test_step "Overlay leaves text untouched when there is no authoritative value"
+
+  local raw="=== Instance Status: myinst ===
+Status: ✗ Inactive
+Version: 1"
+  local out
+  out=$(__overlay_status_active "" "" "$raw")
+
+  assert_contains "$out" "Status: ✗ Inactive" "Empty active value preserves the mgmt text"
 }

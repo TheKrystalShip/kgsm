@@ -409,6 +409,16 @@ source "$events_library" || {
   exit $EC_FAILED_SOURCE
 }
 
+# Watchdog reconciliation helpers — the fleet status path reads run-state from
+# the management script, which is blind to the daemon's cgroup-spawned instances;
+# __watchdog_active_value / __overlay_status_active overlay the authoritative state.
+watchdog_handler=$(__find_command_handler watchdog.sh)
+# shellcheck source=handlers/watchdog.sh
+source "$watchdog_handler" || {
+  __print_error "Failed to load watchdog logic library"
+  exit $EC_FAILED_SOURCE
+}
+
 function _print_info() {
   local instance=$1
   local instance_config_file
@@ -577,7 +587,10 @@ function _get_instance_status() {
       status_args="$status_args --fast"
     fi
 
-    "$instance_management_file" status $status_args
+    local _raw _active
+    _raw=$("$instance_management_file" status $status_args)
+    _active=$(__watchdog_active_value "$instance")
+    __overlay_status_active "$json_format" "$_active" "$_raw"
   else
     # Fallback for older management files that don't support --status
     __print_warning "Instance '$instance' uses an older management file that doesn't support the --status command."
@@ -607,7 +620,10 @@ function _get_instance_status_json() {
       status_args="$status_args --fast"
     fi
 
-    "$instance_management_file" status $status_args
+    local _raw _active
+    _raw=$("$instance_management_file" status $status_args)
+    _active=$(__watchdog_active_value "$instance")
+    __overlay_status_active "1" "$_active" "$_raw"
   else
     # Fallback for older management files that don't support --status
     __print_warning "Instance '$instance' uses an older management file that doesn't support the --status command."

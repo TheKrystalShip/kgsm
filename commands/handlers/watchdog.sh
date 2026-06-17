@@ -207,6 +207,82 @@ function __watchdog_tracks() {
 
 export -f __watchdog_tracks
 
+# Resolves the watchdog's authoritative run-state for an instance as a value (for
+# callers that need to overlay it onto status output, not branch on an exit code).
+# Native instances are cgroup-spawned by the daemon with no PID file, so a
+# management script's own PID-based check reads a running, watchdog-supervised
+# instance as inactive; the daemon is the source of truth. Echoes:
+#   "true"  - tracked and the cgroup is populated (running)
+#   "false" - tracked but not populated (stopped / restart-pending)
+#   ""      - not the watchdog's to answer (daemon absent, or instance untracked:
+#             an orphan or a container) -> the caller keeps the management
+#             script's own value unchanged.
+# Args: $1 = instance name
+function __watchdog_active_value() {
+  local _name="$1"
+
+  # Gate on availability first: a fast socket-exists check avoids a per-instance
+  # curl timeout on the fleet path when the daemon is absent.
+  if ! __watchdog_available; then
+    printf ''
+    return 0
+  fi
+
+  __watchdog_is_active "$_name"
+  case $? in
+    0) printf 'true' ;;
+    1) printf 'false' ;;
+    *) printf '' ;; # untracked / unknown -> caller keeps the mgmt-script value
+  esac
+}
+
+export -f __watchdog_active_value
+
+# Overlays an authoritative run-state onto a management script's status output so
+# the reported state can never diverge from is-active. The management script
+# derives liveness from its PID file, which the watchdog never writes for the
+# instances it cgroup-spawns; this rewrites the run-state in that output to the
+# value the daemon reports, making `status` consult the SAME authority as
+# is-active. An empty active value means "not the watchdog's to answer" (see
+# __watchdog_active_value): the output is passed through untouched, so there is
+# zero change for orphans, containers, or a daemon-down host. Pure (no socket I/O)
+# so the reconciliation is unit-testable with a canned active value.
+# Args: $1 = json_format (non-empty = JSON output), $2 = active (true|false|""),
+#       $3 = raw status output from the management script
+# Outputs: the (possibly overlaid) status output
+function __overlay_status_active() {
+  local _json_format="$1"
+  local _active="$2"
+  local _raw="$3"
+
+  # No authoritative value -> leave the management script's output as-is.
+  if [[ -z "$_active" ]]; then
+    printf '%s' "$_raw"
+    return 0
+  fi
+
+  if [[ -n "$_json_format" ]]; then
+    # Rewrite only the boolean status field; every other field is preserved. If
+    # jq fails (unexpected output), emit the raw value rather than nothing — the
+    # un-overlaid truth beats an empty reply.
+    local _out
+    if _out=$(printf '%s' "$_raw" | jq --argjson active "$_active" '.status = $active' 2> /dev/null) \
+      && [[ -n "$_out" ]]; then
+      printf '%s' "$_out"
+    else
+      printf '%s' "$_raw"
+    fi
+  else
+    # Human-readable form: the template prints exactly one line beginning with
+    # "Status:" — either "Status: ✓ Active" or "Status: ✗ Inactive". Rewrite it.
+    local _line="Status: ✗ Inactive"
+    [[ "$_active" == "true" ]] && _line="Status: ✓ Active"
+    printf '%s' "$_raw" | sed "s/^Status:.*/$_line/"
+  fi
+}
+
+export -f __overlay_status_active
+
 # ---- boot auto-start (enable/disable) ------------------------------------------------------------
 # The systemctl-style boot axis, orthogonal to start/stop. These drive the daemon's persisted
 # desired-state set (POST /enable, /disable; GET /enabled). Only meaningful WITH the watchdog —
