@@ -249,6 +249,9 @@ native:
   # Steam App ID. 0 if not applicable, a valid Steam app id otherwise.
   steam_app_id: 0
 
+  # Client Steam App ID — the game players launch to connect. 0 if not Steam.
+  client_steam_app_id: 0
+
   # (Optional) Additional steamcmd arguments, e.g. "+beta <branch>".
   steamcmd_arguments: ""
 
@@ -290,6 +293,7 @@ the rest are optional with the noted defaults.
 | `executable_file` | Name of the server executable | Yes | `factorio` |
 | `ports` | Network ports in UFW format (single-quoted) | No | `'25565/tcp'` |
 | `steam_app_id` | Steam App ID (`0` if not applicable) | No | `294420` |
+| `client_steam_app_id` | Client Steam App ID for launch/connect (`0` if not Steam) | No | `251570` |
 | `steamcmd_arguments` | Extra arguments passed to steamcmd | No | `"+beta public"` |
 | `is_steam_account_required` | Whether a Steam account is required (`false`/`true`) | No | `false` |
 | `platform` | Target platform (`linux`, `windows`, `macos`) | No | `linux` |
@@ -358,6 +362,7 @@ The following variables can be used inside `executable_arguments` and are resolv
 | Variable | Description |
 |----------|-------------|
 | `$instance_steam_app_id` | Steam App ID for downloads |
+| `$instance_client_steam_app_id` | Client Steam App ID for launch/connect deeplinks |
 | `$instance_is_steam_account_required` | Whether a Steam account is required |
 
 **Network Configuration**

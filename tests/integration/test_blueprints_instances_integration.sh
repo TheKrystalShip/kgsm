@@ -392,16 +392,18 @@ function test_duplicate_instance_name_rejected() {
 # =============================================================================
 
 function test_steam_blueprint_data_flows_to_instance() {
-  log_test_step "Testing: Steam blueprint data (steam_app_id) appears in instance config"
+  log_test_step "Testing: Steam blueprint data (steam_app_id, client_steam_app_id) appears in instance config"
 
-  # Get necesse blueprint info (canonical JSON) and extract SteamAppId
+  # Get necesse blueprint info (canonical JSON) and extract SteamAppId + ClientSteamAppId
   local blueprint_info
   blueprint_info=$("$BLUEPRINTS_MODULE" info necesse --json 2>&1)
   assert_equals 0 "$?" "blueprints info necesse --json should succeed"
 
-  local expected_app_id
+  local expected_app_id expected_client_app_id
   expected_app_id=$(echo "$blueprint_info" | jq -r '.SteamAppId')
+  expected_client_app_id=$(echo "$blueprint_info" | jq -r '.ClientSteamAppId')
   assert_not_null "$expected_app_id" "Necesse blueprint should have steam_app_id"
+  assert_not_null "$expected_client_app_id" "Necesse blueprint should have client_steam_app_id"
 
   # Create an instance from necesse
   local instance_name="test-steam-$$"
@@ -409,12 +411,14 @@ function test_steam_blueprint_data_flows_to_instance() {
   assert_equals 0 "$?" "necesse instance creation should succeed"
   _TEARDOWN_INSTANCES+=("necesse:$instance_name")
 
-  # Instance config should contain the steam_app_id
+  # Instance config should contain the steam_app_id and client_steam_app_id
   local instance_config_path
   instance_config_path=$("$INSTANCES_MODULE" find "$instance_name" 2>&1)
   assert_file_exists "$instance_config_path" "Instance config file should exist"
   assert_file_contains "$instance_config_path" "$expected_app_id" \
     "Instance config should contain the blueprint's steam_app_id"
+  assert_file_contains "$instance_config_path" "$expected_client_app_id" \
+    "Instance config should contain the blueprint's client_steam_app_id"
 }
 
 # =============================================================================

@@ -80,6 +80,9 @@ native:
   # Steam App ID of the DEDICATED SERVER (0 if not a Steam download).
   steam_app_id: 0
 
+  # Client Steam App ID — the game players launch to connect (0 if not Steam).
+  client_steam_app_id: 0
+
   # Extra steamcmd arguments, e.g. "+beta <branch>". Empty if none.
   steamcmd_arguments: ""
 

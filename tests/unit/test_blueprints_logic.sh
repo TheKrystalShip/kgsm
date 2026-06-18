@@ -275,6 +275,7 @@ function test_info_json_steam_fields_preserved() {
   local output
   output=$(__logic_get_blueprint_info_json "7dtd")
   assert_equals "294420" "$(echo "$output" | jq -r '.SteamAppId')" "SteamAppId preserved as string"
+  assert_equals "251570" "$(echo "$output" | jq -r '.ClientSteamAppId')" "ClientSteamAppId preserved as string"
   assert_equals "false" "$(echo "$output" | jq -r '.IsSteamAccountRequired')" "Bool false preserved (not blanked)"
 }
 

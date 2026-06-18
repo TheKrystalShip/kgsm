@@ -202,6 +202,7 @@ function _deploy() {
 **Optional but common**:
 - `ports`: Format `'1111:2222/tcp|3333/udp'` (single-quoted, pipe-separated)
 - `steam_app_id`: For Steam-based servers
+- `client_steam_app_id`: Client Steam App ID for launch/connect (`0` if not Steam)
 - `executable_subdirectory`: Relative path if binary is nested
 - `executable_arguments`: Command-line args for server startup
 

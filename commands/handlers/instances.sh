@@ -158,6 +158,7 @@ function __logic_create_base_instance() {
   export instance_platform="${blueprint_platform:-linux}"
   export instance_level_name="${blueprint_level_name:-default}"
   export instance_steam_app_id="${blueprint_steam_app_id:-0}"
+  export instance_client_steam_app_id="${blueprint_client_steam_app_id:-0}"
   export instance_steamcmd_arguments="${blueprint_steamcmd_arguments:-}"
   export instance_is_steam_account_required="${blueprint_is_steam_account_required:-false}"
 
@@ -426,7 +427,8 @@ export -f __logic_get_instance_paths
 
     case "$key" in
       name | blueprint_file | runtime | platform | install_datetime | \
-        is_steam_account_required | steam_app_id | ports)
+        is_steam_account_required | steam_app_id | \
+        client_steam_app_id | ports)
         return 0
         ;;
       *_dir | *_file | executable_subdirectory)

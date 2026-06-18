@@ -215,6 +215,7 @@ function __logic_get_blueprint_info_json() {
     --arg ports "$blueprint_ports" \
     --arg blueprint_type "$blueprint_type" \
     --arg steam_app_id "$blueprint_steam_app_id" \
+    --arg client_steam_app_id "$blueprint_client_steam_app_id" \
     --arg is_steam_account_required "$blueprint_is_steam_account_required" \
     --arg executable_file "$blueprint_executable_file" \
     --arg level_name "$blueprint_level_name" \
@@ -228,6 +229,7 @@ function __logic_get_blueprint_info_json() {
       Ports: $ports,
       BlueprintType: $blueprint_type,
       SteamAppId: $steam_app_id,
+      ClientSteamAppId: $client_steam_app_id,
       IsSteamAccountRequired: $is_steam_account_required,
       ExecutableFile: $executable_file,
       LevelName: $level_name,

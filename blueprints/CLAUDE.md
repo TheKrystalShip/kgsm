@@ -34,7 +34,8 @@ directory instead.
 ## Native blueprint (`runtime: native`)
 
 Required: `native.executable_file`. Common optional under `native:`: `ports`,
-`steam_app_id` (`0` if not Steam), `is_steam_account_required`,
+`steam_app_id` (`0` if not Steam), `client_steam_app_id` (`0` if not Steam),
+`is_steam_account_required`,
 `steamcmd_arguments`, `platform`, `level_name`, `executable_subdirectory`,
 `executable_arguments`, `stop_command`, `save_command`, `startup_success_regex`.
 

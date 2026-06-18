@@ -138,6 +138,7 @@
 #
 # Steam Integration:
 # $instance_steam_app_id         Steam AppID (for Steam-based games)
+# $instance_client_steam_app_id  Client Steam AppID (for launch/connect deeplinks)
 # $instance_is_steam_account_required  Whether Steam account is needed (true/false)
 #
 # Network Configuration:

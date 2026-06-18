@@ -12,6 +12,7 @@ metadata:
 native:
   ports: 8050/udp
   steam_app_id: 4763510
+  client_steam_app_id: 1805320
   steamcmd_arguments: ""
   is_steam_account_required: false
   platform: linux

@@ -62,6 +62,7 @@ function convert_native() {
   name="${kv[name]}" \
   ports="${kv[ports]:-}" \
   steam_app_id="${kv[steam_app_id]:-0}" \
+  client_steam_app_id="${kv[client_steam_app_id]:-0}" \
   steamcmd_arguments="${kv[steamcmd_arguments]:-}" \
   is_steam_account_required="${kv[is_steam_account_required]:-false}" \
   platform="${kv[platform]:-linux}" \
@@ -85,6 +86,7 @@ function convert_native() {
     | .metadata head_comment = strenv(META_COMMENT)
     | .native.ports = strenv(ports)
     | .native.steam_app_id = env(steam_app_id)
+    | .native.client_steam_app_id = env(client_steam_app_id)
     | .native.steamcmd_arguments = strenv(steamcmd_arguments)
     | .native.is_steam_account_required = env(is_steam_account_required)
     | .native.platform = strenv(platform)

@@ -114,7 +114,7 @@ function activate(context) {
           `  recommended_ram_mb: null\n` +
           `  base_disk_mb: null\n` +
           (runtime === "native"
-            ? `native:\n  ports: ''\n  steam_app_id: 0\n  executable_file: \n  level_name: default\n`
+            ? `native:\n  ports: ''\n  steam_app_id: 0\n  client_steam_app_id: 0\n  executable_file: \n  level_name: default\n`
             : `container:\n  compose: |\n    services:\n      ${name}:\n        image: \n        container_name: \${instance_name}\n        restart: unless-stopped\n`);
       }
 

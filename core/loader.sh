@@ -293,6 +293,7 @@ function __source_blueprint() {
   # re-source of a different blueprint) cannot leak stale values.
   declare -g blueprint_ports=""
   declare -g blueprint_steam_app_id=""
+  declare -g blueprint_client_steam_app_id=""
   declare -g blueprint_steamcmd_arguments=""
   declare -g blueprint_is_steam_account_required=""
   declare -g blueprint_platform=""
@@ -307,6 +308,7 @@ function __source_blueprint() {
   if [[ "$blueprint_runtime" == "native" ]]; then
     blueprint_ports=$(__bp_yaml_field "$bp" '.native.ports')
     blueprint_steam_app_id=$(__bp_yaml_field "$bp" '.native.steam_app_id')
+    blueprint_client_steam_app_id=$(__bp_yaml_field "$bp" '.native.client_steam_app_id')
     blueprint_steamcmd_arguments=$(__bp_yaml_field "$bp" '.native.steamcmd_arguments')
     blueprint_is_steam_account_required=$(__bp_yaml_field "$bp" '.native.is_steam_account_required')
     blueprint_platform=$(__bp_yaml_field "$bp" '.native.platform')
@@ -322,7 +324,8 @@ function __source_blueprint() {
   fi
 
   export blueprint_name blueprint_runtime blueprint_ports \
-    blueprint_steam_app_id blueprint_steamcmd_arguments \
+    blueprint_steam_app_id blueprint_client_steam_app_id \
+    blueprint_steamcmd_arguments \
     blueprint_is_steam_account_required blueprint_platform \
     blueprint_level_name blueprint_executable_subdirectory \
     blueprint_executable_file blueprint_executable_arguments \

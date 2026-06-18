@@ -50,6 +50,7 @@ The low-level file discovery is handled by `__find_template` in `core/loader.sh`
 | `executable_file` | Yes | Server binary name |
 | `ports` | No | Network ports in UFW format, e.g. `'27015/tcp\|27015/udp'` |
 | `steam_app_id` | No | Steam App ID; `0` if not applicable |
+| `client_steam_app_id` | No | Client Steam App ID for launch/connect; `0` if not Steam |
 | `is_steam_account_required` | No | `true` if a Steam account is needed |
 | `platform` | No | Target OS: `linux` (default), `windows`, `macos` |
 | `level_name` | No | Default world/map name (defaults to `default`) |
@@ -206,6 +207,7 @@ The following `$instance_*` variables are available in templates that are expand
 | Variable | Description |
 |---|---|
 | `$instance_steam_app_id` | Steam App ID; `0` if not Steam-based |
+| `$instance_client_steam_app_id` | Client Steam App ID for launch/connect; `0` if not Steam |
 | `$instance_steamcmd_arguments` | Additional arguments passed to SteamCMD |
 | `$instance_is_steam_account_required` | `true` if a Steam account is required for download |
 

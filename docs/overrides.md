@@ -205,6 +205,7 @@ Override functions have access to all instance and global configuration variable
 | Variable | Description |
 |---|---|
 | `$instance_steam_app_id` | Steam App ID (Steam-based games only) |
+| `$instance_client_steam_app_id` | Client Steam App ID for launch/connect deeplinks |
 | `$instance_is_steam_account_required` | Whether a Steam account is required (`true`/`false`) |
 
 **Network Configuration**

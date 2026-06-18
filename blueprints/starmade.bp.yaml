@@ -11,7 +11,8 @@ metadata:
   base_disk_mb: null
 native:
   ports: 4242/tcp|4242/udp
-  steam_app_id: 335180
+  steam_app_id: 244770
+  client_steam_app_id: 244770
   steamcmd_arguments: ""
   is_steam_account_required: true
   platform: linux

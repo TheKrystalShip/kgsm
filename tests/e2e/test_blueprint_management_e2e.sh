@@ -192,18 +192,23 @@ function test_list_find_consistency() {
 # =============================================================================
 
 function test_steam_blueprint_field_differentiation() {
-  log_test_step "Workflow: Steam blueprints carry a steam_app_id; factorio is 0"
+  log_test_step "Workflow: Steam blueprints carry a steam_app_id and client_steam_app_id; factorio is 0"
 
   for bp in "starbound" "necesse"; do
-    local steam_app_id
+    local steam_app_id client_steam_app_id
     steam_app_id=$("$MODULE" info "$bp" --json 2>&1 | jq -r '.SteamAppId')
+    client_steam_app_id=$("$MODULE" info "$bp" --json 2>&1 | jq -r '.ClientSteamAppId')
     assert_not_null "$steam_app_id" "${bp}: SteamAppId should be set"
     assert_not_equals "0" "$steam_app_id" "${bp}: SteamAppId should be a real Steam id"
+    assert_not_null "$client_steam_app_id" "${bp}: ClientSteamAppId should be set"
+    assert_not_equals "0" "$client_steam_app_id" "${bp}: ClientSteamAppId should be a real Steam id"
   done
 
-  local factorio_steam_id
+  local factorio_steam_id factorio_client_steam_id
   factorio_steam_id=$("$MODULE" info factorio --json 2>&1 | jq -r '.SteamAppId')
+  factorio_client_steam_id=$("$MODULE" info factorio --json 2>&1 | jq -r '.ClientSteamAppId')
   assert_equals "0" "$factorio_steam_id" "factorio: SteamAppId should be 0 (non-Steam)"
+  assert_equals "0" "$factorio_client_steam_id" "factorio: ClientSteamAppId should be 0 (non-Steam)"
 }
 
 # =============================================================================
