@@ -227,7 +227,11 @@ function test_json_output() {
   local info_json
   info_json=$("$MODULE" info vrising --json 2>&1)
   assert_equals 0 "$?" "blueprints info vrising --json should succeed"
-  # Container ports are derived from the embedded compose.
-  assert_contains "$(echo "$info_json" | jq -r '.Ports')" "9876/udp" \
-    "vrising info --json should expose derived ports"
+  # Container ports are derived from the embedded compose, emitted as the canonical
+  # structured array [{start,end,protocol}] (the same shape `instances info --json` uses).
+  assert_equals "array" "$(echo "$info_json" | jq -r '.Ports | type')" \
+    "vrising info --json Ports should be a structured array"
+  assert_equals "true" \
+    "$(echo "$info_json" | jq -r 'any(.Ports[]; .start==9876 and .protocol=="udp")')" \
+    "vrising info --json should expose derived ports as structured {start,end,protocol}"
 }

@@ -208,11 +208,19 @@ function __logic_get_blueprint_info_json() {
     BaseDiskMb: .base_disk_mb
   }')
 
-  # Top-level fields are emitted exactly as before (strings via --arg) so existing
-  # C# consumers bind unchanged; only the Metadata object is added.
+  # Ports as the canonical structured array [{start,end,protocol}] — the SAME shape
+  # `instances info --json` emits — so no machine consumer (kgsm-lib Blueprint.Ports,
+  # kgsm-api's library catalog) re-parses an opaque port string. Native ports come from the
+  # blueprint's UFW-style spec; container ports are derived into the same spec by
+  # __source_blueprint. An empty or malformed spec yields "[]" (always valid JSON).
+  local ports_json
+  ports_json=$(__ufw_ports_to_json "$blueprint_ports")
+
+  # Other top-level fields stay strings (--arg); only Ports moved to the structured array
+  # and the Metadata object is nested.
   jq -n \
     --arg name "$blueprint_name" \
-    --arg ports "$blueprint_ports" \
+    --argjson ports "$ports_json" \
     --arg blueprint_type "$blueprint_type" \
     --arg steam_app_id "$blueprint_steam_app_id" \
     --arg client_steam_app_id "$blueprint_client_steam_app_id" \

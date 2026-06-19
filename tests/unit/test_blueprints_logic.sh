@@ -240,6 +240,16 @@ function test_info_json_native() {
   assert_equals "factorio" "$(echo "$output" | jq -r '.Name')" "Name should be factorio"
   assert_equals "Native" "$(echo "$output" | jq -r '.BlueprintType')" "BlueprintType should be Native"
   assert_not_null "$(echo "$output" | jq -r '.ExecutableFile')" "ExecutableFile should be present"
+  # Ports are the canonical structured array [{start,end,protocol}] — the same shape
+  # `instances info --json` emits, not the legacy UFW string. factorio declares "34197"
+  # (no protocol) so it expands to one tcp + one udp mapping.
+  assert_equals "array" "$(echo "$output" | jq -r '.Ports | type')" "Ports should be a structured array"
+  assert_equals "true" \
+    "$(echo "$output" | jq -r 'any(.Ports[]; .start==34197 and .end==34197 and .protocol=="tcp")')" \
+    "Ports should carry the structured 34197/tcp mapping"
+  assert_equals "true" \
+    "$(echo "$output" | jq -r 'any(.Ports[]; .start==34197 and .protocol=="udp")')" \
+    "A protocol-less spec should expand to a udp mapping too"
 }
 
 function test_info_json_container_derives_ports() {
@@ -247,8 +257,12 @@ function test_info_json_container_derives_ports() {
   output=$(__logic_get_blueprint_info_json "vrising")
   assert_equals "$EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED" "$?" "Should return success code"
   assert_equals "Container" "$(echo "$output" | jq -r '.BlueprintType')" "BlueprintType should be Container"
-  # Ports are derived from the embedded compose (host/proto, pipe-joined).
-  assert_contains "$(echo "$output" | jq -r '.Ports')" "9876/udp" "Container ports should be derived from compose"
+  # Container ports are derived from the embedded compose, then emitted as the SAME
+  # canonical structured array [{start,end,protocol}] as native blueprints.
+  assert_equals "array" "$(echo "$output" | jq -r '.Ports | type')" "Ports should be a structured array"
+  assert_equals "true" \
+    "$(echo "$output" | jq -r 'any(.Ports[]; .start==9876 and .protocol=="udp")')" \
+    "Container ports should be derived from compose as structured {start,end,protocol}"
   assert_equals "" "$(echo "$output" | jq -r '.ExecutableFile')" "Native-only fields should be empty for containers"
 }
 
