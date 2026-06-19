@@ -130,6 +130,44 @@ function test_invalid_instance() {
 }
 
 # =============================================================================
+# FORCE FLAG TESTS (the non-interactive contract — flag parsing only, no destruction)
+# =============================================================================
+
+function test_force_flag_recognized() {
+  log_test_step "Testing that --force is a recognized option (not an unknown flag)"
+
+  # --force is accepted and parsing proceeds to instance validation (→ not found),
+  # never the "Unknown option" path. Safe: validation precedes any removal.
+  local output
+  output=$("$MODULE" --force nonexistent_instance_xyz_12345 2>&1 || true)
+  assert_not_contains "$output" "Unknown option" \
+    "--force should be a recognized flag, not an unknown option"
+  assert_contains "$output" "not found" \
+    "Parsing should proceed to instance validation with --force"
+}
+
+function test_short_yes_flag_recognized() {
+  log_test_step "Testing that -y is a recognized option"
+
+  local output
+  output=$("$MODULE" -y nonexistent_instance_xyz_12345 2>&1 || true)
+  assert_not_contains "$output" "Unknown option" \
+    "-y should be a recognized flag, not an unknown option"
+  assert_contains "$output" "not found" "Parsing should proceed to validation with -y"
+}
+
+function test_force_flag_after_instance() {
+  log_test_step "Testing that --force is parsed even when it follows the instance name"
+
+  # The arg loop must not stop at the first positional — order independence.
+  local output
+  output=$("$MODULE" nonexistent_instance_xyz_12345 --force 2>&1 || true)
+  assert_not_contains "$output" "Unknown option" \
+    "--force after the instance name should still be recognized"
+  assert_contains "$output" "not found" "Parsing should reach validation regardless of flag order"
+}
+
+# =============================================================================
 # HELP OUTPUT STRUCTURE TESTS
 # =============================================================================
 

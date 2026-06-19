@@ -232,7 +232,10 @@ function test_uninstall_cancels_on_no_answer() {
   echo "n" | "$UNINSTALL_MODULE" "$instance_name" 2>/dev/null
   local exit_code=$?
 
-  assert_equals 0 "$exit_code" "uninstall.sh should succeed (exit 0) when cancelled"
+  # A declined uninstall returns EC_CANCELLED (non-zero), NOT 0 — a silent success on
+  # cancellation would let a non-interactive caller believe the instance was removed.
+  assert_equals "$EC_CANCELLED" "$exit_code" \
+    "uninstall.sh should return EC_CANCELLED when declined (never a masquerading exit 0)"
 
   # Instance should still exist after cancellation
   local instance_config
@@ -271,6 +274,28 @@ function test_uninstall_removes_instance_config() {
     "instances find should fail after uninstall (instance removed)"
 
   # Cleanup any remaining partial state
+  __cleanup_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" 2>/dev/null || true
+}
+
+# TEST 9b: uninstall.sh --force removes the instance with NO prompt (non-interactive path)
+function test_uninstall_force_removes_without_prompt() {
+  log_test_step "Testing: uninstall.sh --force removes the instance with no confirmation prompt"
+
+  local instance_name="test-uninstall-force-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Instance creation should succeed"
+
+  # No piped input — --force must skip the prompt entirely (the non-interactive contract
+  # kgsm-lib / the API rely on). </dev/null guarantees a read would EOF (and fail) if it ran.
+  "$UNINSTALL_MODULE" --force "$instance_name" >/dev/null 2>&1 </dev/null
+  local uninstall_exit=$?
+
+  assert_equals 0 "$uninstall_exit" "uninstall.sh --force should succeed without a prompt"
+
+  # Instance should be gone.
+  "$INSTANCES_MODULE" find "$instance_name" 2>/dev/null
+  assert_not_equals 0 "$?" "instances find should fail after a --force uninstall (instance removed)"
+
   __cleanup_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" 2>/dev/null || true
 }
 

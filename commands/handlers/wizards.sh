@@ -544,8 +544,10 @@ function __logic_wizard_uninstall_instance() {
   local uninstall_module
   uninstall_module=$(__find_command uninstall.sh) || return $EC_FAILED_SOURCE
 
-  # Execute uninstall
-  "$uninstall_module" "$_instance_name" >/dev/null 2>&1
+  # Execute uninstall. --force skips uninstall.sh's own prompt: the wizard has
+  # already confirmed with the user (and its stdout/stderr are suppressed here, so a
+  # second prompt would be invisible and hang on hidden input).
+  "$uninstall_module" --force "$_instance_name" >/dev/null 2>&1
   return $?
 }
 export -f __logic_wizard_uninstall_instance

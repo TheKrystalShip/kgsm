@@ -97,6 +97,9 @@ export EC_INVALID_INSTANCE
 declare -g -r EC_FAILED_MV=30
 export EC_FAILED_MV
 
+declare -g -r EC_CANCELLED=31
+export EC_CANCELLED
+
 declare -g -r EC_FAILED_TOUCH=32
 export EC_FAILED_TOUCH
 
@@ -314,6 +317,7 @@ declare -A EXIT_CODES=(
    [$EC_FAILED_SOURCE]="Failed to source file"
    [$EC_MISSING_ARG]="Missing argument"
    [$EC_INVALID_ARG]="Invalid argument"
+   [$EC_CANCELLED]="Operation cancelled"
    [$EC_FAILED_CD]="Failed to move into directory"
    [$EC_FAILED_CP]="Failed to copy"
    [$EC_FAILED_RM]="Failed to remove"

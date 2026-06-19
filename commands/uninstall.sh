@@ -35,9 +35,12 @@ ${UNDERLINE}Arguments:${END}
 
 ${UNDERLINE}Options:${END}
   -h, --help                  Display this help information
+  -y, --force, --yes          Skip the confirmation prompt (for non-interactive
+                              callers; the destructive intent is confirmed already)
 
 ${UNDERLINE}Examples:${END}
   ${self} factorio-01
+  ${self} factorio-01 --force
   ${self} my-server --help
 
 ${UNDERLINE}Warning:${END}
@@ -48,12 +51,19 @@ ${UNDERLINE}Warning:${END}
 
 function _uninstall() {
   local instance=""
+  local force=0
 
   while [[ "$#" -gt 0 ]]; do
     case $1 in
       -h | --help | help)
         show_usage
         return 0
+        ;;
+      --force | -y | --yes)
+        # Skip the interactive confirmation — for non-interactive callers (kgsm-lib,
+        # the API, the TUI wizard which already confirms). The destructive intent is
+        # confirmed by the caller, not a TTY prompt.
+        force=1
         ;;
       -*)
         __print_error "Unknown option: $1"
@@ -63,7 +73,6 @@ function _uninstall() {
         ;;
       *)
         instance="$1"
-        break
         ;;
     esac
     shift
@@ -90,23 +99,27 @@ function _uninstall() {
     return $EC_GENERAL
   }
 
-  # Warning message about destructive operation
-  __print_warning "This operation is destructive and irreversible."
-  echo ""
-  echo "The following will be permanently deleted:"
-  echo "  - Installation files"
-  echo "  - Server logs"
-  echo "  - World saves and backups"
-  echo "  - All configuration files"
-  echo "  - Associated system files (firewall rules, symlinks, etc.)"
-  echo ""
+  # Warning + confirmation prompt — skipped when --force is given (a non-interactive
+  # caller has already confirmed the destructive intent). A declined prompt returns a
+  # non-zero EC_CANCELLED, never 0: a silent success on cancellation would let a
+  # non-interactive caller (no TTY, no --force) believe the instance was removed.
+  if [[ "$force" -ne 1 ]]; then
+    __print_warning "This operation is destructive and irreversible."
+    echo ""
+    echo "The following will be permanently deleted:"
+    echo "  - Installation files"
+    echo "  - Server logs"
+    echo "  - World saves and backups"
+    echo "  - All configuration files"
+    echo "  - Associated system files (firewall rules, symlinks, etc.)"
+    echo ""
 
-  # Confirmation prompt
-  read -rp "Are you sure you want to uninstall instance '$instance'? (y/N): " confirmation
+    read -rp "Are you sure you want to uninstall instance '$instance'? (y/N): " confirmation
 
-  if [[ ! "$confirmation" =~ ^[Yy]$ ]]; then
-    __print_info "Uninstall cancelled"
-    return 0
+    if [[ ! "$confirmation" =~ ^[Yy]$ ]]; then
+      __print_info "Uninstall cancelled"
+      return $EC_CANCELLED
+    fi
   fi
 
   __print_info "Uninstalling instance '$instance'..."
