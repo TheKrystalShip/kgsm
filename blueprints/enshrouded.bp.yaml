@@ -47,11 +47,20 @@ container:
           - type: bind
             source: ${instance_temp_dir}
             target: /opt/enshrouded/temp
+          # Player-presence event channel: the in-image shim writes
+          # events.ndjson here; the kgsm-watchdog tails it.
+          - type: bind
+            source: ${instance_events_dir}
+            target: /run/kgsm
 
         # Environment variables passed to the container
         environment:
           INSTANCE_AUTO_UPDATE: ${instance_auto_update}
           STEAMCMD_ADDITIONAL_ARGS: ""
+          # Player-presence detection patterns (base64-encoded; empty = that
+          # detection is disabled until a curated regex is set on the blueprint).
+          KGSM_PLAYER_JOINED_REGEX_B64: ${instance_player_joined_regex_b64}
+          KGSM_PLAYER_LEFT_REGEX_B64: ${instance_player_left_regex_b64}
 
         # Restart policy to keep the container running
         restart: unless-stopped

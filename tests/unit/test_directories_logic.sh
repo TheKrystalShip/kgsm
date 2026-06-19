@@ -261,13 +261,15 @@ function test_create_directories_success() {
   assert_equals "$exit_code" "$EC_SUCCESS_DIRECTORIES_CREATED" \
     "Should return EC_SUCCESS_DIRECTORIES_CREATED"
 
-  # Verify all 6 directories were created
+  # Verify all 7 directories were created (working_dir + 6 subdirs, incl. the
+  # player-presence events dir bind-mounted into container instances).
   assert_dir_exists "$working_dir" "working_dir should be created"
   assert_dir_exists "$working_dir/backups" "backups_dir should be created"
   assert_dir_exists "$working_dir/install" "install_dir should be created"
   assert_dir_exists "$working_dir/saves" "saves_dir should be created"
   assert_dir_exists "$working_dir/temp" "temp_dir should be created"
   assert_dir_exists "$working_dir/logs" "logs_dir should be created"
+  assert_dir_exists "$working_dir/events" "events_dir should be created"
 
   # Verify config file was updated
   assert_file_contains "$config_file" "working_dir" "Config should contain working_dir"
@@ -276,6 +278,7 @@ function test_create_directories_success() {
   assert_file_contains "$config_file" "saves_dir" "Config should contain saves_dir"
   assert_file_contains "$config_file" "temp_dir" "Config should contain temp_dir"
   assert_file_contains "$config_file" "logs_dir" "Config should contain logs_dir"
+  assert_file_contains "$config_file" "events_dir" "Config should contain events_dir"
 
   # Cleanup
   rm -rf "$working_dir" "$config_file"

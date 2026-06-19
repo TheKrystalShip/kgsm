@@ -46,6 +46,11 @@ container:
           - type: bind
             source: ${instance_temp_dir}
             target: /opt/abioticfactor/temp
+          # Player-presence event channel: the in-image shim writes
+          # events.ndjson here; the kgsm-watchdog tails it.
+          - type: bind
+            source: ${instance_events_dir}
+            target: /run/kgsm
 
         # Environment variables for the game server
         environment:
@@ -58,6 +63,10 @@ container:
           STEAM_SERVER_NAME: KGSM
           WORLD_SAVE_NAME: Cascade
           ADDITIONAL_LAUNCH_ARGS: ""
+          # Player-presence detection patterns (base64-encoded; empty = that
+          # detection is disabled until a curated regex is set on the blueprint).
+          KGSM_PLAYER_JOINED_REGEX_B64: ${instance_player_joined_regex_b64}
+          KGSM_PLAYER_LEFT_REGEX_B64: ${instance_player_left_regex_b64}
 
         # Restart policy to ensure the container restarts automatically
         restart: unless-stopped

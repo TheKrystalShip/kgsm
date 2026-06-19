@@ -289,6 +289,18 @@ function __source_blueprint() {
   declare -g blueprint_name; blueprint_name=$(__bp_yaml_field "$bp" '.name')
   declare -g blueprint_runtime; blueprint_runtime=$(__bp_yaml_field "$bp" '.runtime')
 
+  # Player-presence detection patterns (top-level, runtime-agnostic). Optional;
+  # empty/unset means that detection is disabled (honest unknown, no event).
+  # Kept top-level rather than under native:/container: because the native field
+  # family is emptied for container runtime, and Increment 1 wires them only for
+  # containers (the in-image shim reads them). They are forwarded to the
+  # container, base64-encoded, as instance variables (see instances handler).
+  # Patterns are authored from real server output — never guessed.
+  declare -g blueprint_player_joined_regex
+  blueprint_player_joined_regex=$(__bp_yaml_field "$bp" '.player_joined_regex')
+  declare -g blueprint_player_left_regex
+  blueprint_player_left_regex=$(__bp_yaml_field "$bp" '.player_left_regex')
+
   # Native field family — default everything empty so a container source (or a
   # re-source of a different blueprint) cannot leak stale values.
   declare -g blueprint_ports=""
@@ -330,7 +342,8 @@ function __source_blueprint() {
     blueprint_level_name blueprint_executable_subdirectory \
     blueprint_executable_file blueprint_executable_arguments \
     blueprint_stop_command blueprint_save_command \
-    blueprint_startup_success_regex
+    blueprint_startup_success_regex \
+    blueprint_player_joined_regex blueprint_player_left_regex
 }
 
 export -f __source_blueprint

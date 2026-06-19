@@ -114,8 +114,8 @@ function test_validate_event_type_empty_returns_error() {
     "Should return EC_EVENT_TYPE_INVALID for empty parameter"
 }
 
-function test_validate_event_type_all_35_constants() {
-  log_test_step "Testing __logic_validate_event_type with all 35 event constants"
+function test_validate_event_type_all_37_constants() {
+  log_test_step "Testing __logic_validate_event_type with all 37 event constants"
 
   local event_types=(
     "instance_created"
@@ -153,6 +153,8 @@ function test_validate_event_type_all_35_constants() {
     "instance_uninstalled"
     "instance_ports_opened"
     "instance_ports_closed"
+    "instance_player_joined"
+    "instance_player_left"
   )
 
   local failed_events=()
@@ -164,7 +166,7 @@ function test_validate_event_type_all_35_constants() {
   done
 
   assert_equals "${#failed_events[@]}" "0" \
-    "All 35 event types should be valid. Failed: ${failed_events[*]}"
+    "All 37 event types should be valid. Failed: ${failed_events[*]}"
 }
 
 function test_validate_event_type_case_sensitive() {
@@ -429,8 +431,8 @@ function test_get_param_spec_output_format_space_separated() {
     "Should contain spaces between parameters"
 }
 
-function test_get_param_spec_all_35_events() {
-  log_test_step "Testing __logic_get_event_param_spec for all 35 events"
+function test_get_param_spec_all_37_events() {
+  log_test_step "Testing __logic_get_event_param_spec for all 37 events"
 
   local event_types=(
     "instance_created"
@@ -468,6 +470,8 @@ function test_get_param_spec_all_35_events() {
     "instance_uninstalled"
     "instance_ports_opened"
     "instance_ports_closed"
+    "instance_player_joined"
+    "instance_player_left"
   )
 
   local failed_events=()
@@ -482,7 +486,7 @@ function test_get_param_spec_all_35_events() {
   done
 
   assert_equals "${#failed_events[@]}" "0" \
-    "All 35 events should return valid specs. Failed: ${failed_events[*]}"
+    "All 37 events should return valid specs. Failed: ${failed_events[*]}"
 }
 
 function test_get_param_spec_firewall_ports_events() {
@@ -496,6 +500,90 @@ function test_get_param_spec_firewall_ports_events() {
     "instance_ports_opened should require 'instance ports'"
   assert_equals "instance ports" "$spec_closed" \
     "instance_ports_closed should require 'instance ports'"
+}
+
+# =============================================================================
+# TESTS: player-presence events (nullable player_id / player_name)
+# =============================================================================
+# player_id and player_name are deliberately ABSENT from the EVENT_CONFIGS spec
+# (only `instance` is required) so the validator never forces them non-empty —
+# their nullability is what keeps the wire honest. The JSON-null rendering of an
+# omitted value lives in _build_event_payload and is covered by the command-layer
+# payload test, not here (this file tests pure logic only).
+
+function test_validate_event_type_player_events() {
+  log_test_step "Testing __logic_validate_event_type for player-presence events"
+
+  __logic_validate_event_type "instance_player_joined"
+  local joined_code=$?
+  __logic_validate_event_type "instance_player_left"
+  local left_code=$?
+
+  assert_equals "$joined_code" "$EC_SUCCESS" \
+    "instance_player_joined should be a valid event type"
+  assert_equals "$left_code" "$EC_SUCCESS" \
+    "instance_player_left should be a valid event type"
+}
+
+function test_get_param_spec_player_events_instance_only() {
+  log_test_step "Testing player-presence events require only 'instance'"
+
+  local spec_joined spec_left
+  spec_joined=$(__logic_get_event_param_spec "instance_player_joined")
+  spec_left=$(__logic_get_event_param_spec "instance_player_left")
+
+  # Only `instance` is required: player_id/player_name are nullable, so they are
+  # intentionally NOT part of the required-param spec.
+  assert_equals "instance" "$spec_joined" \
+    "instance_player_joined should require only 'instance' (id/name nullable)"
+  assert_equals "instance" "$spec_left" \
+    "instance_player_left should require only 'instance' (id/name nullable)"
+}
+
+function test_validate_params_player_joined_instance_only() {
+  log_test_step "Testing instance_player_joined validates with only the instance"
+
+  # A join with neither id nor name supplied must still pass validation — the
+  # at-least-one-non-null guarantee is the emitting shim's job, not KGSM's.
+  __logic_validate_event_params "instance_player_joined" "test_instance"
+  local exit_code=$?
+
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "instance_player_joined should validate with only the instance param"
+}
+
+function test_validate_params_player_joined_with_id_and_name() {
+  log_test_step "Testing instance_player_joined validates with id and name"
+
+  __logic_validate_event_params "instance_player_joined" \
+    "test_instance" "76561198000000000" "Alice"
+  local exit_code=$?
+
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "instance_player_joined should validate with instance, id and name"
+}
+
+function test_validate_params_player_left_empty_instance_fails() {
+  log_test_step "Testing instance_player_left rejects an empty instance"
+
+  __logic_validate_event_params "instance_player_left" "" 2>/dev/null
+  local exit_code=$?
+
+  assert_equals "$exit_code" "$EC_EVENT_PARAMS_INVALID" \
+    "instance_player_left should reject an empty required instance param"
+}
+
+function test_event_name_to_type_player_events() {
+  log_test_step "Testing dash-to-underscore conversion for player events"
+
+  local joined left
+  joined=$(__logic_event_name_to_type "instance-player-joined")
+  left=$(__logic_event_name_to_type "instance-player-left")
+
+  assert_equals "$joined" "instance_player_joined" \
+    "Should convert 'instance-player-joined' to 'instance_player_joined'"
+  assert_equals "$left" "instance_player_left" \
+    "Should convert 'instance-player-left' to 'instance_player_left'"
 }
 
 # =============================================================================
@@ -724,12 +812,12 @@ function test_edge_case_all_events_have_configs() {
 }
 
 function test_edge_case_event_count_matches_configs() {
-  log_test_step "Testing EVENT_CONFIGS count matches expected 35 events"
+  log_test_step "Testing EVENT_CONFIGS count matches expected 37 events"
 
   local config_count="${#EVENT_CONFIGS[@]}"
 
-  assert_equals "$config_count" "35" \
-    "EVENT_CONFIGS should contain exactly 35 entries (found: $config_count)"
+  assert_equals "$config_count" "37" \
+    "EVENT_CONFIGS should contain exactly 37 entries (found: $config_count)"
 }
 
 # Conformance guard: every event a call site actually emits must be registered

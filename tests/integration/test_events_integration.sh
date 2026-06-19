@@ -917,3 +917,160 @@ function test_emit_ports_opened_payload_carries_structured_ports() {
     "Second entry should preserve the tcp range"
 }
 
+# =============================================================================
+# TEST: instance_player_joined renders id AND name when both are supplied.
+# Captures the real _build_event_payload output over the socket transport to
+# prove the PlayerId/PlayerName Data shape (the keys this repo DEFINES — only the
+# param names were frozen in the contract, not the Data keys).
+# =============================================================================
+
+function test_emit_player_joined_payload_carries_id_and_name() {
+  log_test_step "Testing: instance_player_joined payload carries PlayerId and PlayerName"
+
+  if ! command -v socat > /dev/null 2>&1; then
+    skip_test "socat not available - skipping payload capture test"
+    return
+  fi
+
+  # Deterministic socket path (don't depend on sandbox config defaults).
+  export config_event_socket_filenames=""
+  export config_event_socket_filename="kgsm.sock"
+  local socket_file="$KGSM_ROOT/kgsm.sock"
+  local capture="$KGSM_TEST_SANDBOX/player-joined-capture.json"
+  rm -f "$socket_file" "$capture"
+
+  # One-shot listener: accept a single connection, copy its bytes to the file.
+  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
+  local listener_pid=$!
+
+  # Bounded wait for the socket node to exist.
+  local i=0
+  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  local sock_ready="false"
+  [[ -S "$socket_file" ]] && sock_ready="true"
+  assert_true "$sock_ready" "socat listener should create the socket node"
+
+  _enable_broadcasting
+  _enable_socket_events
+
+  # Emit exactly as the watchdog forwarder does: instance, player_id, player_name
+  # as the three positional params (the latter two are NOT in EVENT_CONFIGS).
+  "$EVENTS_MODULE" emit instance-player-joined player-test-server \
+    "76561198000000000" "Alice" > /dev/null 2>&1 || true
+
+  # Bounded wait for the captured payload to land.
+  i=0
+  while [[ ! -s "$capture" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+
+  # Tear down the listener and restore transport config before asserting.
+  kill "$listener_pid" 2> /dev/null || true
+  wait "$listener_pid" 2> /dev/null || true
+  _disable_socket_events
+  _disable_broadcasting
+  rm -f "$socket_file"
+
+  local payload
+  payload=$(cat "$capture" 2> /dev/null)
+  assert_not_null "$payload" "Captured event payload should not be empty"
+
+  local event_type instance player_id player_name
+  event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)
+  instance=$(echo "$payload" | jq -r '.Data.InstanceName' 2> /dev/null)
+  player_id=$(echo "$payload" | jq -r '.Data.PlayerId' 2> /dev/null)
+  player_name=$(echo "$payload" | jq -r '.Data.PlayerName' 2> /dev/null)
+
+  assert_equals "instance_player_joined" "$event_type" \
+    "EventType should be instance_player_joined"
+  assert_equals "player-test-server" "$instance" \
+    "Data.InstanceName should carry the instance"
+  assert_equals "76561198000000000" "$player_id" \
+    "Data.PlayerId should carry the supplied id"
+  assert_equals "Alice" "$player_name" \
+    "Data.PlayerName should carry the supplied name"
+}
+
+# =============================================================================
+# TEST: the HONEST-NULL behaviour — the whole point of the nullable contract.
+# A left event with only a name (no id) must render Data.PlayerId as JSON null,
+# NOT an empty string masquerading as a real id. Asserts both the jq `type` is
+# `null` and that the value is not "".
+# =============================================================================
+
+function test_emit_player_left_payload_renders_missing_id_as_json_null() {
+  log_test_step "Testing: instance_player_left renders an absent player_id as JSON null"
+
+  if ! command -v socat > /dev/null 2>&1; then
+    skip_test "socat not available - skipping payload capture test"
+    return
+  fi
+
+  # Deterministic socket path (don't depend on sandbox config defaults).
+  export config_event_socket_filenames=""
+  export config_event_socket_filename="kgsm.sock"
+  local socket_file="$KGSM_ROOT/kgsm.sock"
+  local capture="$KGSM_TEST_SANDBOX/player-left-capture.json"
+  rm -f "$socket_file" "$capture"
+
+  # One-shot listener: accept a single connection, copy its bytes to the file.
+  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
+  local listener_pid=$!
+
+  # Bounded wait for the socket node to exist.
+  local i=0
+  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  local sock_ready="false"
+  [[ -S "$socket_file" ]] && sock_ready="true"
+  assert_true "$sock_ready" "socat listener should create the socket node"
+
+  _enable_broadcasting
+  _enable_socket_events
+
+  # Only a name is known: pass an EMPTY player_id positional, then the name. The
+  # empty id must surface as JSON null, never the string "".
+  "$EVENTS_MODULE" emit instance-player-left player-test-server \
+    "" "Bob" > /dev/null 2>&1 || true
+
+  # Bounded wait for the captured payload to land.
+  i=0
+  while [[ ! -s "$capture" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+
+  # Tear down the listener and restore transport config before asserting.
+  kill "$listener_pid" 2> /dev/null || true
+  wait "$listener_pid" 2> /dev/null || true
+  _disable_socket_events
+  _disable_broadcasting
+  rm -f "$socket_file"
+
+  local payload
+  payload=$(cat "$capture" 2> /dev/null)
+  assert_not_null "$payload" "Captured event payload should not be empty"
+
+  local event_type player_name id_type player_name_type
+  event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)
+  player_name=$(echo "$payload" | jq -r '.Data.PlayerName' 2> /dev/null)
+  # `type` distinguishes a real JSON null from the string "" — the whole point.
+  id_type=$(echo "$payload" | jq -r '.Data.PlayerId | type' 2> /dev/null)
+  player_name_type=$(echo "$payload" | jq -r '.Data.PlayerName | type' 2> /dev/null)
+
+  assert_equals "instance_player_left" "$event_type" \
+    "EventType should be instance_player_left"
+  assert_equals "null" "$id_type" \
+    "Data.PlayerId should be JSON null when no id is supplied (not an empty string)"
+  assert_equals "string" "$player_name_type" \
+    "Data.PlayerName should remain a JSON string when supplied"
+  assert_equals "Bob" "$player_name" \
+    "Data.PlayerName should carry the supplied name"
+}
+

@@ -175,6 +175,10 @@ ${UNDERLINE}Instance Backups:${END}
   instance-backup-created <instance> <source> <version>
   instance-backup-restored <instance> <source> <version>
 
+${UNDERLINE}Player Presence:${END}
+  instance-player-joined <instance> [player_id] [player_name]
+  instance-player-left <instance> [player_id] [player_name]
+
 ${UNDERLINE}Instance Removal:${END}
   instance-files-removed <instance>
   instance-directories-removed <instance>
@@ -202,6 +206,8 @@ ${UNDERLINE}Examples:${END}
   ${self} emit instance-stopped myserver manual
   ${self} emit instance-ports-opened myserver '34197/udp|27015:27020/tcp'
   ${self} emit instance-ports-closed myserver '34197/udp|27015:27020/tcp'
+  ${self} emit instance-player-joined myserver 76561198000000000 Alice
+  ${self} emit instance-player-left myserver '' Bob
 "
 }
 
@@ -404,6 +410,21 @@ function _build_event_payload() {
       data_object='{
         InstanceName: $instance,
         Ports: $ports_json
+      }'
+      ;;
+    "$EVENT_INSTANCE_PLAYER_JOINED" | "$EVENT_INSTANCE_PLAYER_LEFT")
+      # player_id/player_name are NULLABLE and are NOT in the EVENT_CONFIGS spec
+      # (only `instance` is required), so they are read positionally here rather
+      # than through param_names. An absent/empty value renders as JSON null —
+      # the same honest-null rule used for Origin — never an empty string posing
+      # as a real id/name. The at-least-one-non-null guarantee belongs to the
+      # emitting shim, not to KGSM (a faithful emitter).
+      jq_args+=(--arg player_id "${params[1]:-}"
+        --arg player_name "${params[2]:-}")
+      data_object='{
+        InstanceName: $instance,
+        PlayerId: ($player_id | if . == "" then null else . end),
+        PlayerName: ($player_name | if . == "" then null else . end)
       }'
       ;;
     *)

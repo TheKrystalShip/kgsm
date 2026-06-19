@@ -70,6 +70,20 @@ metadata:
   base_disk_mb: null         # install footprint (MB); grows with saves/mods
 
 # -----------------------------------------------------------------------------
+# Player-presence detection (optional, top-level — applies to both runtimes)
+# -----------------------------------------------------------------------------
+# Regexes matched against the game server's log output to detect a player
+# joining/leaving. For OUR container images the in-image shim does the matching
+# and self-reports; KGSM forwards these patterns to the container as the env
+# vars KGSM_PLAYER_JOINED_REGEX_B64 / KGSM_PLAYER_LEFT_REGEX_B64 (base64-encoded
+# — see the container vars below). Leave EMPTY/unset to disable that detection
+# (honest unknown — no event is invented). Author these from REAL server output,
+# never guessed. Optional named groups (?<id>...) / (?<name>...) populate the
+# event's player_id / player_name; at least one must match (the shim's rule).
+# player_joined_regex: ''
+# player_left_regex: ''
+
+# -----------------------------------------------------------------------------
 # NATIVE runtime (delete this block for container blueprints)
 # -----------------------------------------------------------------------------
 native:
@@ -125,6 +139,14 @@ native:
 # any ${instance_*} placeholders. UFW ports are derived from the compose ports —
 # do not add a separate top-level ports field for containers.
 #
+# Player-presence vars available to the compose body (see the top-level
+# player_*_regex fields): bind-mount the DIRECTORY ${instance_events_dir} to
+# /run/kgsm so the in-image shim can write its NDJSON channel
+# (/run/kgsm/events.ndjson) and replace it with a fresh inode each start, and
+# pass ${instance_player_joined_regex_b64} / ${instance_player_left_regex_b64}
+# (KGSM base64-encodes the regexes — raw patterns mangle through compose/shell)
+# as the KGSM_PLAYER_JOINED_REGEX_B64 / KGSM_PLAYER_LEFT_REGEX_B64 env vars.
+#
 # container:
 #   compose: |
 #     services:
@@ -138,4 +160,12 @@ native:
 #           - type: bind
 #             source: ${instance_install_dir}
 #             target: /opt/example/install
+#           # Player-presence event channel (the watchdog tails events.ndjson
+#           # inside this directory):
+#           - type: bind
+#             source: ${instance_events_dir}
+#             target: /run/kgsm
+#         environment:
+#           KGSM_PLAYER_JOINED_REGEX_B64: ${instance_player_joined_regex_b64}
+#           KGSM_PLAYER_LEFT_REGEX_B64: ${instance_player_left_regex_b64}
 #         restart: unless-stopped

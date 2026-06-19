@@ -40,6 +40,11 @@ temp_dir="${instance_temp_dir}"
 # Directory where the instance logs are stored
 logs_dir="${instance_logs_dir}"
 
+# (Container only) Directory bind-mounted to /run/kgsm in the container; the
+# in-container player-presence shim writes events.ndjson inside it and the
+# kgsm-watchdog tails that file.
+events_dir="${instance_events_dir}"
+
 # (Native only) Directory from which to launch the instance binary
 launch_dir="${instance_launch_dir}"
 

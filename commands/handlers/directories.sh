@@ -50,6 +50,10 @@ function __logic_create_directories() {
   fi
 
   # Define directory structure
+  # events_dir: a DIRECTORY bind-mounted to /run/kgsm in container instances. The
+  # in-container player-presence shim writes events.ndjson inside it; created
+  # here (not pre-touched as a file) so it exists with correct ownership before
+  # the container starts and Docker mounts a real directory, never a stray file.
   declare -A DIR_ARRAY=(
     ["working_dir"]="$instance_working_dir"
     ["backups_dir"]="${instance_working_dir}/backups"
@@ -57,6 +61,7 @@ function __logic_create_directories() {
     ["saves_dir"]="${instance_working_dir}/saves"
     ["temp_dir"]="${instance_working_dir}/temp"
     ["logs_dir"]="${instance_working_dir}/logs"
+    ["events_dir"]="${instance_working_dir}/events"
   )
 
   # Create directories and update config

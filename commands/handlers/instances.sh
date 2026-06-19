@@ -142,6 +142,30 @@ function __logic_create_base_instance() {
   export instance_socket_file="${instance_working_dir}/.${_instance_name}.sock"
   export instance_log_file="${instance_working_dir}/${_instance_name}.log"
 
+  # Player-presence event channel: a DIRECTORY bind-mounted to /run/kgsm in the
+  # container. The in-container detection shim writes /run/kgsm/events.ndjson
+  # inside it and the kgsm-watchdog tails that file. A directory (not a single
+  # file) mount is required: a single-file mount pins the host inode for the
+  # mount's lifetime, so the shim could never surface a fresh inode on restart
+  # (the watchdog keys on inode change), and Docker would auto-create a missing
+  # host file path as a root-owned directory. The dir itself is created at
+  # instance creation (see __logic_create_directories) so it carries correct
+  # ownership before the container starts.
+  export instance_events_dir="${instance_working_dir}/events"
+
+  # Player-presence detection patterns, forwarded to the container shim across
+  # the env boundary base64-encoded (raw regex through compose-YAML→shell→shim
+  # mangles $/quotes/backslashes/<>). An empty/unset blueprint pattern yields an
+  # empty string here → that detection is disabled in the shim (honest unknown).
+  export instance_player_joined_regex_b64
+  instance_player_joined_regex_b64=$(
+    printf '%s' "${blueprint_player_joined_regex:-}" | base64 -w0
+  )
+  export instance_player_left_regex_b64
+  instance_player_left_regex_b64=$(
+    printf '%s' "${blueprint_player_left_regex:-}" | base64 -w0
+  )
+
   export instance_startup_success_regex="${blueprint_startup_success_regex:-}"
 
   export instance_install_subdir

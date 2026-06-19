@@ -133,6 +133,21 @@ export EVENT_INSTANCE_PORTS_OPENED
 declare -g -r EVENT_INSTANCE_PORTS_CLOSED="instance_ports_closed"
 export EVENT_INSTANCE_PORTS_CLOSED
 
+# Player-presence events. Emitted on behalf of a running game server when a
+# player joins or leaves. For our container images these are forwarded by the
+# kgsm-watchdog, which tails the in-container event channel and re-emits via
+# kgsm-lib (origin=system, actor=null — an autonomous observation). Only the
+# `instance` param is required in EVENT_CONFIGS: `player_id` and `player_name`
+# are NULLABLE (a source may give only one) and are handled out-of-band in
+# _build_event_payload, where an empty value renders as JSON null — never an
+# empty string masquerading as a real value. KGSM never fabricates the missing
+# half (the at-least-one-non-null guarantee is the emitting shim's job).
+declare -g -r EVENT_INSTANCE_PLAYER_JOINED="instance_player_joined"
+export EVENT_INSTANCE_PLAYER_JOINED
+
+declare -g -r EVENT_INSTANCE_PLAYER_LEFT="instance_player_left"
+export EVENT_INSTANCE_PLAYER_LEFT
+
 # Event parameter specifications
 declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_CREATED"]="instance blueprint"
@@ -170,6 +185,10 @@ declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_UNINSTALLED"]="instance"
   ["$EVENT_INSTANCE_PORTS_OPENED"]="instance ports"
   ["$EVENT_INSTANCE_PORTS_CLOSED"]="instance ports"
+  # Only `instance` is required — player_id/player_name are nullable and
+  # validated/rendered out-of-band (see _build_event_payload).
+  ["$EVENT_INSTANCE_PLAYER_JOINED"]="instance"
+  ["$EVENT_INSTANCE_PLAYER_LEFT"]="instance"
 )
 
 # Validates that an event type is supported
