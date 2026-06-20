@@ -94,6 +94,14 @@ auto_update="${instance_auto_update_before_start:-false}"
 # Regex pattern to match the startup success message in the log file
 startup_success_regex="${instance_startup_success_regex}"
 
+# Player-presence detection patterns (from the blueprint). For a NATIVE instance
+# the kgsm-watchdog reads these (via `instances info --json`) and matches them
+# against this instance's log to emit player join/left events. Empty = that
+# detection is disabled (honest unknown). Containers use the base64 env form +
+# in-image shim instead; the matching engine differs (.NET here, Perl in-shim).
+player_joined_regex="${instance_player_joined_regex:-}"
+player_left_regex="${instance_player_left_regex:-}"
+
 #=============================================================================
 # GAME SERVER EXECUTABLE CONFIGURATION
 # Settings for running the actual game server binary

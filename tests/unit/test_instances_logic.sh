@@ -385,6 +385,68 @@ function test_create_base_instance_native_blueprint() {
     "Config should contain instance name"
 }
 
+function test_create_base_instance_materializes_player_patterns() {
+  log_test_step "Testing __logic_create_base_instance materializes blueprint player-presence patterns into the config"
+
+  local blueprint="factorio"
+  local instance_name="test-base-player-patterns"
+
+  # Setup prerequisites
+  _setup_instance_prereqs "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
+  # Set player-presence patterns on the sandboxed blueprint (yq is a kgsm hard
+  # dep). These flow blueprint -> blueprint_player_*_regex (loader) ->
+  # instance_player_*_regex (export) -> instance.tp -> config, so the watchdog
+  # can read them off `instances info --json` for native detection. Plain literal
+  # tokens (no regex metacharacters) so the grep-based assertion below matches
+  # the value verbatim — real-pattern matching is covered by the watchdog tests.
+  local blueprint_path="$KGSM_ROOT/blueprints/$blueprint.bp.yaml"
+  yq -i '.player_joined_regex = "JOINMARK"' "$blueprint_path"
+  yq -i '.player_left_regex = "LEAVEMARK"' "$blueprint_path"
+
+  local config_path
+  config_path=$(__logic_create_instance_config_file "$instance_name" "$blueprint")
+
+  __logic_create_base_instance "$config_path" "$instance_name" "$blueprint_path" "$TEST_INSTALL_DIR"
+  local exit_code=$?
+
+  assert_equals 0 "$exit_code" "Should succeed"
+
+  # The raw (un-encoded) patterns must land in the instance config verbatim.
+  assert_file_contains "$config_path" 'player_joined_regex="JOINMARK"' \
+    "Config should materialize player_joined_regex from the blueprint"
+  assert_file_contains "$config_path" 'player_left_regex="LEAVEMARK"' \
+    "Config should materialize player_left_regex from the blueprint"
+}
+
+function test_create_base_instance_player_patterns_empty_when_unset() {
+  log_test_step "Testing player-presence pattern keys are present-but-empty when the blueprint sets none"
+
+  local blueprint="factorio"
+  local instance_name="test-base-no-player-patterns"
+
+  _setup_instance_prereqs "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
+  local blueprint_path="$KGSM_ROOT/blueprints/$blueprint.bp.yaml"
+  # Order-independent: ensure the shared-sandbox blueprint has NO patterns (another
+  # test may have set them). __bp_yaml_field maps an absent key -> "" (loader.sh).
+  yq -i 'del(.player_joined_regex, .player_left_regex)' "$blueprint_path"
+
+  local config_path
+  config_path=$(__logic_create_instance_config_file "$instance_name" "$blueprint")
+
+  __logic_create_base_instance "$config_path" "$instance_name" "$blueprint_path" "$TEST_INSTALL_DIR"
+
+  # Keys always present (so `instances info --json` carries them) but empty -> the
+  # watchdog reads "" and disables native detection (honest unknown, no event).
+  assert_file_contains "$config_path" 'player_joined_regex=""' \
+    "Unset blueprint pattern should yield an empty player_joined_regex key"
+  assert_file_contains "$config_path" 'player_left_regex=""' \
+    "Unset blueprint pattern should yield an empty player_left_regex key"
+}
+
 function test_create_base_instance_container_blueprint() {
   log_test_step "Testing __logic_create_base_instance with container blueprint"
 

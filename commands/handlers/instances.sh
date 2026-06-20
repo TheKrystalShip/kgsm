@@ -166,6 +166,15 @@ function __logic_create_base_instance() {
     printf '%s' "${blueprint_player_left_regex:-}" | base64 -w0
   )
 
+  # Raw (un-encoded) player-presence patterns, materialized into the instance
+  # config (templates/instance.tp) so the kgsm-watchdog reads them off
+  # `instances info --json` to detect presence on a NATIVE instance's log (the
+  # .NET-regex analog of the container shim's matching). The container path uses
+  # the base64 env form above; this is the native delivery channel. Empty when
+  # the blueprint sets none → native detection disabled (honest unknown).
+  export instance_player_joined_regex="${blueprint_player_joined_regex:-}"
+  export instance_player_left_regex="${blueprint_player_left_regex:-}"
+
   export instance_startup_success_regex="${blueprint_startup_success_regex:-}"
 
   export instance_install_subdir

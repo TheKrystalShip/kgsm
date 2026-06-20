@@ -76,10 +76,15 @@ metadata:
 # joining/leaving. For OUR container images the in-image shim does the matching
 # and self-reports; KGSM forwards these patterns to the container as the env
 # vars KGSM_PLAYER_JOINED_REGEX_B64 / KGSM_PLAYER_LEFT_REGEX_B64 (base64-encoded
-# — see the container vars below). Leave EMPTY/unset to disable that detection
-# (honest unknown — no event is invented). Author these from REAL server output,
-# never guessed. Optional named groups (?<id>...) / (?<name>...) populate the
-# event's player_id / player_name; at least one must match (the shim's rule).
+# — see the container vars below). For a NATIVE instance the kgsm-watchdog reads
+# these (materialized into the instance config) and matches the instance's log
+# itself. Leave EMPTY/unset to disable that detection (honest unknown — no event
+# is invented). Author these from REAL server output, never guessed. Optional
+# named groups (?<id>...) / (?<name>...) populate the event's player_id /
+# player_name; at least one must match.
+# NOTE: the field is consumed by TWO regex engines depending on runtime — Perl
+# in the container shim, .NET System.Text.RegularExpressions in the watchdog —
+# so author a pattern valid in the engine of the runtime this game uses.
 # player_joined_regex: ''
 # player_left_regex: ''
 
