@@ -124,6 +124,21 @@ function test_json_malformed_is_empty_array() {
     "malformed spec must degrade to []"
 }
 
+# Cross-codebase round-trip fidelity (CONTRACT TEST). The watchdog emits the UPnP
+# (and the firewall path the ports) event by rendering the structured Instance.Ports
+# back to a UFW string via kgsm-lib PortMappingExtensions.ToUfwSpec(), then kgsm's
+# events emit re-parses that string here. The two MUST be exact inverses or the
+# audit row's ports silently differ. This locks the kgsm half against the EXACT
+# literal kgsm-lib's `ToUfwSpec_renders_single_and_range_entries_pipe_joined` test
+# asserts ToUfwSpec produces — if either side changes its format, one of the two
+# tests fails loudly. (kgsm-lib: List<PortMapping>{27015:27020/udp, 27016/tcp}.)
+function test_json_round_trips_the_lib_toufwspec_format() {
+  log_test_step "ToUfwSpec output ('27015:27020/udp|27016/tcp') re-parses to the same structured ports"
+  local expected='[{"start":27015,"end":27020,"protocol":"udp"},{"start":27016,"end":27016,"protocol":"tcp"}]'
+  assert_equals "$expected" "$(__ufw_ports_to_json '27015:27020/udp|27016/tcp')" \
+    "kgsm-lib ToUfwSpec and kgsm __ufw_ports_to_json must be exact inverses"
+}
+
 # =============================================================================
 # __expand_ufw_ports_flat() — flat expanded form (fallback port-forwarding + conflict scan)
 # =============================================================================

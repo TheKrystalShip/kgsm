@@ -141,6 +141,13 @@ ports="${instance_ports}"
 # Whether to enable firewall management (true | false)
 enable_firewall_management="${instance_enable_firewall_management:-false}"
 
+# Whether to forward this instance's ports on the router via UPnP (true | false).
+# The kgsm-watchdog reads this (via `instances info --json`) and, when true, opens
+# the ports as UPnP mappings on the IGD on bring-up and closes them on a stop —
+# best-effort, never a hard dependency. Distinct from enable_firewall_management
+# (router NAT forward vs. host ufw rule). Toggle with `instances config-set`.
+enable_port_forwarding="${instance_enable_port_forwarding:-false}"
+
 # Path to the firewall rule file
 firewall_rule_file="${instance_firewall_rule_file}"
 

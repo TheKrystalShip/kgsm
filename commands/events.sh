@@ -399,11 +399,14 @@ function _build_event_payload() {
         Restarts: $restarts
       }'
       ;;
-    "$EVENT_INSTANCE_PORTS_OPENED" | "$EVENT_INSTANCE_PORTS_CLOSED")
+    "$EVENT_INSTANCE_PORTS_OPENED" | "$EVENT_INSTANCE_PORTS_CLOSED" | "$EVENT_INSTANCE_UPNP_OPENED" | "$EVENT_INSTANCE_UPNP_CLOSED")
       # The `ports` param is the UFW-format spec; surface it as the canonical
       # structured array [{start,end,protocol}] — the same shape `instances
       # info --json` emits — never the opaque UFW string. Converted here and
       # passed via --argjson (the one non-string Data field in this builder).
+      # Shared by the firewall (instance_ports_*) and UPnP (instance_upnp_*)
+      # events — both carry the same structured Ports payload; the event TYPE
+      # distinguishes router NAT forward from host ufw rule downstream.
       local ports_json
       ports_json="$(__ufw_ports_to_json "${params[1]:-}")" || ports_json="[]"
       jq_args+=(--argjson ports_json "$ports_json")

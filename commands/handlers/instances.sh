@@ -177,6 +177,14 @@ function __logic_create_base_instance() {
 
   export instance_startup_success_regex="${blueprint_startup_success_regex:-}"
 
+  # UPnP port-forwarding gate (per-instance, materialized into the instance config).
+  # The resident supervisor (kgsm-watchdog) reads this off `instances info --json`
+  # and, when true, opens/closes the instance's ports on the router via upnpc on
+  # bring-up/stop. Seeded from the host default (config_enable_port_forwarding,
+  # default false = inert); toggle per-instance later with `instances config-set`.
+  # Distinct from enable_firewall_management (router NAT forward vs. host ufw rule).
+  export instance_enable_port_forwarding="${config_enable_port_forwarding:-false}"
+
   export instance_install_subdir
   instance_install_subdir="${blueprint_executable_subdirectory:-}"
 

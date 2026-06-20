@@ -447,6 +447,60 @@ function test_create_base_instance_player_patterns_empty_when_unset() {
     "Unset blueprint pattern should yield an empty player_left_regex key"
 }
 
+function test_create_base_instance_materializes_upnp_gate_default_false() {
+  log_test_step "Testing __logic_create_base_instance materializes the UPnP gate (default false)"
+
+  local blueprint="factorio"
+  local instance_name="test-base-upnp-default"
+
+  _setup_instance_prereqs "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
+  local blueprint_path="$KGSM_ROOT/blueprints/$blueprint.bp.yaml"
+  local config_path
+  config_path=$(__logic_create_instance_config_file "$instance_name" "$blueprint")
+
+  __logic_create_base_instance "$config_path" "$instance_name" "$blueprint_path" "$TEST_INSTALL_DIR"
+  local exit_code=$?
+  assert_equals 0 "$exit_code" "Should succeed"
+
+  # The gate key is always present (so the watchdog reads it off `instances info
+  # --json`) and defaults false = inert (no UPnP op until explicitly enabled).
+  assert_file_contains "$config_path" 'enable_port_forwarding="false"' \
+    "Config should materialize the UPnP gate defaulting to false"
+}
+
+function test_create_base_instance_upnp_gate_seeds_from_config() {
+  log_test_step "Testing the UPnP gate seeds from config_enable_port_forwarding"
+
+  local blueprint="factorio"
+  local instance_name="test-base-upnp-seeded"
+
+  _setup_instance_prereqs "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
+  local blueprint_path="$KGSM_ROOT/blueprints/$blueprint.bp.yaml"
+  local config_path
+  config_path=$(__logic_create_instance_config_file "$instance_name" "$blueprint")
+
+  # The host default (config_enable_port_forwarding) seeds each new instance; flip
+  # it true for this create and confirm it flows config -> instance var -> config
+  # file. Save/restore so it never leaks to a sibling test in the shared shell.
+  local _saved="${config_enable_port_forwarding:-}"
+  export config_enable_port_forwarding="true"
+  __logic_create_base_instance "$config_path" "$instance_name" "$blueprint_path" "$TEST_INSTALL_DIR"
+  local exit_code=$?
+  if [[ -n "$_saved" ]]; then
+    export config_enable_port_forwarding="$_saved"
+  else
+    unset config_enable_port_forwarding
+  fi
+
+  assert_equals 0 "$exit_code" "Should succeed"
+  assert_file_contains "$config_path" 'enable_port_forwarding="true"' \
+    "A true host default should materialize enable_port_forwarding=\"true\""
+}
+
 function test_create_base_instance_container_blueprint() {
   log_test_step "Testing __logic_create_base_instance with container blueprint"
 

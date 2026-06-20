@@ -114,8 +114,8 @@ function test_validate_event_type_empty_returns_error() {
     "Should return EC_EVENT_TYPE_INVALID for empty parameter"
 }
 
-function test_validate_event_type_all_37_constants() {
-  log_test_step "Testing __logic_validate_event_type with all 37 event constants"
+function test_validate_event_type_all_39_constants() {
+  log_test_step "Testing __logic_validate_event_type with all 39 event constants"
 
   local event_types=(
     "instance_created"
@@ -153,6 +153,8 @@ function test_validate_event_type_all_37_constants() {
     "instance_uninstalled"
     "instance_ports_opened"
     "instance_ports_closed"
+    "instance_upnp_opened"
+    "instance_upnp_closed"
     "instance_player_joined"
     "instance_player_left"
   )
@@ -166,7 +168,7 @@ function test_validate_event_type_all_37_constants() {
   done
 
   assert_equals "${#failed_events[@]}" "0" \
-    "All 37 event types should be valid. Failed: ${failed_events[*]}"
+    "All 39 event types should be valid. Failed: ${failed_events[*]}"
 }
 
 function test_validate_event_type_case_sensitive() {
@@ -431,8 +433,8 @@ function test_get_param_spec_output_format_space_separated() {
     "Should contain spaces between parameters"
 }
 
-function test_get_param_spec_all_37_events() {
-  log_test_step "Testing __logic_get_event_param_spec for all 37 events"
+function test_get_param_spec_all_39_events() {
+  log_test_step "Testing __logic_get_event_param_spec for all 39 events"
 
   local event_types=(
     "instance_created"
@@ -470,6 +472,8 @@ function test_get_param_spec_all_37_events() {
     "instance_uninstalled"
     "instance_ports_opened"
     "instance_ports_closed"
+    "instance_upnp_opened"
+    "instance_upnp_closed"
     "instance_player_joined"
     "instance_player_left"
   )
@@ -486,7 +490,7 @@ function test_get_param_spec_all_37_events() {
   done
 
   assert_equals "${#failed_events[@]}" "0" \
-    "All 37 events should return valid specs. Failed: ${failed_events[*]}"
+    "All 39 events should return valid specs. Failed: ${failed_events[*]}"
 }
 
 function test_get_param_spec_firewall_ports_events() {
@@ -500,6 +504,21 @@ function test_get_param_spec_firewall_ports_events() {
     "instance_ports_opened should require 'instance ports'"
   assert_equals "instance ports" "$spec_closed" \
     "instance_ports_closed should require 'instance ports'"
+}
+
+function test_get_param_spec_upnp_events() {
+  log_test_step "Testing __logic_get_event_param_spec for the UPnP port-forwarding events"
+
+  local spec_opened spec_closed
+  spec_opened=$(__logic_get_event_param_spec "instance_upnp_opened")
+  spec_closed=$(__logic_get_event_param_spec "instance_upnp_closed")
+
+  # Same 'instance ports' spec as the firewall events — both carry the structured
+  # Ports payload; the event TYPE (not the param shape) distinguishes router from host.
+  assert_equals "instance ports" "$spec_opened" \
+    "instance_upnp_opened should require 'instance ports'"
+  assert_equals "instance ports" "$spec_closed" \
+    "instance_upnp_closed should require 'instance ports'"
 }
 
 # =============================================================================
@@ -812,12 +831,12 @@ function test_edge_case_all_events_have_configs() {
 }
 
 function test_edge_case_event_count_matches_configs() {
-  log_test_step "Testing EVENT_CONFIGS count matches expected 37 events"
+  log_test_step "Testing EVENT_CONFIGS count matches expected 39 events"
 
   local config_count="${#EVENT_CONFIGS[@]}"
 
-  assert_equals "$config_count" "37" \
-    "EVENT_CONFIGS should contain exactly 37 entries (found: $config_count)"
+  assert_equals "$config_count" "39" \
+    "EVENT_CONFIGS should contain exactly 39 entries (found: $config_count)"
 }
 
 # Conformance guard: every event a call site actually emits must be registered

@@ -133,6 +133,22 @@ export EVENT_INSTANCE_PORTS_OPENED
 declare -g -r EVENT_INSTANCE_PORTS_CLOSED="instance_ports_closed"
 export EVENT_INSTANCE_PORTS_CLOSED
 
+# UPnP port-forwarding audit events. Emitted by the kgsm-watchdog (the resident
+# supervisor owns UPnP because it is process-lifetime state) when it opens/closes
+# an instance's port mappings on the local router (IGD) via upnpc — origin=system,
+# actor=system, an autonomous daemon action. DISTINCT from the firewall
+# instance_ports_* events above: a router NAT forward is a different fact from a
+# host ufw rule (a host can have one without the other), so they carry separate
+# event types and separate downstream audit actions. The `ports` parameter is the
+# UFW-format spec; the payload renders it as the canonical structured array (same
+# as the firewall events). Only a confirmed upnpc-exit-0 transition emits — never
+# a fabricated outcome.
+declare -g -r EVENT_INSTANCE_UPNP_OPENED="instance_upnp_opened"
+export EVENT_INSTANCE_UPNP_OPENED
+
+declare -g -r EVENT_INSTANCE_UPNP_CLOSED="instance_upnp_closed"
+export EVENT_INSTANCE_UPNP_CLOSED
+
 # Player-presence events. Emitted on behalf of a running game server when a
 # player joins or leaves. For our container images these are forwarded by the
 # kgsm-watchdog, which tails the in-container event channel and re-emits via
@@ -185,6 +201,8 @@ declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_UNINSTALLED"]="instance"
   ["$EVENT_INSTANCE_PORTS_OPENED"]="instance ports"
   ["$EVENT_INSTANCE_PORTS_CLOSED"]="instance ports"
+  ["$EVENT_INSTANCE_UPNP_OPENED"]="instance ports"
+  ["$EVENT_INSTANCE_UPNP_CLOSED"]="instance ports"
   # Only `instance` is required — player_id/player_name are nullable and
   # validated/rendered out-of-band (see _build_event_payload).
   ["$EVENT_INSTANCE_PLAYER_JOINED"]="instance"
