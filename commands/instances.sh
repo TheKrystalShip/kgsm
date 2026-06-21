@@ -40,6 +40,8 @@ ${UNDERLINE}Commands:${END}
                               Restore a named backup
   update <instance>           Update to the latest version (must be stopped)
   check-update <instance>     Check whether a newer version is available
+  version <instance> [--installed|--latest]
+                              Show the installed or latest version
   help [command]              Show help information
 
 ${UNDERLINE}Options:${END}
@@ -67,6 +69,7 @@ ${UNDERLINE}Examples:${END}
   $self restore-backup factorio-01 factorio-01-1234-2026-06-21T10:00:00.backup
   $self update factorio-01
   $self check-update factorio-01
+  $self version factorio-01 --latest
   $self help create
 
 ${UNDERLINE}Notes:${END}
@@ -1583,6 +1586,85 @@ function _cmd_check_update() {
   exit $?
 }
 
+function show_usage_version() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Instance Version${END}
+
+Print version information for an instance. With no flag (or --installed) prints
+the installed version; with --latest queries the latest available version. To
+ask whether a newer version exists, use '$self check-update <instance>'.
+
+${UNDERLINE}Usage:${END}
+  $self version <instance> [--installed | --latest]
+
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
+
+${UNDERLINE}Options:${END}
+  --installed                 Print the installed version (default)
+  --latest                    Print the latest available version
+  --help                      Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self version factorio-01
+  $self version factorio-01 --installed
+  $self version factorio-01 --latest
+"
+}
+
+function _cmd_version() {
+  local instance=""
+  local mode="installed"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_version
+        return 0
+        ;;
+      --installed)
+        mode="installed"
+        ;;
+      --latest)
+        mode="latest"
+        ;;
+      -*)
+        __print_error "Invalid option for version command: $1"
+        __print_error "Use '$self version --help' for usage information"
+        return $EC_INVALID_ARG
+        ;;
+      *)
+        instance="$1"
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self version --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  __source_instance "$instance"
+
+  # Read-only version query forwarded to the per-instance management file. The
+  # installed version is the management file's bare `version` (present on every
+  # management file — no regeneration/capability gate needed); --latest forwards
+  # the flag. No event (read-only).
+  case "$mode" in
+    latest)
+      "$instance_management_file" version --latest
+      ;;
+    *)
+      "$instance_management_file" version
+      ;;
+  esac
+  exit $?
+}
+
 function _cmd_help() {
   local command="$1"
 
@@ -1639,6 +1721,9 @@ function _cmd_help() {
       ;;
     check-update)
       show_usage_check_update
+      ;;
+    version)
+      show_usage_version
       ;;
     *)
       __print_error "Unknown command: $command"
@@ -1737,6 +1822,9 @@ case "$command" in
     ;;
   check-update)
     _cmd_check_update "$@"
+    ;;
+  version)
+    _cmd_version "$@"
     ;;
   *)
     __print_error "Unknown command: $command"

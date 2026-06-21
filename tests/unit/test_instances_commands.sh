@@ -742,3 +742,73 @@ function test_check_update_unknown_instance() {
   assert_not_equals 0 "$?" "check-update on a missing instance should fail"
 }
 
+# =============================================================================
+# TEST: version — installed/latest version query (backs kgsm-lib
+#       GetInstalledVersion/GetLatestVersion: `instances version <i> --installed`
+#       / `--latest`). Forwards to the management file's `version` command.
+# =============================================================================
+
+function test_help_lists_version() {
+  log_test_step "Testing main help lists the version command"
+
+  local output
+  output=$("$MODULE" help 2>&1)
+  assert_contains "$output" "version" "help should mention version"
+}
+
+function test_help_version_subcommand() {
+  log_test_step "Testing 'help version' describes the command"
+
+  local output
+  output=$("$MODULE" help version 2>&1)
+  assert_equals 0 "$?" "help version should exit 0"
+  assert_contains "$output" "version" "help version should describe the command"
+  assert_contains "$output" "--latest" "help version should document --latest"
+}
+
+function test_version_installed_default() {
+  log_test_step "Testing 'version <instance>' and '--installed' return the installed version"
+
+  local instance_name="test-version-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Instance should be created for version test"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
+
+  # No installed version file yet → the management file reports "unknown"
+  # (honest), never empty/fabricated; both bare and --installed take that path.
+  local bare installed
+  bare=$("$MODULE" version "$instance_name" 2>/dev/null)
+  assert_equals 0 "$?" "version <instance> should succeed"
+  assert_not_null "$bare" "version <instance> should print the installed version"
+
+  installed=$("$MODULE" version "$instance_name" --installed 2>/dev/null)
+  assert_equals 0 "$?" "version --installed should succeed"
+  assert_equals "$bare" "$installed" "--installed should match the bare default"
+}
+
+function test_version_missing_instance() {
+  log_test_step "Testing 'version' without instance argument fails"
+
+  "$MODULE" version 2>/dev/null
+  assert_not_equals 0 "$?" "version without instance should fail"
+}
+
+function test_version_unknown_instance() {
+  log_test_step "Testing 'version' on a nonexistent instance fails"
+
+  "$MODULE" version totally_nonexistent_instance_xyz 2>/dev/null
+  assert_not_equals 0 "$?" "version on a missing instance should fail"
+}
+
+function test_version_invalid_flag() {
+  log_test_step "Testing 'version <instance> --bogus' rejects an unknown flag"
+
+  local instance_name="test-version-badflag-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
+
+  "$MODULE" version "$instance_name" --bogus 2>/dev/null
+  assert_not_equals 0 "$?" "version with an unknown flag should fail"
+}
+
