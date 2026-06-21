@@ -2,6 +2,17 @@
 # STATUS
 # =============================================================================
 
+# Convert a date string (ps `lstart` local-time, or an RFC3339 docker timestamp) to
+# ISO-8601 UTC second-precision (YYYY-MM-DDTHH:MM:SSZ). Empty input -> empty output;
+# an unparseable input -> empty output. Never fabricates a time (a missing/bad value
+# stays empty -> JSON null downstream); converting the host's own clock to UTC is not
+# fabrication. One defined outcome per input (behavioral certainty, CLAUDE.md).
+function _to_iso_utc() {
+  local _raw="$1"
+  [[ -n "$_raw" ]] || return 0
+  date -d "$_raw" -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || return 0
+}
+
 # Get detailed container process information
 # This function provides container-specific process monitoring equivalent to native template
 function _get_container_process_info() {
@@ -125,7 +136,9 @@ function _get_status() {
           container_state_info=$(docker inspect "$container_id" --format '{{.State.Status}} {{.State.StartedAt}}' 2>/dev/null)
           if [[ -n "$container_state_info" ]]; then
             process_status=$(echo "$container_state_info" | awk '{print $1}')
-            start_time=$(echo "$container_state_info" | awk '{$1=""; print substr($0,2)}' | sed 's/T/ /' | sed 's/\..*//')
+            local _started_at
+            _started_at=$(echo "$container_state_info" | awk '{$1=""; print substr($0,2)}')
+            start_time=$(_to_iso_utc "$_started_at")
 
             # Additional container state validation using monitoring functions
             local state_details
@@ -145,7 +158,9 @@ function _get_status() {
           ps_output=$(ps -p "$container_id" -o state,lstart --no-headers 2>/dev/null)
           if [[ -n "$ps_output" ]]; then
             process_status=$(echo "$ps_output" | awk '{print $1}' | tr -d ' ')
-            start_time=$(echo "$ps_output" | awk '{$1=""; print substr($0,2)}')
+            local _lstart
+            _lstart=$(echo "$ps_output" | awk '{$1=""; print substr($0,2)}')
+            start_time=$(_to_iso_utc "$_lstart")
           fi
         fi
       fi
