@@ -34,6 +34,12 @@ ${UNDERLINE}Commands:${END}
   config-get <instance> <key> Read a value from the instance config
   config-set <instance> <key>=<value>
                               Set a runtime value in the instance config
+  backups <instance>          List available backups
+  create-backup <instance>    Create a backup (instance must be stopped)
+  restore-backup <instance> <source>
+                              Restore a named backup
+  update <instance>           Update to the latest version (must be stopped)
+  check-update <instance>     Check whether a newer version is available
   help [command]              Show help information
 
 ${UNDERLINE}Options:${END}
@@ -56,6 +62,11 @@ ${UNDERLINE}Examples:${END}
   $self config-get factorio-01 auto_update
   $self config-set factorio-01 auto_update=true
   $self config-set factorio-01 \"executable_arguments=--start-server saves/world.zip\"
+  $self backups factorio-01
+  $self create-backup factorio-01
+  $self restore-backup factorio-01 factorio-01-1234-2026-06-21T10:00:00.backup
+  $self update factorio-01
+  $self check-update factorio-01
   $self help create
 
 ${UNDERLINE}Notes:${END}
@@ -1180,6 +1191,398 @@ function _cmd_config_set() {
   esac
 }
 
+# =============================================================================
+# Tier-1 ops: backups / create-backup / restore-backup / update / check-update
+# =============================================================================
+#
+# Each forwards verbatim to the per-instance management file, which accepts the
+# same dash-free command names (see templates/manage.*.d). On a successful
+# mutation the command layer emits the matching event — the management file
+# stays event-free, mirroring the install/uninstall convention — so downstream
+# audit consumers (e.g. kgsm-api) observe it. `update` exists on every
+# management file; the backup/check-update commands are newer, so
+# _management_supports_ops gates them with an honest "regenerate" message
+# rather than leaking a raw "Unknown command" from an older management file.
+
+function show_usage_backups() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}List Instance Backups${END}
+
+List the available backups for an instance, one name per line.
+
+${UNDERLINE}Usage:${END}
+  $self backups <instance>
+
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
+
+${UNDERLINE}Options:${END}
+  --help                      Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self backups factorio-01
+"
+}
+
+function show_usage_create_backup() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Create Instance Backup${END}
+
+Create a backup of an instance's current server files. The instance must be
+stopped first.
+
+${UNDERLINE}Usage:${END}
+  $self create-backup <instance>
+
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
+
+${UNDERLINE}Options:${END}
+  --help                      Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self create-backup factorio-01
+"
+}
+
+function show_usage_restore_backup() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Restore Instance Backup${END}
+
+Restore an instance from a named backup. The current files are backed up first.
+
+${UNDERLINE}Usage:${END}
+  $self restore-backup <instance> <source>
+
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
+  source                      Backup name (see '$self backups <instance>')
+
+${UNDERLINE}Options:${END}
+  --help                      Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self restore-backup factorio-01 factorio-01-1234-2026-06-21T10:00:00.backup
+"
+}
+
+function show_usage_update() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Update Instance${END}
+
+Update an instance to the latest available version. The instance must be
+stopped first. A no-op when already current.
+
+${UNDERLINE}Usage:${END}
+  $self update <instance>
+
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
+
+${UNDERLINE}Options:${END}
+  --help                      Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self update factorio-01
+"
+}
+
+function show_usage_check_update() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Check For Instance Update${END}
+
+Check whether a newer version is available without applying it. Prints the
+latest version to stdout when an update is available; nothing when current.
+
+${UNDERLINE}Usage:${END}
+  $self check-update <instance>
+
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
+
+${UNDERLINE}Options:${END}
+  --help                      Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self check-update factorio-01
+"
+}
+
+# Whether an instance's management file exposes the newer dash-free ops commands
+# (backups / create-backup / restore-backup / check-update). Older generated
+# files predate them; the distinctive `check-update` token in --help marks
+# support. `update` is intentionally NOT gated on this — it ships on every
+# management file.
+function _management_supports_ops() {
+  local management_file="$1"
+  [[ -f "$management_file" && -x "$management_file" ]] || return 1
+  "$management_file" --help 2> /dev/null | grep -q "check-update"
+}
+
+# Honest gate: exit with a regenerate hint when the management file is too old
+# to support the requested ops command. $1=instance, $2=management_file.
+function _require_ops_support() {
+  local instance="$1"
+  local management_file="$2"
+  if ! _management_supports_ops "$management_file"; then
+    __print_error "Instance '$instance' uses an older management file that does not support this operation."
+    __print_error "Regenerate it with: kgsm files management create $instance"
+    exit $EC_ERROR
+  fi
+}
+
+function _cmd_backups() {
+  local instance=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_backups
+        return 0
+        ;;
+      -*)
+        __print_error "Invalid option for backups command: $1"
+        __print_error "Use '$self backups --help' for usage information"
+        return $EC_INVALID_ARG
+        ;;
+      *)
+        instance="$1"
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self backups --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  __source_instance "$instance"
+  _require_ops_support "$instance" "$instance_management_file"
+
+  # A malformed instance with no resolved backups dir has no snapshots to list.
+  # Never forward in that state: the management file's _list_backups would glob a
+  # bare "/" and fabricate entries. Emit nothing (honest empty) instead — never a
+  # made-up listing.
+  # shellcheck disable=SC2154
+  if [[ -z "$instance_backups_dir" ]]; then
+    # Warning to stderr only — stdout is the machine-parsed listing (kgsm-api),
+    # and __print_warning routes to stdout by convention, so redirect it.
+    __print_warning "Instance '$instance' has no configured backups directory; reporting no backups" >&2
+    exit 0
+  fi
+
+  # Normalize to one backup name per line. The management file's listing may be
+  # space- or newline-separated (older files / overrides differ); consumers such
+  # as kgsm-api parse one-per-line. Empty output = no backups (honest, never 0).
+  local rc
+  "$instance_management_file" backups 2> /dev/null | tr -s ' \t\n' '\n' | grep -v '^[[:space:]]*$'
+  rc=${PIPESTATUS[0]}
+  exit $rc
+}
+
+function _cmd_create_backup() {
+  local instance=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_create_backup
+        return 0
+        ;;
+      -*)
+        __print_error "Invalid option for create-backup command: $1"
+        __print_error "Use '$self create-backup --help' for usage information"
+        return $EC_INVALID_ARG
+        ;;
+      *)
+        instance="$1"
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self create-backup --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  __source_instance "$instance"
+  _require_ops_support "$instance" "$instance_management_file"
+
+  "$instance_management_file" create-backup
+  local rc=$?
+
+  if [[ $rc -eq 0 ]]; then
+    # Derive the created snapshot (newest entry in the backups dir) and the
+    # version it captured, for the event payload — the same "latest backup"
+    # heuristic _restore_backup uses internally.
+    local backup_file version
+    # instance_backups_dir / instance_version_file are set by __source_instance.
+    # shellcheck disable=SC2012,SC2154
+    backup_file="$(ls -t "$instance_backups_dir" 2> /dev/null | head -n1)"
+    # shellcheck disable=SC2154
+    version="$(cat "$instance_version_file" 2> /dev/null)"
+    if [[ -n "$backup_file" ]]; then
+      events.sh emit instance-backup-created "$instance" "$backup_file" "$version"
+    fi
+  fi
+
+  exit $rc
+}
+
+function _cmd_restore_backup() {
+  local instance=""
+  local backup=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_restore_backup
+        return 0
+        ;;
+      -*)
+        __print_error "Invalid option for restore-backup command: $1"
+        __print_error "Use '$self restore-backup --help' for usage information"
+        return $EC_INVALID_ARG
+        ;;
+      *)
+        if [[ -z "$instance" ]]; then
+          instance="$1"
+        elif [[ -z "$backup" ]]; then
+          backup="$1"
+        else
+          __print_error "Unexpected argument: $1"
+          __print_error "Use '$self restore-backup --help' for usage information"
+          return $EC_INVALID_ARG
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self restore-backup --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  if [[ -z "$backup" ]]; then
+    __print_error "Missing required argument: <source>"
+    __print_error "Use '$self restore-backup --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  __source_instance "$instance"
+  _require_ops_support "$instance" "$instance_management_file"
+
+  "$instance_management_file" restore-backup "$backup"
+  local rc=$?
+
+  if [[ $rc -eq 0 ]]; then
+    local version
+    version="$(cat "$instance_version_file" 2> /dev/null)"
+    events.sh emit instance-backup-restored "$instance" "$backup" "$version"
+  fi
+
+  exit $rc
+}
+
+function _cmd_update() {
+  local instance=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_update
+        return 0
+        ;;
+      -*)
+        __print_error "Invalid option for update command: $1"
+        __print_error "Use '$self update --help' for usage information"
+        return $EC_INVALID_ARG
+        ;;
+      *)
+        instance="$1"
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self update --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  __source_instance "$instance"
+
+  # `update` ships on every management file (no ops gate). Capture the version
+  # before and after so we can emit instance-version-updated ONLY when it
+  # actually changed — an already-current instance is a successful no-op and
+  # must not produce a spurious event.
+  local old_version new_version
+  old_version="$(cat "$instance_version_file" 2> /dev/null)"
+
+  "$instance_management_file" update
+  local rc=$?
+
+  if [[ $rc -eq 0 ]]; then
+    new_version="$(cat "$instance_version_file" 2> /dev/null)"
+    if [[ -n "$new_version" && "$new_version" != "$old_version" ]]; then
+      events.sh emit instance-version-updated "$instance" "$old_version" "$new_version"
+    fi
+  fi
+
+  exit $rc
+}
+
+function _cmd_check_update() {
+  local instance=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_check_update
+        return 0
+        ;;
+      -*)
+        __print_error "Invalid option for check-update command: $1"
+        __print_error "Use '$self check-update --help' for usage information"
+        return $EC_INVALID_ARG
+        ;;
+      *)
+        instance="$1"
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self check-update --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  __source_instance "$instance"
+  _require_ops_support "$instance" "$instance_management_file"
+
+  "$instance_management_file" check-update
+  exit $?
+}
+
 function _cmd_help() {
   local command="$1"
 
@@ -1221,6 +1624,21 @@ function _cmd_help() {
       ;;
     config-set)
       show_usage_config_set
+      ;;
+    backups)
+      show_usage_backups
+      ;;
+    create-backup)
+      show_usage_create_backup
+      ;;
+    restore-backup)
+      show_usage_restore_backup
+      ;;
+    update)
+      show_usage_update
+      ;;
+    check-update)
+      show_usage_check_update
       ;;
     *)
       __print_error "Unknown command: $command"
@@ -1304,6 +1722,21 @@ case "$command" in
     ;;
   config-set)
     _cmd_config_set "$@"
+    ;;
+  backups)
+    _cmd_backups "$@"
+    ;;
+  create-backup)
+    _cmd_create_backup "$@"
+    ;;
+  restore-backup)
+    _cmd_restore_backup "$@"
+    ;;
+  update)
+    _cmd_update "$@"
+    ;;
+  check-update)
+    _cmd_check_update "$@"
     ;;
   *)
     __print_error "Unknown command: $command"

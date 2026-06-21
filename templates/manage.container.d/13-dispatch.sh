@@ -84,6 +84,24 @@ backup)
   exit $?
   ;;
 
+# Tier-1 ops: dash-free aliases mirroring the top-level `kgsm instances` CLI
+backups)
+  _cmd_backups "$@"
+  exit $?
+  ;;
+create-backup)
+  _cmd_create_backup "$@"
+  exit $?
+  ;;
+restore-backup)
+  _cmd_restore_backup "$@"
+  exit $?
+  ;;
+check-update)
+  _cmd_check_update "$@"
+  exit $?
+  ;;
+
 *)
   __print_error "Unknown command: $command"
   __print_error "Use '$self help' for available commands"

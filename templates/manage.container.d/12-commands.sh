@@ -314,4 +314,55 @@ function _cmd_backup() {
   esac
 }
 
+# -----------------------------------------------------------------------------
+# Tier-1 ops: flat, dash-free command aliases that mirror the top-level kgsm CLI
+# (`kgsm instances backups|create-backup|restore-backup|check-update <name>`).
+# The top-level CLI forwards each subcommand verbatim to this script, so the
+# names match exactly. They delegate to the existing (overridable) backup and
+# version helpers — no logic is duplicated here.
+# -----------------------------------------------------------------------------
+
+function _cmd_backups() {
+  _list_backups
+}
+
+function _cmd_create_backup() {
+  _create_backup
+}
+
+function _cmd_restore_backup() {
+  if [[ -z "${1:-}" ]]; then
+    __print_error "Missing argument: <source>"
+    return $EC_MISSING_ARG
+  fi
+  _restore_backup "$1"
+}
+
+function _cmd_check_update() {
+  # Compare the installed version against the latest available one, using the
+  # (per-game overridable) version helpers. Honest contract:
+  #   - update available -> print the latest version to stdout, return success
+  #   - already current  -> print nothing to stdout, return success
+  #   - cannot determine -> return an error (never a fabricated answer)
+  local installed latest
+  installed="$(_get_installed_version)"
+  latest="$(_get_latest_version)" || return $EC_ERROR
+
+  if [[ -z "$latest" ]]; then
+    __print_error "Could not determine the latest version"
+    return $EC_ERROR
+  fi
+
+  # Status lines go to stderr; stdout carries only the machine-readable result
+  # (the latest version when an update is available, nothing otherwise).
+  if [[ "$installed" == "$latest" ]]; then
+    __print_info "Already up to date (version ${installed})" >&2
+    return $EC_SUCCESS
+  fi
+
+  __print_info "Update available: ${installed} -> ${latest}" >&2
+  echo "$latest"
+  return $EC_SUCCESS
+}
+
 

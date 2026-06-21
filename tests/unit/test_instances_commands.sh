@@ -548,3 +548,197 @@ function test_help_config_subcommands() {
   assert_contains "$output" "config-get" "help config-get should describe the command"
 }
 
+# =============================================================================
+# TEST: Tier-1 ops — backups / create-backup / restore-backup / update /
+#       check-update. These forward to the per-instance management file (which
+#       accepts the same dash-free command names) and back the kgsm-api Tier-1
+#       endpoints. See commands/instances.sh and templates/manage.*.d.
+# =============================================================================
+
+function test_help_lists_tier1_ops() {
+  log_test_step "Testing main help lists the Tier-1 ops commands"
+
+  local output
+  output=$("$MODULE" help 2>&1)
+  assert_contains "$output" "backups" "help should mention backups"
+  assert_contains "$output" "create-backup" "help should mention create-backup"
+  assert_contains "$output" "restore-backup" "help should mention restore-backup"
+  assert_contains "$output" "check-update" "help should mention check-update"
+  assert_contains "$output" "update" "help should mention update"
+}
+
+function test_help_tier1_subcommands() {
+  log_test_step "Testing help sub-commands for Tier-1 ops"
+
+  local commands=("backups" "create-backup" "restore-backup" "update" "check-update")
+  for cmd in "${commands[@]}"; do
+    local output
+    output=$("$MODULE" help "$cmd" 2>&1)
+    assert_equals 0 "$?" "help $cmd should exit 0"
+    assert_not_null "$output" "help $cmd should produce output"
+    assert_contains "$output" "$cmd" "help $cmd should describe the command"
+  done
+}
+
+# Point a created instance at a real backups dir we control. A freshly created
+# test instance is not fully provisioned (no directory step), so its config's
+# backups_dir is empty; the management file's 01-config sources every config
+# line with last-wins semantics, so an appended key takes effect at runtime.
+function _seed_backups_dir() {
+  local instance_name="$1"
+  local bdir="$2"
+  local cfg
+  cfg=$("$MODULE" find "$instance_name" 2>/dev/null)
+  [[ -f "$cfg" ]] || return 1
+  mkdir -p "$bdir"
+  printf 'backups_dir="%s"\n' "$bdir" >> "$cfg"
+}
+
+function test_backups_lists_one_per_line() {
+  log_test_step "Testing 'backups' prints each snapshot on its own line"
+
+  local instance_name="test-backups-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Instance should be created for backups test"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
+
+  local bdir="$TEST_INSTALL_DIR/${instance_name}-backups"
+  _seed_backups_dir "$instance_name" "$bdir"
+  assert_equals 0 "$?" "should be able to seed a backups dir for the instance"
+  touch "$bdir/${instance_name}-1-2026-06-21T10:00:00.backup"
+  touch "$bdir/${instance_name}-1-2026-06-21T11:00:00.backup"
+
+  local output line_count
+  output=$("$MODULE" backups "$instance_name" 2>/dev/null)
+  assert_equals 0 "$?" "backups should succeed"
+  # One snapshot per line — the contract kgsm-api parses. A regression to
+  # space-separated output would collapse both names onto a single line.
+  line_count=$(printf '%s\n' "$output" | grep -c '\.backup')
+  assert_equals 2 "$line_count" "backups should print exactly two snapshot lines"
+  assert_contains "$output" "${instance_name}-1-2026-06-21T10:00:00.backup" \
+    "backups should list the first snapshot"
+  assert_contains "$output" "${instance_name}-1-2026-06-21T11:00:00.backup" \
+    "backups should list the second snapshot"
+}
+
+# Container parity: the dash-free commands + one-per-line listing are added
+# identically to manage.container.d, so a container instance must behave the
+# same. (vrising is the suite's standard container blueprint.)
+function test_backups_container_lists_one_per_line() {
+  log_test_step "Testing 'backups' on a container instance lists one snapshot per line"
+
+  local instance_name="test-backups-ctr-$$"
+  create_test_instance "vrising" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Container instance should be created for backups test"
+  _TEARDOWN_INSTANCES+=("vrising:$instance_name")
+
+  local bdir="$TEST_INSTALL_DIR/${instance_name}-backups"
+  _seed_backups_dir "$instance_name" "$bdir"
+  assert_equals 0 "$?" "should be able to seed a backups dir for the container instance"
+  touch "$bdir/${instance_name}-1-2026-06-21T10:00:00.backup"
+  touch "$bdir/${instance_name}-1-2026-06-21T11:00:00.backup"
+
+  local output line_count
+  output=$("$MODULE" backups "$instance_name" 2>/dev/null)
+  assert_equals 0 "$?" "backups should succeed for a container instance"
+  line_count=$(printf '%s\n' "$output" | grep -c '\.backup')
+  assert_equals 2 "$line_count" "container backups should print exactly two snapshot lines"
+}
+
+function test_backups_empty_is_honest() {
+  log_test_step "Testing 'backups' prints nothing (never a fabricated 0) with no snapshots"
+
+  local instance_name="test-backups-empty-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
+
+  local bdir="$TEST_INSTALL_DIR/${instance_name}-backups-empty"
+  _seed_backups_dir "$instance_name" "$bdir"
+  assert_equals 0 "$?" "should be able to seed an empty backups dir for the instance"
+
+  local output
+  output=$("$MODULE" backups "$instance_name" 2>/dev/null)
+  assert_equals 0 "$?" "backups should succeed with no snapshots"
+  assert_equals "" "$output" "backups should print nothing when there are no snapshots"
+}
+
+function test_backups_unprovisioned_no_root_glob() {
+  log_test_step "Testing 'backups' on an instance with no backups dir emits nothing (never a root glob)"
+
+  local instance_name="test-backups-unprov-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
+
+  # A freshly created (unprovisioned) instance has an empty backups_dir. The
+  # command must report nothing — never forward to a bare "$dir"/* glob that
+  # would expand to "/" and fabricate names (bin, boot, ...).
+  local output
+  output=$("$MODULE" backups "$instance_name" 2>/dev/null)
+  assert_equals 0 "$?" "backups should succeed on an unprovisioned instance"
+  assert_equals "" "$output" \
+    "backups must emit nothing (never a root-glob) when no backups dir is configured"
+}
+
+function test_backups_missing_instance() {
+  log_test_step "Testing 'backups' without instance argument fails"
+
+  "$MODULE" backups 2>/dev/null
+  assert_not_equals 0 "$?" "backups without instance should fail"
+}
+
+function test_backups_unknown_instance() {
+  log_test_step "Testing 'backups' on a nonexistent instance fails"
+
+  "$MODULE" backups totally_nonexistent_instance_xyz 2>/dev/null
+  assert_not_equals 0 "$?" "backups on a missing instance should fail"
+}
+
+function test_create_backup_missing_instance() {
+  log_test_step "Testing 'create-backup' without instance argument fails"
+
+  "$MODULE" create-backup 2>/dev/null
+  assert_not_equals 0 "$?" "create-backup without instance should fail"
+}
+
+function test_restore_backup_missing_instance() {
+  log_test_step "Testing 'restore-backup' without instance argument fails"
+
+  "$MODULE" restore-backup 2>/dev/null
+  assert_not_equals 0 "$?" "restore-backup without instance should fail"
+}
+
+function test_restore_backup_missing_source() {
+  log_test_step "Testing 'restore-backup <instance>' without a source fails"
+
+  local instance_name="test-restore-noarg-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
+
+  "$MODULE" restore-backup "$instance_name" 2>/dev/null
+  assert_not_equals 0 "$?" "restore-backup without <source> should fail"
+}
+
+function test_update_missing_instance() {
+  log_test_step "Testing 'update' without instance argument fails"
+
+  "$MODULE" update 2>/dev/null
+  assert_not_equals 0 "$?" "update without instance should fail"
+}
+
+function test_check_update_missing_instance() {
+  log_test_step "Testing 'check-update' without instance argument fails"
+
+  "$MODULE" check-update 2>/dev/null
+  assert_not_equals 0 "$?" "check-update without instance should fail"
+}
+
+function test_check_update_unknown_instance() {
+  log_test_step "Testing 'check-update' on a nonexistent instance fails"
+
+  "$MODULE" check-update totally_nonexistent_instance_xyz 2>/dev/null
+  assert_not_equals 0 "$?" "check-update on a missing instance should fail"
+}
+

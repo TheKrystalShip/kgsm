@@ -30,14 +30,15 @@ ${BOLD}${UNDERLINE}Server Commands:${END}
 
 ${BOLD}${UNDERLINE}Version & Update Commands:${END}
   version [--latest|--compare|--save <ver>]  Version management
+  check-update                Check whether a newer version is available
   download [version]          Download game server files
   deploy                      Deploy files from temp directory
   update                      Update to latest version
 
 ${BOLD}${UNDERLINE}Backup Commands:${END}
-  backup create               Create a backup
-  backup restore <source>     Restore a specified backup
-  backup list                 List available backups
+  backups                     List available backups
+  create-backup               Create a backup
+  restore-backup <source>     Restore a specified backup
 
 ${BOLD}${UNDERLINE}Other:${END}
   help [command]              Display help information
@@ -210,22 +211,42 @@ function show_usage_backup() {
   local UNDERLINE="\e[4m"
   local END="\e[0m"
 
-  echo -e "${UNDERLINE}Backup Command${END}
+  echo -e "${UNDERLINE}Backup Commands${END}
 
 Manage game server backups.
 
 ${UNDERLINE}Usage:${END}
-  $self backup <subcommand>
+  $self backups
+  $self create-backup
+  $self restore-backup <source>
 
-${UNDERLINE}Subcommands:${END}
-  create                      Create a backup of current server files
-  restore <source>            Restore from a specified backup
-  list                        List available backups
+${UNDERLINE}Commands:${END}
+  backups                     List available backups
+  create-backup               Create a backup of current server files
+  restore-backup <source>     Restore from a specified backup
 
 ${UNDERLINE}Examples:${END}
-  $self backup create
-  $self backup list
-  $self backup restore mybackup.tar.gz
+  $self create-backup
+  $self backups
+  $self restore-backup mybackup.tar.gz
+"
+}
+
+function show_usage_check_update() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Check-Update Command${END}
+
+Check whether a newer version is available without applying it. Prints the
+latest version to stdout when an update is available; prints nothing when the
+instance is already current.
+
+${UNDERLINE}Usage:${END}
+  $self check-update
+
+${UNDERLINE}Examples:${END}
+  $self check-update
 "
 }
 
@@ -293,8 +314,11 @@ function _cmd_help() {
   version)
     show_usage_version
     ;;
-  backup)
+  backup | backups | create-backup | restore-backup)
     show_usage_backup
+    ;;
+  check-update)
+    show_usage_check_update
     ;;
   download)
     show_usage_download
