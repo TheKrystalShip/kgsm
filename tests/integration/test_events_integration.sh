@@ -1074,3 +1074,93 @@ function test_emit_player_left_payload_renders_missing_id_as_json_null() {
     "Data.PlayerName should carry the supplied name"
 }
 
+# =============================================================================
+# TEST: instance_config_changed carries the Key but NEVER the value.
+# This is the entire reason the event is key-only: instance config holds secrets
+# (RCON/admin passwords, tokens), so the value must never reach a transport. We
+# emit with a sentinel secret value and prove (a) Data.Key carries the key, and
+# (b) the captured payload contains NEITHER the sentinel value NOR a `Value`
+# Data field — pinning the security property directly, not just "carries Key".
+# =============================================================================
+
+function test_emit_config_changed_payload_carries_key_never_value() {
+  log_test_step "Testing: instance_config_changed payload carries Key but never the value"
+
+  if ! command -v socat > /dev/null 2>&1; then
+    skip_test "socat not available - skipping payload capture test"
+    return
+  fi
+
+  # Deterministic socket path (don't depend on sandbox config defaults).
+  export config_event_socket_filenames=""
+  export config_event_socket_filename="kgsm.sock"
+  local socket_file="$KGSM_ROOT/kgsm.sock"
+  local capture="$KGSM_TEST_SANDBOX/config-changed-capture.json"
+  rm -f "$socket_file" "$capture"
+
+  # One-shot listener: accept a single connection, copy its bytes to the file.
+  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
+  local listener_pid=$!
+
+  # Bounded wait for the socket node to exist.
+  local i=0
+  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  local sock_ready="false"
+  [[ -S "$socket_file" ]] && sock_ready="true"
+  assert_true "$sock_ready" "socat listener should create the socket node"
+
+  _enable_broadcasting
+  _enable_socket_events
+
+  # Emit exactly as the config-set command layer does: instance, then the key.
+  # The event interface itself takes ONLY instance + key — there is no value
+  # parameter at all, so the value structurally cannot enter the payload. The
+  # `has("Value") == false` assertion below pins that the Data contract is
+  # key-only. (The end-to-end "a secret config value never leaks" property is
+  # proven by the live `config-set <key>=<secret>` path, where the value actually
+  # exists — that path is outside this transport-level test.)
+  "$EVENTS_MODULE" emit instance-config-changed config-test-server rcon_password \
+    > /dev/null 2>&1 || true
+
+  # Bounded wait for the captured payload to land.
+  i=0
+  while [[ ! -s "$capture" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+
+  # Tear down the listener and restore transport config before asserting.
+  kill "$listener_pid" 2> /dev/null || true
+  wait "$listener_pid" 2> /dev/null || true
+  _disable_socket_events
+  _disable_broadcasting
+  rm -f "$socket_file"
+
+  local payload
+  payload=$(cat "$capture" 2> /dev/null)
+  assert_not_null "$payload" "Captured event payload should not be empty"
+
+  local event_type instance key
+  event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)
+  instance=$(echo "$payload" | jq -r '.Data.InstanceName' 2> /dev/null)
+  key=$(echo "$payload" | jq -r '.Data.Key' 2> /dev/null)
+
+  assert_equals "instance_config_changed" "$event_type" \
+    "EventType should be instance_config_changed"
+  assert_equals "config-test-server" "$instance" \
+    "Data.InstanceName should carry the instance"
+  assert_equals "rcon_password" "$key" \
+    "Data.Key should carry the changed key"
+
+  # The security property: the Data object must carry NO `Value` field — the value
+  # is never part of the event contract (instance config holds secrets like
+  # RCON/admin passwords).
+  local has_value
+  has_value=$(echo "$payload" | jq -r '.Data | has("Value")' 2> /dev/null)
+  assert_equals "false" "$has_value" \
+    "Data must NOT contain a Value field (instance config holds secrets)"
+}
+

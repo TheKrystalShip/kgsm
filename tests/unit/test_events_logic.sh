@@ -114,8 +114,8 @@ function test_validate_event_type_empty_returns_error() {
     "Should return EC_EVENT_TYPE_INVALID for empty parameter"
 }
 
-function test_validate_event_type_all_39_constants() {
-  log_test_step "Testing __logic_validate_event_type with all 39 event constants"
+function test_validate_event_type_all_40_constants() {
+  log_test_step "Testing __logic_validate_event_type with all 40 event constants"
 
   local event_types=(
     "instance_created"
@@ -157,6 +157,7 @@ function test_validate_event_type_all_39_constants() {
     "instance_upnp_closed"
     "instance_player_joined"
     "instance_player_left"
+    "instance_config_changed"
   )
 
   local failed_events=()
@@ -168,7 +169,7 @@ function test_validate_event_type_all_39_constants() {
   done
 
   assert_equals "${#failed_events[@]}" "0" \
-    "All 39 event types should be valid. Failed: ${failed_events[*]}"
+    "All 40 event types should be valid. Failed: ${failed_events[*]}"
 }
 
 function test_validate_event_type_case_sensitive() {
@@ -433,8 +434,8 @@ function test_get_param_spec_output_format_space_separated() {
     "Should contain spaces between parameters"
 }
 
-function test_get_param_spec_all_39_events() {
-  log_test_step "Testing __logic_get_event_param_spec for all 39 events"
+function test_get_param_spec_all_40_events() {
+  log_test_step "Testing __logic_get_event_param_spec for all 40 events"
 
   local event_types=(
     "instance_created"
@@ -476,6 +477,7 @@ function test_get_param_spec_all_39_events() {
     "instance_upnp_closed"
     "instance_player_joined"
     "instance_player_left"
+    "instance_config_changed"
   )
 
   local failed_events=()
@@ -490,7 +492,7 @@ function test_get_param_spec_all_39_events() {
   done
 
   assert_equals "${#failed_events[@]}" "0" \
-    "All 39 events should return valid specs. Failed: ${failed_events[*]}"
+    "All 40 events should return valid specs. Failed: ${failed_events[*]}"
 }
 
 function test_get_param_spec_firewall_ports_events() {
@@ -603,6 +605,69 @@ function test_event_name_to_type_player_events() {
     "Should convert 'instance-player-joined' to 'instance_player_joined'"
   assert_equals "$left" "instance_player_left" \
     "Should convert 'instance-player-left' to 'instance_player_left'"
+}
+
+# =============================================================================
+# TESTS: instance_config_changed event (instance + key, NEVER the value)
+# =============================================================================
+# The value is deliberately ABSENT from the EVENT_CONFIGS spec — config-set holds
+# secrets (RCON/admin passwords), so only the instance + key are audited. The
+# value-never-carried property is proven in the integration test (it captures the
+# real payload); this file tests pure logic only: validation, the param spec, and
+# the dash-to-underscore name conversion.
+
+function test_validate_event_type_config_changed() {
+  log_test_step "Testing __logic_validate_event_type for instance_config_changed"
+
+  __logic_validate_event_type "instance_config_changed"
+  local exit_code=$?
+
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "instance_config_changed should be a valid event type"
+}
+
+function test_get_param_spec_config_changed_instance_key() {
+  log_test_step "Testing instance_config_changed requires 'instance key'"
+
+  local spec
+  spec=$(__logic_get_event_param_spec "instance_config_changed")
+  local exit_code=$?
+
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS for instance_config_changed"
+  # 'instance key' — the value is NOT a required param (and never carried).
+  assert_equals "instance key" "$spec" \
+    "instance_config_changed should require 'instance key' (never the value)"
+}
+
+function test_validate_params_config_changed_valid() {
+  log_test_step "Testing instance_config_changed validates with instance + key"
+
+  __logic_validate_event_params "instance_config_changed" "test_instance" "rcon_password"
+  local exit_code=$?
+
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "instance_config_changed should validate with instance and key params"
+}
+
+function test_validate_params_config_changed_missing_key_fails() {
+  log_test_step "Testing instance_config_changed rejects a missing key"
+
+  __logic_validate_event_params "instance_config_changed" "test_instance" 2>/dev/null
+  local exit_code=$?
+
+  assert_equals "$exit_code" "$EC_EVENT_PARAMS_INVALID" \
+    "instance_config_changed should reject a missing key param"
+}
+
+function test_event_name_to_type_config_changed() {
+  log_test_step "Testing dash-to-underscore conversion for instance-config-changed"
+
+  local result
+  result=$(__logic_event_name_to_type "instance-config-changed")
+
+  assert_equals "$result" "instance_config_changed" \
+    "Should convert 'instance-config-changed' to 'instance_config_changed'"
 }
 
 # =============================================================================
@@ -831,12 +896,12 @@ function test_edge_case_all_events_have_configs() {
 }
 
 function test_edge_case_event_count_matches_configs() {
-  log_test_step "Testing EVENT_CONFIGS count matches expected 39 events"
+  log_test_step "Testing EVENT_CONFIGS count matches expected 40 events"
 
   local config_count="${#EVENT_CONFIGS[@]}"
 
-  assert_equals "$config_count" "39" \
-    "EVENT_CONFIGS should contain exactly 39 entries (found: $config_count)"
+  assert_equals "$config_count" "40" \
+    "EVENT_CONFIGS should contain exactly 40 entries (found: $config_count)"
 }
 
 # Conformance guard: every event a call site actually emits must be registered

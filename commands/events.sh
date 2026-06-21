@@ -150,6 +150,9 @@ ${UNDERLINE}Instance Lifecycle:${END}
   instance-removed <instance>
   instance-ready <instance>
 
+${UNDERLINE}Instance Configuration:${END}
+  instance-config-changed <instance> <key>
+
 ${UNDERLINE}Instance Creation Process:${END}
   instance-directories-created <instance>
   instance-files-created <instance>
@@ -208,6 +211,7 @@ ${UNDERLINE}Examples:${END}
   ${self} emit instance-ports-closed myserver '34197/udp|27015:27020/tcp'
   ${self} emit instance-player-joined myserver 76561198000000000 Alice
   ${self} emit instance-player-left myserver '' Bob
+  ${self} emit instance-config-changed myserver rcon_password
 "
 }
 
@@ -390,6 +394,15 @@ function _build_event_payload() {
     "$EVENT_INSTANCE_STARTED" | "$EVENT_INSTANCE_STOPPED" | "$EVENT_INSTANCE_RESTARTED")
       data_object='{
         InstanceName: $instance
+      }'
+      ;;
+    "$EVENT_INSTANCE_CONFIG_CHANGED")
+      # Key only — the value is deliberately never carried (instance config holds
+      # secrets like RCON/admin passwords). `$key` binds because `key` is the 2nd
+      # EVENT_CONFIGS param name (rendered via --arg in the loop above).
+      data_object='{
+        InstanceName: $instance,
+        Key: $key
       }'
       ;;
     "$EVENT_INSTANCE_CRASHED" | "$EVENT_INSTANCE_FAILED")

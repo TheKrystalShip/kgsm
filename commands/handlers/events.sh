@@ -164,6 +164,15 @@ export EVENT_INSTANCE_PLAYER_JOINED
 declare -g -r EVENT_INSTANCE_PLAYER_LEFT="instance_player_left"
 export EVENT_INSTANCE_PLAYER_LEFT
 
+# Instance config-change audit event. Emitted by the command layer when a
+# `.config.ini` key is set via `instances config-set`. Carries the instance name
+# and the changed key ONLY — NEVER the value: instance config holds secrets
+# (RCON/admin passwords, tokens), so the value must never reach a transport, log,
+# or downstream audit. The downstream record is "key X changed on instance Y",
+# nothing more.
+declare -g -r EVENT_INSTANCE_CONFIG_CHANGED="instance_config_changed"
+export EVENT_INSTANCE_CONFIG_CHANGED
+
 # Event parameter specifications
 declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_CREATED"]="instance blueprint"
@@ -207,6 +216,9 @@ declare -g -A EVENT_CONFIGS=(
   # validated/rendered out-of-band (see _build_event_payload).
   ["$EVENT_INSTANCE_PLAYER_JOINED"]="instance"
   ["$EVENT_INSTANCE_PLAYER_LEFT"]="instance"
+  # `key` only — NEVER the value (instance config holds secrets). The matching
+  # case arm in _build_event_payload renders Data { InstanceName, Key }.
+  ["$EVENT_INSTANCE_CONFIG_CHANGED"]="instance key"
 )
 
 # Validates that an event type is supported

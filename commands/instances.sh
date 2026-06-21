@@ -1161,6 +1161,11 @@ function _cmd_config_set() {
 
   case $exit_code in
     0)
+      # Audit the change (instance + key only — never the value: instance config
+      # holds secrets). Emitted from the command layer, not the handler, so internal
+      # default-writes stay event-free (matches the create/backup convention).
+      # `events.sh emit` no-ops when broadcasting is off.
+      events.sh emit instance-config-changed "$instance" "$key"
       __print_success "Set '$key' on instance '$instance'"
       exit 0
       ;;
