@@ -13,7 +13,7 @@ metadata:
 native:
   ports: "34197"
   steam_app_id: 0
-  client_steam_app_id: 0
+  client_steam_app_id: 427520
   steamcmd_arguments: ""
   is_steam_account_required: false
   platform: linux
