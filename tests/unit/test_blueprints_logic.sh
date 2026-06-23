@@ -270,8 +270,44 @@ function test_info_json_has_metadata_block() {
   local output meta
   output=$(__logic_get_blueprint_info_json "factorio")
   meta=$(echo "$output" | jq -r '.Metadata | keys | sort | join(",")')
-  assert_equals "BaseDiskMb,Description,DisplayName,MaxPlayers,MinRamMb,RecommendedRamMb" "$meta" \
+  assert_equals "BaseDiskMb,Description,DisplayName,MaxPlayers,MinRamMb,RawgSlug,RecommendedRamMb" "$meta" \
     "Metadata should expose the full PascalCase key set"
+}
+
+function test_info_json_rawg_slug_curated() {
+  # rawg_slug is the external-catalog (RAWG.io) lookup hint, emitted as a string
+  # under the nested Metadata block when curated.
+  local output
+  output=$(__logic_get_blueprint_info_json "factorio")
+  assert_equals "factorio" "$(echo "$output" | jq -r '.Metadata.RawgSlug')" \
+    "Curated rawg_slug should round-trip as Metadata.RawgSlug"
+  # The blueprint name is NOT assumed to equal the slug.
+  output=$(__logic_get_blueprint_info_json "gmod")
+  assert_equals "garrys-mod" "$(echo "$output" | jq -r '.Metadata.RawgSlug')" \
+    "rawg_slug is independent of the blueprint name (gmod -> garrys-mod)"
+}
+
+function test_info_json_rawg_slug_absent_is_null() {
+  # honest-null: a blueprint without rawg_slug emits JSON null, never a fabricated
+  # value (e.g. never falling back to the blueprint name).
+  local custom_bp="$KGSM_USER_BLUEPRINTS_DIR/test-noslug.bp.yaml"
+  cat > "$custom_bp" << 'EOF'
+schema_version: 1
+name: test-noslug
+runtime: native
+metadata:
+  display_name: null
+  description: null
+native:
+  executable_file: test.sh
+EOF
+  local output
+  output=$(__logic_get_blueprint_info_json "test-noslug")
+  local exit_code=$?
+  rm -f "$custom_bp"
+  assert_equals "$EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED" "$exit_code" "Should succeed"
+  assert_equals "true" "$(echo "$output" | jq '.Metadata.RawgSlug == null')" \
+    "Absent rawg_slug must be JSON null, never fabricated from the name"
 }
 
 function test_info_json_uncurated_metadata_is_null_not_zero() {

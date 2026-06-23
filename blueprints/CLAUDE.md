@@ -25,11 +25,20 @@ directory instead.
 - `name` — lowercase, no spaces. Also the **override-binding key** (see below).
 - `runtime` — `native` | `container`.
 - `metadata:` — a block of advisory, presentation-oriented fields for catalog /
-  control-panel UIs. All six keys are **required to be present** but every value
-  is **nullable**: `display_name`, `description`, `max_players`, `min_ram_mb`,
-  `recommended_ram_mb`, `base_disk_mb`. **`null` means unknown/unbounded — never
-  a fabricated `0`** (the project's no-fabricate invariant). Nothing in
-  create/install reads metadata, so a blueprint works fully with it all null.
+  control-panel UIs. All keys are **required to be present** but every value
+  is **nullable**: `display_name`, `description`, `rawg_slug`, `max_players`,
+  `min_ram_mb`, `recommended_ram_mb`, `base_disk_mb`. **`null` means
+  unknown/unbounded — never a fabricated `0`** (the project's no-fabricate
+  invariant). Nothing in create/install reads metadata, so a blueprint works
+  fully with it all null.
+  - `rawg_slug` is the game's slug on [RAWG.io](https://rawg.io) — the external
+    catalog the Control Panel uses to fetch cover art + description + tags. It is
+    a *lookup hint* only (kgsm never calls RAWG; the consumer does), and is the
+    same kind of external-catalog id as `native.steam_app_id`. The blueprint
+    `name` is **not** assumed to equal the slug (e.g. `gmod` → `garrys-mod`,
+    `ark` → `ark-survival-evolved`). Set it **only when verified** (the slug
+    resolves to the right game); leave it `null` otherwise — a wrong slug is
+    misattribution, which the no-fabricate invariant forbids.
 
 ## Native blueprint (`runtime: native`)
 

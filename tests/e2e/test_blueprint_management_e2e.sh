@@ -152,11 +152,14 @@ function test_metadata_block_present() {
   info=$("$MODULE" info factorio --json 2>&1)
 
   # The block exists with the full key set...
-  assert_equals "6" "$(echo "$info" | jq -r '.Metadata | keys | length')" \
-    "Metadata should expose six keys"
+  assert_equals "7" "$(echo "$info" | jq -r '.Metadata | keys | length')" \
+    "Metadata should expose seven keys"
   # ...and uncurated numeric values are null, never a fabricated 0.
   assert_equals "true" "$(echo "$info" | jq '.Metadata.MaxPlayers == null')" \
     "Uncurated MaxPlayers must be JSON null"
+  # ...the curated rawg_slug (external RAWG.io catalog hint) round-trips as a string.
+  assert_equals "factorio" "$(echo "$info" | jq -r '.Metadata.RawgSlug')" \
+    "Curated rawg_slug should round-trip (factorio)"
 }
 
 # =============================================================================

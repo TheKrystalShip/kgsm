@@ -11,8 +11,8 @@
 # WRITES new `.bp.yaml` files; it does not delete anything (the old dirs are
 # removed by the cutover commit after the output is verified).
 #
-# Metadata is emitted as null skeletons (display_name, description, max_players,
-# min_ram_mb, recommended_ram_mb, base_disk_mb) — `null` means unknown, NEVER a
+# Metadata is emitted as null skeletons (display_name, description, rawg_slug,
+# max_players, min_ram_mb, recommended_ram_mb, base_disk_mb) — `null` means unknown, NEVER a
 # fabricated 0. Real values are curated separately, file by file, afterwards.
 #
 # Requires: mikefarah/yq (go-yq).
@@ -79,6 +79,7 @@ function convert_native() {
     | .runtime = "native"
     | .metadata.display_name = null
     | .metadata.description = null
+    | .metadata.rawg_slug = null
     | .metadata.max_players = null
     | .metadata.min_ram_mb = null
     | .metadata.recommended_ram_mb = null
@@ -122,6 +123,7 @@ function convert_container() {
     | .runtime = "container"
     | .metadata.display_name = null
     | .metadata.description = null
+    | .metadata.rawg_slug = null
     | .metadata.max_players = null
     | .metadata.min_ram_mb = null
     | .metadata.recommended_ram_mb = null

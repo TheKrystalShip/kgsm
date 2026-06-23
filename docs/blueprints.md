@@ -96,11 +96,21 @@ value left `null`.
 metadata:
   display_name: "Factorio"          # human-friendly name ("7 Days to Die", not "7dtd")
   description: "Automation/factory-building dedicated server."
+  rawg_slug: "factorio"             # RAWG.io slug for cover art/metadata; null if unverified
   max_players: 65535                # null if unbounded/configurable/unknown
   min_ram_mb: 2048                  # advisory minimum RAM
   recommended_ram_mb: 4096          # advisory recommended RAM
   base_disk_mb: 3000                # base install footprint (grows with saves/mods)
 ```
+
+> [!NOTE]
+> `rawg_slug` is the game's slug on [RAWG.io](https://rawg.io), the external
+> catalog the control panel uses to fetch cover art, descriptions, and tags. It
+> is a *lookup hint* only — KGSM never calls RAWG; the consumer (kgsm-api) does,
+> and caches the result. It is the same kind of external-catalog identifier as
+> `native.steam_app_id`. The blueprint `name` is **not** assumed to equal the
+> slug (`gmod` → `garrys-mod`, `ark` → `ark-survival-evolved`). Set it **only
+> when verified**; leave it `null` otherwise — a wrong slug is misattribution.
 
 > [!IMPORTANT]
 > Every metadata value is **nullable**, and `null` means *unknown or unbounded*
@@ -237,6 +247,7 @@ runtime: native
 metadata:
   display_name: "Factorio"
   description: "Automation/factory-building dedicated server."
+  rawg_slug: "factorio"      # RAWG.io slug; null if unverified
   max_players: null          # null = unknown/unbounded, NEVER 0
   min_ram_mb: null
   recommended_ram_mb: null
@@ -413,6 +424,7 @@ runtime: container
 metadata:
   display_name: "V Rising"
   description: "Survival vampire dedicated server (official image)."
+  rawg_slug: "v-rising"      # RAWG.io slug; null if unverified
   max_players: null          # null = unknown/unbounded, NEVER 0
   min_ram_mb: null
   recommended_ram_mb: null

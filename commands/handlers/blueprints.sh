@@ -202,6 +202,7 @@ function __logic_get_blueprint_info_json() {
   metadata_json=$(yq -o=json '.metadata // {}' "$blueprint_path" 2>/dev/null | jq '{
     DisplayName: .display_name,
     Description: .description,
+    RawgSlug: .rawg_slug,
     MaxPlayers: .max_players,
     MinRamMb: .min_ram_mb,
     RecommendedRamMb: .recommended_ram_mb,

@@ -64,6 +64,8 @@ runtime: native
 metadata:
   display_name: null        # e.g. "7 Days to Die"
   description: null          # one-line blurb
+  rawg_slug: null            # RAWG.io game slug for cover art/metadata lookup
+                             # (e.g. "garrys-mod"); null if not on RAWG / unverified
   max_players: null          # integer, or null if unbounded/configurable
   min_ram_mb: null           # advisory minimum RAM (MB)
   recommended_ram_mb: null   # advisory recommended RAM (MB)
