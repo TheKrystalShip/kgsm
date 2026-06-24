@@ -582,13 +582,18 @@ function test_test_webhook_routes_to_webhook_module() {
 # =============================================================================
 
 function test_socket_file_path_within_kgsm_root() {
-  log_test_step "Testing: socket file path is within KGSM_ROOT"
+  log_test_step "Testing: a relative socket name resolves within KGSM_ROOT"
+
+  # A bare/relative socket name still resolves under KGSM_ROOT (absolute names are
+  # used as-is — see __socket_resolve_path). Force a deterministic relative name so
+  # this does not depend on the configured default (which is now absolute /run paths).
+  export config_event_socket_filenames="kgsm.sock"
 
   local output
   output=$("$SOCKET_MODULE" status 2>&1)
 
-  assert_contains "$output" "$KGSM_ROOT" \
-    "Socket status should show socket file path within KGSM_ROOT"
+  assert_contains "$output" "$KGSM_ROOT/kgsm.sock" \
+    "Socket status should resolve a relative socket name within KGSM_ROOT"
 }
 
 # =============================================================================

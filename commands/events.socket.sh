@@ -40,7 +40,8 @@ ${UNDERLINE}Examples:${END}
 
 ${UNDERLINE}Notes:${END}
   • Socket transport requires 'socat' for message transmission
-  • Socket file is created in \$KGSM_ROOT directory
+  • A socket name may be ABSOLUTE (e.g. /run/kgsm-api/kgsm-events.sock) — used as-is —
+    or a bare filename, resolved under \$KGSM_ROOT
   • Multiple processes can listen to the same socket
   • Sockets are created automatically when first event is emitted
 "
@@ -139,6 +140,22 @@ ${UNDERLINE}Examples:${END}
 "
 }
 
+# Resolve an event-socket name to its filesystem path. An ABSOLUTE name (one starting
+# with '/') is used verbatim, so a socket may live anywhere on the system — e.g. a
+# per-service runtime dir like /run/kgsm-api/kgsm-events.sock. A bare/relative name is
+# resolved under $KGSM_ROOT (backward compatible, e.g. "kgsm.sock"). This is the single
+# place socket-name -> path resolution happens; every caller goes through it.
+function __socket_resolve_path() {
+  local name="$1"
+  if [[ "$name" == /* ]]; then
+    printf '%s' "$name"
+  else
+    printf '%s' "$KGSM_ROOT/$name"
+  fi
+}
+
+export -f __socket_resolve_path
+
 # Core function: Send event to socket (used by core/events.sh)
 function __socket_emit_event() {
   local payload="$1"
@@ -175,7 +192,7 @@ function __socket_emit_event() {
   for socket_name in "${socket_list[@]}"; do
     # Trim whitespace
     socket_name=$(echo "$socket_name" | xargs)
-    local socket_file="$KGSM_ROOT/$socket_name"
+    local socket_file="$(__socket_resolve_path "$socket_name")"
 
     if [[ ! -e "$socket_file" ]]; then
       continue
@@ -238,12 +255,12 @@ function _cmd_enable() {
     IFS=',' read -ra socket_list <<< "$socket_filenames"
 
     if [[ ${#socket_list[@]} -eq 1 ]]; then
-      __print_info "Socket file will be created at: $KGSM_ROOT/${socket_list[0]// /}"
+      __print_info "Socket file will be created at: $(__socket_resolve_path "${socket_list[0]// /}")"
     else
       __print_info "Socket files will be created at:"
       for socket_name in "${socket_list[@]}"; do
         socket_name=$(echo "$socket_name" | xargs)
-        __print_info "  - $KGSM_ROOT/$socket_name"
+        __print_info "  - $(__socket_resolve_path "$socket_name")"
       done
     fi
 
@@ -284,7 +301,7 @@ function _cmd_disable() {
     # Clean up socket files if they exist
     for socket_name in "${socket_list[@]}"; do
       socket_name=$(echo "$socket_name" | xargs)
-      local socket_file="$KGSM_ROOT/$socket_name"
+      local socket_file="$(__socket_resolve_path "$socket_name")"
       if [[ -e "$socket_file" ]]; then
         rm -f "$socket_file"
         __print_info "Removed socket file: $socket_file"
@@ -331,19 +348,19 @@ function _cmd_test() {
   IFS=',' read -ra socket_list <<< "$socket_filenames"
 
   if [[ ${#socket_list[@]} -eq 1 ]]; then
-    __print_info "Socket file: $KGSM_ROOT/${socket_list[0]// /}"
+    __print_info "Socket file: $(__socket_resolve_path "${socket_list[0]// /}")"
   else
     __print_info "Socket files:"
     for socket_name in "${socket_list[@]}"; do
       socket_name=$(echo "$socket_name" | xargs)
-      __print_info "  - $KGSM_ROOT/$socket_name"
+      __print_info "  - $(__socket_resolve_path "$socket_name")"
     done
   fi
 
   # Clean up any existing socket files
   for socket_name in "${socket_list[@]}"; do
     socket_name=$(echo "$socket_name" | xargs)
-    local socket_file="$KGSM_ROOT/$socket_name"
+    local socket_file="$(__socket_resolve_path "$socket_name")"
     if [[ -e "$socket_file" ]]; then
       rm -f "$socket_file"
     fi
@@ -374,7 +391,7 @@ function _cmd_test() {
   # Start listeners for each socket
   for i in "${!socket_list[@]}"; do
     local socket_name=$(echo "${socket_list[$i]}" | xargs)
-    local socket_file="$KGSM_ROOT/$socket_name"
+    local socket_file="$(__socket_resolve_path "$socket_name")"
     local test_output="/tmp/kgsm-socket-test-$$-$i"
 
     # Start listener that will capture one message and exit
@@ -433,7 +450,7 @@ function _cmd_test() {
 
   for socket_name in "${socket_list[@]}"; do
     socket_name=$(echo "$socket_name" | xargs)
-    local socket_file="$KGSM_ROOT/$socket_name"
+    local socket_file="$(__socket_resolve_path "$socket_name")"
     rm -f "$socket_file"
   done
 
@@ -484,12 +501,12 @@ function _cmd_status() {
   IFS=',' read -ra socket_list <<< "$socket_filenames"
 
   if [[ ${#socket_list[@]} -eq 1 ]]; then
-    echo "  Socket file: $KGSM_ROOT/${socket_list[0]// /}"
+    echo "  Socket file: $(__socket_resolve_path "${socket_list[0]// /}")"
   else
     echo "  Socket files:"
     for socket_name in "${socket_list[@]}"; do
       socket_name=$(echo "$socket_name" | xargs)
-      echo "    - $KGSM_ROOT/$socket_name"
+      echo "    - $(__socket_resolve_path "$socket_name")"
     done
   fi
   echo ""
@@ -510,7 +527,7 @@ function _cmd_status() {
   local any_exist=false
   for socket_name in "${socket_list[@]}"; do
     socket_name=$(echo "$socket_name" | xargs)
-    local socket_file="$KGSM_ROOT/$socket_name"
+    local socket_file="$(__socket_resolve_path "$socket_name")"
     if [[ -e "$socket_file" ]]; then
       echo -e "  $socket_name: ${GREEN}Exists${END}"
       any_exist=true
