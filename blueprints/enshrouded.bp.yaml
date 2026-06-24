@@ -4,10 +4,10 @@ runtime: container
 metadata:
   # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
   display_name: "Enshrouded"
-  description: null
+  description: "Survival action RPG developed by Keen Games, set in the open world of Embervale where players build bases, craft equipment, and explore fog-covered zones called the Shroud that are filled with hostile creatures."
   rawg_slug: "enshrouded-2"
-  max_players: null
-  min_ram_mb: null
+  max_players: 16
+  min_ram_mb: 6144
   recommended_ram_mb: null
   base_disk_mb: null
 container:

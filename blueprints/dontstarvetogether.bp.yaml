@@ -4,11 +4,11 @@ runtime: native
 metadata:
   # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
   display_name: "Don't Starve Together"
-  description: null
+  description: "Don't Starve Together is a cooperative multiplayer survival game by Klei Entertainment in which players explore a procedurally generated wilderness, gather resources, and work together to survive threats and the environment."
   rawg_slug: "dont-starve-together"
   max_players: null
-  min_ram_mb: null
-  recommended_ram_mb: null
+  min_ram_mb: 1024
+  recommended_ram_mb: 4096
   base_disk_mb: null
 native:
   ports: 10999/tcp|10999/udp

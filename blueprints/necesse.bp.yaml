@@ -4,11 +4,11 @@ runtime: native
 metadata:
   # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
   display_name: "Necesse"
-  description: null
+  description: "Top-down action-adventure sandbox RPG by Fair Games ApS where players build settlements, recruit NPC settlers, craft gear, and explore procedurally generated worlds while battling dungeons and bosses in single-player or multiplayer."
   rawg_slug: "necesse"
-  max_players: null
-  min_ram_mb: null
-  recommended_ram_mb: null
+  max_players: 250
+  min_ram_mb: 2048
+  recommended_ram_mb: 4096
   base_disk_mb: null
 native:
   ports: 14159/tcp|14159/udp

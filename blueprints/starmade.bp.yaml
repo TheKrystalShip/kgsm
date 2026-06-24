@@ -4,11 +4,11 @@ runtime: native
 metadata:
   # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
   display_name: "StarMade"
-  description: null
+  description: "StarMade is a voxel-based 3D space sandbox game developed by Schine GmbH in which players build and pilot spacecraft, explore a procedurally generated universe, and construct space stations from block-based components in multiplayer or solo."
   rawg_slug: "starmade"
-  max_players: null
-  min_ram_mb: null
-  recommended_ram_mb: null
+  max_players: 32
+  min_ram_mb: 2048
+  recommended_ram_mb: 4096
   base_disk_mb: null
 native:
   ports: 4242/tcp|4242/udp

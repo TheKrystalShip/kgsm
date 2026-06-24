@@ -4,11 +4,11 @@ runtime: container
 metadata:
   # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
   display_name: "Abiotic Factor"
-  description: null
+  description: "Survival crafting game for 1-6 players set inside an underground research facility after a catastrophic containment breach, developed by Deep Field Games."
   rawg_slug: "abiotic-factor"
-  max_players: null
-  min_ram_mb: null
-  recommended_ram_mb: null
+  max_players: 6
+  min_ram_mb: 4096
+  recommended_ram_mb: 8192
   base_disk_mb: null
 container:
   compose: |-

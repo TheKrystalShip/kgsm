@@ -4,12 +4,12 @@ runtime: native
 metadata:
   # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
   display_name: "7 Days to Die"
-  description: null
+  description: "An open-world survival horror game by The Fun Pimps set in a post-apocalyptic world, combining crafting, voxel-based construction, and tower defense against zombie hordes that intensify every seventh in-game day."
   rawg_slug: "7-days-to-die"
-  max_players: null
-  min_ram_mb: null
-  recommended_ram_mb: null
-  base_disk_mb: null
+  max_players: 8
+  min_ram_mb: 4096
+  recommended_ram_mb: 8192
+  base_disk_mb: 15360
 native:
   ports: 26900:26903/tcp|26900:26903/udp
   steam_app_id: 294420

@@ -4,12 +4,12 @@ runtime: native
 metadata:
   # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
   display_name: "ARK: Survival Evolved"
-  description: null
+  description: "Open-world survival game set on a prehistoric island where players gather resources, build bases, and tame dinosaurs; developed by Studio Wildcard, released 2017."
   rawg_slug: "ark-survival-evolved"
   max_players: null
-  min_ram_mb: null
-  recommended_ram_mb: null
-  base_disk_mb: null
+  min_ram_mb: 6144
+  recommended_ram_mb: 8192
+  base_disk_mb: 18432
 native:
   ports: 7777/udp|7778/udp|27020/tcp|27015/udp
   steam_app_id: 376030

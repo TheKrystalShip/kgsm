@@ -4,12 +4,12 @@ runtime: native
 metadata:
   # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
   display_name: "Counter-Strike: Source"
-  description: null
+  description: "Counter-Strike: Source is a tactical first-person shooter by Valve that remakes the original Counter-Strike on the Source engine, pitting teams of terrorists and counter-terrorists against each other across objective-based rounds."
   rawg_slug: "counter-strike-source"
-  max_players: null
-  min_ram_mb: null
-  recommended_ram_mb: null
-  base_disk_mb: null
+  max_players: 32
+  min_ram_mb: 512
+  recommended_ram_mb: 1024
+  base_disk_mb: 2200
 native:
   ports: 26900/udp|27015/tcp|27015/udp|27020/udp|27005/udp
   steam_app_id: 232330

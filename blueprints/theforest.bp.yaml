@@ -4,12 +4,12 @@ runtime: container
 metadata:
   # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
   display_name: "The Forest"
-  description: null
+  description: "Open-world survival horror game by Endnight Games in which players crash-land on a forested peninsula and must gather resources, build shelter, and fend off cannibalistic mutants alone or in co-op."
   rawg_slug: "the-forest"
-  max_players: null
-  min_ram_mb: null
-  recommended_ram_mb: null
-  base_disk_mb: null
+  max_players: 8
+  min_ram_mb: 4096
+  recommended_ram_mb: 8192
+  base_disk_mb: 10240
 container:
   compose: |-
     services:

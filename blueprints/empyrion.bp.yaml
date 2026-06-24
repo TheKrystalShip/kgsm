@@ -4,11 +4,11 @@ runtime: container
 metadata:
   # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
   display_name: "Empyrion - Galactic Survival"
-  description: null
+  description: "Open-world space sandbox survival game by Eleon Game Studios in which players explore planets, mine resources, and construct ships, ground vehicles, and bases. Supports both single-player and dedicated multiplayer."
   rawg_slug: "empyrion-galactic-survival"
   max_players: null
-  min_ram_mb: null
-  recommended_ram_mb: null
+  min_ram_mb: 8192
+  recommended_ram_mb: 16384
   base_disk_mb: null
 container:
   compose: |-

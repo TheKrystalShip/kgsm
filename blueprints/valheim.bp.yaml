@@ -4,12 +4,12 @@ runtime: native
 metadata:
   # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
   display_name: "Valheim"
-  description: null
+  description: "A Viking-themed survival and exploration game by Iron Gate Studio where players gather resources, build bases, and fight mythical creatures in procedurally generated worlds. Supports cooperative multiplayer with up to 10 players on a dedicated server."
   rawg_slug: "valheim"
-  max_players: null
-  min_ram_mb: null
-  recommended_ram_mb: null
-  base_disk_mb: null
+  max_players: 10
+  min_ram_mb: 2048
+  recommended_ram_mb: 4096
+  base_disk_mb: 5120
 native:
   ports: 2456:2458/tcp|2456:2458/udp
   steam_app_id: 896660

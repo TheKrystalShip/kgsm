@@ -4,12 +4,12 @@ runtime: native
 metadata:
   # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
   display_name: "Minecraft"
-  description: null
+  description: "Open-world sandbox survival game by Mojang Studios in which players explore, gather resources, craft, and build in procedurally generated 3D block worlds; supports both survival and creative modes."
   rawg_slug: "minecraft"
-  max_players: null
-  min_ram_mb: null
-  recommended_ram_mb: null
-  base_disk_mb: null
+  max_players: 20
+  min_ram_mb: 1024
+  recommended_ram_mb: 2048
+  base_disk_mb: 120
 native:
   ports: 25565/udp
   steam_app_id: 0
