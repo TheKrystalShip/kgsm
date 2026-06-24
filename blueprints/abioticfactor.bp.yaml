@@ -3,7 +3,7 @@ name: abioticfactor
 runtime: container
 metadata:
   # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
-  display_name: null
+  display_name: "Abiotic Factor"
   description: null
   rawg_slug: "abiotic-factor"
   max_players: null

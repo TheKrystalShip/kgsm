@@ -3,7 +3,7 @@ name: enshrouded
 runtime: container
 metadata:
   # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
-  display_name: null
+  display_name: "Enshrouded"
   description: null
   rawg_slug: "enshrouded-2"
   max_players: null

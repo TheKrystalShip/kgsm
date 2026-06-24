@@ -3,7 +3,7 @@ name: projectzomboid
 runtime: native
 metadata:
   # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
-  display_name: null
+  display_name: "Project Zomboid"
   description: null
   rawg_slug: "project-zomboid"
   max_players: null

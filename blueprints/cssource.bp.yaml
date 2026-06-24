@@ -3,7 +3,7 @@ name: cssource
 runtime: native
 metadata:
   # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
-  display_name: null
+  display_name: "Counter-Strike: Source"
   description: null
   rawg_slug: "counter-strike-source"
   max_players: null

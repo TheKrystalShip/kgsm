@@ -3,7 +3,7 @@ name: corekeeper
 runtime: native
 metadata:
   # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
-  display_name: null
+  display_name: "Core Keeper"
   description: null
   rawg_slug: "core-keeper"
   max_players: null
