@@ -91,11 +91,17 @@ export -f __watchdog_available
 
 # Routes a start/stop verb to the watchdog and maps the HTTP result to a kgsm
 # exit code mirroring the direct path's contract:
-#   200 -> success event code (started/stopped)
-#   409 -> already in the desired state; treated as idempotent success
-#   connection failure / other status -> EC_ERROR. Availability was already
-#     confirmed by the caller, so a failure here is a real error: do NOT silently
-#     re-spawn via the direct path (that risks a double start).
+#   200 -> success event code (started/stopped). The daemon returns 200 for a
+#     genuine idempotent no-op too (ok:true "already running" / "not running"), so
+#     200 alone is the honest success signal — no separate already-in-state case.
+#   any other status (incl. 409) -> EC_ERROR. The daemon uses 409 (ok:false) for a
+#     REAL failure — e.g. "unknown instance (kgsm-lib returned no info)" or a failed
+#     spawn — NOT "already in the desired state". Mapping 409 to success made kgsm
+#     report a successful start AND emit a fabricated instance_started event when the
+#     start actually failed (e.g. the daemon pointed at a kgsm that can't see the
+#     instance). Claim success only when the daemon confirms it. Availability was
+#     already confirmed by the caller, so any non-200 here is a real error: do NOT
+#     silently re-spawn via the direct path (that risks a double start).
 # Args: $1 = verb (start|stop), $2 = instance name
 # Returns: EC_SUCCESS_INSTANCE_STARTED / EC_SUCCESS_INSTANCE_STOPPED, or an error code
 function __watchdog_dispatch_lifecycle() {
@@ -132,7 +138,6 @@ function __watchdog_dispatch_lifecycle() {
 
   case "$_code" in
     200) return $_success_ec ;;
-    409) return $_success_ec ;;
     *) return $EC_ERROR ;;
   esac
 }

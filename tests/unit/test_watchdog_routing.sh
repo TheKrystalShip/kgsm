@@ -147,14 +147,20 @@ function test_dispatch_start_200_is_started() {
     "200 should map to the started event code"
 }
 
-function test_dispatch_start_409_is_idempotent_success() {
-  log_test_step "POST /start 409 (already running) -> idempotent success"
+function test_dispatch_start_409_is_ec_error() {
+  log_test_step "POST /start 409 (real failure, e.g. unknown instance) -> EC_ERROR"
 
+  # The daemon returns 409 (ok:false) for a GENUINE failure — e.g. "unknown
+  # instance (kgsm-lib returned no info)" or a failed spawn — NOT for "already in
+  # the desired state" (a real idempotent no-op like "already running" returns 200
+  # ok:true). Mapping 409 to success made kgsm report a successful start AND emit a
+  # fabricated instance_started event when the start had actually failed. 409 must
+  # surface as an error so the failure is honest, not masked.
   function __watchdog_curl() { echo "409"; return 0; }
 
   __watchdog_dispatch_lifecycle start "myinst"
-  assert_equals "$EC_SUCCESS_INSTANCE_STARTED" "$?" \
-    "409 should be treated as already-in-desired-state success"
+  assert_equals "$EC_ERROR" "$?" \
+    "409 is a real daemon failure and must map to EC_ERROR, never success"
 }
 
 function test_dispatch_stop_200_is_stopped() {
