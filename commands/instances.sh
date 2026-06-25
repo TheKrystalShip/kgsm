@@ -1063,6 +1063,17 @@ function _cmd_input() {
 
   __source_instance "$instance"
   "$instance_management_file" input "$command"
+  local exit_code=$?
+
+  if [[ $exit_code -eq 0 ]]; then
+    # Audit the delivered command (instance + verbatim command). Emitted from the
+    # command layer, not the management script (a standalone artifact without the
+    # event helpers), and only on a successful send. `events.sh emit` no-ops when
+    # broadcasting is off. Matches the config-set convention.
+    events.sh emit instance-input-sent "$instance" "$command"
+  fi
+
+  exit $exit_code
 }
 
 function _cmd_config_get() {

@@ -173,6 +173,17 @@ export EVENT_INSTANCE_PLAYER_LEFT
 declare -g -r EVENT_INSTANCE_CONFIG_CHANGED="instance_config_changed"
 export EVENT_INSTANCE_CONFIG_CHANGED
 
+# Console-input audit event. Emitted by the command layer when an arbitrary
+# console command is delivered to a running instance via `instances input`.
+# Carries the instance name and the verbatim command text. Unlike
+# instance_config_changed (key only), the FULL command is carried on purpose —
+# the trail's value is recording exactly what an operator ran (console commands
+# are admin-level: ban/kick/op/...). A command can therefore contain a secret
+# (e.g. an RCON login); the surface is operator-gated upstream and a consumer
+# that must redact does so at its own boundary.
+declare -g -r EVENT_INSTANCE_INPUT_SENT="instance_input_sent"
+export EVENT_INSTANCE_INPUT_SENT
+
 # Event parameter specifications
 declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_CREATED"]="instance blueprint"
@@ -219,6 +230,9 @@ declare -g -A EVENT_CONFIGS=(
   # `key` only — NEVER the value (instance config holds secrets). The matching
   # case arm in _build_event_payload renders Data { InstanceName, Key }.
   ["$EVENT_INSTANCE_CONFIG_CHANGED"]="instance key"
+  # `command` is the verbatim console command. The matching case arm in
+  # _build_event_payload renders Data { InstanceName, Command }.
+  ["$EVENT_INSTANCE_INPUT_SENT"]="instance command"
 )
 
 # Validates that an event type is supported

@@ -405,6 +405,15 @@ function _build_event_payload() {
         Key: $key
       }'
       ;;
+    "$EVENT_INSTANCE_INPUT_SENT")
+      # The verbatim console command. Carried in full on purpose (unlike the
+      # config-changed key-only rule) so the audit records exactly what was run.
+      # `$command` binds because `command` is the 2nd EVENT_CONFIGS param name.
+      data_object='{
+        InstanceName: $instance,
+        Command: $command
+      }'
+      ;;
     "$EVENT_INSTANCE_CRASHED" | "$EVENT_INSTANCE_FAILED")
       data_object='{
         InstanceName: $instance,

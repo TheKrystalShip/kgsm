@@ -115,7 +115,7 @@ function test_validate_event_type_empty_returns_error() {
 }
 
 function test_validate_event_type_all_40_constants() {
-  log_test_step "Testing __logic_validate_event_type with all 40 event constants"
+  log_test_step "Testing __logic_validate_event_type with all 41 event constants"
 
   local event_types=(
     "instance_created"
@@ -158,6 +158,7 @@ function test_validate_event_type_all_40_constants() {
     "instance_player_joined"
     "instance_player_left"
     "instance_config_changed"
+    "instance_input_sent"
   )
 
   local failed_events=()
@@ -169,7 +170,7 @@ function test_validate_event_type_all_40_constants() {
   done
 
   assert_equals "${#failed_events[@]}" "0" \
-    "All 40 event types should be valid. Failed: ${failed_events[*]}"
+    "All 41 event types should be valid. Failed: ${failed_events[*]}"
 }
 
 function test_validate_event_type_case_sensitive() {
@@ -435,7 +436,7 @@ function test_get_param_spec_output_format_space_separated() {
 }
 
 function test_get_param_spec_all_40_events() {
-  log_test_step "Testing __logic_get_event_param_spec for all 40 events"
+  log_test_step "Testing __logic_get_event_param_spec for all 41 events"
 
   local event_types=(
     "instance_created"
@@ -478,6 +479,7 @@ function test_get_param_spec_all_40_events() {
     "instance_player_joined"
     "instance_player_left"
     "instance_config_changed"
+    "instance_input_sent"
   )
 
   local failed_events=()
@@ -492,7 +494,7 @@ function test_get_param_spec_all_40_events() {
   done
 
   assert_equals "${#failed_events[@]}" "0" \
-    "All 40 events should return valid specs. Failed: ${failed_events[*]}"
+    "All 41 events should return valid specs. Failed: ${failed_events[*]}"
 }
 
 function test_get_param_spec_firewall_ports_events() {
@@ -896,12 +898,12 @@ function test_edge_case_all_events_have_configs() {
 }
 
 function test_edge_case_event_count_matches_configs() {
-  log_test_step "Testing EVENT_CONFIGS count matches expected 40 events"
+  log_test_step "Testing EVENT_CONFIGS count matches expected 41 events"
 
   local config_count="${#EVENT_CONFIGS[@]}"
 
-  assert_equals "$config_count" "40" \
-    "EVENT_CONFIGS should contain exactly 40 entries (found: $config_count)"
+  assert_equals "$config_count" "41" \
+    "EVENT_CONFIGS should contain exactly 41 entries (found: $config_count)"
 }
 
 # Conformance guard: every event a call site actually emits must be registered
