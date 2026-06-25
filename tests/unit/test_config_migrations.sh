@@ -30,6 +30,8 @@ function setup_file() {
   assert_file_executable "$MIGRATION_DIR/002_v1_to_v2_add_cgroup_section.sh" "Migration 002 should be executable"
   assert_file_exists "$MIGRATION_DIR/003_v2_to_v3_remove_services_section.sh" "Migration 003 should exist"
   assert_file_executable "$MIGRATION_DIR/003_v2_to_v3_remove_services_section.sh" "Migration 003 should be executable"
+  assert_file_exists "$MIGRATION_DIR/004_v3_to_v4_cgroup_base_delegated.sh" "Migration 004 should exist"
+  assert_file_executable "$MIGRATION_DIR/004_v3_to_v4_cgroup_base_delegated.sh" "Migration 004 should be executable"
 
   log_test_step "Config migration test environment validated"
 }
@@ -491,3 +493,94 @@ EOF
   assert_command_succeeds "grep -q '^\[cgroup\]' '$test_config'"
 }
 
+
+# =============================================================================
+# TEST: Migration 004 - cgroup base -> delegated watchdog service cgroup
+# =============================================================================
+
+function test_migration_004_rewrites_default_base() {
+  log_test_step "Testing migration 004 rewrites the old default cgroup base"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v3_default_base.ini"
+  cat > "$test_config" << 'EOF'
+config_schema_version=3
+
+[cgroup]
+enable_cgroups=true
+cgroup_mount_point=/sys/fs/cgroup
+cgroup_base_name=kgsm.slice
+cgroup_controllers=cpu memory io pids
+EOF
+
+  bash "$MIGRATION_DIR/004_v3_to_v4_cgroup_base_delegated.sh" "$test_config"
+  assert_equals "$?" "0" "Migration 004 should succeed"
+
+  # Schema version bumped to 4
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "4" "Schema version should be 4"
+
+  # Old default rewritten to the delegated service cgroup
+  assert_command_succeeds "grep -q '^cgroup_base_name=kgsm.slice/kgsm-watchdog.service$' '$test_config'"
+  assert_command_fails "grep -q '^cgroup_base_name=kgsm.slice$' '$test_config'"
+
+  # Other cgroup keys preserved
+  assert_command_succeeds "grep -q '^enable_cgroups=true' '$test_config'"
+  assert_command_succeeds "grep -q '^cgroup_controllers=cpu memory io pids' '$test_config'"
+
+  # Backup created
+  assert_file_exists "${test_config}.pre-migration-v4.bak"
+}
+
+# =============================================================================
+# TEST: Migration 004 - leaves an operator-customised base untouched
+# =============================================================================
+
+function test_migration_004_preserves_custom_base() {
+  log_test_step "Testing migration 004 does not clobber a customised base"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v3_custom_base.ini"
+  cat > "$test_config" << 'EOF'
+config_schema_version=3
+
+[cgroup]
+cgroup_base_name=games.slice/my-supervisor.service
+EOF
+
+  bash "$MIGRATION_DIR/004_v3_to_v4_cgroup_base_delegated.sh" "$test_config"
+  assert_equals "$?" "0" "Migration 004 should succeed"
+
+  # Version bumped, custom value preserved
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "4" "Schema version should be 4"
+  assert_command_succeeds "grep -q '^cgroup_base_name=games.slice/my-supervisor.service$' '$test_config'"
+}
+
+# =============================================================================
+# TEST: Migration 004 - Idempotency (already delegated)
+# =============================================================================
+
+function test_migration_004_idempotent() {
+  log_test_step "Testing migration 004 idempotency"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v3_idempotent.ini"
+  cat > "$test_config" << 'EOF'
+config_schema_version=3
+
+[cgroup]
+cgroup_base_name=kgsm.slice
+EOF
+
+  bash "$MIGRATION_DIR/004_v3_to_v4_cgroup_base_delegated.sh" "$test_config"
+  assert_equals "$?" "0" "First run should succeed"
+
+  bash "$MIGRATION_DIR/004_v3_to_v4_cgroup_base_delegated.sh" "$test_config"
+  assert_equals "$?" "0" "Second run should succeed (idempotent)"
+
+  # Stable at v4 with the delegated base
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "4" "Schema version should be 4"
+  assert_command_succeeds "grep -q '^cgroup_base_name=kgsm.slice/kgsm-watchdog.service$' '$test_config'"
+}

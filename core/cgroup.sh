@@ -9,14 +9,19 @@
 # (`cgroup.events`), atomic whole-tree teardown (`cgroup.kill`), and accurate
 # per-instance accounting.
 #
-# All functions operate on KGSM's delegated base (see `kgsm system
-# setup-cgroups`), resolved from config. They communicate via exit codes and
-# print only on hard failure. Callers must gate on `__cgroup_supported` first.
+# All functions operate on KGSM's delegated base, resolved from config. Under
+# systemd cgroup delegation that base is kgsm-watchdog's own service cgroup
+# (kgsm.slice/kgsm-watchdog.service) — systemd creates + delegates it, so KGSM no
+# longer prepares it (`kgsm system setup-cgroups` is legacy). KGSM mainly DERIVES
+# the per-instance path here to surface it as each instance's `cgroup_path`; the
+# watchdog is what actually creates/moves/kills the cgroups. They communicate via
+# exit codes and print only on hard failure. Callers gate on `__cgroup_supported`.
 #
 # Config (flattened to config_* by core/config.sh):
 #   config_enable_cgroups       master switch (true|false)
 #   config_cgroup_mount_point   cgroup v2 mount (default /sys/fs/cgroup)
-#   config_cgroup_base_name     KGSM's delegated base (default kgsm.slice)
+#   config_cgroup_base_name     delegated base, MUST match the watchdog's layout
+#                               (default kgsm.slice/kgsm-watchdog.service)
 #   config_cgroup_controllers   space-separated controllers (cpu memory io pids)
 
 # Disabling SC2086 globally:
@@ -32,7 +37,7 @@ fi
 # Returns: base path to stdout (e.g. /sys/fs/cgroup/kgsm.slice)
 function __cgroup_base() {
   local mount_point="${config_cgroup_mount_point:-/sys/fs/cgroup}"
-  local base_name="${config_cgroup_base_name:-kgsm.slice}"
+  local base_name="${config_cgroup_base_name:-kgsm.slice/kgsm-watchdog.service}"
   echo "${mount_point}/${base_name}"
 }
 

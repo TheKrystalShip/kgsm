@@ -830,7 +830,13 @@ function show_usage_setup_cgroups() {
   local UNDERLINE="\e[4m"
   local END="\e[0m"
 
-  echo -e "${UNDERLINE}Set up KGSM cgroup delegation${END}
+  echo -e "${UNDERLINE}Set up KGSM cgroup delegation (LEGACY)${END}
+
+LEGACY / not needed under systemd: kgsm-watchdog now obtains its cgroup base via
+systemd cgroup delegation (Slice=kgsm.slice, Delegate=yes) and manages the subtree
+below its own service cgroup. Running this on a systemd host creates a manual
+kgsm.slice that systemd then fights. Use it only on non-systemd hosts or for
+diagnostics.
 
 Creates KGSM's delegated cgroup v2 base and hands its ownership to a user, so
 game-server instances can be supervised (crash detection, whole-tree teardown,
