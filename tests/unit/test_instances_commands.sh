@@ -276,10 +276,27 @@ function test_info_missing_instance() {
 }
 
 function test_info_invalid_instance() {
-  log_test_step "Testing 'info' with nonexistent instance fails"
+  log_test_step "Testing 'info' with nonexistent instance fails loudly"
 
   "$MODULE" info totally_nonexistent_instance_xyz 2>/dev/null
-  assert_not_equals 0 "$?" "info with nonexistent instance should fail"
+  assert_equals "$EC_FILE_NOT_FOUND" "$?" \
+    "info with nonexistent instance should fail with EC_FILE_NOT_FOUND"
+}
+
+function test_info_json_invalid_instance() {
+  log_test_step "Testing 'info --json' with nonexistent instance fails (no skeletal JSON)"
+
+  # The bug this guards: a missing instance must NOT render a skeletal object
+  # ({cgroup_path:"",ports:[]}) with exit 0 — a consumer (kgsm-lib/watchdog) must
+  # be able to tell "no such instance" apart from real data.
+  local output exit_code
+  output=$("$MODULE" info totally_nonexistent_instance_xyz --json 2>/dev/null)
+  exit_code=$?
+
+  assert_equals "$EC_FILE_NOT_FOUND" "$exit_code" \
+    "info --json for a nonexistent instance should fail with EC_FILE_NOT_FOUND"
+  assert_null "$output" \
+    "info --json for a nonexistent instance must emit no JSON on stdout"
 }
 
 # =============================================================================

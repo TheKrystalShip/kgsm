@@ -835,6 +835,17 @@ function _cmd_info() {
     exit $EC_MISSING_ARG
   fi
 
+  # The instance must exist. Fail loudly with the dedicated not-found code rather
+  # than rendering a skeletal/empty object for a missing instance, so a consumer
+  # (e.g. kgsm-lib) can tell "no such instance" apart from real data. Mirrors the
+  # not-found contract in core/loader.sh.
+  local instance_config_file
+  instance_config_file=$(__find_instance_config "$instance")
+  if [[ -z "$instance_config_file" ]]; then
+    __print_error "Instance config file for '$instance' not found."
+    exit $EC_FILE_NOT_FOUND
+  fi
+
   if [[ -z "$json_format" ]]; then
     _print_info "$instance"
   else
