@@ -101,15 +101,22 @@ function _get_status() {
     backup_json_array=$(printf '%s\n' $backup_list | jq -R . | jq -s .)
   fi
 
-  # Fast logs (minimal processing)
-  if [[ -d "$instance_logs_dir" ]]; then
+  # Recent logs: read the LIVE log file the server writes to ($instance_log_file).
+  # The logs dir ($instance_logs_dir) holds only ROTATED logs, so reading it alone
+  # returns nothing between rotations even while the server is actively logging — a
+  # false "no logs" that consumers (e.g. the assistant health check) must not mistake
+  # for "logs are clean". Prefer the live file; fall back to the newest rotated log;
+  # only then report an empty array (genuinely nothing to show, never a fabricated ok).
+  local _log_source=""
+  if [[ -f "$instance_log_file" && -s "$instance_log_file" ]]; then
+    _log_source="$instance_log_file"
+  elif [[ -d "$instance_logs_dir" ]]; then
     local latest_log
     latest_log=$(ls -t "$instance_logs_dir" 2>/dev/null | head -1)
-    if [[ -n "$latest_log" ]]; then
-      recent_logs=$(tail -3 "$instance_logs_dir/$latest_log" 2>/dev/null | jq -R -s . 2>/dev/null || echo '[]')
-    else
-      recent_logs='[]'
-    fi
+    [[ -n "$latest_log" ]] && _log_source="$instance_logs_dir/$latest_log"
+  fi
+  if [[ -n "$_log_source" ]]; then
+    recent_logs=$(tail -3 "$_log_source" 2>/dev/null | jq -R -s . 2>/dev/null || echo '[]')
   else
     recent_logs='[]'
   fi

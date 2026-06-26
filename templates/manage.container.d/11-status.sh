@@ -221,22 +221,24 @@ function _get_status() {
     backup_json_array=$(printf '%s\n' $backup_list | jq -R . | jq -s .)
   fi
 
-  # Fast logs (minimal processing) - enhanced to match native template approach
+  # Recent logs: read the LIVE container logs (docker compose) when active. The logs
+  # dir ($instance_logs_dir) holds only ROTATED logs, so reading it first returns
+  # nothing between rotations even while the container is actively logging — a false
+  # "no logs" that consumers (e.g. the assistant health check) must not mistake for
+  # "logs are clean". Prefer live logs; fall back to the newest rotated log; only then
+  # an empty array (genuinely nothing to show, never a fabricated ok).
+  local _latest_rotated=""
   if [[ -d "$instance_logs_dir" ]]; then
     local latest_log
     latest_log=$(ls -t "$instance_logs_dir" 2>/dev/null | head -1)
-    if [[ -n "$latest_log" ]]; then
-      recent_logs=$(tail -3 "$instance_logs_dir/$latest_log" 2>/dev/null | jq -R -s . 2>/dev/null || echo '[]')
-    else
-      recent_logs='[]'
-    fi
+    [[ -n "$latest_log" ]] && _latest_rotated="$instance_logs_dir/$latest_log"
+  fi
+  if _is_active >/dev/null 2>&1; then
+    recent_logs=$(cd "$instance_working_dir" && docker compose -f "$instance_compose_file" logs --tail=3 2>/dev/null | jq -R -s . 2>/dev/null || echo '[]')
+  elif [[ -n "$_latest_rotated" ]]; then
+    recent_logs=$(tail -3 "$_latest_rotated" 2>/dev/null | jq -R -s . 2>/dev/null || echo '[]')
   else
-    # Fallback to docker compose logs if no log directory exists
-    if _is_active >/dev/null 2>&1; then
-      recent_logs=$(cd "$instance_working_dir" && docker compose -f "$instance_compose_file" logs --tail=3 2>/dev/null | jq -R -s . 2>/dev/null || echo '[]')
-    else
-      recent_logs='[]'
-    fi
+    recent_logs='[]'
   fi
 
   if [[ -n "$json_format" ]]; then
