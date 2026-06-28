@@ -106,11 +106,61 @@ export -f __logic_create_instance_config_file
 # Create base instance configuration
 # Args: $1 = instance_config_file, $2 = _instance_name, $3 = blueprint_abs_path, $4 = install_dir
 # Returns: 0 on success, error code on failure
+# Override the primary game port in a UFW-style port spec.
+# Args: $1 = port spec (e.g. "34197", "7777/tcp|7777/udp", "27015:27016/udp")
+#       $2 = new primary port (numeric)
+# Echoes the rewritten spec. The "primary" port is the start of the FIRST
+# pipe-separated mapping; every field across the spec equal to that primary
+# value (a start or a single-port end) is replaced with the new port. This
+# handles the common shapes exactly — a lone port, and a tcp+udp pair sharing
+# one port (e.g. terraria 7777/tcp|7777/udp → N/tcp|N/udp) — while preserving
+# protocols, ranges, and any genuinely-distinct secondary ports untouched.
+# An empty spec yields just the new port.
+function __override_primary_port() {
+  local spec="$1"
+  local new_port="$2"
+
+  if [[ -z "$spec" ]]; then
+    printf '%s' "$new_port"
+    return 0
+  fi
+
+  local primary="" out="" seg first=1
+  local _segs
+  IFS='|' read -ra _segs <<<"$spec"
+  for seg in "${_segs[@]}"; do
+    local proto="" range="$seg" start end=""
+    if [[ "$seg" == */* ]]; then
+      proto="/${seg#*/}"
+      range="${seg%%/*}"
+    fi
+    start="${range%%:*}"
+    [[ "$range" == *:* ]] && end="${range#*:}"
+
+    if [[ $first -eq 1 ]]; then
+      primary="$start"
+      first=0
+    fi
+    [[ "$start" == "$primary" ]] && start="$new_port"
+    [[ -n "$end" && "$end" == "$primary" ]] && end="$new_port"
+
+    local rebuilt="$start"
+    [[ -n "$end" ]] && rebuilt="${start}:${end}"
+    rebuilt="${rebuilt}${proto}"
+    [[ -n "$out" ]] && out="${out}|"
+    out="${out}${rebuilt}"
+  done
+  printf '%s' "$out"
+}
+
+export -f __override_primary_port
+
 function __logic_create_base_instance() {
   local instance_config_file="$1"
   local _instance_name="$2"
   local blueprint_abs_path="$3"
   local install_dir="$4"
+  local override_port="${5:-}"
 
   if [[ -z "$instance_config_file" || -z "$_instance_name" || -z "$blueprint_abs_path" || -z "$install_dir" ]]; then
     return $EC_INVALID_ARG
@@ -193,7 +243,13 @@ function __logic_create_base_instance() {
     instance_launch_dir="${instance_launch_dir}/${instance_install_subdir}"
   fi
 
+  # Ports default to the blueprint's declared spec; an explicit --port from the
+  # install/create caller overrides the primary game port (see
+  # __override_primary_port) while preserving protocols and secondary ports.
   export instance_ports="${blueprint_ports:-}"
+  if [[ -n "$override_port" ]]; then
+    instance_ports="$(__override_primary_port "$instance_ports" "$override_port")"
+  fi
   export instance_stop_command="${blueprint_stop_command:-}"
   export instance_save_command="${blueprint_save_command:-}"
   export instance_platform="${blueprint_platform:-linux}"
@@ -266,12 +322,14 @@ EOF
 export -f __logic_create_base_instance
 
 # Create a complete instance
-# Args: $1 = blueprint, $2 = install_dir, $3 = identifier (optional)
+# Args: $1 = blueprint, $2 = install_dir, $3 = identifier (optional),
+#       $4 = override_port (optional — overrides the blueprint's primary port)
 # Returns: Echoes _instance_name on success (EC_SUCCESS_INSTANCE_CREATED), error code on failure
 function __logic_create_instance() {
   local blueprint=$1
   local install_dir=$2
   local identifier=${3:-}
+  local override_port=${4:-}
 
   # Validate blueprint
   if ! validate_blueprint "$blueprint" >/dev/null 2>&1; then
@@ -320,7 +378,7 @@ function __logic_create_instance() {
   fi
 
   # Create base instance configuration
-  if ! __logic_create_base_instance "$instance_config_file" "$_instance_name" "$blueprint_abs_path" "$install_dir"; then
+  if ! __logic_create_base_instance "$instance_config_file" "$_instance_name" "$blueprint_abs_path" "$install_dir" "$override_port"; then
     return $?
   fi
 

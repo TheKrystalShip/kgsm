@@ -97,6 +97,7 @@ ${UNDERLINE}Arguments:${END}
 ${UNDERLINE}Options:${END}
   --install-dir <path>        Installation directory (required)
   --name <name>               Custom instance name (optional, auto-generated if not provided)
+  --port <port>               Override the blueprint's primary game port (optional)
   --help                      Display this help information
 
 ${UNDERLINE}Description:${END}
@@ -654,6 +655,7 @@ function _cmd_create() {
   local instance_name=""
   local blueprint=""
   local install_dir="$config_default_install_directory"
+  local port=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -670,6 +672,15 @@ function _cmd_create() {
         shift
         [[ -z "$1" ]] && __print_error "Missing argument for --name" && return $EC_MISSING_ARG
         instance_name="$1"
+        ;;
+      --port)
+        shift
+        [[ -z "$1" ]] && __print_error "Missing argument for --port" && return $EC_MISSING_ARG
+        if ! [[ "$1" =~ ^[0-9]+$ ]] || ((10#$1 < 1 || 10#$1 > 65535)); then
+          __print_error "Invalid --port '$1' (expected 1-65535)"
+          return $EC_INVALID_ARG
+        fi
+        port="$1"
         ;;
       -*)
         __print_error "Invalid option for create command: $1"
@@ -692,7 +703,7 @@ function _cmd_create() {
 
   # Create instance
   local created_instance
-  created_instance=$(__logic_create_instance "$blueprint" "$install_dir" "$instance_name")
+  created_instance=$(__logic_create_instance "$blueprint" "$install_dir" "$instance_name" "$port")
   local exit_code=$?
 
   case $exit_code in

@@ -41,6 +41,7 @@ ${BOLD}${UNDERLINE}Module Commands:${END}
     [--install-dir <path>]    Installation directory
     [--version <version>]     Specific version to install
     [--name <name>]           Custom instance name
+    [--port <port>]           Override the blueprint's primary game port
   remove <instance>           Alias for uninstall
   uninstall <instance>        Remove a game server instance
   interactive                 Launch interactive menu mode

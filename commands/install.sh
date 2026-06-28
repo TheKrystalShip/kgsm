@@ -37,6 +37,7 @@ ${UNDERLINE}Options:${END}
   --install-dir <path>        Installation directory (default: from config)
   --version <version>         Specific version to install (default: latest)
   --name <name>               Custom instance name (default: auto-generated)
+  --port <port>               Override the blueprint's primary game port (1-65535)
   -h, --help                  Display this help information
 
 ${UNDERLINE}Examples:${END}
@@ -44,6 +45,7 @@ ${UNDERLINE}Examples:${END}
   ${self} factorio --install-dir /opt/servers
   ${self} factorio --install-dir /opt/servers --name factorio-prod
   ${self} factorio --install-dir /opt/servers --version 1.1.87
+  ${self} factorio --port 34200
 "
 }
 
@@ -65,6 +67,7 @@ function _cmd_install() {
   local install_dir=$config_default_install_directory
   local version=0 # 0 means get latest
   local identifier
+  local port=""
 
   # Parse optional arguments
   while [[ $# -ne 0 ]]; do
@@ -72,6 +75,18 @@ function _cmd_install() {
       -h | --help | help)
         show_usage
         return 0
+        ;;
+      --port)
+        shift
+        if [[ -z "$1" ]]; then
+          __print_error "Missing argument for --port"
+          return $EC_MISSING_ARG
+        fi
+        if ! [[ "$1" =~ ^[0-9]+$ ]] || ((10#$1 < 1 || 10#$1 > 65535)); then
+          __print_error "Invalid --port '$1' (expected 1-65535)"
+          return $EC_INVALID_ARG
+        fi
+        port="$1"
         ;;
       --install-dir)
         shift
@@ -150,7 +165,7 @@ function _cmd_install() {
   # Create instance configuration (name is now pre-determined)
   # Config will be created at $KGSM_INSTANCES_DIR/$blueprint/$instance/$instance.config.ini
   # which resolves through the symlink to $working_dir/$instance.config.ini
-  instance="$(instances.sh create "$blueprint" --install-dir "$install_dir" --name "$instance")" || {
+  instance="$(instances.sh create "$blueprint" --install-dir "$install_dir" --name "$instance" ${port:+--port "$port"})" || {
     exit_code=$?
     __print_error "Failed to create instance configuration"
     # Clean up on failure
