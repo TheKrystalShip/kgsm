@@ -9,7 +9,7 @@ metadata:
   max_players: 8
   min_ram_mb: 4096
   recommended_ram_mb: 8192
-  base_disk_mb: null
+  base_disk_mb: 4096
 native:
   ports: 8050/udp
   steam_app_id: 4763510
@@ -23,4 +23,4 @@ native:
   executable_arguments: Server.dll
   stop_command: stop
   save_command: save
-  startup_success_regex: ""
+  startup_success_regex: "Server started on port"
