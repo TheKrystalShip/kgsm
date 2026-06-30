@@ -82,3 +82,10 @@ Native instances are supervised by the resident **kgsm-watchdog** daemon (cgroup
 - `docs/` — `execution_flows.md`, `blueprints.md`, `overrides.md`, `instances.md`, `configuration_management.md`
 - `docs/specs/testing-framework/testing_specification.md` — required before touching tests
 - Examples: `blueprints/factorio.bp.yaml` (native), `blueprints/vrising.bp.yaml` (container), `overrides/factorio/`, `migrations/config/001_v0_to_v1_flat_to_sectioned.sh`
+
+## Version tracking
+
+- **Version source:** `KGSM_VERSION` variable at the top of `kgsm.sh`
+- Bump the version whenever you make a user-facing change (new feature, bug fix, behaviour change). Patch for fixes, minor for new features, major for breaking changes.
+- Update `CHANGELOG.md` under `## [Unreleased]` with a brief entry for every meaningful change.
+- A git tag matching the new version should be created on release: `git tag v<version>`.
