@@ -437,19 +437,44 @@ function _build_event_payload() {
         Ports: $ports_json
       }'
       ;;
-    "$EVENT_INSTANCE_PLAYER_JOINED" | "$EVENT_INSTANCE_PLAYER_LEFT")
-      # player_id/player_name are NULLABLE and are NOT in the EVENT_CONFIGS spec
-      # (only `instance` is required), so they are read positionally here rather
-      # than through param_names. An absent/empty value renders as JSON null —
-      # the same honest-null rule used for Origin — never an empty string posing
-      # as a real id/name. The at-least-one-non-null guarantee belongs to the
-      # emitting shim, not to KGSM (a faithful emitter).
+    "$EVENT_INSTANCE_PLAYER_JOINED")
+      # player_id/player_name/player_addr are NULLABLE and are NOT in the
+      # EVENT_CONFIGS spec (only `instance` is required), so they are read
+      # positionally here rather than through param_names. An absent/empty
+      # value renders as JSON null — the same honest-null rule used for
+      # Origin — never an empty string posing as a real id/name/addr. The
+      # at-least-one-non-null guarantee belongs to the emitting shim, not to
+      # KGSM (a faithful emitter). session_key is the watchdog's per-session
+      # correlation token and is ALWAYS a non-empty string — never
+      # null-coalesced like the others.
       jq_args+=(--arg player_id "${params[1]:-}"
-        --arg player_name "${params[2]:-}")
+        --arg player_name "${params[2]:-}"
+        --arg player_addr "${params[3]:-}"
+        --arg session_key "${params[4]:-}")
       data_object='{
         InstanceName: $instance,
         PlayerId: ($player_id | if . == "" then null else . end),
-        PlayerName: ($player_name | if . == "" then null else . end)
+        PlayerName: ($player_name | if . == "" then null else . end),
+        PlayerAddr: ($player_addr | if . == "" then null else . end),
+        SessionKey: $session_key
+      }'
+      ;;
+    "$EVENT_INSTANCE_PLAYER_LEFT")
+      # Same nullable/positional rules as the joined case above, plus `reason`
+      # (left-only): the disconnect reason the game logged, honest-null when
+      # the game's quit path doesn't log one.
+      jq_args+=(--arg player_id "${params[1]:-}"
+        --arg player_name "${params[2]:-}"
+        --arg player_addr "${params[3]:-}"
+        --arg session_key "${params[4]:-}"
+        --arg reason "${params[5]:-}")
+      data_object='{
+        InstanceName: $instance,
+        PlayerId: ($player_id | if . == "" then null else . end),
+        PlayerName: ($player_name | if . == "" then null else . end),
+        PlayerAddr: ($player_addr | if . == "" then null else . end),
+        SessionKey: $session_key,
+        Reason: ($reason | if . == "" then null else . end)
       }'
       ;;
     *)

@@ -1080,6 +1080,195 @@ function test_emit_player_left_payload_renders_missing_id_as_json_null() {
 }
 
 # =============================================================================
+# TEST: instance_player_joined renders PlayerAddr as JSON null when absent and
+# always carries the SessionKey. Mirrors a Steam-relay-style game (Valheim):
+# no real network address, correlation rides an opaque session token instead.
+# =============================================================================
+
+function test_emit_player_joined_payload_carries_addr_and_session_key() {
+  log_test_step "Testing: instance_player_joined payload renders PlayerAddr null and carries SessionKey"
+
+  if ! command -v socat > /dev/null 2>&1; then
+    skip_test "socat not available - skipping payload capture test"
+    return
+  fi
+
+  # Deterministic socket path (don't depend on sandbox config defaults).
+  export config_event_socket_filenames=""
+  export config_event_socket_filename="kgsm.sock"
+  local socket_file="$KGSM_ROOT/kgsm.sock"
+  local capture="$KGSM_TEST_SANDBOX/player-joined-addr-capture.json"
+  rm -f "$socket_file" "$capture"
+
+  # One-shot listener: accept a single connection, copy its bytes to the file.
+  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
+  local listener_pid=$!
+
+  # Bounded wait for the socket node to exist.
+  local i=0
+  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  local sock_ready="false"
+  [[ -S "$socket_file" ]] && sock_ready="true"
+  assert_true "$sock_ready" "socat listener should create the socket node"
+
+  _enable_broadcasting
+  _enable_socket_events
+
+  # No real network address (empty addr positional), only an opaque session
+  # token. Params: instance, player_id, player_name, player_addr, session_key.
+  "$EVENTS_MODULE" emit instance-player-joined player-test-server \
+    "" "Carol" "" "651023867:1" > /dev/null 2>&1 || true
+
+  # Bounded wait for the captured payload to land.
+  i=0
+  while [[ ! -s "$capture" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+
+  # Tear down the listener and restore transport config before asserting.
+  kill "$listener_pid" 2> /dev/null || true
+  wait "$listener_pid" 2> /dev/null || true
+  _disable_socket_events
+  _disable_broadcasting
+  rm -f "$socket_file"
+
+  local payload
+  payload=$(cat "$capture" 2> /dev/null)
+  assert_not_null "$payload" "Captured event payload should not be empty"
+
+  local addr_type session_key
+  addr_type=$(echo "$payload" | jq -r '.Data.PlayerAddr | type' 2> /dev/null)
+  session_key=$(echo "$payload" | jq -r '.Data.SessionKey' 2> /dev/null)
+
+  assert_equals "null" "$addr_type" \
+    "Data.PlayerAddr should be JSON null when no addr is supplied (not an empty string)"
+  assert_equals "651023867:1" "$session_key" \
+    "Data.SessionKey should carry the supplied session key (never null-coalesced)"
+}
+
+# =============================================================================
+# TEST: instance_player_left carries a real Reason when the game logs one
+# (e.g. Core Keeper's "App_Min"), and renders it as JSON null when absent —
+# the same honest-null rule as PlayerId/PlayerName/PlayerAddr.
+# =============================================================================
+
+function test_emit_player_left_payload_carries_reason() {
+  log_test_step "Testing: instance_player_left payload carries a real Reason"
+
+  if ! command -v socat > /dev/null 2>&1; then
+    skip_test "socat not available - skipping payload capture test"
+    return
+  fi
+
+  export config_event_socket_filenames=""
+  export config_event_socket_filename="kgsm.sock"
+  local socket_file="$KGSM_ROOT/kgsm.sock"
+  local capture="$KGSM_TEST_SANDBOX/player-left-reason-capture.json"
+  rm -f "$socket_file" "$capture"
+
+  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
+  local listener_pid=$!
+
+  local i=0
+  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  local sock_ready="false"
+  [[ -S "$socket_file" ]] && sock_ready="true"
+  assert_true "$sock_ready" "socat listener should create the socket node"
+
+  _enable_broadcasting
+  _enable_socket_events
+
+  # Params: instance, player_id, player_name, player_addr, session_key, reason.
+  "$EVENTS_MODULE" emit instance-player-left player-test-server \
+    "" "" "" "userid:3801603394" "App_Min" > /dev/null 2>&1 || true
+
+  i=0
+  while [[ ! -s "$capture" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+
+  kill "$listener_pid" 2> /dev/null || true
+  wait "$listener_pid" 2> /dev/null || true
+  _disable_socket_events
+  _disable_broadcasting
+  rm -f "$socket_file"
+
+  local payload
+  payload=$(cat "$capture" 2> /dev/null)
+  assert_not_null "$payload" "Captured event payload should not be empty"
+
+  local reason
+  reason=$(echo "$payload" | jq -r '.Data.Reason' 2> /dev/null)
+
+  assert_equals "App_Min" "$reason" \
+    "Data.Reason should carry the supplied disconnect reason"
+}
+
+function test_emit_player_left_payload_renders_missing_reason_as_json_null() {
+  log_test_step "Testing: instance_player_left renders an absent Reason as JSON null"
+
+  if ! command -v socat > /dev/null 2>&1; then
+    skip_test "socat not available - skipping payload capture test"
+    return
+  fi
+
+  export config_event_socket_filenames=""
+  export config_event_socket_filename="kgsm.sock"
+  local socket_file="$KGSM_ROOT/kgsm.sock"
+  local capture="$KGSM_TEST_SANDBOX/player-left-no-reason-capture.json"
+  rm -f "$socket_file" "$capture"
+
+  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
+  local listener_pid=$!
+
+  local i=0
+  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  local sock_ready="false"
+  [[ -S "$socket_file" ]] && sock_ready="true"
+  assert_true "$sock_ready" "socat listener should create the socket node"
+
+  _enable_broadcasting
+  _enable_socket_events
+
+  # Reason positional (6th) left empty — the game's quit path logged nothing.
+  "$EVENTS_MODULE" emit instance-player-left player-test-server \
+    "" "Bob" "" "sess-key-1" "" > /dev/null 2>&1 || true
+
+  i=0
+  while [[ ! -s "$capture" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+
+  kill "$listener_pid" 2> /dev/null || true
+  wait "$listener_pid" 2> /dev/null || true
+  _disable_socket_events
+  _disable_broadcasting
+  rm -f "$socket_file"
+
+  local payload
+  payload=$(cat "$capture" 2> /dev/null)
+  assert_not_null "$payload" "Captured event payload should not be empty"
+
+  local reason_type
+  reason_type=$(echo "$payload" | jq -r '.Data.Reason | type' 2> /dev/null)
+
+  assert_equals "null" "$reason_type" \
+    "Data.Reason should be JSON null when no reason is supplied (not an empty string)"
+}
+
+# =============================================================================
 # TEST: instance_config_changed carries the Key but NEVER the value.
 # This is the entire reason the event is key-only: instance config holds secrets
 # (RCON/admin passwords, tokens), so the value must never reach a transport. We

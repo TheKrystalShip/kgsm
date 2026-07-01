@@ -146,6 +146,9 @@ events.webhook.sh --test → events.webhook.sh test
 - Command-specific help for all event commands
 - Unit tests for event logic library (`tests/unit/test_events_logic.sh`)
 - Integration tests for event modules (`tests/integration/test_events_module.sh`)
+- player presence v1 — player_addr/session_key/reason event params + join/left
+  detection regexes for stationeers/romestead/valheim/corekeeper; kick/ban +
+  concurrent-join deferred to a future version.
 
 ### Changed
 - Event system now uses command-based CLI instead of flag-based

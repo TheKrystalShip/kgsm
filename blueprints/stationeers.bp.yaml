@@ -10,6 +10,11 @@ metadata:
   min_ram_mb: 6144
   recommended_ram_mb: 12288
   base_disk_mb: null
+# Player-presence detection, authored from real server output (see
+# player-presence-plan.md). Self-identifying both sides (SteamID64) — `id` is
+# the correlation token on both join and leave.
+player_joined_regex: 'Client (?<name>.+?) \((?<id>\d+)\) is ready'
+player_left_regex: 'Client disconnected: \d+ \| (?<name>.+?)\s+connectTime:.*ClientId: (?<id>\d+)'
 native:
   ports: 27015:27015/udp
   steam_app_id: 600760
