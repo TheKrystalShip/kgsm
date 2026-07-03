@@ -123,6 +123,12 @@ auto_backup_on_restart="${instance_auto_backup_on_restart:-false}"
 # 0 = keep all (no pruning). Only used when auto_backup_on_restart=true.
 backup_retention="${instance_backup_retention:-5}"
 
+# Whether the kgsm-watchdog should auto-restart this instance on crash (true|false).
+crash_restart="${instance_crash_restart:-true}"
+
+# Max consecutive crash-restarts before the watchdog gives up (integer).
+crash_max_restarts="${instance_crash_max_restarts:-5}"
+
 # Regex pattern to match the startup success message in the log file
 startup_success_regex="${instance_startup_success_regex}"
 
