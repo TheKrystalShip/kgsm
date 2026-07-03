@@ -38,6 +38,7 @@ ${UNDERLINE}Commands:${END}
   create-backup <instance>    Create a backup (instance must be stopped)
   restore-backup <instance> <source>
                               Restore a named backup
+  prune-backups <instance>    Prune old backups, keeping the N most recent
   update <instance>           Update to the latest version (must be stopped)
   check-update <instance>     Check whether a newer version is available
   version <instance> [--installed|--latest]
@@ -1313,6 +1314,33 @@ ${UNDERLINE}Examples:${END}
 "
 }
 
+function show_usage_prune_backups() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Prune Instance Backups${END}
+
+Prune old backups for an instance, keeping the N most recent. Backups are
+sorted by modification time (newest first); all beyond position N are deleted.
+Safe to call on an empty or missing backups directory (exits 0 with no action).
+
+${UNDERLINE}Usage:${END}
+  $self prune-backups <instance> [--keep=N]
+
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
+
+${UNDERLINE}Options:${END}
+  --keep=N                    Number of most-recent backups to keep
+                              (default: 5; minimum: 1)
+  --help                      Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self prune-backups factorio-01 --keep=5
+  $self prune-backups factorio-01 --keep=10
+"
+}
+
 function show_usage_update() {
   local UNDERLINE="\e[4m"
   local END="\e[0m"
@@ -1541,6 +1569,88 @@ function _cmd_restore_backup() {
   exit $rc
 }
 
+function _cmd_prune_backups() {
+  local instance=""
+  local keep=5
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_prune_backups
+        return 0
+        ;;
+      --keep=*)
+        keep="${1#*=}"
+        ;;
+      -*)
+        __print_error "Invalid option for prune-backups command: $1"
+        __print_error "Use '$self prune-backups --help' for usage information"
+        return $EC_INVALID_ARG
+        ;;
+      *)
+        instance="$1"
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self prune-backups --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  if ! [[ "$keep" =~ ^[0-9]+$ ]] || [[ "$keep" -lt 1 ]]; then
+    __print_error "--keep must be a positive integer (got: $keep)"
+    exit $EC_INVALID_ARG
+  fi
+
+  __source_instance "$instance"
+  _require_ops_support "$instance" "$instance_management_file"
+
+  # shellcheck disable=SC2154
+  if [[ -z "$instance_backups_dir" ]] || [[ ! -d "$instance_backups_dir" ]]; then
+    __print_info "No backups directory for '$instance', nothing to prune"
+    exit 0
+  fi
+
+  # List entries sorted by mtime (newest first), skip the first $keep, delete the rest.
+  local -a to_delete
+  # shellcheck disable=SC2012
+  mapfile -t to_delete < <(ls -t "$instance_backups_dir" 2> /dev/null | tail -n +"$((keep + 1))")
+
+  if [[ ${#to_delete[@]} -eq 0 ]]; then
+    __print_info "Nothing to prune for '$instance' (≤$keep backups present)"
+    exit 0
+  fi
+
+  local deleted=0
+  local failed=0
+  for name in "${to_delete[@]}"; do
+    [[ -z "$name" ]] && continue
+    local full_path="$instance_backups_dir/$name"
+    if [[ -d "$full_path" ]]; then
+      if rm -rf "$full_path"; then
+        ((deleted++))
+      else
+        __print_error "Failed to remove backup directory: $full_path"
+        ((failed++))
+      fi
+    elif [[ -f "$full_path" ]]; then
+      if rm -f "$full_path"; then
+        ((deleted++))
+      else
+        __print_error "Failed to remove backup file: $full_path"
+        ((failed++))
+      fi
+    fi
+  done
+
+  __print_info "Pruned $deleted backup(s) for '$instance' (kept: $keep)"
+  [[ $failed -gt 0 ]] && exit $EC_ERROR
+  exit 0
+}
+
 function _cmd_update() {
   local instance=""
 
@@ -1754,6 +1864,9 @@ function _cmd_help() {
     restore-backup)
       show_usage_restore_backup
       ;;
+    prune-backups)
+      show_usage_prune_backups
+      ;;
     update)
       show_usage_update
       ;;
@@ -1854,6 +1967,9 @@ case "$command" in
     ;;
   restore-backup)
     _cmd_restore_backup "$@"
+    ;;
+  prune-backups)
+    _cmd_prune_backups "$@"
     ;;
   update)
     _cmd_update "$@"

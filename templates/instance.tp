@@ -114,6 +114,15 @@ restart_day="${instance_restart_day:-sun}"
 # IANA timezone for restart scheduling (e.g. Europe/Madrid). Empty = host-local.
 timezone="${instance_timezone:-}"
 
+# Auto-backup on scheduled restart (true|false). When true the scheduler runs
+# Stop -> CreateBackup -> PruneBackups -> Start instead of a bare atomic restart.
+# Requires scheduled_restart != off to have any effect.
+auto_backup_on_restart="${instance_auto_backup_on_restart:-false}"
+
+# Number of backups to keep after each auto-backup prune (1-100).
+# 0 = keep all (no pruning). Only used when auto_backup_on_restart=true.
+backup_retention="${instance_backup_retention:-5}"
+
 # Regex pattern to match the startup success message in the log file
 startup_success_regex="${instance_startup_success_regex}"
 
