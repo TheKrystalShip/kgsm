@@ -91,6 +91,29 @@ platform="${instance_platform}"
 # Whether to automatically update the server before starting (true | false)
 auto_update="${instance_auto_update_before_start:-false}"
 
+# CPU scheduling priority for this instance's cgroup (low | normal | high).
+# Translated to cgroup cpu.weight by the watchdog: low=50, normal=100, high=400.
+# Empty / "normal" = default weight.
+cpu_priority="${instance_cpu_priority:-normal}"
+
+# Maximum memory for this instance's cgroup in MiB (0 = uncapped).
+# Applied by the watchdog at spawn via cgroup memory.max.
+memory_cap_mb="${instance_memory_cap_mb:-0}"
+
+# Scheduled restart cadence (off | daily | weekly | 6h). Enforced by the
+# kgsm-scheduler leaf; inert on hosts without the scheduler deployed.
+scheduled_restart="${instance_scheduled_restart:-off}"
+
+# Time of day to perform the scheduled restart (HH:MM, 24h, host-local timezone).
+restart_time="${instance_restart_time:-04:00}"
+
+# Day of week for weekly restarts (sun | mon | tue | wed | thu | fri | sat).
+# Only used when scheduled_restart=weekly.
+restart_day="${instance_restart_day:-sun}"
+
+# IANA timezone for restart scheduling (e.g. Europe/Madrid). Empty = host-local.
+timezone="${instance_timezone:-}"
+
 # Regex pattern to match the startup success message in the log file
 startup_success_regex="${instance_startup_success_regex}"
 
