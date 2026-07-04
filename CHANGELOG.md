@@ -155,6 +155,17 @@ events.webhook.sh --test → events.webhook.sh test
 - All event emission calls updated across all modules
 - Event dispatcher in `core/events.sh` uses new command format
 - Improved error messages for invalid events and parameters
+- `kgsm start` no longer auto-launches the `watcher.sh` readiness watcher on a
+  successful start. The resident **kgsm-watchdog** daemon is now the canonical
+  detector of `instance_ready` for native instances (it matches the blueprint's
+  `startup_success_regex` against the game log itself), which made kgsm's own
+  bash log/port watcher redundant on that path — and it was already broken
+  under the watchdog spawn path, since it blocked waiting for a
+  management-script PID file the watchdog's cgroup spawn never writes. kgsm
+  itself performs no readiness detection any more. `watcher.sh` /
+  `watcher.logs.sh` / `watcher.ports.sh` remain available as manual CLI
+  commands (`kgsm watcher start|status|test <instance>`), they are simply no
+  longer invoked automatically.
 
 ### Technical Details
 - All 28 event types supported with full parameter validation

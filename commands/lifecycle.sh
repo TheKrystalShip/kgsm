@@ -234,10 +234,6 @@ function _cmd_start() {
     $EC_SUCCESS_INSTANCE_STARTED)
       __print_success "Instance $instance_name started successfully"
       __dispatch_event_from_exit_code "$exit_code" "$instance_name"
-
-      # Start watcher if available
-      watcher.sh start "$instance_name" --detach > /dev/null 2>&1 || true
-
       return $EC_SUCCESS
       ;;
     *)
