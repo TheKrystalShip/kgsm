@@ -139,7 +139,7 @@ function _cmd_install() {
 
   # Generate instance name early (before any config/file creation)
   local instance
-  instance="$(instances.sh generate-id "$blueprint" ${identifier:+--name $identifier})" || {
+  instance="$(instances.sh generate-id "$blueprint" ${identifier:+--name "$identifier"})" || {
     exit_code=$?
     __print_error "Failed to generate instance identifier"
     return $exit_code
