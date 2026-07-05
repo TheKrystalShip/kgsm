@@ -83,6 +83,13 @@ Native instances are supervised by the resident **kgsm-watchdog** daemon (cgroup
 - `docs/specs/testing-framework/testing_specification.md` — required before touching tests
 - Examples: `blueprints/factorio.bp.yaml` (native), `blueprints/vrising.bp.yaml` (container), `overrides/factorio/`, `migrations/config/001_v0_to_v1_flat_to_sectioned.sh`
 
+## Deployment
+
+The canonical install lives at `/opt/kgsm` — a byte-identical copy of this checkout,
+published by `./deploy.sh` (sudo `rsync`, excludes `.git`). The `kgsm` on `PATH`
+(`/usr/local/bin/kgsm` → `/opt/kgsm/kgsm.sh`) resolves there. After changing engine
+code, run `./deploy.sh` to refresh `/opt/kgsm` so the deployed copy stays identical.
+
 ## Version tracking
 
 - **Version source:** `KGSM_VERSION` variable at the top of `kgsm.sh`
