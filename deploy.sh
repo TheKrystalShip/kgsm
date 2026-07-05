@@ -22,7 +22,8 @@ if [[ -d "${DEST}" ]]; then
 fi
 
 sudo mkdir -p "${DEST}"
-sudo rsync -a --exclude='.git' --exclude='node_modules' "${SRC}/" "${DEST}/"
+sudo rsync -a --exclude='.git' --exclude='node_modules' --exclude='.dev-instances' \
+  "${SRC}/" "${DEST}/"
 sudo chmod +x "${DEST}/kgsm.sh"
 sudo find "${DEST}/scripts" -type f -name '*.sh' -exec chmod +x {} + 2>/dev/null || true
 
