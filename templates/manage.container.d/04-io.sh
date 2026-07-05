@@ -53,18 +53,26 @@ function _send_input() {
     return $EC_ERROR
   fi
 
-  # Get the management file path from the container's environment
-  local management_file
-  management_file=$(docker exec "$instance_name" bash -c 'echo $MANAGEMENT_FILE' 2>/dev/null)
-
-  if [[ -z "$management_file" ]]; then
-    __print_error "Could not determine management script path in container. \$MANAGEMENT_FILE not set."
+  # Write directly to the command FIFO on the shared /run/kgsm bind mount
+  # (${instance_events_dir}/command.fifo on the host == /run/kgsm/command.fifo
+  # in the container), mirroring how native's manage.native.d/04-io.sh writes
+  # straight to its own host-visible FIFO. This replaces the previous
+  # `docker exec -i ... "$management_file" --input` roundtrip, which appended
+  # to $instance_socket_file -- a FIFO only _start_background() ever creates.
+  # Containers always launch via the foreground _start(), so that FIFO never
+  # existed for a container instance and every send silently failed.
+  if [[ -z "$instance_events_dir" ]]; then
+    __print_error "Input failed: instance_events_dir is not set for '$instance_name'."
     return $EC_ERROR
   fi
 
-  # Call the container's internal management script with the --input flag
-  # Using printf to safely pass the command without shell interpretation
-  if ! printf '%s\n' "$command" | docker exec -i "$instance_name" "$management_file" --input; then
+  local command_fifo="${instance_events_dir}/command.fifo"
+  if [[ ! -p "$command_fifo" ]]; then
+    __print_error "Input failed: No active server found (command FIFO missing at $command_fifo)."
+    return $EC_ERROR
+  fi
+
+  if ! printf '%s\n' "$command" >>"$command_fifo"; then
     __print_error "Failed to send command to container '$instance_name'"
     return $EC_ERROR
   fi

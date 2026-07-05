@@ -150,6 +150,37 @@ events.webhook.sh --test → events.webhook.sh test
   detection regexes for stationeers/romestead/valheim/corekeeper; kick/ban +
   concurrent-join deferred to a future version.
 
+### Fixed
+- **Container `instance_stopping` lifecycle event now fires reliably, emitted
+  host-side.** `templates/manage.container.d/03-lifecycle.sh`'s `_stop_server`
+  now appends `{"type":"instance_stopping","ts":"<ISO-8601-UTC>"}` to
+  `${instance_events_dir}/lifecycle.ndjson` immediately before running
+  `docker compose ... down`. Previously this event was only emitted by an
+  in-container `INT`/`TERM` trap (see kgsm-containers'
+  `templates/container.manage.sh` `_emit_lifecycle`), which is unreachable
+  for the vast majority of stops: once `_start`'s final `exec` replaces that
+  bash process with the game binary, no in-container bash remains to catch
+  the signal a `docker stop`/`compose down` sends. kgsm-watchdog tails
+  `lifecycle.ndjson` to drive UPnP port-close on `instance_stopping` — this
+  fix makes that reliable for containers instead of depending on a narrow
+  pre-exec signal-timing window. Best-effort/guarded: a write failure never
+  fails the stop, and a guard failure is skipped silently rather than
+  emitting bad data. The in-container trap is left in place as a harmless
+  redundant emit (UPnP-close is idempotent).
+- **Host→container console input actually works now.** `_send_input`/
+  `_send_save_command` in `templates/manage.container.d/04-io.sh` previously
+  shelled out via `docker exec -i <container> "$MANAGEMENT_FILE" --input`,
+  which appended the command to `$instance_socket_file` inside the
+  container — a FIFO that only the in-container `_start_background()` ever
+  creates. Container instances always launch through the foreground
+  `_start()` (compose runs them in the foreground), so that FIFO never
+  existed and every console-input send silently failed. Fixed by writing
+  directly to a new, independent `${instance_events_dir}/command.fifo` on
+  the existing `/run/kgsm` bind mount (mirrors how
+  `manage.native.d/04-io.sh` writes straight to its own host-visible FIFO).
+  The in-container half (creating the FIFO, keeping it open, and wiring it
+  to the game's stdin) lives in kgsm-containers.
+
 ### Changed
 - Event system now uses command-based CLI instead of flag-based
 - All event emission calls updated across all modules

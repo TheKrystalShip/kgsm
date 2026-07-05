@@ -145,6 +145,26 @@ function _stop_server() {
     fi
   fi
 
+  # Emit instance_stopping on the host-visible lifecycle channel *before*
+  # tearing the container down. This is the reliable half of the signal: the
+  # in-container INT/TERM trap that emits the same event (see
+  # kgsm-containers templates/container.manage.sh `_emit_lifecycle`) is
+  # unreachable once `_start`'s final `exec` has replaced that bash process
+  # with the game binary, so a `docker stop`/`down` never reaches any
+  # in-container bash to run it. Host-side bash is always alive here, so we
+  # emit it ourselves. Best-effort/guarded: a write failure must never fail
+  # the stop, and a guard failure is skipped silently rather than emitting
+  # bad data (honesty rule) -- never invent a malformed line. Shape/format
+  # matches the in-container emitter byte-for-byte:
+  # {"type":"instance_stopping","ts":"<ISO-8601-UTC>"}.
+  if [[ -n "$instance_events_dir" ]] && mkdir -p "$instance_events_dir" 2>/dev/null; then
+    local _lifecycle_stopping_ts
+    if _lifecycle_stopping_ts="$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null)"; then
+      printf '{"type":"instance_stopping","ts":"%s"}\n' "$_lifecycle_stopping_ts" \
+        >>"$instance_events_dir/lifecycle.ndjson" 2>/dev/null
+    fi
+  fi
+
   # Use docker compose down to stop the container
   # Run in the working directory where docker-compose.yml is located
   if ! (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" down); then
