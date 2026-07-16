@@ -149,6 +149,13 @@ events.webhook.sh --test → events.webhook.sh test
 - player presence v1 — player_addr/session_key/reason event params + join/left
   detection regexes for stationeers/romestead/valheim/corekeeper; kick/ban +
   concurrent-join deferred to a future version.
+- Blueprint validation now requires every container service to declare
+  `network_mode: host`. KGSM containers are host-networked so the host firewall
+  (ufw / kgsm-firewall) governs them through the `INPUT` chain exactly like
+  native instances, and the compose `ports:` block stays the declarative source
+  for firewall/UPnP. A bridge-networked service would DNAT-publish those ports
+  into Docker's `FORWARD`/`DOCKER-USER` path, bypassing the host firewall; such a
+  blueprint is now rejected before it can produce an instance.
 
 ### Fixed
 - **Container `instance_stopping` lifecycle event now fires reliably, emitted

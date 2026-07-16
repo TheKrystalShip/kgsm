@@ -129,8 +129,10 @@ export -f validate_blueprint_readable
 # All blueprints are YAML (`<name>.bp.yaml`); `runtime` discriminates the body.
 # Required: `name`, `runtime` (native|container); native requires
 # `native.executable_file`; container requires a `container.compose` with at
-# least one service. (`level_name` / `executable_arguments` are optional — they
-# default during instance creation.)
+# least one service, every service on `network_mode: host` (KGSM containers are
+# host-networked so their firewall/UPnP behaviour matches native instances; a
+# bridge service's published ports would bypass the host firewall). (`level_name`
+# / `executable_arguments` are optional — they default during instance creation.)
 # Usage: validate_blueprint_format <blueprint_path>
 # Returns: 0 if valid format, non-zero if invalid
 function validate_blueprint_format() {
@@ -186,6 +188,23 @@ function validate_blueprint_format() {
       service_count=$(printf '%s' "$compose" | yq -r '.services | length' 2>/dev/null)
       if [[ ! "$service_count" =~ ^[0-9]+$ ]] || ((service_count < 1)); then
         __print_error "Container blueprint 'container.compose' defines no services: $blueprint_path"
+        return $EC_INVALID_ARG
+      fi
+      # KGSM containers are host-networked (`network_mode: host`). Under host
+      # networking the compose `ports:` block is NOT a Docker publish — Docker
+      # ignores it and the game process listens straight on the host's network
+      # stack, so ufw/kgsm-firewall's INPUT rules govern the instance exactly
+      # like a native one. `ports:` stays the declarative source of truth for the
+      # host-firewall rule and router UPnP (kgsm-watchdog reads it). A bridge
+      # service with the same `ports:` would instead DNAT-publish into the
+      # FORWARD/DOCKER-USER path, which bypasses ufw's INPUT chain — an unfiltered
+      # hole on a DMZ host. Require host networking on every service so that can
+      # never reach an instance.
+      local non_host_services
+      non_host_services=$(printf '%s' "$compose" \
+        | yq -r '[.services.* | select(.network_mode != "host")] | length' 2>/dev/null)
+      if [[ ! "$non_host_services" =~ ^[0-9]+$ ]] || ((non_host_services > 0)); then
+        __print_error "Container blueprint service missing 'network_mode: host' (KGSM containers are host-networked; a bridge service's published ports bypass the host firewall): $blueprint_path"
         return $EC_INVALID_ARG
       fi
       ;;

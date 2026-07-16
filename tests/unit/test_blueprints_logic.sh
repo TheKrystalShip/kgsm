@@ -92,6 +92,77 @@ function test_validate_blueprint_valid_container() {
   assert_equals "0" "$?" "Should validate vrising successfully"
 }
 
+function test_validate_blueprint_container_host_net_with_ports_ok() {
+  # A host-networked container with a `ports:` block is valid: under host
+  # networking `ports:` is the firewall/UPnP source of truth, not a Docker
+  # publish, so it is accepted.
+  local custom_bp="$KGSM_USER_BLUEPRINTS_DIR/test-hostnet.bp.yaml"
+  cat > "$custom_bp" << 'EOF'
+schema_version: 1
+name: test-hostnet
+runtime: container
+container:
+  compose: |-
+    services:
+      game:
+        image: example:latest
+        network_mode: host
+        ports:
+          - 7777:7777/udp
+EOF
+  __logic_validate_blueprint "test-hostnet" 2> /dev/null
+  local exit_code=$?
+  rm -f "$custom_bp"
+  assert_equals "0" "$exit_code" "Host-networked container with ports should validate"
+}
+
+function test_validate_blueprint_container_rejects_bridge_network() {
+  # A bridge service's `ports:` become a DNAT publish that bypasses the host
+  # firewall's INPUT chain — rejected so it can never reach an instance.
+  local custom_bp="$KGSM_USER_BLUEPRINTS_DIR/test-bridge.bp.yaml"
+  cat > "$custom_bp" << 'EOF'
+schema_version: 1
+name: test-bridge
+runtime: container
+container:
+  compose: |-
+    services:
+      game:
+        image: example:latest
+        network_mode: bridge
+        ports:
+          - 7777:7777/udp
+EOF
+  __logic_validate_blueprint "test-bridge" 2> /dev/null
+  local exit_code=$?
+  rm -f "$custom_bp"
+  assert_equals "$EC_INVALID_ARG" "$exit_code" \
+    "Bridge-networked container blueprint must be rejected"
+}
+
+function test_validate_blueprint_container_rejects_missing_network_mode() {
+  # No `network_mode` at all defaults to bridge under Compose — same hazard,
+  # same rejection.
+  local custom_bp="$KGSM_USER_BLUEPRINTS_DIR/test-nonet.bp.yaml"
+  cat > "$custom_bp" << 'EOF'
+schema_version: 1
+name: test-nonet
+runtime: container
+container:
+  compose: |-
+    services:
+      game:
+        image: example:latest
+        ports:
+          - 7777:7777/udp
+EOF
+  __logic_validate_blueprint "test-nonet" 2> /dev/null
+  local exit_code=$?
+  rm -f "$custom_bp"
+  assert_equals "$EC_INVALID_ARG" "$exit_code" \
+    "Container blueprint without network_mode: host must be rejected"
+}
+
 function test_validate_blueprint_not_found() {
   __logic_validate_blueprint "does-not-exist" 2> /dev/null
   assert_equals "$EC_BLUEPRINT_NOT_FOUND" "$?" "Should return blueprint not found error"

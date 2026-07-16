@@ -469,6 +469,17 @@ container:
 > compose is the single source of truth for ports.
 
 > [!IMPORTANT]
+> Every service **must** set `network_mode: host` — KGSM validates this and
+> rejects a container blueprint without it. Host networking makes the container
+> listen directly on the host network stack, so the host firewall (ufw /
+> kgsm-firewall) governs it through the `INPUT` chain exactly like a native
+> instance. Under host networking Docker **ignores** the `ports:` block; KGSM
+> reads it as the declarative source for the firewall rule and router UPnP
+> mappings. A bridge-networked service would instead DNAT-publish those ports
+> into Docker's `FORWARD`/`DOCKER-USER` path, bypassing the host firewall — which
+> is why it is not allowed.
+
+> [!IMPORTANT]
 > KGSM uses official container images from the [KGSM-Containers](https://github.com/TheKrystalShip/kgsm-containers) project. These images are specifically tested and configured to work with the KGSM ecosystem. While you can use other container images, the official ones ensure compatibility and proper integration.
 
 ### Container Blueprint Components

@@ -143,8 +143,19 @@ native:
 # -----------------------------------------------------------------------------
 # Embed the Docker Compose definition VERBATIM as a literal block scalar (the
 # "|" below). KGSM extracts it to the instance's docker-compose.yml and expands
-# any ${instance_*} placeholders. UFW ports are derived from the compose ports —
-# do not add a separate top-level ports field for containers.
+# any ${instance_*} placeholders.
+#
+# Every service MUST set `network_mode: host` (KGSM validates this and rejects a
+# blueprint without it). KGSM containers share the host network stack, so the
+# game process listens directly on the host exactly like a native instance and
+# the host firewall (ufw / kgsm-firewall) governs it through the INPUT chain. A
+# bridge-networked service would instead DNAT-publish its `ports:`, bypassing
+# that firewall — not allowed.
+#
+# Under host networking Docker IGNORES the `ports:` block; KGSM does not. `ports:`
+# is the declarative source of truth KGSM derives the host-firewall rule and the
+# router UPnP mappings (kgsm-watchdog) from, and documents which ports the server
+# uses. Keep it accurate; do not add a separate top-level ports field.
 #
 # Player-presence vars available to the compose body (see the top-level
 # player_*_regex fields): bind-mount the DIRECTORY ${instance_events_dir} to
