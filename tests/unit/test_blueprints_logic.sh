@@ -383,8 +383,23 @@ EOF
 
 function test_info_json_uncurated_metadata_is_null_not_zero() {
   # The no-fabricate invariant: an uncurated numeric field is JSON null, NEVER 0.
+  # Use a synthetic blueprint with explicitly-null metadata so the assertion holds
+  # regardless of how the shipped blueprints get curated over time (a real game's
+  # min_ram/max_players can legitimately be filled in later).
+  local custom_bp="$KGSM_USER_BLUEPRINTS_DIR/test-nullmeta.bp.yaml"
+  cat > "$custom_bp" << 'EOF'
+schema_version: 1
+name: test-nullmeta
+runtime: native
+metadata:
+  max_players: null
+  min_ram_mb: null
+native:
+  executable_file: test.sh
+EOF
   local output
-  output=$(__logic_get_blueprint_info_json "factorio")
+  output=$(__logic_get_blueprint_info_json "test-nullmeta")
+  rm -f "$custom_bp"
   assert_equals "null" "$(echo "$output" | jq -r '.Metadata.MaxPlayers')" \
     "Uncurated MaxPlayers must be null, not 0"
   assert_equals "true" "$(echo "$output" | jq '.Metadata.MinRamMb == null')" \

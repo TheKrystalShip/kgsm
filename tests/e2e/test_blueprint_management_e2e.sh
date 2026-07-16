@@ -210,8 +210,12 @@ function test_steam_blueprint_field_differentiation() {
   local factorio_steam_id factorio_client_steam_id
   factorio_steam_id=$("$MODULE" info factorio --json 2>&1 | jq -r '.SteamAppId')
   factorio_client_steam_id=$("$MODULE" info factorio --json 2>&1 | jq -r '.ClientSteamAppId')
-  assert_equals "0" "$factorio_steam_id" "factorio: SteamAppId should be 0 (non-Steam)"
-  assert_equals "0" "$factorio_client_steam_id" "factorio: ClientSteamAppId should be 0 (non-Steam)"
+  # factorio's dedicated SERVER is not on Steam (it downloads from factorio.com), so
+  # SteamAppId is 0; the game itself DOES have a Steam client (427520), so
+  # ClientSteamAppId carries that real id — the two axes are independent.
+  assert_equals "0" "$factorio_steam_id" "factorio: SteamAppId should be 0 (server not on Steam)"
+  assert_equals "427520" "$factorio_client_steam_id" \
+    "factorio: ClientSteamAppId is the real Steam client id (427520)"
 }
 
 # =============================================================================
