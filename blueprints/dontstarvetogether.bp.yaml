@@ -9,7 +9,7 @@ metadata:
   max_players: null
   min_ram_mb: 1024
   recommended_ram_mb: 4096
-  base_disk_mb: null
+  base_disk_mb: 4298
 native:
   ports: 10999/tcp|10999/udp
   steam_app_id: 343050

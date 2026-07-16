@@ -6,10 +6,10 @@ metadata:
   display_name: "Veloren"
   description: "Open-world, open-source multiplayer voxel RPG written in Rust, inspired by Cube World, Dwarf Fortress, and Minecraft; developed by a community of volunteer contributors under GPL 3."
   rawg_slug: "veloren"
-  max_players: null
+  max_players: 100
   min_ram_mb: null
   recommended_ram_mb: null
-  base_disk_mb: null
+  base_disk_mb: 520
 native:
   ports: 14004/tcp|14004/udp
   steam_app_id: 0

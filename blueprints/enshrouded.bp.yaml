@@ -8,8 +8,8 @@ metadata:
   rawg_slug: "enshrouded-2"
   max_players: 16
   min_ram_mb: 6144
-  recommended_ram_mb: null
-  base_disk_mb: null
+  recommended_ram_mb: 16384
+  base_disk_mb: 8351
 container:
   compose: |-
     services:

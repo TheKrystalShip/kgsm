@@ -9,7 +9,7 @@ metadata:
   max_players: 6
   min_ram_mb: 4096
   recommended_ram_mb: 8192
-  base_disk_mb: null
+  base_disk_mb: 2900
 container:
   compose: |-
     services:

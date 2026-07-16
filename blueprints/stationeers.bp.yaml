@@ -9,7 +9,7 @@ metadata:
   max_players: 30
   min_ram_mb: 6144
   recommended_ram_mb: 12288
-  base_disk_mb: null
+  base_disk_mb: 4777
 # Player-presence detection, authored from real server output (see
 # player-presence-plan.md). Self-identifying both sides (SteamID64) — `id` is
 # the correlation token on both join and leave.
