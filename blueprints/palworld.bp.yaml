@@ -1,0 +1,26 @@
+schema_version: 1
+name: palworld
+runtime: native
+metadata:
+  # TODO: curate — advisory values researched per game; null = unknown/unbounded, NEVER 0
+  display_name: "Palworld"
+  description: "An open-world survival and creature-collection game by Pocketpair where players catch, breed, and battle alongside creatures called Pals while building bases, farming, and automating factories; supports co-op multiplayer of up to 32 players on a dedicated server."
+  rawg_slug: "palworld"
+  max_players: 32
+  min_ram_mb: 8192
+  recommended_ram_mb: 16384
+  base_disk_mb: 8192
+native:
+  ports: 8211/udp|27015/udp
+  steam_app_id: 2394010
+  client_steam_app_id: 1623730
+  steamcmd_arguments: ""
+  is_steam_account_required: false
+  platform: linux
+  level_name: default
+  executable_subdirectory: ""
+  executable_file: PalServer.sh
+  executable_arguments: -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS -publicport=8211 -players=32
+  stop_command: ""
+  save_command: ""
+  startup_success_regex: Bringing World /Pal/Maps/MainWorld up for play

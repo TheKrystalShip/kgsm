@@ -149,6 +149,9 @@ events.webhook.sh --test → events.webhook.sh test
 - player presence v1 — player_addr/session_key/reason event params + join/left
   detection regexes for stationeers/romestead/valheim/corekeeper; kick/ban +
   concurrent-join deferred to a future version.
+- Palworld native blueprint (`blueprints/palworld.bp.yaml`) — SteamCMD dedicated
+  server (app `2394010`, anonymous), `PalServer.sh` on `8211/udp` + `27015/udp`
+  query.
 - Blueprint validation now requires every container service to declare
   `network_mode: host`. KGSM containers are host-networked so the host firewall
   (ufw / kgsm-firewall) governs them through the `INPUT` chain exactly like
