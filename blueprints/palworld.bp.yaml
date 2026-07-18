@@ -10,6 +10,12 @@ metadata:
   min_ram_mb: 8192
   recommended_ram_mb: 16384
   base_disk_mb: 8192
+# Player-presence detection, authored from real server output (see
+# player-presence-plan.md). Self-identifying both sides (SteamID64) — `id` is
+# the correlation token on both join and leave. The join edge is "joined the
+# server" (player loaded into the world), not the earlier "connected" line.
+player_joined_regex: '\[LOG\] (?<name>.+?) joined the server\. \(User id: steam_(?<id>\d+)'
+player_left_regex: '\[LOG\] (?<name>.+?) left the server\. \(User id: steam_(?<id>\d+)'
 native:
   ports: 8211/udp|27015/udp
   steam_app_id: 2394010

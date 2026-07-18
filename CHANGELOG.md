@@ -152,6 +152,10 @@ events.webhook.sh --test → events.webhook.sh test
 - Palworld native blueprint (`blueprints/palworld.bp.yaml`) — SteamCMD dedicated
   server (app `2394010`, anonymous), `PalServer.sh` on `8211/udp` + `27015/udp`
   query.
+- Palworld player-presence detection — `player_joined_regex`/`player_left_regex`
+  authored from real server output, correlating on the SteamID64 (`id`). Join
+  edge is the "joined the server" world-load line, not the earlier "connected"
+  handshake; leave resolves the same identity via the session map.
 - Blueprint validation now requires every container service to declare
   `network_mode: host`. KGSM containers are host-networked so the host firewall
   (ufw / kgsm-firewall) governs them through the `INPUT` chain exactly like
