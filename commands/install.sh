@@ -38,6 +38,7 @@ ${UNDERLINE}Options:${END}
   --version <version>         Specific version to install (default: latest)
   --name <name>               Custom instance name (default: auto-generated)
   --port <port>               Override the blueprint's primary game port (1-65535)
+  --start                     Start the server immediately after install
   -h, --help                  Display this help information
 
 ${UNDERLINE}Examples:${END}
@@ -46,6 +47,7 @@ ${UNDERLINE}Examples:${END}
   ${self} factorio --install-dir /opt/servers --name factorio-prod
   ${self} factorio --install-dir /opt/servers --version 1.1.87
   ${self} factorio --port 34200
+  ${self} factorio --start
 "
 }
 
@@ -68,6 +70,7 @@ function _cmd_install() {
   local version=0 # 0 means get latest
   local identifier
   local port=""
+  local start_after=false
 
   # Parse optional arguments
   while [[ $# -ne 0 ]]; do
@@ -111,6 +114,9 @@ function _cmd_install() {
           return $EC_MISSING_ARG
         fi
         identifier=$1
+        ;;
+      --start)
+        start_after=true
         ;;
       *)
         __print_error "Invalid argument: $1"
@@ -230,6 +236,15 @@ function _cmd_install() {
 
   __print_success "Instance '${instance}', version '${version}', has been created in '${install_dir}'"
   events.sh emit instance-installed "${instance}" "${blueprint}"
+
+  # Start immediately after install when --start was passed (one-shot start,
+  # not watchdog boot-autostart). A failure to start does not invalidate the
+  # install — the server remains installed and can be started later.
+  if [[ "$start_after" == true ]]; then
+    lifecycle.sh start "$instance" || {
+      __print_warning "Install succeeded but start failed; start the server manually."
+    }
+  fi
 
   return 0
 }
