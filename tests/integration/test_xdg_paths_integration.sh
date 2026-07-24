@@ -297,3 +297,27 @@ function test_kgsm_paths_command() {
   assert_contains "$output" "$KGSM_DATA_DIR" "Should display KGSM_DATA_DIR"
 }
 
+function test_kgsm_paths_command_json() {
+  log_test_step "Testing kgsm --paths --json emits valid machine-readable paths"
+
+  # Execute --paths --json command
+  local output exit_code
+  output=$("${KGSM_ROOT}/kgsm.sh" --paths --json 2>&1)
+  exit_code=$?
+
+  assert_equals "0" "$exit_code" "--paths --json should succeed"
+
+  # Must be valid JSON
+  assert_command_succeeds "echo '$output' | jq -e ." "--paths --json output should be valid JSON"
+
+  # Both groups present with the paths consumers rely on
+  local user_blueprints system_blueprints
+  user_blueprints=$(echo "$output" | jq -r '.user.KGSM_USER_BLUEPRINTS_DIR')
+  system_blueprints=$(echo "$output" | jq -r '.system.KGSM_SYSTEM_BLUEPRINTS_DIR')
+
+  assert_equals "$KGSM_USER_BLUEPRINTS_DIR" "$user_blueprints" \
+    ".user.KGSM_USER_BLUEPRINTS_DIR should match the resolved user blueprints dir"
+  assert_equals "$KGSM_SYSTEM_BLUEPRINTS_DIR" "$system_blueprints" \
+    ".system.KGSM_SYSTEM_BLUEPRINTS_DIR should match the resolved system blueprints dir"
+}
+

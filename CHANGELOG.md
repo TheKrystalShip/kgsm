@@ -135,6 +135,10 @@ events.webhook.sh --test → events.webhook.sh test
 ```
 
 ### Added
+- `kgsm --paths --json` emits the XDG directory layout as machine-readable JSON
+  (grouped `system`/`user` objects), alongside the existing human-readable
+  `--paths`. Lets consumers query engine paths (e.g. the user blueprints
+  directory) without parsing free-form text.
 - New `kgsm autostart enable|disable|status|list <instance>` command for boot
   auto-start, backed by the kgsm-watchdog daemon's persisted desired-state. It works
   like `systemctl enable`/`disable`: it is **independent** of `start`/`stop` —

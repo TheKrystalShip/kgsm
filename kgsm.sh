@@ -9,7 +9,7 @@
 source "$(dirname "$(readlink -f "$0")")/core/bootstrap.sh"
 
 # KGSM version (managed by package manager)
-export KGSM_VERSION="3.1.2-rc3"
+export KGSM_VERSION="3.1.2-rc4"
 
 function show_usage() {
   local self
@@ -33,7 +33,7 @@ ${UNDERLINE}Usage:${END}
 ${BOLD}${UNDERLINE}Built-in Commands:${END}
   -h, --help                  Display this help information
   -v, --version               Display KGSM version
-  --paths                     Display XDG directory layout
+  --paths [--json]            Display XDG directory layout (--json for machine-readable)
 
 ${BOLD}${UNDERLINE}Module Commands:${END}
   create <blueprint>          Alias for install
@@ -107,6 +107,67 @@ There is NO WARRANTY, to the extent permitted by law."
 
 # Paths command - display XDG directory layout
 function _cmd_paths() {
+  local _json=false
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --json)
+        _json=true
+        shift
+        ;;
+      *)
+        __print_error "Unknown option for --paths: $1"
+        return $EC_INVALID_ARG
+        ;;
+    esac
+  done
+
+  if [[ "$_json" == true ]]; then
+    if ! command -v jq > /dev/null 2>&1; then
+      __print_error "JSON output requires jq to be installed"
+      return $EC_MISSING_DEPENDENCY
+    fi
+    jq -n \
+      --arg KGSM_ROOT "$KGSM_ROOT" \
+      --arg KGSM_CORE_DIR "$KGSM_CORE_DIR" \
+      --arg KGSM_COMMANDS_DIR "$KGSM_COMMANDS_DIR" \
+      --arg KGSM_HANDLERS_DIR "$KGSM_HANDLERS_DIR" \
+      --arg KGSM_TEMPLATES_DIR "$KGSM_TEMPLATES_DIR" \
+      --arg KGSM_MIGRATIONS_DIR "$KGSM_MIGRATIONS_DIR" \
+      --arg KGSM_SYSTEM_BLUEPRINTS_DIR "$KGSM_SYSTEM_BLUEPRINTS_DIR" \
+      --arg KGSM_SYSTEM_OVERRIDES_DIR "$KGSM_SYSTEM_OVERRIDES_DIR" \
+      --arg KGSM_DEFAULT_CONFIG_FILE "$KGSM_DEFAULT_CONFIG_FILE" \
+      --arg KGSM_CONFIG_DIR "$KGSM_CONFIG_DIR" \
+      --arg KGSM_CONFIG_FILE "$KGSM_CONFIG_FILE" \
+      --arg KGSM_DATA_DIR "$KGSM_DATA_DIR" \
+      --arg KGSM_INSTANCES_DIR "$KGSM_INSTANCES_DIR" \
+      --arg KGSM_LOGS_DIR "$KGSM_LOGS_DIR" \
+      --arg KGSM_USER_BLUEPRINTS_DIR "$KGSM_USER_BLUEPRINTS_DIR" \
+      --arg KGSM_USER_OVERRIDES_DIR "$KGSM_USER_OVERRIDES_DIR" \
+      '{
+        system: {
+          KGSM_ROOT: $KGSM_ROOT,
+          KGSM_CORE_DIR: $KGSM_CORE_DIR,
+          KGSM_COMMANDS_DIR: $KGSM_COMMANDS_DIR,
+          KGSM_HANDLERS_DIR: $KGSM_HANDLERS_DIR,
+          KGSM_TEMPLATES_DIR: $KGSM_TEMPLATES_DIR,
+          KGSM_MIGRATIONS_DIR: $KGSM_MIGRATIONS_DIR,
+          KGSM_SYSTEM_BLUEPRINTS_DIR: $KGSM_SYSTEM_BLUEPRINTS_DIR,
+          KGSM_SYSTEM_OVERRIDES_DIR: $KGSM_SYSTEM_OVERRIDES_DIR,
+          KGSM_DEFAULT_CONFIG_FILE: $KGSM_DEFAULT_CONFIG_FILE
+        },
+        user: {
+          KGSM_CONFIG_DIR: $KGSM_CONFIG_DIR,
+          KGSM_CONFIG_FILE: $KGSM_CONFIG_FILE,
+          KGSM_DATA_DIR: $KGSM_DATA_DIR,
+          KGSM_INSTANCES_DIR: $KGSM_INSTANCES_DIR,
+          KGSM_LOGS_DIR: $KGSM_LOGS_DIR,
+          KGSM_USER_BLUEPRINTS_DIR: $KGSM_USER_BLUEPRINTS_DIR,
+          KGSM_USER_OVERRIDES_DIR: $KGSM_USER_OVERRIDES_DIR
+        }
+      }'
+    return $?
+  fi
+
   echo "KGSM Directory Layout:
 
 System Paths (Read-only):
@@ -151,8 +212,8 @@ case "$command" in
     exit 0
     ;;
   --paths)
-    _cmd_paths
-    exit 0
+    _cmd_paths "$@"
+    exit $?
     ;;
 
   # MODULE PASSTHROUGHS
