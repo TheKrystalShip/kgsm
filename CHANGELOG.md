@@ -51,6 +51,15 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Documentation
+
+- Added a knowledge base under `docs/knowledge/` documenting how native Linux dedicated
+  servers are launched (wrapper scripts vs raw binaries vs interpreter-run servers, the
+  executable subdirectory, headless arguments, readiness detection), how SteamCMD app ids
+  and account ownership work (dedicated-server vs client app id, anonymous vs owned
+  downloads), and annotated real examples from the catalog grouped by pattern. Cross-linked
+  from `docs/README.md` and `docs/blueprints.md`.
+
 ### Breaking Changes
 
 #### Systemd Removed as an Instance Lifecycle Manager

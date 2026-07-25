@@ -234,6 +234,10 @@ KGSM reads the blueprint's `runtime` field to decide whether to install it as a 
 
 ## Native Blueprint Reference
 
+> For the *reasoning* behind these fields — how to choose the executable (wrapper script vs raw
+> binary vs interpreter), how SteamCMD app ids and account ownership work, and annotated real
+> examples grouped by pattern — see the [knowledge base](knowledge/README.md).
+
 ### Native Blueprint Example Template
 
 Below is a representative native blueprint (Factorio). The `native:` block holds

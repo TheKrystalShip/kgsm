@@ -21,6 +21,13 @@ Read these sections in order to understand the core concepts of how KGSM operate
 - [Creating a new game server instance](create_new_game_server_instance.md) - Step-by-step guide to set up a new server
 - [Managing game servers](managing_game_servers.md) - Day-to-day operations for running your servers
 
+## Knowledge Base
+
+Reference knowledge on how native dedicated servers are set up, and the reasoning behind blueprint
+fields — useful when authoring or debugging a blueprint for a new game:
+
+- [Knowledge base index](knowledge/README.md) - Native launch conventions, SteamCMD app ids and account ownership, and annotated real examples from the catalog
+
 ## Advanced Features
 
 - [Event System](events.md) - Using KGSM's event broadcasting to build integrations
