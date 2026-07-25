@@ -392,6 +392,50 @@ function __watchdog_set_autostart() {
 
 export -f __watchdog_set_autostart
 
+# Deregisters an instance from the watchdog (DELETE /instance/<name>) — the uninstall
+# counterpart. Drops the daemon's supervision record, cgroup, boot-autostart intent and
+# persisted restart counters, so a removed instance stops being supervised. Without this
+# the daemon keeps a desired=running record forever: it restart-loops a game whose install
+# directory is gone, and every consumer of its state (the web API's alert feed among them)
+# keeps reporting a condition for a server that no longer exists.
+#
+# Idempotent by contract: the daemon answers 200 for an unknown name, so calling this for
+# an instance it never supervised (a container instance, or one removed while the daemon
+# was down) is a success, not an error.
+#
+# The timeout must exceed a full graceful stop, because deregistering performs one: the
+# daemon sends the instance's stop command and drains up to its configured stop timeout
+# before hard-killing. A client timeout shorter than that abandons the request mid-drain.
+# 180s sits above the 120s the stop verb allows itself.
+#
+# Distinct outcomes, because the caller must treat them differently (see uninstall.sh):
+# a refusal means the game is still running, which is not the same as "no daemon here".
+# Returns:
+#   0 - deregistered (or was never supervised)
+#   1 - could not reach the daemon / unexpected status (best-effort: caller may continue)
+#   2 - refused: the instance is still running and was NOT deregistered
+# Args: $1 = instance name
+function __watchdog_deregister() {
+  local _name="${1%.ini}"
+
+  local _code
+  local _rc
+  _code="$(__watchdog_curl DELETE "instance/$_name" 180)"
+  _rc=$?
+
+  if [[ $_rc -ne 0 ]]; then
+    return 1
+  fi
+
+  case "$_code" in
+    200) return 0 ;;
+    409) return 2 ;;
+    *) return 1 ;;
+  esac
+}
+
+export -f __watchdog_deregister
+
 # Fetches GET /enabled. Echoes the JSON array body; returns 0 only on HTTP 200, non-zero on
 # connection failure / any other status. Separate from __watchdog_curl because the set needs the body.
 # Returns: 0 on HTTP 200 (body echoed), 1 on other status, 2 on connection failure

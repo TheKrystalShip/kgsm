@@ -51,6 +51,21 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Fixed
+
+- **`uninstall` now deregisters the instance from the kgsm-watchdog daemon.** Removing a native
+  instance left the watchdog supervising it: the daemon kept a `desired=running` record and
+  restart-looped a server whose install directory no longer existed, and because that record stayed
+  in its instance list, downstream consumers (the Control Panel API's alert feed) reported a crash
+  condition for a server that could never be started, stopped, or resolved. `uninstall` now calls the
+  daemon's `DELETE /instance/<name>` (kgsm-watchdog 1.9.0) before removing any files — the daemon
+  stops the instance as part of deregistering, and a graceful stop needs the FIFO and management
+  script to still exist. An unreachable daemon is best-effort (a host without one still uninstalls,
+  with a warning), but an explicit refusal **aborts** the uninstall: a refusal means the daemon could
+  not stop the instance, and deleting a running server's files corrupts its saves and strands the
+  process. Because deregistering performs a full graceful stop, uninstalling a running instance now
+  takes as long as stopping it does.
+
 ### Documentation
 
 - Added a knowledge base under `docs/knowledge/` documenting how native Linux dedicated

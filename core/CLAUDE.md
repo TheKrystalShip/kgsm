@@ -37,7 +37,7 @@ After bootstrap, modules are reached via the `__find_*` locators in `loader.sh`
 | `delegator.sh` | Shortcut accessors so modules can call into each other |
 | `common.sh` | Aggregates/loads the common library surface |
 | `paths.sh` | XDG path resolution (`~/.local/share/kgsm`, `~/.config/kgsm`); user-dir init |
-| `errors.sh` | All `EC_*` exit-code constants (`EC_OKAY=0`, …) |
+| `errors.sh` | All `EC_*` exit-code constants (`EC_SUCCESS=0`, …) |
 | `config.sh` | INI load/flatten to `config_*` vars; merge logic |
 | `overrides.sh` | Resolving `overrides/<name>/` modules during management-script assembly |
 | `validation.sh` | Input/blueprint/instance validation helpers |

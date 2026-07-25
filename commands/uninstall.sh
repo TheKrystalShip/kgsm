@@ -13,6 +13,13 @@
 # shellcheck source=../core/bootstrap.sh
 source "$(dirname "$(readlink -f "$0")")/../core/bootstrap.sh"
 
+# Watchdog routing — an uninstalled instance must also be deregistered from the resident
+# supervisor. Self-gates on the daemon's availability, so a host without one is unaffected.
+if [[ -z "${KGSM_LOGIC_WATCHDOG_LOADED}" ]]; then
+  # shellcheck source=handlers/watchdog.sh
+  source "$(__find_command_handler watchdog.sh)" || exit $EC_FAILED_SOURCE
+fi
+
 self="$(basename "$0")"
 
 # =============================================================================
@@ -125,6 +132,32 @@ function _uninstall() {
   __print_info "Uninstalling instance '$instance'..."
 
   events.sh emit instance-uninstall-started "${instance}"
+
+  # Deregister from the watchdog BEFORE any files are removed: the daemon stops the
+  # instance as part of deregistering, and a graceful stop needs the instance's FIFO and
+  # management script to still exist. Skipping this leaves the daemon supervising a server
+  # whose files are gone — it restart-loops the missing install dir, and its state feeds a
+  # permanent, unresolvable crash alert into every consumer of the daemon's instance list.
+  #
+  # An unreachable daemon is best-effort (a host without one must still be able to uninstall),
+  # but an explicit refusal is fatal: it means the daemon could not stop the instance, so the
+  # game is still running. Deleting a running server's files out from under it corrupts saves
+  # and strands the process — abort and let the operator deal with it.
+  if __watchdog_available; then
+    __watchdog_deregister "$instance"
+    case $? in
+      0) ;;
+      2)
+        __print_error "Instance '$instance' is still running; the watchdog could not stop it"
+        __print_error "Uninstall aborted — stop it manually, then retry"
+        events.sh emit instance-uninstall-failed "${instance}"
+        return $EC_ERROR
+        ;;
+      *)
+        __print_warning "Could not reach the watchdog to deregister '$instance'; it may remain supervised"
+        ;;
+    esac
+  fi
 
   # Remove instance files (firewall, symlinks, etc.)
   files.sh remove "$instance" || {
