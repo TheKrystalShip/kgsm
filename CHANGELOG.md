@@ -53,6 +53,19 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Fixed
 
+- **Palworld player-presence detection now matches crossplay accounts, not just Steam.** The
+  `player_joined_regex`/`player_left_regex` in `palworld.bp.yaml` required a literal `steam_`
+  prefix on the `User id:` field, so a player connecting from Xbox / Game Pass (`gdk_<XUID>`)
+  matched neither pattern. Palworld is crossplay, so those sessions were invisible to the entire
+  presence pipeline, and invisible *silently*: the watchdog's native matcher treats a line that
+  matches no pattern as an ordinary non-presence line and ignores it without a warning, so no
+  join/leave event was emitted and the player never reached a roster, with nothing anywhere to
+  indicate a player had been dropped. Both patterns now accept `(?:steam|gdk)_`. The platform
+  prefix stays **outside** the `id` capture group — the bare account number remains the roster
+  identity, so existing Steam roster rows keep theirs, and the two number spaces (17-digit
+  SteamID64, 16-digit XUID) do not collide. Detection is tail-based: this applies from the next
+  join onward and does not backfill sessions already missed.
+
 - **`uninstall` now deregisters the instance from the kgsm-watchdog daemon.** Removing a native
   instance left the watchdog supervising it: the daemon kept a `desired=running` record and
   restart-looped a server whose install directory no longer existed, and because that record stayed

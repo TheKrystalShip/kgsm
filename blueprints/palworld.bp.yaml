@@ -11,11 +11,15 @@ metadata:
   recommended_ram_mb: 16384
   base_disk_mb: 8192
 # Player-presence detection, authored from real server output (see
-# player-presence-plan.md). Self-identifying both sides (SteamID64) — `id` is
-# the correlation token on both join and leave. The join edge is "joined the
+# player-presence-plan.md). Self-identifying both sides — `id` is the
+# correlation token on both join and leave. The join edge is "joined the
 # server" (player loaded into the world), not the earlier "connected" line.
-player_joined_regex: '\[LOG\] (?<name>.+?) joined the server\. \(User id: steam_(?<id>\d+)'
-player_left_regex: '\[LOG\] (?<name>.+?) left the server\. \(User id: steam_(?<id>\d+)'
+# Palworld is crossplay: `User id:` carries a platform prefix (`steam_` +
+# SteamID64, `gdk_` + Xbox XUID), so both prefixes match. The prefix stays
+# OUT of the `id` capture — the bare account number is the roster identity,
+# and the two number spaces (17-digit SteamID64, 16-digit XUID) don't collide.
+player_joined_regex: '\[LOG\] (?<name>.+?) joined the server\. \(User id: (?:steam|gdk)_(?<id>\d+)'
+player_left_regex: '\[LOG\] (?<name>.+?) left the server\. \(User id: (?:steam|gdk)_(?<id>\d+)'
 native:
   ports: 8211/udp|27015/udp
   steam_app_id: 2394010

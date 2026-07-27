@@ -9,7 +9,7 @@
 source "$(dirname "$(readlink -f "$0")")/core/bootstrap.sh"
 
 # KGSM version (managed by package manager)
-export KGSM_VERSION="3.1.2-rc5"
+export KGSM_VERSION="3.1.2-rc6"
 
 function show_usage() {
   local self
