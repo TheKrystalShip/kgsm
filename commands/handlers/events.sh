@@ -184,6 +184,42 @@ export EVENT_INSTANCE_CONFIG_CHANGED
 declare -g -r EVENT_INSTANCE_INPUT_SENT="instance_input_sent"
 export EVENT_INSTANCE_INPUT_SENT
 
+# Blueprint file events. The ONLY events in the system that are not
+# instance-scoped: their subject is a blueprint, so their Data carries
+# `BlueprintName` where every other event carries `InstanceName`. They exist so
+# no consumer holds a stale blueprint — kgsm-api's catalog cache and the
+# assistant's blueprint cache both refresh off them, and the edit lands in event
+# history.
+#
+# Emitted by kgsm-lib (which owns the file write) through
+# EmitWithProvenance, exactly as the watchdog emits its lifecycle events. Actor
+# and origin are threaded from the human who made the edit, NOT hardcoded to
+# system — a browser edit must be attributable to the admin who made it.
+#
+# `tier` is where the file lives (only ever `user`: the shipped system directory
+# is read-only, an rsync target that a write would lose on the next deploy).
+# `overrides_system` distinguishes a brand-new custom blueprint from one that now
+# shadows a shipped blueprint of the same name — the state the catalog badge and
+# the audit row need. `runtime` is nullable: a blueprint can be saved in a state
+# the parser cannot read a runtime out of, and an unknown runtime is reported as
+# null rather than guessed.
+#
+# The file CONTENT is never carried. A blueprint can hold credentials
+# (steamcmd arguments, server passwords in an embedded compose), and an event
+# payload fans out to every transport — the record is "blueprint X changed",
+# nothing more. A consumer that needs the content reads the file.
+declare -g -r EVENT_BLUEPRINT_CREATED="blueprint_created"
+export EVENT_BLUEPRINT_CREATED
+
+declare -g -r EVENT_BLUEPRINT_UPDATED="blueprint_updated"
+export EVENT_BLUEPRINT_UPDATED
+
+# `reverted_to_system` is the counterpart of `overrides_system`: true when
+# deleting the user file uncovers a shipped blueprint that takes over again,
+# false when the blueprint is gone from the host entirely.
+declare -g -r EVENT_BLUEPRINT_REMOVED="blueprint_removed"
+export EVENT_BLUEPRINT_REMOVED
+
 # Event parameter specifications
 declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_CREATED"]="instance blueprint"
@@ -233,6 +269,13 @@ declare -g -A EVENT_CONFIGS=(
   # `command` is the verbatim console command. The matching case arm in
   # _build_event_payload renders Data { InstanceName, Command }.
   ["$EVENT_INSTANCE_INPUT_SENT"]="instance command"
+  # Blueprint-scoped, not instance-scoped: the first param is a blueprint name
+  # and renders as Data.BlueprintName. `runtime` is NOT in the spec because it
+  # is nullable — it is read positionally and rendered as JSON null when the
+  # emitter could not determine it (see _build_event_payload).
+  ["$EVENT_BLUEPRINT_CREATED"]="blueprint tier overrides_system"
+  ["$EVENT_BLUEPRINT_UPDATED"]="blueprint tier overrides_system"
+  ["$EVENT_BLUEPRINT_REMOVED"]="blueprint tier reverted_to_system"
 )
 
 # Validates that an event type is supported

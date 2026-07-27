@@ -189,6 +189,14 @@ ${UNDERLINE}Instance Removal:${END}
   instance-uninstall-finished <instance>
   instance-uninstalled <instance>
 
+${UNDERLINE}Blueprints:${END}
+  blueprint-created <blueprint> <tier> <overrides_system> [runtime]
+  blueprint-updated <blueprint> <tier> <overrides_system> [runtime]
+  blueprint-removed <blueprint> <tier> <reverted_to_system>
+
+  These take a blueprint name, not an instance name, and carry it as
+  Data.BlueprintName. The file contents are never carried.
+
 ${UNDERLINE}Description:${END}
 Events are broadcast to all enabled transports in parallel. The JSON payload
 includes the event type, event-specific data, timestamp, actor, hostname, and
@@ -212,6 +220,9 @@ ${UNDERLINE}Examples:${END}
   ${self} emit instance-player-joined myserver 76561198000000000 Alice
   ${self} emit instance-player-left myserver '' Bob
   ${self} emit instance-config-changed myserver rcon_password
+  ${self} emit blueprint-created mygame user false native
+  ${self} emit blueprint-updated terraria user true native
+  ${self} emit blueprint-removed terraria user true
 "
 }
 
@@ -475,6 +486,36 @@ function _build_event_payload() {
         PlayerAddr: ($player_addr | if . == "" then null else . end),
         SessionKey: $session_key,
         Reason: ($reason | if . == "" then null else . end)
+      }'
+      ;;
+    "$EVENT_BLUEPRINT_CREATED" | "$EVENT_BLUEPRINT_UPDATED")
+      # The only Data shape keyed on a blueprint instead of an instance: the
+      # subject is a file in the blueprint catalog, and no instance is involved.
+      # `$blueprint`/`$tier`/`$overrides_system` bind from the EVENT_CONFIGS
+      # spec; `runtime` is read positionally because it is nullable — a
+      # blueprint can be saved in a state the parser cannot read a runtime out
+      # of, and an unknown runtime renders as JSON null rather than a guess.
+      # OverridesSystem is a real JSON boolean, not the string "true": anything
+      # other than true/false is a value the emitter could not determine, so it
+      # renders null on the same honest-null rule.
+      jq_args+=(--arg runtime "${params[3]:-}")
+      data_object='{
+        BlueprintName: $blueprint,
+        Tier: $tier,
+        OverridesSystem: ($overrides_system | if . == "true" then true elif . == "false" then false else null end),
+        Runtime: ($runtime | if . == "" then null else . end)
+      }'
+      ;;
+    "$EVENT_BLUEPRINT_REMOVED")
+      # No Runtime: the file is gone, so its runtime is no longer a fact this
+      # event can state. RevertedToSystem follows the same boolean/honest-null
+      # rule as OverridesSystem above — true when deleting the user file
+      # uncovers a shipped blueprint that takes over, false when the blueprint
+      # leaves the host entirely.
+      data_object='{
+        BlueprintName: $blueprint,
+        Tier: $tier,
+        RevertedToSystem: ($reverted_to_system | if . == "true" then true elif . == "false" then false else null end)
       }'
       ;;
     *)

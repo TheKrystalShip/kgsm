@@ -70,6 +70,26 @@ Event types use **underscore-separated** names in JSON payloads and **dash-separ
 | `instance_uninstall_finished` | Uninstallation process completed | `InstanceName` |
 | `instance_uninstalled` | Server fully uninstalled | `InstanceName` |
 
+### 📘 Blueprint Events
+
+These are the only events whose subject is **not an instance**. They fire when a blueprint file in the catalog is written or deleted, so that no consumer serves a stale blueprint and the change lands in event history.
+
+| Event Name | Description | Data Fields |
+|------------|-------------|-------------|
+| `blueprint_created` | A blueprint file appeared where none existed | `BlueprintName`, `Tier`, `OverridesSystem`, `Runtime` |
+| `blueprint_updated` | An existing blueprint file was overwritten | `BlueprintName`, `Tier`, `OverridesSystem`, `Runtime` |
+| `blueprint_removed` | A blueprint file was deleted | `BlueprintName`, `Tier`, `RevertedToSystem` |
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `BlueprintName` | string | The blueprint's logical name — the subject, in place of `InstanceName` |
+| `Tier` | string | Where the file lives. Always `user`: the shipped system directory is read-only |
+| `OverridesSystem` | boolean\|null | `true` when the blueprint now shadows a shipped blueprint of the same name, `false` when it is entirely new |
+| `RevertedToSystem` | boolean\|null | `true` when deleting the user file uncovers a shipped blueprint that takes over again, `false` when the blueprint leaves the host entirely |
+| `Runtime` | string\|null | `native` or `container`, or `null` when the emitter could not determine it |
+
+The file **contents are never carried**. A blueprint can hold credentials (SteamCMD arguments, passwords inside an embedded compose) and an event payload fans out to every enabled transport, so the record is "blueprint X changed" and nothing more. A consumer that needs the content reads the file.
+
 ## 🔄 Event Payload Structure
 
 Every event is a JSON object with the following top-level fields:
@@ -90,7 +110,7 @@ Every event is a JSON object with the following top-level fields:
 | Field | Type | Description |
 |-------|------|-------------|
 | `EventType` | string | Underscore-separated event type name |
-| `Data` | object | Event-specific payload (always contains `InstanceName`) |
+| `Data` | object | Event-specific payload. Instance events key it on `InstanceName`; the blueprint events key it on `BlueprintName` |
 | `Timestamp` | string | ISO 8601 UTC timestamp |
 | `Hostname` | string | System hostname where the event originated |
 | `KGSMVersion` | string | Running KGSM version |
@@ -195,6 +215,9 @@ events.sh emit <event-type> [parameters...]
 | `instance-uninstall-started` | `<instance>` |
 | `instance-uninstall-finished` | `<instance>` |
 | `instance-uninstalled` | `<instance>` |
+| `blueprint-created` | `<blueprint>` `<tier>` `<overrides_system>` `[runtime]` |
+| `blueprint-updated` | `<blueprint>` `<tier>` `<overrides_system>` `[runtime]` |
+| `blueprint-removed` | `<blueprint>` `<tier>` `<reverted_to_system>` |
 
 **Examples:**
 
@@ -204,6 +227,8 @@ events.sh emit instance-started myserver
 events.sh emit instance-version-updated myserver 1.0.0 1.1.0
 events.sh emit instance-backup-created myserver auto 1.2.3
 events.sh emit instance-stopped myserver
+events.sh emit blueprint-updated terraria user true native
+events.sh emit blueprint-removed terraria user true
 ```
 
 ## ⚙️ Configuration
@@ -302,18 +327,23 @@ def listen_for_events():
 
 def process_event(event):
     event_type = event["EventType"]
-    instance_name = event["Data"]["InstanceName"]
+    data = event["Data"]
 
+    # Instance events key Data on InstanceName, blueprint events on
+    # BlueprintName — read the one the event type actually carries.
     if event_type == "instance_started":
-        print(f"Server {instance_name} has started!")
+        print(f"Server {data['InstanceName']} has started!")
     elif event_type == "instance_stopped":
-        print(f"Server {instance_name} has stopped!")
+        print(f"Server {data['InstanceName']} has stopped!")
+    elif event_type == "blueprint_updated":
+        print(f"Blueprint {data['BlueprintName']} changed — refresh your cache")
 ```
 
 **Reliability tips:**
 - Recreate and re-bind the socket if it is deleted while your application is running.
 - Filter for only the event types your application cares about.
 - Always validate the JSON structure before accessing fields.
+- Do not assume `Data.InstanceName` exists — the blueprint events are blueprint-scoped and carry `Data.BlueprintName` instead.
 
 ## 🌐 Webhook Transport — Integration Guide
 

@@ -159,6 +159,9 @@ function test_validate_event_type_all_40_constants() {
     "instance_player_left"
     "instance_config_changed"
     "instance_input_sent"
+    "blueprint_created"
+    "blueprint_updated"
+    "blueprint_removed"
   )
 
   local failed_events=()
@@ -170,7 +173,7 @@ function test_validate_event_type_all_40_constants() {
   done
 
   assert_equals "${#failed_events[@]}" "0" \
-    "All 41 event types should be valid. Failed: ${failed_events[*]}"
+    "All 44 event types should be valid. Failed: ${failed_events[*]}"
 }
 
 function test_validate_event_type_case_sensitive() {
@@ -480,6 +483,9 @@ function test_get_param_spec_all_40_events() {
     "instance_player_left"
     "instance_config_changed"
     "instance_input_sent"
+    "blueprint_created"
+    "blueprint_updated"
+    "blueprint_removed"
   )
 
   local failed_events=()
@@ -494,7 +500,7 @@ function test_get_param_spec_all_40_events() {
   done
 
   assert_equals "${#failed_events[@]}" "0" \
-    "All 41 events should return valid specs. Failed: ${failed_events[*]}"
+    "All 44 events should return valid specs. Failed: ${failed_events[*]}"
 }
 
 function test_get_param_spec_firewall_ports_events() {
@@ -670,6 +676,115 @@ function test_event_name_to_type_config_changed() {
 
   assert_equals "$result" "instance_config_changed" \
     "Should convert 'instance-config-changed' to 'instance_config_changed'"
+}
+
+# =============================================================================
+# TESTS: blueprint_* events (blueprint-scoped, not instance-scoped)
+# =============================================================================
+# The only events whose subject is a blueprint rather than an instance. This file
+# tests pure logic: the param specs, validation, and name conversion. That the
+# payload keys Data on BlueprintName (not InstanceName), renders the booleans as
+# real JSON booleans, and honest-nulls an unknown runtime is proven in the
+# integration test, which captures the real payload off the socket.
+
+function test_validate_event_type_blueprint_events() {
+  log_test_step "Testing __logic_validate_event_type for the three blueprint events"
+
+  local failed=()
+  local event_type
+  for event_type in blueprint_created blueprint_updated blueprint_removed; do
+    __logic_validate_event_type "$event_type"
+    [[ $? -ne $EC_SUCCESS ]] && failed+=("$event_type")
+  done
+
+  assert_equals "${#failed[@]}" "0" \
+    "All blueprint event types should be valid. Failed: ${failed[*]}"
+}
+
+function test_get_param_spec_blueprint_created_and_updated() {
+  log_test_step "Testing blueprint_created/updated require 'blueprint tier overrides_system'"
+
+  local created updated
+  created=$(__logic_get_event_param_spec "blueprint_created")
+  updated=$(__logic_get_event_param_spec "blueprint_updated")
+
+  # `runtime` is deliberately NOT in the spec: it is nullable, read positionally,
+  # and rendered as JSON null when the emitter could not determine it.
+  assert_equals "blueprint tier overrides_system" "$created" \
+    "blueprint_created should require 'blueprint tier overrides_system' (runtime is nullable)"
+  assert_equals "blueprint tier overrides_system" "$updated" \
+    "blueprint_updated should require 'blueprint tier overrides_system' (runtime is nullable)"
+}
+
+function test_get_param_spec_blueprint_removed() {
+  log_test_step "Testing blueprint_removed requires 'blueprint tier reverted_to_system'"
+
+  local spec
+  spec=$(__logic_get_event_param_spec "blueprint_removed")
+  local exit_code=$?
+
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "Should return EC_SUCCESS for blueprint_removed"
+  # No `runtime`: the file is gone, so its runtime is no longer a fact the event
+  # can state.
+  assert_equals "blueprint tier reverted_to_system" "$spec" \
+    "blueprint_removed should require 'blueprint tier reverted_to_system'"
+}
+
+function test_validate_params_blueprint_updated_valid() {
+  log_test_step "Testing blueprint_updated validates with name, tier, and overrides flag"
+
+  __logic_validate_event_params "blueprint_updated" "terraria" "user" "true"
+  local exit_code=$?
+
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "blueprint_updated should validate with its three required params"
+}
+
+function test_validate_params_blueprint_updated_accepts_optional_runtime() {
+  log_test_step "Testing blueprint_updated accepts the optional trailing runtime"
+
+  __logic_validate_event_params "blueprint_updated" "terraria" "user" "true" "native"
+  local exit_code=$?
+
+  assert_equals "$exit_code" "$EC_SUCCESS" \
+    "blueprint_updated should accept a 4th positional runtime param"
+}
+
+function test_validate_params_blueprint_updated_missing_overrides_fails() {
+  log_test_step "Testing blueprint_updated rejects a missing overrides_system flag"
+
+  __logic_validate_event_params "blueprint_updated" "terraria" "user" 2>/dev/null
+  local exit_code=$?
+
+  assert_equals "$exit_code" "$EC_EVENT_PARAMS_INVALID" \
+    "blueprint_updated should reject a missing overrides_system param"
+}
+
+function test_validate_params_blueprint_removed_missing_reverted_fails() {
+  log_test_step "Testing blueprint_removed rejects a missing reverted_to_system flag"
+
+  __logic_validate_event_params "blueprint_removed" "terraria" "user" 2>/dev/null
+  local exit_code=$?
+
+  assert_equals "$exit_code" "$EC_EVENT_PARAMS_INVALID" \
+    "blueprint_removed should reject a missing reverted_to_system param"
+}
+
+function test_event_name_to_type_blueprint_events() {
+  log_test_step "Testing dash-to-underscore conversion for blueprint events"
+
+  local created updated removed
+  created=$(__logic_event_name_to_type "blueprint-created")
+  updated=$(__logic_event_name_to_type "blueprint-updated")
+  removed=$(__logic_event_name_to_type "blueprint-removed")
+
+  assert_equals "$created" "blueprint_created" \
+    "Should convert 'blueprint-created' to 'blueprint_created'"
+  assert_equals "$updated" "blueprint_updated" \
+    "Should convert 'blueprint-updated' to 'blueprint_updated'"
+  assert_equals "$removed" "blueprint_removed" \
+    "Should convert 'blueprint-removed' to 'blueprint_removed'"
 }
 
 # =============================================================================
@@ -874,17 +989,20 @@ function test_edge_case_special_characters_in_params() {
 function test_edge_case_all_events_have_configs() {
   log_test_step "Testing that all EVENT_* constants have EVENT_CONFIGS entries"
 
-  # Get all EVENT_* constant names (exported variables)
+  # Get all EVENT_* constant names (exported variables). Matches every event
+  # family, not just EVENT_INSTANCE_* — the blueprint events are not
+  # instance-scoped and an instance-only match would leave them unguarded.
+  # EVENT_CONFIGS is the spec map itself, not an event name, so it is excluded.
   local all_event_constants=()
   while IFS= read -r line; do
-    if [[ "$line" =~ ^EVENT_INSTANCE_ ]]; then
+    if [[ "$line" =~ ^EVENT_ && ! "$line" =~ ^EVENT_CONFIGS ]]; then
       # Extract the value of the constant
       local const_name="${line%%=*}"
       local const_value="${line#*=\"}"
       const_value="${const_value%\"}"
       all_event_constants+=("$const_value")
     fi
-  done < <(declare -p | grep "^declare -[^ ]*x[^ ]* EVENT_INSTANCE_")
+  done < <(declare -p | grep "^declare -[^ ]*x[^ ]* EVENT_")
 
   local missing_configs=()
   for event_const in "${all_event_constants[@]}"; do
@@ -898,12 +1016,12 @@ function test_edge_case_all_events_have_configs() {
 }
 
 function test_edge_case_event_count_matches_configs() {
-  log_test_step "Testing EVENT_CONFIGS count matches expected 41 events"
+  log_test_step "Testing EVENT_CONFIGS count matches expected 44 events"
 
   local config_count="${#EVENT_CONFIGS[@]}"
 
-  assert_equals "$config_count" "41" \
-    "EVENT_CONFIGS should contain exactly 41 entries (found: $config_count)"
+  assert_equals "$config_count" "44" \
+    "EVENT_CONFIGS should contain exactly 44 entries (found: $config_count)"
 }
 
 # Conformance guard: every event a call site actually emits must be registered

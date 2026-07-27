@@ -73,6 +73,21 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   check: locating a file is not the same as approving it, and a malformed blueprint has to stay
   findable in order to be repaired.
 
+- **Blueprint file events: `blueprint-created`, `blueprint-updated`, `blueprint-removed`.** A
+  blueprint write was invisible to the rest of the system, so every consumer holding a blueprint
+  catalog kept serving the pre-edit version until its own refresh timer happened to fire, and the
+  change never reached event history at all. These are the first events whose subject is not an
+  instance: their `Data` carries `BlueprintName` where every other event carries `InstanceName`,
+  alongside `Tier` (where the file lives — only ever `user`, since the shipped system directory is
+  an rsync target a write would lose on the next deploy) and a boolean saying whether the file
+  shadows a shipped blueprint of the same name (`OverridesSystem`) or, on removal, whether
+  deleting it uncovers one that takes over again (`RevertedToSystem`). `Runtime` is nullable — a
+  blueprint can be saved in a state no runtime can be read out of, and an unknown runtime is
+  reported as `null` rather than defaulted. The file **contents are never carried**: a blueprint
+  can hold credentials (SteamCMD arguments, a password inside an embedded compose) and a payload
+  fans out to every enabled transport, so the record is that the blueprint changed and nothing
+  more.
+
 ### Fixed
 
 - **Palworld player-presence detection now matches crossplay accounts, not just Steam.** The

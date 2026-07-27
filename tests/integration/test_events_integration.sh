@@ -1358,3 +1358,251 @@ function test_emit_config_changed_payload_carries_key_never_value() {
     "Data must NOT contain a Value field (instance config holds secrets)"
 }
 
+
+# =============================================================================
+# BLUEPRINT EVENT PAYLOAD — blueprint-scoped Data, real booleans, honest nulls
+# =============================================================================
+# The blueprint events are the only ones whose Data is keyed on BlueprintName
+# instead of InstanceName, and the only ones carrying real JSON booleans. Both
+# properties live in the _build_event_payload jq template, so they are proven
+# here against the actual payload captured off the socket, not by inspecting the
+# template. Also pins the two contracts the downstream audit row depends on: a
+# human's actor/origin survives the emit (a browser edit must not be attributed
+# to a service account), and the file CONTENT never appears in the payload.
+# =============================================================================
+
+function test_emit_blueprint_updated_payload_is_blueprint_scoped() {
+  log_test_step "Testing: blueprint_updated payload keys Data on BlueprintName with real booleans"
+
+  if ! command -v socat > /dev/null 2>&1; then
+    skip_test "socat not available - skipping payload capture test"
+    return
+  fi
+
+  export config_event_socket_filenames=""
+  export config_event_socket_filename="kgsm.sock"
+  local socket_file="$KGSM_ROOT/kgsm.sock"
+  local capture="$KGSM_TEST_SANDBOX/blueprint-updated-capture.json"
+  rm -f "$socket_file" "$capture"
+
+  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
+  local listener_pid=$!
+
+  local i=0
+  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+  local sock_ready="false"
+  [[ -S "$socket_file" ]] && sock_ready="true"
+  assert_true "$sock_ready" "socat listener should create the socket node"
+
+  _enable_broadcasting
+  _enable_socket_events
+
+  # Emit exactly as kgsm-lib does for a browser edit: the human's identity is
+  # threaded through, NOT the hardcoded system stamp the watchdog uses.
+  KGSM_EVENT_ACTOR="discord:123456789" KGSM_EVENT_ORIGIN="ui" \
+    "$EVENTS_MODULE" emit blueprint-updated terraria user true native > /dev/null 2>&1 || true
+
+  i=0
+  while [[ ! -s "$capture" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+
+  kill "$listener_pid" 2> /dev/null || true
+  wait "$listener_pid" 2> /dev/null || true
+  _disable_socket_events
+  _disable_broadcasting
+  rm -f "$socket_file"
+
+  local payload
+  payload=$(cat "$capture" 2> /dev/null)
+  assert_not_null "$payload" "Captured event payload should not be empty"
+
+  local event_type name tier runtime
+  event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)
+  name=$(echo "$payload" | jq -r '.Data.BlueprintName' 2> /dev/null)
+  tier=$(echo "$payload" | jq -r '.Data.Tier' 2> /dev/null)
+  runtime=$(echo "$payload" | jq -r '.Data.Runtime' 2> /dev/null)
+
+  assert_equals "blueprint_updated" "$event_type" \
+    "EventType should be blueprint_updated"
+  assert_equals "terraria" "$name" \
+    "Data.BlueprintName should carry the blueprint name"
+  assert_equals "user" "$tier" \
+    "Data.Tier should carry the tier (only ever 'user')"
+  assert_equals "native" "$runtime" \
+    "Data.Runtime should carry the runtime when known"
+
+  # Not instance-scoped: an InstanceName key here would be a fabricated subject,
+  # and would make the event join against the wrong entity downstream.
+  local has_instance
+  has_instance=$(echo "$payload" | jq -r '.Data | has("InstanceName")' 2> /dev/null)
+  assert_equals "false" "$has_instance" \
+    "Data must NOT contain an InstanceName field (blueprint events are not instance-scoped)"
+
+  # OverridesSystem must be a real JSON boolean, not the string "true" — the
+  # catalog badge and the audit row both branch on it.
+  local overrides overrides_type
+  overrides=$(echo "$payload" | jq -r '.Data.OverridesSystem' 2> /dev/null)
+  overrides_type=$(echo "$payload" | jq -r '.Data.OverridesSystem | type' 2> /dev/null)
+  assert_equals "boolean" "$overrides_type" \
+    "Data.OverridesSystem should be a JSON boolean, not a string"
+  assert_equals "true" "$overrides" \
+    "Data.OverridesSystem should be true when the blueprint shadows a shipped one"
+
+  # The human's provenance survives: without this the audit row would attribute
+  # an admin's browser edit to whatever OS user the service runs as.
+  local actor origin
+  actor=$(echo "$payload" | jq -r '.Actor' 2> /dev/null)
+  origin=$(echo "$payload" | jq -r '.Origin' 2> /dev/null)
+  assert_equals "discord:123456789" "$actor" \
+    "Actor should carry the human principal, not a service account"
+  assert_equals "ui" "$origin" "Origin should reflect the driving surface"
+
+  # The blueprint CONTENT is never carried: a blueprint can hold credentials and
+  # the payload fans out to every enabled transport.
+  local has_content
+  has_content=$(echo "$payload" | jq -r '.Data | has("Content")' 2> /dev/null)
+  assert_equals "false" "$has_content" \
+    "Data must NOT contain the blueprint content (it can hold credentials)"
+}
+
+# =============================================================================
+# BLUEPRINT REMOVAL PAYLOAD — RevertedToSystem, and an unknown runtime as null
+# =============================================================================
+# Proves the honest-null rule on the blueprint events: `false` renders as the
+# boolean false (not a string, and not dropped), and a runtime the emitter could
+# not determine renders as JSON null rather than an empty string posing as a
+# real runtime.
+# =============================================================================
+
+function test_emit_blueprint_removed_payload_renders_false_and_null_honestly() {
+  log_test_step "Testing: blueprint_removed carries boolean false; unknown runtime renders as null"
+
+  if ! command -v socat > /dev/null 2>&1; then
+    skip_test "socat not available - skipping payload capture test"
+    return
+  fi
+
+  export config_event_socket_filenames=""
+  export config_event_socket_filename="kgsm.sock"
+  local socket_file="$KGSM_ROOT/kgsm.sock"
+  local capture="$KGSM_TEST_SANDBOX/blueprint-removed-capture.json"
+  rm -f "$socket_file" "$capture"
+
+  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
+  local listener_pid=$!
+
+  local i=0
+  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+
+  _enable_broadcasting
+  _enable_socket_events
+
+  # A custom blueprint with no shipped counterpart: deleting it removes the
+  # blueprint from the host entirely, so nothing is reverted to.
+  KGSM_EVENT_ACTOR="discord:123456789" KGSM_EVENT_ORIGIN="ui" \
+    "$EVENTS_MODULE" emit blueprint-removed mycustomgame user false > /dev/null 2>&1 || true
+
+  i=0
+  while [[ ! -s "$capture" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+
+  kill "$listener_pid" 2> /dev/null || true
+  wait "$listener_pid" 2> /dev/null || true
+  _disable_socket_events
+  _disable_broadcasting
+  rm -f "$socket_file"
+
+  local payload
+  payload=$(cat "$capture" 2> /dev/null)
+  assert_not_null "$payload" "Captured event payload should not be empty"
+
+  local event_type name reverted reverted_type
+  event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)
+  name=$(echo "$payload" | jq -r '.Data.BlueprintName' 2> /dev/null)
+  reverted=$(echo "$payload" | jq -r '.Data.RevertedToSystem' 2> /dev/null)
+  reverted_type=$(echo "$payload" | jq -r '.Data.RevertedToSystem | type' 2> /dev/null)
+
+  assert_equals "blueprint_removed" "$event_type" \
+    "EventType should be blueprint_removed"
+  assert_equals "mycustomgame" "$name" \
+    "Data.BlueprintName should carry the blueprint name"
+  assert_equals "boolean" "$reverted_type" \
+    "Data.RevertedToSystem should be a JSON boolean, not a string"
+  assert_equals "false" "$reverted" \
+    "Data.RevertedToSystem should be false when nothing is left to revert to"
+
+  # A removal cannot state the runtime of a file that no longer exists.
+  local has_runtime
+  has_runtime=$(echo "$payload" | jq -r '.Data | has("Runtime")' 2> /dev/null)
+  assert_equals "false" "$has_runtime" \
+    "blueprint_removed must NOT carry a Runtime (the file is gone)"
+}
+
+function test_emit_blueprint_created_payload_renders_unknown_runtime_as_null() {
+  log_test_step "Testing: blueprint_created renders an omitted runtime as JSON null"
+
+  if ! command -v socat > /dev/null 2>&1; then
+    skip_test "socat not available - skipping payload capture test"
+    return
+  fi
+
+  export config_event_socket_filenames=""
+  export config_event_socket_filename="kgsm.sock"
+  local socket_file="$KGSM_ROOT/kgsm.sock"
+  local capture="$KGSM_TEST_SANDBOX/blueprint-created-capture.json"
+  rm -f "$socket_file" "$capture"
+
+  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
+  local listener_pid=$!
+
+  local i=0
+  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+
+  _enable_broadcasting
+  _enable_socket_events
+
+  # Runtime omitted: the emitter could not read one out of the file. KGSM must
+  # report that as unknown, never guess a default.
+  "$EVENTS_MODULE" emit blueprint-created mycustomgame user false > /dev/null 2>&1 || true
+
+  i=0
+  while [[ ! -s "$capture" && $i -lt 50 ]]; do
+    sleep 0.1
+    i=$((i + 1))
+  done
+
+  kill "$listener_pid" 2> /dev/null || true
+  wait "$listener_pid" 2> /dev/null || true
+  _disable_socket_events
+  _disable_broadcasting
+  rm -f "$socket_file"
+
+  local payload
+  payload=$(cat "$capture" 2> /dev/null)
+  assert_not_null "$payload" "Captured event payload should not be empty"
+
+  local event_type runtime_type overrides
+  event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)
+  runtime_type=$(echo "$payload" | jq -r '.Data.Runtime | type' 2> /dev/null)
+  overrides=$(echo "$payload" | jq -r '.Data.OverridesSystem' 2> /dev/null)
+
+  assert_equals "blueprint_created" "$event_type" \
+    "EventType should be blueprint_created"
+  assert_equals "null" "$runtime_type" \
+    "Data.Runtime should be JSON null when the runtime is unknown, never a guessed default"
+  assert_equals "false" "$overrides" \
+    "Data.OverridesSystem should be false for a brand-new custom blueprint"
+}
