@@ -344,6 +344,174 @@ function test_find_help() {
 }
 
 # =============================================================================
+# find --all / --json TESTS
+# =============================================================================
+
+function test_find_json_reports_candidates() {
+  log_test_step "Testing: find factorio --json"
+
+  assert_command_succeeds "$MODULE find factorio --json" \
+    "find --json should succeed"
+
+  assert_command_output "$MODULE find factorio --json" "Candidates" \
+    "find --json output should contain the Candidates array"
+
+  assert_command_output "$MODULE find factorio --json" "Resolved" \
+    "find --json output should contain the Resolved path"
+}
+
+function test_find_all_human_output() {
+  log_test_step "Testing: find factorio --all"
+
+  assert_command_succeeds "$MODULE find factorio --all" \
+    "find --all should succeed"
+
+  assert_command_output "$MODULE find factorio --all" "system" \
+    "find --all output should name the system tier"
+
+  assert_command_output "$MODULE find factorio --all" "user" \
+    "find --all output should name the user tier"
+}
+
+function test_find_json_flag_before_name() {
+  log_test_step "Testing: find --json factorio (option before argument)"
+
+  assert_command_succeeds "$MODULE find --json factorio" \
+    "find should accept the option before the blueprint name"
+}
+
+function test_find_json_invalid_blueprint() {
+  log_test_step "Testing: find --json with non-existent blueprint fails"
+
+  assert_command_fails "$MODULE find nonexistent_blueprint_xyz --json" \
+    "find --json with non-existent blueprint should fail"
+}
+
+function test_find_plain_output_unchanged() {
+  log_test_step "Testing: find without options still emits just the path"
+
+  local output
+  output=$("$MODULE" find factorio)
+
+  assert_equals "1" "$(echo "$output" | wc -l)" \
+    "Plain find should emit exactly one line"
+
+  assert_contains "$output" "factorio.bp.yaml" \
+    "Plain find should emit the blueprint path"
+}
+
+# =============================================================================
+# validate TESTS
+# =============================================================================
+
+function test_validate_native_blueprint() {
+  log_test_step "Testing: validate factorio (native blueprint)"
+
+  assert_command_succeeds "$MODULE validate factorio" \
+    "validate factorio should succeed"
+}
+
+function test_validate_container_blueprint() {
+  log_test_step "Testing: validate vrising (container blueprint)"
+
+  assert_command_succeeds "$MODULE validate vrising" \
+    "validate vrising should succeed"
+}
+
+function test_validate_json() {
+  log_test_step "Testing: validate factorio --json"
+
+  assert_command_succeeds "$MODULE validate factorio --json" \
+    "validate factorio --json should succeed"
+
+  assert_command_output "$MODULE validate factorio --json" '"Valid": true' \
+    "validate --json output should report Valid: true"
+}
+
+function test_validate_accepts_a_path() {
+  log_test_step "Testing: validate accepts a file path outside the blueprint dirs"
+
+  local draft
+  draft=$(mktemp -t "kgsm-validate-XXXXXX.bp.yaml")
+  cat > "$draft" << 'EOF'
+schema_version: 1
+name: draft
+runtime: native
+native:
+  executable_file: draft.sh
+EOF
+
+  assert_command_succeeds "$MODULE validate $draft --json" \
+    "validate should accept a path to an uncommitted file"
+
+  rm -f "$draft"
+}
+
+function test_validate_rejects_malformed_blueprint() {
+  log_test_step "Testing: validate rejects a malformed blueprint"
+
+  local broken
+  broken=$(mktemp -t "kgsm-validate-XXXXXX.bp.yaml")
+  printf 'schema_version: 1\nruntime: bogus\n' > "$broken"
+
+  assert_command_fails "$MODULE validate $broken" \
+    "validate should fail on a malformed blueprint"
+
+  # Both problems — the missing name and the invalid runtime — are reported,
+  # so a caller fixing a rejected file sees the full list at once.
+  local output
+  output=$("$MODULE" validate "$broken" --json 2> /dev/null)
+  rm -f "$broken"
+
+  assert_equals "2" "$(echo "$output" | jq -r '.Errors | length')" \
+    "validate --json should report every problem, not just the first"
+
+  assert_equals "false" "$(echo "$output" | jq -r '.Valid')" \
+    "validate --json should report Valid: false"
+}
+
+function test_validate_missing_blueprint_arg() {
+  log_test_step "Testing: validate with no argument fails"
+
+  assert_command_fails "$MODULE validate" \
+    "validate with no argument should fail"
+}
+
+function test_validate_invalid_blueprint() {
+  log_test_step "Testing: validate with non-existent blueprint fails"
+
+  assert_command_fails "$MODULE validate nonexistent_blueprint_xyz" \
+    "validate with non-existent blueprint should fail"
+}
+
+function test_validate_invalid_option() {
+  log_test_step "Testing: validate with invalid option fails"
+
+  assert_command_fails "$MODULE validate --invalid-option factorio" \
+    "validate with invalid option should fail"
+}
+
+function test_validate_help() {
+  log_test_step "Testing: validate --help"
+
+  assert_command_succeeds "$MODULE validate --help" \
+    "validate --help should succeed"
+
+  assert_command_output "$MODULE validate --help" "Validate Blueprint" \
+    "validate --help output should contain Validate Blueprint"
+}
+
+function test_help_validate_subcommand() {
+  log_test_step "Testing: help validate subcommand"
+
+  assert_command_succeeds "$MODULE help validate" \
+    "help validate should succeed"
+
+  assert_command_output "$MODULE help validate" "Validate Blueprint" \
+    "help validate output should contain Validate Blueprint"
+}
+
+# =============================================================================
 # unknown command TESTS
 # =============================================================================
 

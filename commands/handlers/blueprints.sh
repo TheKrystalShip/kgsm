@@ -254,5 +254,157 @@ function __logic_get_blueprint_info_json() {
 
 export -f __logic_get_blueprint_info_json
 
+# =============================================================================
+# BLUEPRINT VALIDATION VERDICT
+# =============================================================================
+
+# Resolves a validate argument to a blueprint file path. An argument naming an
+# existing file is taken as a path; anything else is resolved as a blueprint
+# name through the normal user-shadows-system lookup. The path form is what lets
+# a not-yet-committed file be checked before it takes a blueprint's real name.
+# Args: $1 = blueprint_name_or_path
+# Returns: 0 and echoes the path, or EC_BLUEPRINT_NOT_FOUND.
+function __logic_resolve_blueprint_target() {
+  local target="$1"
+
+  if [[ -z "$target" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  if [[ -f "$target" ]]; then
+    echo "$target"
+    return 0
+  fi
+
+  local blueprint_path
+  if ! blueprint_path=$(__find_blueprint "$target" 2> /dev/null); then
+    return $EC_BLUEPRINT_NOT_FOUND
+  fi
+
+  echo "$blueprint_path"
+  return 0
+}
+
+export -f __logic_resolve_blueprint_target
+
+# Emits a blueprint's validation verdict as JSON: {valid, path, errors[]}.
+# `errors` holds every problem found, not just the first, so a caller rejecting
+# a save can report all of them in one pass.
+#
+# validate_blueprint_format records into a bash array, which does not survive a
+# subshell, so this function calls it directly rather than through $(...).
+# Args: $1 = blueprint_path
+# Returns: EC_SUCCESS_BLUEPRINT_VALIDATED when valid, EC_INVALID_BLUEPRINT when
+#          not, or EC_MISSING_DEPENDENCY when yq is unavailable.
+function __logic_get_blueprint_validation_json() {
+  local blueprint_path="$1"
+
+  if [[ -z "$blueprint_path" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  validate_blueprint_format "$blueprint_path" 2> /dev/null
+  local format_result=$?
+
+  local errors_json="[]"
+  if [[ ${#KGSM_BLUEPRINT_VALIDATION_ERRORS[@]} -gt 0 ]]; then
+    errors_json=$(printf '%s\n' "${KGSM_BLUEPRINT_VALIDATION_ERRORS[@]}" \
+      | jq -R . | jq -s .)
+  fi
+
+  local valid="false"
+  [[ $format_result -eq 0 ]] && valid="true"
+
+  # PascalCase keys, matching `blueprints info --json` — kgsm-lib deserializes
+  # both through the same source-generated context.
+  jq -n \
+    --argjson valid "$valid" \
+    --arg path "$blueprint_path" \
+    --argjson errors "$errors_json" \
+    '{
+      Valid: $valid,
+      Path: $path,
+      Errors: $errors
+    }'
+
+  if [[ $format_result -eq $EC_MISSING_DEPENDENCY ]]; then
+    return $EC_MISSING_DEPENDENCY
+  fi
+
+  if [[ $format_result -ne 0 ]]; then
+    return $EC_INVALID_BLUEPRINT
+  fi
+
+  return $EC_SUCCESS_BLUEPRINT_VALIDATED
+}
+
+export -f __logic_get_blueprint_validation_json
+
+# =============================================================================
+# BLUEPRINT PATH CANDIDATES
+# =============================================================================
+
+# Emits every path a blueprint name could resolve to, in precedence order, as
+# JSON: {name, resolved, candidates:[{tier, path, exists}]}.
+#
+# `resolved` is the winning path (user shadows system), or null when the name
+# matches nothing. A caller learns from one call both where the file is and
+# whether a user copy is shadowing a system one — the pair of facts a surface
+# needs to tell "custom blueprint" apart from "local override of a shipped one".
+#
+# Unlike `__logic_get_blueprint_path` this reports on existence alone and never
+# consults the format validator: its job is locating files, and a malformed
+# blueprint still has to be findable in order to be repaired.
+# Args: $1 = blueprint_name
+# Returns: EC_SUCCESS_BLUEPRINT_FOUND when at least one candidate exists,
+#          EC_BLUEPRINT_NOT_FOUND when none does.
+function __logic_get_blueprint_candidates_json() {
+  local blueprint_name="$1"
+
+  if [[ -z "$blueprint_name" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  local user_path="$KGSM_USER_BLUEPRINTS_DIR/${blueprint_name}.bp.yaml"
+  local system_path="$KGSM_SYSTEM_BLUEPRINTS_DIR/${blueprint_name}.bp.yaml"
+
+  local user_exists="false" system_exists="false"
+  [[ -f "$user_path" ]] && user_exists="true"
+  [[ -f "$system_path" ]] && system_exists="true"
+
+  # Precedence, not preference: whichever of these comes first and exists is
+  # the file KGSM loads. Mirrors __find_blueprint.
+  local resolved="null"
+  if [[ "$user_exists" == "true" ]]; then
+    resolved=$(jq -n --arg p "$user_path" '$p')
+  elif [[ "$system_exists" == "true" ]]; then
+    resolved=$(jq -n --arg p "$system_path" '$p')
+  fi
+
+  jq -n \
+    --arg name "$blueprint_name" \
+    --argjson resolved "$resolved" \
+    --arg user_path "$user_path" \
+    --argjson user_exists "$user_exists" \
+    --arg system_path "$system_path" \
+    --argjson system_exists "$system_exists" \
+    '{
+      Name: $name,
+      Resolved: $resolved,
+      Candidates: [
+        { Tier: "user",   Path: $user_path,   Exists: $user_exists },
+        { Tier: "system", Path: $system_path, Exists: $system_exists }
+      ]
+    }'
+
+  if [[ "$resolved" == "null" ]]; then
+    return $EC_BLUEPRINT_NOT_FOUND
+  fi
+
+  return $EC_SUCCESS_BLUEPRINT_FOUND
+}
+
+export -f __logic_get_blueprint_candidates_json
+
 # Mark module as loaded
 export KGSM_LOGIC_BLUEPRINTS_LOADED=1

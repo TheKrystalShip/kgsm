@@ -86,7 +86,9 @@ purpose. See `overrides/CLAUDE.md` and `docs/overrides.md`.
 - Keep native `ports` single-quoted; for containers, declare ports only inside
   the embedded compose (KGSM derives the firewall rules from it).
 - Leave any unknown `metadata` value as `null` — never invent a number.
-- The file must parse: `yq eval '.' blueprints/<name>.bp.yaml` and
-  `./kgsm.sh blueprints info <name>` should both succeed.
+- The file must pass `./kgsm.sh blueprints validate <name>`, which is the
+  schema authority — YAML syntax plus every required field for the runtime.
+  `--json` lists every problem at once, and a path argument checks a file that
+  is not yet under a blueprint name: `blueprints validate /tmp/draft.bp.yaml --json`.
 - If you add a blueprint that needs custom install/update logic, it needs a
   matching `overrides/<name>/` directory — the `name` must line up.

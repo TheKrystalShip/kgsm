@@ -33,6 +33,13 @@ function setup_file() {
   assert_not_null "$EC_PERMISSION" "EC_PERMISSION should be defined"
   assert_not_null "$EC_SUCCESS_BLUEPRINT_LISTED" "EC_SUCCESS_BLUEPRINT_LISTED should be defined"
   assert_not_null "$EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED" "EC_SUCCESS_BLUEPRINT_INFO_RETRIEVED should be defined"
+  assert_not_null "$EC_SUCCESS_BLUEPRINT_FOUND" "EC_SUCCESS_BLUEPRINT_FOUND should be defined"
+  assert_not_null "$EC_SUCCESS_BLUEPRINT_VALIDATED" "EC_SUCCESS_BLUEPRINT_VALIDATED should be defined"
+
+  # Scratch space for draft/malformed blueprints that must live outside both
+  # blueprints dirs, so they are never picked up by name resolution.
+  BLUEPRINT_TEST_TEMP_DIR=$(mktemp -d -t "kgsm-blueprint-logic-XXXXXX")
+  export BLUEPRINT_TEST_TEMP_DIR
 
   # Single flat blueprints dir; runtime is a field, not a subdirectory.
   assert_dir_exists "$KGSM_SYSTEM_BLUEPRINTS_DIR" "System blueprints dir should exist"
@@ -46,8 +53,17 @@ function setup_file() {
   assert_function_exists "__logic_get_blueprint_path" "get_blueprint_path should be exported"
   assert_function_exists "__logic_list_blueprints" "list_blueprints should be exported"
   assert_function_exists "__logic_get_blueprint_info_json" "get_blueprint_info_json should be exported"
+  assert_function_exists "__logic_resolve_blueprint_target" "resolve_blueprint_target should be exported"
+  assert_function_exists "__logic_get_blueprint_validation_json" "get_blueprint_validation_json should be exported"
+  assert_function_exists "__logic_get_blueprint_candidates_json" "get_blueprint_candidates_json should be exported"
 
   log_test_step "Blueprint logic test environment validated"
+}
+
+function teardown_file() {
+  if [[ -n "${BLUEPRINT_TEST_TEMP_DIR:-}" ]]; then
+    rm -rf "$BLUEPRINT_TEST_TEMP_DIR"
+  fi
 }
 
 # =============================================================================
@@ -434,4 +450,257 @@ function test_info_json_permission_denied() {
   local exit_code=$?
   chmod "$original_perms" "$blueprint_path"
   assert_equals "$EC_PERMISSION" "$exit_code" "Should return permission error"
+}
+
+# =============================================================================
+# __logic_resolve_blueprint_target()
+# =============================================================================
+
+function test_resolve_target_by_name() {
+  local output
+  output=$(__logic_resolve_blueprint_target "factorio")
+  assert_equals "0" "$?" "Should resolve a blueprint name"
+  assert_equals "$KGSM_SYSTEM_BLUEPRINTS_DIR/factorio.bp.yaml" "$output" \
+    "Should resolve to the system blueprint path"
+}
+
+function test_resolve_target_by_path() {
+  # A path is taken as-is, so a file that is not in either blueprints dir — and
+  # therefore has no blueprint name yet — can still be checked.
+  local draft="$BLUEPRINT_TEST_TEMP_DIR/draft.bp.yaml"
+  cat > "$draft" << 'EOF'
+schema_version: 1
+name: draft
+runtime: native
+native:
+  executable_file: draft.sh
+EOF
+  local output
+  output=$(__logic_resolve_blueprint_target "$draft")
+  local exit_code=$?
+  rm -f "$draft"
+  assert_equals "0" "$exit_code" "Should accept an existing file path"
+  assert_equals "$draft" "$output" "Should echo the path unchanged"
+}
+
+function test_resolve_target_not_found() {
+  __logic_resolve_blueprint_target "nonexistent_blueprint_xyz" 2> /dev/null
+  assert_equals "$EC_BLUEPRINT_NOT_FOUND" "$?" "Should return blueprint not found"
+}
+
+function test_resolve_target_empty_param() {
+  __logic_resolve_blueprint_target "" 2> /dev/null
+  assert_equals "$EC_INVALID_ARG" "$?" "Should return invalid argument error"
+}
+
+# =============================================================================
+# __logic_get_blueprint_validation_json()
+# =============================================================================
+
+function test_validation_json_valid_native() {
+  local output
+  output=$(__logic_get_blueprint_validation_json \
+    "$KGSM_SYSTEM_BLUEPRINTS_DIR/factorio.bp.yaml")
+  local exit_code=$?
+  assert_equals "$EC_SUCCESS_BLUEPRINT_VALIDATED" "$exit_code" \
+    "Valid native blueprint should return the validated success code"
+  assert_equals "true" "$(echo "$output" | jq -r '.Valid')" "Valid should be true"
+  assert_equals "0" "$(echo "$output" | jq -r '.Errors | length')" \
+    "A valid blueprint should report no errors"
+}
+
+function test_validation_json_valid_container() {
+  local output
+  output=$(__logic_get_blueprint_validation_json \
+    "$KGSM_SYSTEM_BLUEPRINTS_DIR/vrising.bp.yaml")
+  local exit_code=$?
+  assert_equals "$EC_SUCCESS_BLUEPRINT_VALIDATED" "$exit_code" \
+    "Valid container blueprint should return the validated success code"
+  assert_equals "true" "$(echo "$output" | jq -r '.Valid')" "Valid should be true"
+}
+
+function test_validation_json_reports_every_error() {
+  # Two independent problems: no `name`, and a native body with no
+  # `executable_file`. Both must be reported, so an editor rejecting a save can
+  # show the complete list instead of one problem per round-trip.
+  local broken="$BLUEPRINT_TEST_TEMP_DIR/broken.bp.yaml"
+  cat > "$broken" << 'EOF'
+schema_version: 1
+runtime: native
+native:
+  level_name: default
+EOF
+  local output
+  output=$(__logic_get_blueprint_validation_json "$broken")
+  local exit_code=$?
+  rm -f "$broken"
+  assert_equals "$EC_INVALID_BLUEPRINT" "$exit_code" "Should return invalid blueprint"
+  assert_equals "false" "$(echo "$output" | jq -r '.Valid')" "Valid should be false"
+  assert_equals "2" "$(echo "$output" | jq -r '.Errors | length')" \
+    "Should report both the missing name and the missing executable_file"
+  assert_contains "$output" "name" "Errors should mention the missing name"
+  assert_contains "$output" "executable_file" \
+    "Errors should mention the missing executable_file"
+}
+
+function test_validation_json_invalid_runtime() {
+  local broken="$BLUEPRINT_TEST_TEMP_DIR/runtime.bp.yaml"
+  cat > "$broken" << 'EOF'
+schema_version: 1
+name: bogus-runtime
+runtime: bogus
+EOF
+  local output
+  output=$(__logic_get_blueprint_validation_json "$broken")
+  local exit_code=$?
+  rm -f "$broken"
+  assert_equals "$EC_INVALID_BLUEPRINT" "$exit_code" "Should return invalid blueprint"
+  assert_contains "$output" "runtime" "Errors should mention the invalid runtime"
+}
+
+function test_validation_json_invalid_yaml_syntax() {
+  local broken="$BLUEPRINT_TEST_TEMP_DIR/syntax.bp.yaml"
+  printf 'name: x\n  bad: [unclosed\n' > "$broken"
+  local output
+  output=$(__logic_get_blueprint_validation_json "$broken")
+  local exit_code=$?
+  rm -f "$broken"
+  assert_equals "$EC_INVALID_BLUEPRINT" "$exit_code" "Should return invalid blueprint"
+  assert_equals "1" "$(echo "$output" | jq -r '.Errors | length')" \
+    "Unparseable YAML is a single fatal error; nothing further can be inspected"
+  assert_contains "$output" "YAML syntax" "Errors should name the syntax failure"
+}
+
+function test_validation_json_empty_file() {
+  local broken="$BLUEPRINT_TEST_TEMP_DIR/empty.bp.yaml"
+  : > "$broken"
+  local output
+  output=$(__logic_get_blueprint_validation_json "$broken")
+  local exit_code=$?
+  rm -f "$broken"
+  assert_equals "$EC_INVALID_BLUEPRINT" "$exit_code" "Should return invalid blueprint"
+  assert_contains "$output" "empty" "Errors should say the file is empty"
+}
+
+function test_validation_json_container_requires_host_networking() {
+  # A bridge-networked service would DNAT-publish its ports past the host
+  # firewall's INPUT chain, so it must be rejected.
+  local broken="$BLUEPRINT_TEST_TEMP_DIR/bridge.bp.yaml"
+  cat > "$broken" << 'EOF'
+schema_version: 1
+name: bridge-net
+runtime: container
+container:
+  compose: |-
+    services:
+      bridge-net:
+        image: example/image:latest
+EOF
+  local output
+  output=$(__logic_get_blueprint_validation_json "$broken")
+  local exit_code=$?
+  rm -f "$broken"
+  assert_equals "$EC_INVALID_BLUEPRINT" "$exit_code" "Should return invalid blueprint"
+  assert_contains "$output" "network_mode" \
+    "Errors should name the missing host networking"
+}
+
+function test_validation_json_empty_param() {
+  __logic_get_blueprint_validation_json "" 2> /dev/null
+  assert_equals "$EC_INVALID_ARG" "$?" "Should return invalid argument error"
+}
+
+# =============================================================================
+# __logic_get_blueprint_candidates_json()
+# =============================================================================
+
+function test_candidates_json_system_only() {
+  local output
+  output=$(__logic_get_blueprint_candidates_json "factorio")
+  local exit_code=$?
+  assert_equals "$EC_SUCCESS_BLUEPRINT_FOUND" "$exit_code" "Should return found"
+  assert_equals "$KGSM_SYSTEM_BLUEPRINTS_DIR/factorio.bp.yaml" \
+    "$(echo "$output" | jq -r '.Resolved')" "Should resolve to the system blueprint"
+  assert_equals "false" \
+    "$(echo "$output" | jq -r '.Candidates[] | select(.Tier == "user") | .Exists')" \
+    "No user copy should exist"
+  assert_equals "true" \
+    "$(echo "$output" | jq -r '.Candidates[] | select(.Tier == "system") | .Exists')" \
+    "The system copy should exist"
+}
+
+function test_candidates_json_user_shadows_system() {
+  # Both tiers present is what distinguishes a local override of a shipped
+  # blueprint from a blueprint that only ever existed as a custom one.
+  local shadow="$KGSM_USER_BLUEPRINTS_DIR/factorio.bp.yaml"
+  cat > "$shadow" << 'EOF'
+schema_version: 1
+name: factorio
+runtime: native
+native:
+  executable_file: factorio
+EOF
+  local output
+  output=$(__logic_get_blueprint_candidates_json "factorio")
+  local exit_code=$?
+  rm -f "$shadow"
+  assert_equals "$EC_SUCCESS_BLUEPRINT_FOUND" "$exit_code" "Should return found"
+  assert_equals "$KGSM_USER_BLUEPRINTS_DIR/factorio.bp.yaml" \
+    "$(echo "$output" | jq -r '.Resolved')" "The user copy should win"
+  assert_equals "true" \
+    "$(echo "$output" | jq -r '.Candidates[] | select(.Tier == "user") | .Exists')" \
+    "The user copy should exist"
+  assert_equals "true" \
+    "$(echo "$output" | jq -r '.Candidates[] | select(.Tier == "system") | .Exists')" \
+    "The shadowed system copy should still be reported"
+}
+
+function test_candidates_json_user_only() {
+  local custom="$KGSM_USER_BLUEPRINTS_DIR/test-candidate.bp.yaml"
+  cat > "$custom" << 'EOF'
+schema_version: 1
+name: test-candidate
+runtime: native
+native:
+  executable_file: test.sh
+EOF
+  local output
+  output=$(__logic_get_blueprint_candidates_json "test-candidate")
+  local exit_code=$?
+  rm -f "$custom"
+  assert_equals "$EC_SUCCESS_BLUEPRINT_FOUND" "$exit_code" "Should return found"
+  assert_equals "false" \
+    "$(echo "$output" | jq -r '.Candidates[] | select(.Tier == "system") | .Exists')" \
+    "A custom blueprint has no system original to revert to"
+}
+
+function test_candidates_json_reports_malformed_blueprint() {
+  # Locating a file is not the same as approving it: a malformed blueprint must
+  # stay findable, or it could never be opened and repaired.
+  local broken="$KGSM_USER_BLUEPRINTS_DIR/test-malformed.bp.yaml"
+  printf 'name: test-malformed\nruntime: bogus\n' > "$broken"
+  local output
+  output=$(__logic_get_blueprint_candidates_json "test-malformed")
+  local exit_code=$?
+  rm -f "$broken"
+  assert_equals "$EC_SUCCESS_BLUEPRINT_FOUND" "$exit_code" \
+    "A malformed blueprint should still be located"
+  assert_equals "$broken" "$(echo "$output" | jq -r '.Resolved')" \
+    "Should resolve to the malformed file"
+}
+
+function test_candidates_json_not_found() {
+  local output
+  output=$(__logic_get_blueprint_candidates_json "nonexistent_blueprint_xyz")
+  local exit_code=$?
+  assert_equals "$EC_BLUEPRINT_NOT_FOUND" "$exit_code" "Should return not found"
+  assert_equals "null" "$(echo "$output" | jq -r '.Resolved')" \
+    "Resolved should be null when nothing matches, never a fabricated path"
+  assert_equals "2" "$(echo "$output" | jq -r '.Candidates | length')" \
+    "Both tiers should still be reported as searched"
+}
+
+function test_candidates_json_empty_param() {
+  __logic_get_blueprint_candidates_json "" 2> /dev/null
+  assert_equals "$EC_INVALID_ARG" "$?" "Should return invalid argument error"
 }

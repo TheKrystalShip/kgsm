@@ -51,6 +51,28 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Added
+
+- **`blueprints validate <blueprint|path> [--json]`** exposes the blueprint schema check as a
+  command. The check itself (YAML syntax, required `name` and `runtime`, `native.executable_file`
+  for native, a `container.compose` with at least one service all on `network_mode: host` for
+  container) was previously reachable only as an internal function, so the only way to find out
+  whether a blueprint was acceptable was to write it and then ask KGSM to read it back. An
+  argument naming an existing file is checked as a path rather than a blueprint name, which
+  allows a file to be checked *before* it is committed under a blueprint's real name. Nothing is
+  written and no event is emitted. `--json` returns `{Valid, Path, Errors}` listing every problem
+  found rather than stopping at the first, so a caller rejecting a file can report all of them at
+  once instead of one per round-trip.
+
+- **`blueprints find <blueprint> --all|--json`** reports every path a blueprint name could
+  resolve to, in precedence order, with whether each exists. Because a user blueprint shadows a
+  same-named system one, the single resolved path that plain `find` returns cannot distinguish a
+  purely custom blueprint from a user copy overriding a shipped one — both candidates existing
+  means an override is in effect, and only the user candidate existing means there is no original
+  to fall back to. Unlike plain `find`, these modes report on existence alone and skip the format
+  check: locating a file is not the same as approving it, and a malformed blueprint has to stay
+  findable in order to be repaired.
+
 ### Fixed
 
 - **Palworld player-presence detection now matches crossplay accounts, not just Steam.** The

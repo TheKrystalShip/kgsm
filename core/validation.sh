@@ -28,6 +28,13 @@ fi
 # EC_INVALID_ARG=8 (invalid format, empty, corrupted)
 # EC_PERMISSION=16 (not readable)
 
+# Every message recorded by the most recent validate_blueprint_format call.
+# Reset on each call, so it reflects one validation and never accumulates.
+# Bash arrays do not survive `export`, so a reader must run in the same shell as
+# the validation — the blueprints handler builds its JSON verdict in-process for
+# exactly this reason.
+declare -g -a KGSM_BLUEPRINT_VALIDATION_ERRORS=()
+
 # =============================================================================
 # BLUEPRINT VALIDATION FUNCTIONS
 # =============================================================================
@@ -125,6 +132,19 @@ function validate_blueprint_readable() {
 
 export -f validate_blueprint_readable
 
+# Records a blueprint format error: appends it to the collected-error array and
+# prints it. Callers that only inspect the return code are unaffected; callers
+# that want the full list read KGSM_BLUEPRINT_VALIDATION_ERRORS afterwards.
+# Usage: __record_blueprint_error <message>
+function __record_blueprint_error() {
+  local message="$1"
+
+  KGSM_BLUEPRINT_VALIDATION_ERRORS+=("$message")
+  __print_error "$message"
+}
+
+export -f __record_blueprint_error
+
 # Validate a unified blueprint's format and required fields.
 # All blueprints are YAML (`<name>.bp.yaml`); `runtime` discriminates the body.
 # Required: `name`, `runtime` (native|container); native requires
@@ -133,29 +153,42 @@ export -f validate_blueprint_readable
 # host-networked so their firewall/UPnP behaviour matches native instances; a
 # bridge service's published ports would bypass the host firewall). (`level_name`
 # / `executable_arguments` are optional — they default during instance creation.)
+#
+# Every failure is recorded in the KGSM_BLUEPRINT_VALIDATION_ERRORS array, reset
+# on entry. The field checks all run so the array holds the complete list of
+# problems — an editor showing a rejected save reports every one at once instead
+# of making the user fix them one round-trip at a time. The gates above them
+# (empty file, missing yq, unparseable YAML) return on the spot: nothing further
+# can be inspected once one of those fails.
 # Usage: validate_blueprint_format <blueprint_path>
 # Returns: 0 if valid format, non-zero if invalid
 function validate_blueprint_format() {
   local blueprint_path="$1"
 
+  KGSM_BLUEPRINT_VALIDATION_ERRORS=()
+
   if [[ -z "$blueprint_path" ]]; then
-    __print_error "validate_blueprint_format: Blueprint path cannot be empty"
+    __record_blueprint_error "validate_blueprint_format: Blueprint path cannot be empty"
     return $EC_INVALID_ARG
   fi
 
   # Check if file is empty
   if [[ ! -s "$blueprint_path" ]]; then
-    __print_error "Blueprint file is empty: $blueprint_path"
+    __record_blueprint_error "Blueprint file is empty: $blueprint_path"
     return $EC_INVALID_ARG
   fi
 
   # yq is a hard dependency — fail with an actionable message before the syntax
   # check (which would otherwise misreport a yq-less host as "Invalid YAML").
-  __require_yq || return $EC_MISSING_DEPENDENCY
+  # __require_yq prints its own message, so record without reprinting.
+  if ! __require_yq; then
+    KGSM_BLUEPRINT_VALIDATION_ERRORS+=("yq is required to validate blueprints but is not installed")
+    return $EC_MISSING_DEPENDENCY
+  fi
 
   # YAML syntax (yq is a hard dependency)
   if ! yq eval '.' "$blueprint_path" >/dev/null 2>&1; then
-    __print_error "Invalid YAML syntax in blueprint: $blueprint_path"
+    __record_blueprint_error "Invalid YAML syntax in blueprint: $blueprint_path"
     return $EC_INVALID_ARG
   fi
 
@@ -165,8 +198,7 @@ function validate_blueprint_format() {
   runtime=$(yq -r '.runtime // ""' "$blueprint_path" 2>/dev/null)
 
   if [[ -z "$name" ]]; then
-    __print_error "Blueprint missing required field 'name': $blueprint_path"
-    return $EC_INVALID_ARG
+    __record_blueprint_error "Blueprint missing required field 'name': $blueprint_path"
   fi
 
   case "$runtime" in
@@ -174,20 +206,19 @@ function validate_blueprint_format() {
       local executable_file
       executable_file=$(yq -r '.native.executable_file // ""' "$blueprint_path" 2>/dev/null)
       if [[ -z "$executable_file" ]]; then
-        __print_error "Native blueprint missing required field 'native.executable_file': $blueprint_path"
-        return $EC_INVALID_ARG
+        __record_blueprint_error "Native blueprint missing required field 'native.executable_file': $blueprint_path"
       fi
       ;;
     container)
       local compose service_count
       compose=$(yq -r '.container.compose // ""' "$blueprint_path" 2>/dev/null)
       if [[ -z "$compose" ]]; then
-        __print_error "Container blueprint missing required field 'container.compose': $blueprint_path"
+        __record_blueprint_error "Container blueprint missing required field 'container.compose': $blueprint_path"
         return $EC_INVALID_ARG
       fi
       service_count=$(printf '%s' "$compose" | yq -r '.services | length' 2>/dev/null)
       if [[ ! "$service_count" =~ ^[0-9]+$ ]] || ((service_count < 1)); then
-        __print_error "Container blueprint 'container.compose' defines no services: $blueprint_path"
+        __record_blueprint_error "Container blueprint 'container.compose' defines no services: $blueprint_path"
         return $EC_INVALID_ARG
       fi
       # KGSM containers are host-networked (`network_mode: host`). Under host
@@ -204,15 +235,17 @@ function validate_blueprint_format() {
       non_host_services=$(printf '%s' "$compose" \
         | yq -r '[.services.* | select(.network_mode != "host")] | length' 2>/dev/null)
       if [[ ! "$non_host_services" =~ ^[0-9]+$ ]] || ((non_host_services > 0)); then
-        __print_error "Container blueprint service missing 'network_mode: host' (KGSM containers are host-networked; a bridge service's published ports bypass the host firewall): $blueprint_path"
-        return $EC_INVALID_ARG
+        __record_blueprint_error "Container blueprint service missing 'network_mode: host' (KGSM containers are host-networked; a bridge service's published ports bypass the host firewall): $blueprint_path"
       fi
       ;;
     *)
-      __print_error "Blueprint has invalid or missing 'runtime' (expected native|container): $blueprint_path"
-      return $EC_INVALID_ARG
+      __record_blueprint_error "Blueprint has invalid or missing 'runtime' (expected native|container): $blueprint_path"
       ;;
   esac
+
+  if [[ ${#KGSM_BLUEPRINT_VALIDATION_ERRORS[@]} -gt 0 ]]; then
+    return $EC_INVALID_ARG
+  fi
 
   return 0
 }

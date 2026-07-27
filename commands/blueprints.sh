@@ -24,6 +24,7 @@ ${UNDERLINE}Commands:${END}
   list [filter]               List available blueprints
   info <blueprint>            Display blueprint contents
   find <blueprint>            Get blueprint file path
+  validate <blueprint|path>   Check a blueprint's format
   help [command]              Show help information
 
 ${UNDERLINE}Options:${END}
@@ -39,6 +40,9 @@ ${UNDERLINE}Examples:${END}
   $self info factorio
   $self info terraria --json
   $self find minecraft
+  $self find minecraft --all
+  $self validate factorio
+  $self validate /tmp/draft.bp.yaml --json
   $self help list
 
 ${UNDERLINE}Notes:${END}
@@ -123,12 +127,14 @@ function show_usage_find() {
 Locate the absolute path to a blueprint file.
 
 ${UNDERLINE}Usage:${END}
-  $self find <blueprint>
+  $self find <blueprint> [options]
 
 ${UNDERLINE}Arguments:${END}
   blueprint                   Name of the blueprint to find
 
 ${UNDERLINE}Options:${END}
+  --all                       Show every path the name could resolve to
+  --json                      Output in JSON format
   --help                      Display this help information
 
 ${UNDERLINE}Description:${END}
@@ -136,10 +142,58 @@ Returns the absolute file path to the specified blueprint. This is
 useful for scripting and debugging. The command validates that the
 blueprint exists and is valid before returning the path.
 
+With --all or --json, every candidate path is reported in precedence
+order (user before system) along with whether it exists, so a caller can
+tell a custom blueprint apart from a user copy shadowing a shipped one.
+These modes report on existence alone and skip the format check — a
+malformed blueprint still has to be findable in order to be repaired.
+
 ${UNDERLINE}Examples:${END}
   $self find factorio
   $self find terraria
+  $self find factorio --all
+  $self find factorio --json
   path=\$($self find minecraft)
+"
+}
+
+function show_usage_validate() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Validate Blueprint${END}
+
+Check a blueprint's format and required fields.
+
+${UNDERLINE}Usage:${END}
+  $self validate <blueprint|path> [options]
+
+${UNDERLINE}Arguments:${END}
+  blueprint|path              Blueprint name, or a path to a blueprint file
+
+${UNDERLINE}Options:${END}
+  --json                      Output in JSON format
+  --help                      Display this help information
+
+${UNDERLINE}Description:${END}
+Checks YAML syntax and required fields: 'name' and 'runtime' on every
+blueprint, 'native.executable_file' for native ones, and a
+'container.compose' with at least one service — all on 'network_mode:
+host' — for container ones.
+
+An argument naming an existing file is checked as a path; anything else
+is resolved as a blueprint name. The path form allows a file to be
+checked before it is committed under a blueprint's real name.
+
+Nothing is written and no event is emitted. --json reports every problem
+found rather than only the first:
+
+  { \"Valid\": false, \"Path\": \"...\", \"Errors\": [\"...\"] }
+
+${UNDERLINE}Examples:${END}
+  $self validate factorio
+  $self validate vrising --json
+  $self validate /tmp/draft.bp.yaml --json
 "
 }
 
@@ -294,6 +348,8 @@ function _cmd_info() {
 
 function _cmd_find() {
   local blueprint=""
+  local all_opt=""
+  local json_opt=""
 
   # Parse arguments
   while [[ $# -gt 0 ]]; do
@@ -302,6 +358,12 @@ function _cmd_find() {
         show_usage_find
         return 0
         ;;
+      --all)
+        all_opt="--all"
+        ;;
+      --json)
+        json_opt="--json"
+        ;;
       -*)
         __print_error "Invalid option: $1"
         __print_error "Use '$self find --help' for usage information"
@@ -309,7 +371,6 @@ function _cmd_find() {
         ;;
       *)
         blueprint="$1"
-        break
         ;;
     esac
     shift
@@ -320,6 +381,30 @@ function _cmd_find() {
     __print_error "Missing required argument: <blueprint>"
     __print_error "Use '$self find --help' for usage information"
     return $EC_MISSING_ARG
+  fi
+
+  # Candidate reporting answers "where could this live, and what is actually
+  # there" — existence only, no format check, so a malformed blueprint can
+  # still be located and repaired.
+  if [[ -n "$all_opt" || -n "$json_opt" ]]; then
+    local candidates
+    candidates=$(__logic_get_blueprint_candidates_json "$blueprint")
+    local candidates_result=$?
+
+    if [[ $candidates_result -ne $EC_SUCCESS_BLUEPRINT_FOUND ]]; then
+      __print_error "Blueprint not found: $blueprint"
+      return $EC_BLUEPRINT_NOT_FOUND
+    fi
+
+    if [[ -n "$json_opt" ]]; then
+      echo "$candidates"
+    else
+      echo "$candidates" \
+        | jq -r '.Candidates[] | "\(.Tier)\t\(.Path)\t\(.Exists)"'
+    fi
+
+    __dispatch_event_from_exit_code $EC_SUCCESS_BLUEPRINT_FOUND "system" "$blueprint" > /dev/null 2>&1
+    return 0
   fi
 
   # Validate blueprint exists
@@ -334,6 +419,79 @@ function _cmd_find() {
   blueprint_path=$(validate_blueprint_exists "$blueprint")
   echo "$blueprint_path"
   __dispatch_event_from_exit_code $EC_SUCCESS_BLUEPRINT_FOUND "system" "$blueprint" > /dev/null 2>&1
+  return 0
+}
+
+function _cmd_validate() {
+  local target=""
+  local json_opt=""
+
+  # Parse arguments
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_validate
+        return 0
+        ;;
+      --json)
+        json_opt="--json"
+        ;;
+      -*)
+        __print_error "Invalid option: $1"
+        __print_error "Use '$self validate --help' for usage information"
+        return $EC_INVALID_ARG
+        ;;
+      *)
+        target="$1"
+        ;;
+    esac
+    shift
+  done
+
+  # Validate target argument
+  if [[ -z "$target" ]]; then
+    __print_error "Missing required argument: <blueprint|path>"
+    __print_error "Use '$self validate --help' for usage information"
+    return $EC_MISSING_ARG
+  fi
+
+  local blueprint_path
+  if ! blueprint_path=$(__logic_resolve_blueprint_target "$target"); then
+    __print_error "Blueprint not found: $target"
+    __print_error "Searched in:"
+    __print_error "  - User: $KGSM_USER_BLUEPRINTS_DIR"
+    __print_error "  - System: $KGSM_SYSTEM_BLUEPRINTS_DIR"
+    return $EC_BLUEPRINT_NOT_FOUND
+  fi
+
+  if [[ ! -r "$blueprint_path" ]]; then
+    __print_error "Blueprint file is not readable: $blueprint_path"
+    return $EC_PERMISSION
+  fi
+
+  local verdict_result
+  if [[ -n "$json_opt" ]]; then
+    # The verdict object carries the errors, so the validator's own stderr
+    # would only duplicate them.
+    __logic_get_blueprint_validation_json "$blueprint_path"
+    verdict_result=$?
+  else
+    # Human mode: every problem is printed by the validator as it is found.
+    validate_blueprint_format "$blueprint_path"
+    verdict_result=$?
+    if [[ $verdict_result -eq 0 ]]; then
+      verdict_result=$EC_SUCCESS_BLUEPRINT_VALIDATED
+      __print_success "Blueprint is valid: $blueprint_path"
+    elif [[ $verdict_result -ne $EC_MISSING_DEPENDENCY ]]; then
+      verdict_result=$EC_INVALID_BLUEPRINT
+    fi
+  fi
+
+  if [[ $verdict_result -ne $EC_SUCCESS_BLUEPRINT_VALIDATED ]]; then
+    return $verdict_result
+  fi
+
+  __dispatch_event_from_exit_code $EC_SUCCESS_BLUEPRINT_VALIDATED "system" "$target" > /dev/null 2>&1
   return 0
 }
 
@@ -354,6 +512,9 @@ function _cmd_help() {
       ;;
     find)
       show_usage_find
+      ;;
+    validate)
+      show_usage_validate
       ;;
     *)
       __print_error "Unknown command: $command"
@@ -390,7 +551,14 @@ case "$command" in
     exit $?
     ;;
   find)
+    # `find --all|--json` reads the candidate set via jq; the plain form does
+    # not, so yq/jq are only required for the structured modes.
     _cmd_find "$@"
+    exit $?
+    ;;
+  validate)
+    __require_yq || exit $EC_MISSING_DEPENDENCY
+    _cmd_validate "$@"
     exit $?
     ;;
   *)

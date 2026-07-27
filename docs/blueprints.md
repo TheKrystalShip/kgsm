@@ -10,6 +10,7 @@ This document explains what blueprints are, how they work in KGSM, and how to cr
 - [Managing Blueprints](#managing-blueprints)
   - [Listing Available Blueprints](#listing-available-blueprints)
   - [Inspecting a Blueprint](#inspecting-a-blueprint)
+  - [Validating a Blueprint](#validating-a-blueprint)
   - [Creating New Blueprints](#creating-new-blueprints)
   - [Customizing Existing Blueprints](#customizing-existing-blueprints)
 - [Using Blueprints](#using-blueprints)
@@ -165,6 +166,52 @@ Find the absolute path to a blueprint file:
 
 ```sh
 ./kgsm.sh blueprints find factorio
+```
+
+Because a user blueprint shadows a same-named system one, the path a name
+resolves to does not by itself say whether a shipped blueprint is being
+overridden. `--all` reports every candidate path in precedence order along with
+whether it exists, and `--json` returns the same set as an object:
+
+```sh
+./kgsm.sh blueprints find factorio --all
+./kgsm.sh blueprints find factorio --json
+```
+
+Both candidates existing means a user copy is shadowing a shipped blueprint;
+only the user candidate existing means the blueprint is purely custom, with no
+original to fall back to. These modes report on existence alone and skip the
+format check, so a malformed blueprint can still be located and repaired.
+
+### Validating a Blueprint
+
+Check a blueprint's YAML syntax and required fields:
+
+```sh
+./kgsm.sh blueprints validate factorio
+./kgsm.sh blueprints validate factorio --json
+```
+
+An argument naming an existing file is checked as a path rather than a
+blueprint name, so a file can be validated before it is committed under a
+blueprint's real name:
+
+```sh
+./kgsm.sh blueprints validate /tmp/mygame.bp.yaml --json
+```
+
+Nothing is written and no event is emitted. `--json` reports every problem
+found rather than stopping at the first:
+
+```json
+{
+  "Valid": false,
+  "Path": "/tmp/mygame.bp.yaml",
+  "Errors": [
+    "Blueprint missing required field 'name': /tmp/mygame.bp.yaml",
+    "Native blueprint missing required field 'native.executable_file': /tmp/mygame.bp.yaml"
+  ]
+}
 ```
 
 ### Creating New Blueprints
