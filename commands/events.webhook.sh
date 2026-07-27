@@ -197,7 +197,7 @@ function __webhook_send() {
     --quiet
     --timeout "${config_webhook_timeout_seconds:-10}"
     --header "Content-Type: application/json"
-    --header "User-Agent: KGSM/$(${KGSM_ROOT}/installer.sh --version 2>/dev/null || echo 'unknown')"
+    --header "User-Agent: KGSM/$KGSM_VERSION"
     --post-data "$payload"
   )
 

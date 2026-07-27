@@ -67,7 +67,7 @@ The `config_schema_version` field tracks the configuration format version. This 
 
 ### During KGSM Updates
 
-When you run `./installer.sh --update`, KGSM automatically:
+When your package manager upgrades KGSM, the next `kgsm` invocation automatically:
 
 1. **Creates a numbered backup** of your current config (saved as `config.ini.0`)
 2. **Runs any pending migrations** to update the config format if needed
@@ -273,8 +273,8 @@ You'll see warnings in the merge output:
 ### After Updating KGSM
 
 ```bash
-# 1. Update KGSM (merge happens automatically)
-./installer.sh --update
+# 1. Upgrade KGSM through your package manager (the merge happens automatically
+#    on the next kgsm invocation)
 
 # 2. Review what changed
 ./kgsm.sh config diff 0

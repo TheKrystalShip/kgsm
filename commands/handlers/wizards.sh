@@ -567,7 +567,7 @@ export -f __logic_wizard_uninstall_instance
 # Example:
 #   version=$(__logic_get_kgsm_version)
 function __logic_get_kgsm_version() {
-  "$KGSM_ROOT/installer.sh" --version 2>/dev/null || echo "Unknown"
+  echo "$KGSM_VERSION"
   return 0
 }
 export -f __logic_get_kgsm_version

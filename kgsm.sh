@@ -8,8 +8,8 @@
 # shellcheck disable=SC1091
 source "$(dirname "$(readlink -f "$0")")/core/bootstrap.sh"
 
-# KGSM version (managed by package manager)
-export KGSM_VERSION="3.1.2-rc8"
+# KGSM_VERSION is declared in core/bootstrap.sh, sourced above, so that every
+# entrypoint reports the same version — not just this one.
 
 function show_usage() {
   local self

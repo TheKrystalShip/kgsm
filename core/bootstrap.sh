@@ -47,6 +47,15 @@ if [[ -z "$KGSM_ROOT" ]]; then
   unset _bootstrap_dir _kgsm_root
 fi
 
+# --- KGSM version ---
+# The single source of truth for the running version, managed by the package
+# manager. It lives here rather than in kgsm.sh because KGSM is a
+# multi-entrypoint CLI: a module under commands/ can be invoked directly, and
+# anything that stamps a version (event payloads, the webhook User-Agent) must
+# report the same value no matter which entrypoint reached it.
+declare -g KGSM_VERSION="3.1.2-rc9"
+export KGSM_VERSION
+
 if [[ -n "${KGSM_BOOTSTRAP_LOADED:-}" ]]; then
   return 0
 fi

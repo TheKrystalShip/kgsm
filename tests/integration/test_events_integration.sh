@@ -1468,6 +1468,19 @@ function test_emit_blueprint_updated_payload_is_blueprint_scoped() {
   has_content=$(echo "$payload" | jq -r '.Data | has("Content")' 2> /dev/null)
   assert_equals "false" "$has_content" \
     "Data must NOT contain the blueprint content (it can hold credentials)"
+
+  # Every payload stamps the running version. Asserted here because this test
+  # reaches the emit through the module directly rather than through kgsm.sh:
+  # the version has to resolve the same way for every entrypoint, so a value
+  # that only appears on the kgsm.sh path is a broken contract, not a detail.
+  local kgsm_version
+  kgsm_version=$(echo "$payload" | jq -r '.KGSMVersion' 2> /dev/null)
+  # KGSM_VERSION is exported by core/bootstrap.sh, which the runner sources.
+  # shellcheck disable=SC2153
+  assert_equals "$KGSM_VERSION" "$kgsm_version" \
+    "KGSMVersion should carry the running version regardless of entrypoint"
+  assert_not_equals "unknown" "$kgsm_version" \
+    "KGSMVersion must never fall back to 'unknown'"
 }
 
 # =============================================================================

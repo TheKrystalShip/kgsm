@@ -90,6 +90,18 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Fixed
 
+- **KGSM no longer reports its version as `unknown`.** Three call sites still shelled
+  `installer.sh --version`, a script deleted when versioning moved to the package manager. The
+  failure was silent — each swallowed the missing-file error and fell back to a literal
+  `"unknown"` — so *every* event payload carried `"KGSMVersion": "unknown"`, every webhook went
+  out as `User-Agent: KGSM/unknown`, and the interactive system overview showed `Unknown`. The
+  version now comes from `KGSM_VERSION`, which moves from `kgsm.sh` to `core/bootstrap.sh`:
+  KGSM is a multi-entrypoint CLI, and a module under `commands/` invoked directly would otherwise
+  report a different version than the same code reached through `kgsm.sh`. Bootstrap is the one
+  file every entrypoint sources, so the version resolves identically no matter how the code was
+  reached. The event payload's `KGSMVersion` is now asserted in the integration suite — nothing
+  covered it before, which is why the regression went unnoticed.
+
 - **Palworld player-presence detection now matches crossplay accounts, not just Steam.** The
   `player_joined_regex`/`player_left_regex` in `palworld.bp.yaml` required a literal `steam_`
   prefix on the `User id:` field, so a player connecting from Xbox / Game Pass (`gdk_<XUID>`)
