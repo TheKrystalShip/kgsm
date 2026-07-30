@@ -26,6 +26,12 @@ if [[ -z "${KGSM_WATCHDOG_DEFAULT_SOCKET:-}" ]]; then
   declare -g -r KGSM_WATCHDOG_DEFAULT_SOCKET="/run/kgsm-watchdog/control.sock"
 fi
 
+# Per-invocation memoization caches. The daemon's liveness and per-instance
+# status are invariant within a single fleet scan — the process exits and
+# these reset naturally when the kgsm invocation completes.
+declare -A _KGSM_WATCHDOG_STATUS_BODY=()
+declare -A _KGSM_WATCHDOG_STATUS_OK=()
+
 # Resolves the watchdog control socket path.
 # Order: explicit env override > config flag > built-in default.
 # Returns: echoes the socket path, always 0.
@@ -71,20 +77,33 @@ export -f __watchdog_curl
 # falls back to the direct path.
 # Returns: 0 if the watchdog is usable, non-zero otherwise
 function __watchdog_available() {
-  # Explicit opt-out lets an operator force the legacy direct-spawn path.
-  [[ "${KGSM_WATCHDOG_DISABLE:-}" == "true" ]] && return 1
-  # Forward-compatible config flag (defaults to enabled when the key is absent).
-  [[ "${config_enable_watchdog:-true}" == "true" ]] || return 1
+  # Memoize: once verified within this kgsm invocation, the daemon can't
+  # disappear mid-skip — the cached result is safe for the fleet scan.
+  if [[ -n "${_KGSM_WATCHDOG_AVAIL_CACHE:-}" ]]; then
+    [[ "$_KGSM_WATCHDOG_AVAIL_CACHE" == "1" ]]
+    return $?
+  fi
 
-  command -v curl > /dev/null 2>&1 || return 1
+  # Explicit opt-out lets an operator force the legacy direct-spawn path.
+  [[ "${KGSM_WATCHDOG_DISABLE:-}" == "true" ]] && { _KGSM_WATCHDOG_AVAIL_CACHE=0; return 1; }
+  # Forward-compatible config flag (defaults to enabled when the key is absent).
+  [[ "${config_enable_watchdog:-true}" == "true" ]] || { _KGSM_WATCHDOG_AVAIL_CACHE=0; return 1; }
+
+  command -v curl > /dev/null 2>&1 || { _KGSM_WATCHDOG_AVAIL_CACHE=0; return 1; }
 
   local _sock
   _sock="$(__watchdog_socket_path)"
-  [[ -S "$_sock" ]] || return 1
+  [[ -S "$_sock" ]] || { _KGSM_WATCHDOG_AVAIL_CACHE=0; return 1; }
 
   local _code
-  _code="$(__watchdog_curl GET health 2)" || return 1
-  [[ "$_code" == "200" ]]
+  _code="$(__watchdog_curl GET health 2)" || { _KGSM_WATCHDOG_AVAIL_CACHE=0; return 1; }
+
+  if [[ "$_code" == "200" ]]; then
+    _KGSM_WATCHDOG_AVAIL_CACHE=1
+    return 0
+  fi
+  _KGSM_WATCHDOG_AVAIL_CACHE=0
+  return 1
 }
 
 export -f __watchdog_available
@@ -152,6 +171,13 @@ export -f __watchdog_dispatch_lifecycle
 function __watchdog_status_body() {
   local _name="${1%.ini}"
 
+  # Memoize: /status/<name> is invariant within a single fleet scan — one
+  # fetch per instance covers both __watchdog_active_value and __watchdog_pid_value.
+  if [[ -v "_KGSM_WATCHDOG_STATUS_BODY[$_name]" ]]; then
+    printf '%s' "${_KGSM_WATCHDOG_STATUS_BODY[$_name]}"
+    [[ "${_KGSM_WATCHDOG_STATUS_OK[$_name]}" == "1" ]] && return 0 || return 1
+  fi
+
   local _sock
   _sock="$(__watchdog_socket_path)"
 
@@ -159,11 +185,18 @@ function __watchdog_status_body() {
   local _code
   _resp="$(curl -s -w $'\n%{http_code}' --max-time 5 \
     --unix-socket "$_sock" \
-    "http://localhost/status/$_name" 2> /dev/null)" || return 2
+    "http://localhost/status/$_name" 2> /dev/null)" || { printf ''; return 2; }
 
   _code="${_resp##*$'\n'}"
-  printf '%s' "${_resp%$'\n'*}"
+  _KGSM_WATCHDOG_STATUS_BODY[$_name]="${_resp%$'\n'*}"
 
+  if [[ "$_code" == "200" ]]; then
+    _KGSM_WATCHDOG_STATUS_OK[$_name]="1"
+  else
+    _KGSM_WATCHDOG_STATUS_OK[$_name]="0"
+  fi
+
+  printf '%s' "${_KGSM_WATCHDOG_STATUS_BODY[$_name]}"
   [[ "$_code" == "200" ]] && return 0
   return 1
 }

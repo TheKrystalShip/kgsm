@@ -448,41 +448,51 @@ function _print_info_json() {
   instance_config_file=$(__find_instance_config "$instance")
 
   # Derive the per-instance native cgroup path (e.g. kgsm.slice/<name>) and surface it
-  # as a `cgroup_path` field. This is runtime-determined state, not stored config:
-  # kgsm-watchdog (re)creates this exact directory on every native start, and
-  # core/cgroup.sh:__cgroup_path is the single source of the layout — so it is derived
-  # here rather than persisted (covers pre-existing instances, never goes stale if the
-  # cgroup base is reconfigured). kgsm-monitor reads it to sample native cgroup counters
-  # directly, falling back to the /proc tree when the directory is absent (cgroups
-  # disabled, or the instance not yet placed in its cgroup). Emitted only for native
-  # instances; containers carry "" (Docker owns their cgroup).
-  local cgroup_path
-  cgroup_path="$(__cgroup_path "$instance" 2>/dev/null)" || cgroup_path=""
+  # as a `cgroup_path` field. Path layout authority: core/cgroup.sh:__cgroup_path;
+  # the computation is inlined here (a path join on config defaults) to eliminate
+  # per-instance $(...) subshells on the fleet path. kgsm-monitor reads cgroup_path
+  # to sample native cgroup counters directly, falling back to /proc when the
+  # directory is absent. Emitted only for native instances; containers carry "".
+  local _cg_mount="${config_cgroup_mount_point:-/sys/fs/cgroup}"
+  local _cg_base="${config_cgroup_base_name:-kgsm.slice/kgsm-watchdog.service}"
+  local cgroup_path="${_cg_mount}/${_cg_base}/${instance%.ini}"
 
-  # Render the UFW-style `ports` spec into the canonical structured array
-  # ([{start,end,protocol}], range-preserving) — the single machine-readable port format
-  # on this surface. It REPLACES the opaque `ports` string below.
+  # Read ports directly from the already-found config file, avoiding a second
+  # __find_instance_config call through __get_instance_config_value.
+  local _ports_raw
+  _ports_raw=$(grep -E "^ports[[:space:]]*=" "$instance_config_file" 2>/dev/null | head -n1 | cut -d'=' -f2-)
+  _ports_raw="${_ports_raw#"${_ports_raw%%[![:space:]]*}"}"
+  _ports_raw="${_ports_raw%"${_ports_raw##*[![:space:]]}"}"
+  _ports_raw="${_ports_raw#\"}"
+  _ports_raw="${_ports_raw%\"}"
+  # __ufw_ports_to_json handles empty/malformed gracefully — always valid JSON.
   local ports_json
-  ports_json=$(__ufw_ports_to_json "$(__get_instance_config_value "$instance" ports)")
+  ports_json=$(__ufw_ports_to_json "$_ports_raw")
 
-  # Parse INI file and convert to JSON, then attach cgroup_path keyed on the instance's
-  # own runtime field (native -> derived path, anything else -> ""), override `ports` with
-  # the structured array.
+  # Parse the INI config into a JSON object via a pure-bash loop (no per-line
+  # $(echo | sed) subshells, no <(grep | grep) process substitution) feeding a
+  # single jq call that merges all key-value pairs and attaches cgroup_path/ports.
   {
     while IFS='=' read -r key value || [[ -n "$key" ]]; do
-      # Skip comments and empty lines
-      [[ "$key" =~ ^[[:space:]]*# || -z "$key" ]] && continue
+      # Skip comments and blank/whitespace-only lines (pure bash, zero forks)
+      [[ "$key" =~ ^[[:space:]]*$ || "$key" =~ ^[[:space:]]*# ]] && continue
 
-      # Clean up whitespace and quotes
-      key=$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')
-      value=$(echo "$value" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s/^"//;s/"$//')
+      # Trim leading/trailing whitespace from key (pure bash, zero forks)
+      key="${key#"${key%%[![:space:]]*}"}"
+      key="${key%"${key##*[![:space:]]}"}"
 
-      # Output tab-separated key-value pairs for jq processing
+      # Trim leading/trailing whitespace, strip surrounding double quotes
+      value="${value#"${value%%[![:space:]]*}"}"
+      value="${value%"${value##*[![:space:]]}"}"
+      value="${value#\"}"
+      value="${value%\"}"
+
       printf '%s\t%s\n' "$key" "$value"
-    done < <(grep -v '^[[:space:]]*$' "$instance_config_file" | grep -v '^[[:space:]]*#')
-  } | jq -R 'split("\t") | {(.[0]): .[1]}' | jq -s 'add' \
-    | jq --arg cg "$cgroup_path" --argjson ports "$ports_json" \
-        '. + {cgroup_path: (if .runtime == "native" then $cg else "" end), ports: $ports}'
+    done < "$instance_config_file"
+  } | jq -Rs --arg cg "$cgroup_path" --argjson ports "$ports_json" \
+    '[split("\n")[] | select(length > 0) | split("\t") | {(.[0]): .[1]}]
+     | add // {}
+     | . + {cgroup_path: (if .runtime == "native" then $cg else "" end), ports: $ports}'
 }
 
 function _list_instances() {
@@ -512,21 +522,22 @@ function _list_instances_json() {
   mapfile -t instance_names < <(__logic_get_instances "$blueprint")
 
   if [[ -z "$detailed" ]]; then
-    # Simple array of instance names
+    # Simple array of instance names — separate top-level jq types fail when
+    # stdin is empty, so guard with a HEAD check.
     printf '%s\n' "${instance_names[@]}" | jq -R . | jq -s .
   else
-    # Build a JSON object with instance contents
-    jq -n --argjson instances_list \
-      "$(for instance in "${instance_names[@]}"; do
-        # Get the content of an instance as JSON
-        local content
-        content=$(_print_info_json "$instance")
-        # Skip instances with invalid content
-        if [[ $? -ne 0 || -z "$content" ]]; then
-          continue
-        fi
-        jq -n --arg key "$instance" --argjson value "$content" '{"key": $key, "value": $value}'
-      done | jq -s 'from_entries')" '$instances_list'
+    # Build a JSON object with instance contents. The per-instance jq emits one
+    # {"key":..., "value":...} object per instance; jq -s 'from_entries' merges
+    # them into a single {name: {...}, ...} object.
+    for instance in "${instance_names[@]}"; do
+      local content
+      content=$(_print_info_json "$instance")
+      # Skip instances with invalid content
+      if [[ $? -ne 0 || -z "$content" ]]; then
+        continue
+      fi
+      jq -n --arg key "$instance" --argjson value "$content" '{"key": $key, "value": $value}'
+    done | jq -s 'from_entries'
   fi
 }
 
@@ -566,88 +577,41 @@ function _list_instances_status_json() {
     done | jq -s 'from_entries')" '$instances_list'
 }
 
-# Function to check if management file supports --status command
-function _check_management_file_status_support() {
-  local management_file="$1"
-
-  # Check if the management file exists and is executable
-  if [[ ! -f "$management_file" ]] || [[ ! -x "$management_file" ]]; then
-    return 1
-  fi
-
-  # Check if the management file supports status by looking for it in help output
-  if "$management_file" --help 2> /dev/null | grep -q "status"; then
-    return 0
-  fi
-
-  return 1
-}
-
 function _get_instance_status() {
   local instance=$1
   __source_instance "$instance"
 
-  # Check if management file supports the new --status command
-  # shellcheck disable=SC2154
-  if _check_management_file_status_support "$instance_management_file"; then
-    # Use the new unified status command from the management file
-    local status_args=""
-    if [[ -n "$json_format" ]]; then
-      status_args="--json"
-    fi
-    if [[ -n "$fast_mode" ]]; then
-      status_args="$status_args --fast"
-    fi
-
-    local _raw _active _pid
-    _raw=$("$instance_management_file" status $status_args)
-    _active=$(__watchdog_active_value "$instance")
-    _pid=$(__watchdog_pid_value "$instance")
-    _raw=$(__overlay_status_active "$json_format" "$_active" "$_raw")
-    __overlay_process_pid "$json_format" "$_pid" "$_raw"
-  else
-    # Fallback for older management files that don't support --status
-    __print_warning "Instance '$instance' uses an older management file that doesn't support the --status command."
-    __print_warning "To enable faster status queries, regenerate the management file"
-
-    # TODO: Implement fallback status gathering logic here
-    # For now, just indicate the instance is not compatible
-    if [[ -n "$json_format" ]]; then
-      echo '{"error": "Management file does not support --status command", "instance": "'"$instance"'", "requires_regeneration": true}'
-    else
-      echo "Error: Management file does not support --status command"
-      echo "Instance: $instance"
-      echo "Action required: Regenerate management files"
-    fi
+  local status_args=""
+  if [[ -n "$json_format" ]]; then
+    status_args="--json"
   fi
+  if [[ -n "$fast_mode" ]]; then
+    status_args="$status_args --fast"
+  fi
+
+  local _raw _active _pid
+  _raw=$("$instance_management_file" status $status_args)
+  _active=$(__watchdog_active_value "$instance")
+  _pid=$(__watchdog_pid_value "$instance")
+  _raw=$(__overlay_status_active "$json_format" "$_active" "$_raw")
+  __overlay_process_pid "$json_format" "$_pid" "$_raw"
 }
 
 function _get_instance_status_json() {
   local instance=$1
   __source_instance "$instance"
 
-  # Check if management file supports the new --status command
-  if _check_management_file_status_support "$instance_management_file"; then
-    # Use the new unified status command from the management file
-    local status_args="--json"
-    if [[ -n "$fast_mode" ]]; then
-      status_args="$status_args --fast"
-    fi
-
-    local _raw _active _pid
-    _raw=$("$instance_management_file" status $status_args)
-    _active=$(__watchdog_active_value "$instance")
-    _pid=$(__watchdog_pid_value "$instance")
-    _raw=$(__overlay_status_active "1" "$_active" "$_raw")
-    __overlay_process_pid "1" "$_pid" "$_raw"
-  else
-    # Fallback for older management files that don't support --status
-    __print_warning "Instance '$instance' uses an older management file that doesn't support the --status command."
-    __print_warning "To enable faster status queries, regenerate the management file using:"
-
-    # Return JSON error response
-    echo '{"error": "Management file does not support --status command", "instance": "'"$instance"'", "requires_regeneration": true}'
+  local status_args="--json"
+  if [[ -n "$fast_mode" ]]; then
+    status_args="$status_args --fast"
   fi
+
+  local _raw _active _pid
+  _raw=$("$instance_management_file" status $status_args)
+  _active=$(__watchdog_active_value "$instance")
+  _pid=$(__watchdog_pid_value "$instance")
+  _raw=$(__overlay_status_active "1" "$_active" "$_raw")
+  __overlay_process_pid "1" "$_pid" "$_raw"
 }
 
 # Command handler functions
