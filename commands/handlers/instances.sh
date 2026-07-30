@@ -225,6 +225,14 @@ function __logic_create_base_instance() {
   export instance_player_joined_regex="${blueprint_player_joined_regex:-}"
   export instance_player_left_regex="${blueprint_player_left_regex:-}"
 
+  # RCON connection parameters, materialized into the instance config so the
+  # kgsm-watchdog can poll the game server for connected players when log-based
+  # leave detection is unavailable. Empty rcon_port = no RCON detection.
+  export instance_rcon_port="${blueprint_rcon_port:-}"
+  export instance_rcon_password="${blueprint_rcon_password:-}"
+  export instance_rcon_poll_interval_seconds="${blueprint_rcon_poll_interval_seconds:-10}"
+  export instance_rcon_players_command="${blueprint_rcon_players_command:-players}"
+
   export instance_startup_success_regex="${blueprint_startup_success_regex:-}"
 
   # UPnP port-forwarding gate (per-instance, materialized into the instance config).

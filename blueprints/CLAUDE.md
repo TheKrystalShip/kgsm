@@ -48,12 +48,28 @@ Required: `native.executable_file`. Common optional under `native:`: `ports`,
 `steamcmd_arguments`, `platform`, `level_name`, `executable_subdirectory`,
 `executable_arguments`, `stop_command`, `save_command`, `startup_success_regex`.
 
+Top-level, runtime-agnostic fields (both native and container):
+`player_joined_regex`, `player_left_regex`, `rcon_port`, `rcon_password`,
+`rcon_poll_interval_seconds`, `rcon_players_command`.
+
 - `ports` is **single-quoted, pipe-separated** UFW format:
   `ports: '1111:2222/tcp|3333/udp'`.
 - `executable_arguments` is single-quoted YAML so `$instance_*` variables survive
   to runtime (e.g. `'--start-server $instance_saves_dir/$instance_level_name'`);
   the eval-cat in `__logic_create_base_instance` substitutes them. The full
   variable list is in `docs/blueprints.md` and `templates/blueprint.tp`.
+
+- `rcon_port` (int, nullable) — the game server's RCON port. Null = no RCON
+  detection. The watchdog polls this port for connected players when log-based
+  leave detection is unavailable.
+- `rcon_password` (string) — RCON authentication password. Empty = RCON disabled.
+  Stored in plaintext in the instance config; the user must also configure the
+  game server's own RCON with matching values.
+- `rcon_poll_interval_seconds` (int, nullable) — how often to poll via RCON
+  (default 10, minimum 5). Null = default.
+- `rcon_players_command` (string) — the RCON command to query connected players
+  (default "players"). Game-specific: PZ uses "players", Source engine games
+  use "status" or "listplayers".
 
 ## Container blueprint (`runtime: container`)
 

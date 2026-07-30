@@ -301,6 +301,19 @@ function __source_blueprint() {
   declare -g blueprint_player_left_regex
   blueprint_player_left_regex=$(__bp_yaml_field "$bp" '.player_left_regex')
 
+  # RCON connection parameters (top-level, runtime-agnostic). Optional;
+  # empty/unset means RCON-based player detection is disabled (honest unknown).
+  # The password is set by the user via config-set; the port/command come from
+  # the blueprint's defaults for the game.
+  declare -g blueprint_rcon_port
+  blueprint_rcon_port=$(__bp_yaml_field "$bp" '.rcon_port')
+  declare -g blueprint_rcon_password
+  blueprint_rcon_password=$(__bp_yaml_field "$bp" '.rcon_password')
+  declare -g blueprint_rcon_poll_interval_seconds
+  blueprint_rcon_poll_interval_seconds=$(__bp_yaml_field "$bp" '.rcon_poll_interval_seconds')
+  declare -g blueprint_rcon_players_command
+  blueprint_rcon_players_command=$(__bp_yaml_field "$bp" '.rcon_players_command')
+
   # Native field family — default everything empty so a container source (or a
   # re-source of a different blueprint) cannot leak stale values.
   declare -g blueprint_ports=""
@@ -343,7 +356,9 @@ function __source_blueprint() {
     blueprint_executable_file blueprint_executable_arguments \
     blueprint_stop_command blueprint_save_command \
     blueprint_startup_success_regex \
-    blueprint_player_joined_regex blueprint_player_left_regex
+    blueprint_player_joined_regex blueprint_player_left_regex \
+    blueprint_rcon_port blueprint_rcon_password \
+    blueprint_rcon_poll_interval_seconds blueprint_rcon_players_command
 }
 
 export -f __source_blueprint

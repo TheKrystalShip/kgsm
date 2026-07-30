@@ -24,3 +24,9 @@ native:
   stop_command: quit
   save_command: save
   startup_success_regex: SERVER STARTED
+  player_joined_regex: 'Steam client (?<id>\d+) is initiating a connection'
+  player_left_regex: ''
+  rcon_port: 27015
+  rcon_password: ""
+  rcon_poll_interval_seconds: 10
+  rcon_players_command: "players"

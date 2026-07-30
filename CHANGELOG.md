@@ -53,6 +53,16 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Added
 
+- **RCON blueprint fields**: `rcon_port`, `rcon_password`, `rcon_poll_interval_seconds`,
+  `rcon_players_command` — new top-level, runtime-agnostic blueprint fields that materialize
+  into the instance config. The kgsm-watchdog reads these to poll game servers via Source RCON
+  for connected players, detecting disconnects when the game server does not log them. The
+  password is stored in plaintext; the user must also configure the game server's own RCON with
+  matching values. Project Zomboid blueprint now ships with `rcon_port: 27015` and
+  `player_joined_regex` for log-based join detection.
+
+### Added
+
 - **`blueprints validate <blueprint|path> [--json]`** exposes the blueprint schema check as a
   command. The check itself (YAML syntax, required `name` and `runtime`, `native.executable_file`
   for native, a `container.compose` with at least one service all on `network_mode: host` for

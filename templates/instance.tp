@@ -140,6 +140,16 @@ startup_success_regex="${instance_startup_success_regex}"
 player_joined_regex="${instance_player_joined_regex:-}"
 player_left_regex="${instance_player_left_regex:-}"
 
+# RCON connection parameters (from the blueprint). The kgsm-watchdog reads these
+# via `instances info --json` to poll the game server for connected players when
+# log-based leave detection is unavailable. Empty rcon_port = no RCON detection.
+# The password is stored in plaintext; the user must also configure the game
+# server's own RCON with matching values.
+rcon_port="${instance_rcon_port:-}"
+rcon_password="${instance_rcon_password:-}"
+rcon_poll_interval_seconds="${instance_rcon_poll_interval_seconds:-10}"
+rcon_players_command="${instance_rcon_players_command:-players}"
+
 #=============================================================================
 # GAME SERVER EXECUTABLE CONFIGURATION
 # Settings for running the actual game server binary
