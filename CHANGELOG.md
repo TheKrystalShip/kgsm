@@ -53,6 +53,13 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Changed
 
+- **`event_socket_filenames` ships the assistant's socket** — `/run/kgsm-assistant/events.sock`
+  joins the four other ecosystem consumer sockets in the default list. The assistant caches the
+  blueprint catalog, so a blueprint written through the Control Panel needs to reach it for the
+  next answer to use the new values. As with every entry, a socket that does not exist is skipped,
+  so listing it costs nothing on a host with no assistant installed. An existing host keeps its own
+  `event_socket_filenames`; add the path there to deliver.
+
 - **Deployment split into `deploy/setup.sh` (once per host) + `deploy/deploy.sh` (every time)**,
   the ecosystem-wide contract (`tks/scripts/deploy-template/README.md`). `setup.sh` asks for sudo
   and creates `/opt/kgsm` owned by the deploying user plus the `/usr/local/bin/kgsm` symlink;
