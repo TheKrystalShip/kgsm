@@ -30,6 +30,19 @@ cd KGSM
 ./kgsm.sh --help
 ```
 
+Run it straight from the checkout as above, or install it system-wide at `/opt/kgsm` with
+the two deploy scripts:
+
+```sh
+./deploy/setup.sh    # ONCE per host — asks for sudo; creates /opt/kgsm owned by you + the PATH symlink
+./deploy/deploy.sh   # every time — rsync the checkout to /opt/kgsm. NO sudo, NO prompts
+```
+
+Because `setup.sh` makes `/opt/kgsm` yours, updating the install is an ordinary file copy —
+`deploy.sh` never needs a password and never prompts. The sync prunes, so a deleted command
+or override doesn't linger; your instances, config and logs live under `~/.local/share/kgsm`
+and `~/.config/kgsm` and are never touched.
+
 ### Dependencies
 
 **Required:**

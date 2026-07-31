@@ -89,16 +89,26 @@ The canonical install lives at `/opt/kgsm` — a byte-identical copy of this che
 (minus `.git`, `node_modules`, `.dev-instances`). The `kgsm` on `PATH`
 (`/usr/local/bin/kgsm` → `/opt/kgsm/kgsm.sh`) resolves there.
 
-Two scripts, the ecosystem-wide pattern (`tks/scripts/deploy-template/README.md`):
+Two scripts in `deploy/`:
 
 ```bash
 ./deploy/setup.sh    # ONCE per host — asks for sudo; creates /opt/kgsm owned by you + the PATH symlink
 ./deploy/deploy.sh   # every time — rsync the checkout to /opt/kgsm. NO sudo, NO prompts
 ```
 
+`setup.sh` is the only part that needs privilege, and it is idempotent — re-run it freely. Because
+it makes `/opt/kgsm` **yours**, the deploy itself is an ordinary file write, so **`deploy.sh` never
+asks for a password and never prompts.** It refuses up front, with *"run `deploy/setup.sh`"*, when
+the host is not provisioned. There are no systemd units here, so unlike the .NET projects this one
+needs no polkit grant at all.
+
 After changing engine code, run `./deploy/deploy.sh` so the deployed copy stays identical.
 The sync prunes, so a deleted command or override never lingers on the deployed engine;
 instances/config/logs live under XDG paths in your home and are never touched.
+
+`deploy/deploy-common.sh` holds the paths and helpers both scripts share. The three files are
+self-contained — a standalone clone deploys with nothing else checked out — and every `kgsm-*`
+sibling repo carries the same `setup.sh`-once / `deploy.sh`-forever pattern.
 
 ## Version tracking
 
