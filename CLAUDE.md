@@ -85,10 +85,20 @@ Native instances are supervised by the resident **kgsm-watchdog** daemon (cgroup
 
 ## Deployment
 
-The canonical install lives at `/opt/kgsm` — a byte-identical copy of this checkout,
-published by `./deploy.sh` (sudo `rsync`, excludes `.git`). The `kgsm` on `PATH`
-(`/usr/local/bin/kgsm` → `/opt/kgsm/kgsm.sh`) resolves there. After changing engine
-code, run `./deploy.sh` to refresh `/opt/kgsm` so the deployed copy stays identical.
+The canonical install lives at `/opt/kgsm` — a byte-identical copy of this checkout
+(minus `.git`, `node_modules`, `.dev-instances`). The `kgsm` on `PATH`
+(`/usr/local/bin/kgsm` → `/opt/kgsm/kgsm.sh`) resolves there.
+
+Two scripts, the ecosystem-wide pattern (`tks/scripts/deploy-template/README.md`):
+
+```bash
+./deploy/setup.sh    # ONCE per host — asks for sudo; creates /opt/kgsm owned by you + the PATH symlink
+./deploy/deploy.sh   # every time — rsync the checkout to /opt/kgsm. NO sudo, NO prompts
+```
+
+After changing engine code, run `./deploy/deploy.sh` so the deployed copy stays identical.
+The sync prunes, so a deleted command or override never lingers on the deployed engine;
+instances/config/logs live under XDG paths in your home and are never touched.
 
 ## Version tracking
 

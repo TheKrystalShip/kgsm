@@ -51,6 +51,16 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Changed
+
+- **Deployment split into `deploy/setup.sh` (once per host) + `deploy/deploy.sh` (every time)**,
+  the ecosystem-wide contract (`tks/scripts/deploy-template/README.md`). `setup.sh` asks for sudo
+  and creates `/opt/kgsm` owned by the deploying user plus the `/usr/local/bin/kgsm` symlink;
+  `deploy.sh` then `rsync`s the checkout with **no sudo and no prompts**, and refuses up-front with
+  "run `deploy/setup.sh`" when the host is not provisioned. It replaces the root-level `deploy.sh`,
+  whose interactive "Overwrite? [y/N]" prompt and `rm -rf` of the target are gone — the sync prunes
+  instead, so a deleted command or override never lingers on the deployed engine.
+
 ### Added
 
 - **RCON blueprint fields**: `rcon_port`, `rcon_password`, `rcon_poll_interval_seconds`,
