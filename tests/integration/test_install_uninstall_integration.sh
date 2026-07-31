@@ -463,3 +463,84 @@ function test_uninstall_does_not_affect_sibling_instances() {
   __cleanup_instance "factorio" "$instance_one" "$TEST_INSTALL_DIR" 2>/dev/null || true
 }
 
+
+# =============================================================================
+# BACKUP SURVIVAL
+# =============================================================================
+
+# Provision an instance's directories and plant one backup in its store.
+# Prints the backups dir on success.
+function __seed_instance_backup() {
+  local instance_name="$1"
+
+  "$KGSM_ROOT/commands/directories.sh" create "$instance_name" >/dev/null 2>&1 || return 1
+
+  local instance_config backups_dir
+  instance_config=$("$INSTANCES_MODULE" find "$instance_name" 2>/dev/null) || return 1
+  backups_dir=$(grep '^backups_dir=' "$instance_config" | tail -n1 | cut -d= -f2- | tr -d '"')
+  [[ -n "$backups_dir" ]] || return 1
+
+  local id="${instance_name}-20260731T120000Z-abc123"
+  mkdir -p "$backups_dir/$id" || return 1
+  jq -n --arg id "$id" \
+    '{schema_version: 1, id: $id, created_at: "2026-07-31T12:00:00Z",
+      compressed: true, consistency: "cold", sources: ["install"],
+      size_bytes: 1, file_count: 1, sha256: null}' \
+    > "$backups_dir/$id/manifest.json" || return 1
+
+  echo "$backups_dir"
+}
+
+# TEST: uninstall keeps the instance's backups
+function test_uninstall_preserves_backups() {
+  log_test_step "Testing: uninstall.sh keeps the instance's backups by default"
+
+  local instance_name="test-uninstall-keepbak-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Instance creation should succeed"
+
+  local backups_dir
+  backups_dir=$(__seed_instance_backup "$instance_name")
+  assert_equals 0 "$?" "should be able to seed a backup for the instance"
+  assert_dir_exists "$backups_dir" "backups dir should exist before uninstall"
+
+  # The whole point of storing backups outside working_dir: an uninstall removes
+  # working_dir wholesale, and must not take the backups with it.
+  local working_dir
+  working_dir=$(grep '^working_dir=' "$("$INSTANCES_MODULE" find "$instance_name")" |
+    tail -n1 | cut -d= -f2- | tr -d '"')
+  assert_equals "${backups_dir#"$working_dir"}" "$backups_dir" \
+    "backups dir must not live under working_dir"
+
+  "$UNINSTALL_MODULE" --force "$instance_name" >/dev/null 2>&1 </dev/null
+  assert_equals 0 "$?" "uninstall.sh --force should succeed"
+
+  assert_dir_not_exists "$working_dir" "working_dir should be gone after uninstall"
+  assert_dir_exists "$backups_dir" "backups should survive the uninstall"
+
+  rm -rf "$backups_dir"
+  __cleanup_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" 2>/dev/null || true
+}
+
+# TEST: uninstall --purge-backups deletes them
+function test_uninstall_purge_backups_removes_store() {
+  log_test_step "Testing: uninstall.sh --purge-backups deletes the instance's backups"
+
+  local instance_name="test-uninstall-purgebak-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Instance creation should succeed"
+
+  local backups_dir
+  backups_dir=$(__seed_instance_backup "$instance_name")
+  assert_equals 0 "$?" "should be able to seed a backup for the instance"
+  assert_dir_exists "$backups_dir" "backups dir should exist before uninstall"
+
+  "$UNINSTALL_MODULE" --force --purge-backups "$instance_name" >/dev/null 2>&1 </dev/null
+  assert_equals 0 "$?" "uninstall.sh --force --purge-backups should succeed"
+
+  assert_dir_not_exists "$backups_dir" \
+    "backups should be gone after an uninstall with --purge-backups"
+
+  rm -rf "$backups_dir"
+  __cleanup_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" 2>/dev/null || true
+}

@@ -385,7 +385,7 @@ The following variables can be used inside `executable_arguments` and are resolv
 | `$instance_working_dir` | Absolute path to the working directory |
 | `$instance_install_dir` | Absolute path to the installation directory |
 | `$instance_saves_dir` | Absolute path to the saves directory |
-| `$instance_backups_dir` | Absolute path to the backups directory |
+| `$instance_backups_dir` | Absolute path to the backups directory (outside `working_dir`) |
 | `$instance_temp_dir` | Absolute path to the temp directory |
 | `$instance_logs_dir` | Absolute path to the logs directory |
 | `$instance_launch_dir` | Directory from which the binary is launched |

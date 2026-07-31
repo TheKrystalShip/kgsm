@@ -44,27 +44,37 @@ ${UNDERLINE}Options:${END}
   -h, --help                  Display this help information
   -y, --force, --yes          Skip the confirmation prompt (for non-interactive
                               callers; the destructive intent is confirmed already)
+  --purge-backups             Also delete the instance's backups. Without this,
+                              backups are kept (they live outside the instance)
 
 ${UNDERLINE}Examples:${END}
   ${self} factorio-01
   ${self} factorio-01 --force
+  ${self} factorio-01 --purge-backups
   ${self} my-server --help
 
 ${UNDERLINE}Warning:${END}
   This operation is irreversible. All instance data, configuration,
-  and associated files will be permanently removed.
+  and associated files will be permanently removed. Backups are kept
+  unless --purge-backups is given.
 "
 }
 
 function _uninstall() {
   local instance=""
   local force=0
+  local purge_backups=0
 
   while [[ "$#" -gt 0 ]]; do
     case $1 in
       -h | --help | help)
         show_usage
         return 0
+        ;;
+      --purge-backups)
+        # Backups live outside the instance's working directory, so removing the
+        # instance leaves them behind. This is the only way to delete them.
+        purge_backups=1
         ;;
       --force | -y | --yes)
         # Skip the interactive confirmation — for non-interactive callers (kgsm-lib,
@@ -110,15 +120,30 @@ function _uninstall() {
   # caller has already confirmed the destructive intent). A declined prompt returns a
   # non-zero EC_CANCELLED, never 0: a silent success on cancellation would let a
   # non-interactive caller (no TTY, no --force) believe the instance was removed.
+  # The instance's backups live outside its working directory, so they survive the
+  # uninstall unless --purge-backups is given. Resolve the store now, while the
+  # instance config still exists, so both the prompt and the purge can name it.
+  local backups_dir
+  backups_dir="$(__get_config_value "$instance_config_file" "backups_dir" 2>/dev/null)"
+  backups_dir="${backups_dir%\"}"
+  backups_dir="${backups_dir#\"}"
+
   if [[ "$force" -ne 1 ]]; then
     __print_warning "This operation is destructive and irreversible."
     echo ""
     echo "The following will be permanently deleted:"
     echo "  - Installation files"
     echo "  - Server logs"
-    echo "  - World saves and backups"
+    echo "  - World saves"
     echo "  - All configuration files"
     echo "  - Associated system files (firewall rules, symlinks, etc.)"
+    if [[ "$purge_backups" -eq 1 ]]; then
+      echo "  - The instance's backups (--purge-backups)"
+    elif [[ -n "$backups_dir" ]] && [[ -d "$backups_dir" ]]; then
+      echo ""
+      echo "Backups are KEPT in: $backups_dir"
+      echo "Pass --purge-backups to delete them too."
+    fi
     echo ""
 
     read -rp "Are you sure you want to uninstall instance '$instance'? (y/N): " confirmation
@@ -179,6 +204,18 @@ function _uninstall() {
     __print_error "Failed to unlink instance directories (may be already unlinked)"
     return $exit_code
   }
+
+  # Purge the backups store last: everything above is recoverable from a backup,
+  # so it must not be removed until the rest of the uninstall has succeeded.
+  if [[ "$purge_backups" -eq 1 ]] && [[ -n "$backups_dir" ]] && [[ -d "$backups_dir" ]]; then
+    if rm -rf "${backups_dir:?}"; then
+      __print_info "Removed backups store $backups_dir"
+    else
+      __print_warning "Failed to remove backups store $backups_dir"
+    fi
+  elif [[ -n "$backups_dir" ]] && [[ -d "$backups_dir" ]]; then
+    __print_info "Backups for '$instance' kept in $backups_dir"
+  fi
 
   events.sh emit instance-uninstall-finished "${instance}"
 

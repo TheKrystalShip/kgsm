@@ -139,10 +139,18 @@ The following functions are defined across the overridable modules. Override the
 
 | Function | Signature | Purpose |
 |---|---|---|
-| `_create_backup` | `() → return 0/1` | Create a timestamped backup of the saves directory |
-| `_list_backups` | `() → return 0/1` | List available backups for this instance |
-| `_restore_backup` | `($1: backup_name) → return 0/1` | Restore a named backup to the saves directory |
-| `_clean_old_backups` | `() → return 0/1` | Delete backups beyond the configured retention limit |
+| `_create_backup` | `() → return 0/1`, prints the new backup id | Back up the instance's install and saves directories |
+| `_list_backups` | `() → return 0/1` | Print this instance's backup ids, newest first, one per line |
+| `_backup_manifest_json` | `() → return 0/1` | Print every backup's manifest as a JSON array, newest first |
+| `_restore_backup` | `($1: backup_id) → return 0/1` | Restore the backup with this id |
+
+A backup is a directory under `$instance_backups_dir`, named with an opaque id
+(`<instance>-<YYYYMMDDTHHMMSSZ>-<6 hex>`), holding a `manifest.json` plus either
+`data.tar.gz` or a `data/` tree depending on `$instance_compress_backups`. The
+manifest is the only source of truth about a backup — nothing parses the id.
+An override that changes the storage format must reimplement all four functions
+together, since `_restore_backup` reads what `_create_backup` wrote and both
+listings depend on the manifest being present and readable.
 
 > [!TIP]
 > The default implementations of every function above live in `templates/manage.native.d/` (or `manage.container.d/` for container runtimes). Use those files as your starting point when creating overrides.

@@ -124,11 +124,18 @@ function test_directories_create_builds_expected_structure() {
 
   assert_not_null "$working_dir" "working_dir should be set in instance config"
   assert_dir_exists "$working_dir" "working_dir should exist on disk"
-  assert_dir_exists "$working_dir/backups" "backups/ subdirectory should exist"
   assert_dir_exists "$working_dir/install" "install/ subdirectory should exist"
   assert_dir_exists "$working_dir/saves" "saves/ subdirectory should exist"
   assert_dir_exists "$working_dir/temp" "temp/ subdirectory should exist"
   assert_dir_exists "$working_dir/logs" "logs/ subdirectory should exist"
+
+  # Backups are the one directory kept outside working_dir, so that removing the
+  # instance cannot destroy them.
+  local backups_dir
+  backups_dir=$(grep "^backups_dir=" "$config_file" 2>/dev/null | head -1 | cut -d= -f2 | tr -d '"')
+  assert_dir_exists "$backups_dir" "backups directory should exist"
+  assert_equals "${backups_dir#"$working_dir"}" "$backups_dir" \
+    "backups directory must not live under working_dir"
 
   remove_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 }
@@ -504,7 +511,10 @@ function test_directories_create_remove_create_cycle() {
   working_dir=$(grep "^working_dir=" "$config_file" 2>/dev/null | head -1 | cut -d= -f2 | tr -d '"')
   assert_dir_exists "$working_dir" "working_dir should exist after first create"
   assert_dir_exists "$working_dir/logs" "logs/ should exist after first create"
-  assert_dir_exists "$working_dir/backups" "backups/ should exist after first create"
+
+  local backups_dir
+  backups_dir=$(grep "^backups_dir=" "$config_file" 2>/dev/null | head -1 | cut -d= -f2 | tr -d '"')
+  assert_dir_exists "$backups_dir" "backups directory should exist after first create"
 
   # Remove - also removes the instance config (it lives inside working_dir)
   assert_command_succeeds "$DIRECTORIES_MODULE remove $instance_name" \

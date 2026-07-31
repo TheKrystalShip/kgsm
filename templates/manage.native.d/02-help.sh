@@ -36,9 +36,9 @@ ${BOLD}${UNDERLINE}Version & Update Commands:${END}
   update                      Update to latest version
 
 ${BOLD}${UNDERLINE}Backup Commands:${END}
-  backups                     List available backups
+  backups [--json]            List available backups
   create-backup               Create a backup
-  restore-backup <source>     Restore a specified backup
+  restore-backup <id>         Restore the backup with this id
 
 ${BOLD}${UNDERLINE}Other:${END}
   help [command]              Display help information
@@ -215,20 +215,25 @@ function show_usage_backup() {
 
 Manage game server backups.
 
+A backup captures the instance's install and saves directories. Each one is
+identified by an opaque id; its details (size, creation time, captured version)
+live in the backup's manifest and are reported by 'backups --json'.
+
 ${UNDERLINE}Usage:${END}
-  $self backups
+  $self backups [--json]
   $self create-backup
-  $self restore-backup <source>
+  $self restore-backup <id>
 
 ${UNDERLINE}Commands:${END}
-  backups                     List available backups
-  create-backup               Create a backup of current server files
-  restore-backup <source>     Restore from a specified backup
+  backups [--json]            List backup ids, newest first (--json: full manifests)
+  create-backup               Create a backup of the current server files
+  restore-backup <id>         Restore from the backup with this id
 
 ${UNDERLINE}Examples:${END}
   $self create-backup
   $self backups
-  $self restore-backup mybackup.tar.gz
+  $self backups --json
+  $self restore-backup factorio-01-20260731T142233Z-a3f9c1
 "
 }
 

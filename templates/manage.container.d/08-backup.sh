@@ -1,22 +1,88 @@
 # =============================================================================
 # BACKUP MANAGEMENT
 # =============================================================================
+#
+# A backup is a DIRECTORY under $instance_backups_dir, named with an opaque id:
+#
+#   <instance>-<YYYYMMDDTHHMMSSZ>-<6 hex>/
+#     manifest.json     what this backup is (the only source of that truth)
+#     data.tar.gz       compress_backups=true
+#     data/             compress_backups=false
+#
+# Nothing parses the id: everything a consumer needs is in manifest.json, so the
+# id is free to be opaque and sortable (UTC, no colons, lexicographic order ==
+# chronological order, unique within a second).
+#
+# The archive captures the instance's install AND saves subtrees, rooted at their
+# own names ("install/…", "saves/…"), because for many games the world lives in
+# saves/ while install/ holds only re-downloadable game files. manifest.sources
+# records exactly which subtrees were captured; restore iterates that list and
+# never assumes.
+#
+# A backup is built in $instance_temp_dir and moved into place only once it is
+# complete, and _list_backups only reports directories that carry a readable
+# manifest.json — so an interrupted build is invisible and can never be offered
+# for restore.
+
+# The instance subtrees a backup captures, in archive order.
+readonly BACKUP_SOURCE_LABELS=(install saves)
+
+# Emit the labels this instance actually has content for, one per line.
+# A subtree that is missing or empty is not captured (and so is absent from
+# manifest.sources); a subtree that exists somewhere other than
+# $instance_working_dir/<label> cannot be rooted correctly in the archive and is
+# a hard error rather than a silent omission.
+function __backup_sources() {
+  local label path
+  for label in "${BACKUP_SOURCE_LABELS[@]}"; do
+    case "$label" in
+    install) path="$instance_install_dir" ;;
+    saves) path="$instance_saves_dir" ;;
+    *) continue ;;
+    esac
+
+    [[ -z "$path" ]] && continue
+    [[ ! -d "$path" ]] && continue
+
+    if [[ "$path" != "${instance_working_dir}/${label}" ]]; then
+      __print_error "$label directory ($path) is not ${instance_working_dir}/${label}; cannot back it up"
+      return $EC_ERROR
+    fi
+
+    # Skip an empty subtree: there is nothing to capture, and recording it in
+    # manifest.sources would promise content the archive does not hold.
+    [[ -z "$(ls -A "$path" 2>/dev/null)" ]] && continue
+
+    echo "$label"
+  done
+
+  return $EC_SUCCESS
+}
+
+# Mint a backup id: <instance>-<UTC timestamp>-<6 hex>.
+function __backup_new_id() {
+  local datetime suffix
+  datetime="$(date -u +"%Y%m%dT%H%M%SZ")"
+  suffix="$(od -An -tx1 -N3 /dev/urandom 2>/dev/null | tr -d ' \n')"
+  # /dev/urandom is always present on Linux; fall back rather than mint a
+  # colliding id if it ever is not.
+  [[ -z "$suffix" ]] && suffix="$(printf '%06x' $((RANDOM * RANDOM % 16777216)))"
+
+  echo "${instance_name}-${datetime}-${suffix}"
+}
+
+# Print the path of a backup's manifest, or nothing when it has none.
+function __backup_manifest_path() {
+  local dir="$1"
+  [[ -f "${dir}/manifest.json" ]] && echo "${dir}/manifest.json"
+}
 
 function _create_backup() {
   __print_info "Creating backup..."
 
-  # Check if install directory exists
   if [[ ! -d "${instance_install_dir}" ]]; then
     __print_error "Install directory ${instance_install_dir} does not exist"
     return $EC_ERROR
-  fi
-
-  # Check for content inside the install directory before attempting to
-  # create a backup. If empty, skip
-  if [ -z "$(ls -A "${instance_install_dir}")" ]; then
-    # Source directory is empty, nothing to back up
-    __print_warning "${instance_install_dir} is empty, skipping backup"
-    return $EC_SUCCESS
   fi
 
   # Check instance running state before attempting to create backup
@@ -25,7 +91,13 @@ function _create_backup() {
     return $EC_ERROR
   fi
 
-  # Ensure backup directory exists
+  local -a sources
+  mapfile -t sources < <(__backup_sources) || return $EC_ERROR
+  if [[ ${#sources[@]} -eq 0 ]]; then
+    __print_warning "Nothing to back up for ${instance_name} (install and saves are empty)"
+    return $EC_SUCCESS
+  fi
+
   if [[ ! -d "${instance_backups_dir}" ]]; then
     mkdir -p "${instance_backups_dir}" || {
       __print_error "Failed to create backup directory ${instance_backups_dir}"
@@ -33,133 +105,212 @@ function _create_backup() {
     }
   fi
 
-  # Format current datetime for backup filename
-  local datetime
-  datetime="$(date +"%Y-%m-%dT%H:%M:%S")"
-  local installed_version
-  installed_version=$(_get_installed_version)
-  local output="${instance_backups_dir}/${instance_name}-${installed_version:-unknown}-${datetime}.backup"
+  local backup_id staging
+  backup_id="$(__backup_new_id)"
+  staging="${instance_temp_dir}/${backup_id}.partial"
 
-  if [[ "$instance_compress_backups" == "true" ]]; then
-    output="${output}.tar.gz"
-
-    if ! touch "$output"; then
-      __print_error "Failed to create $output"
-      return $EC_ERROR
-    fi
-
-    cd "$instance_install_dir" || return $EC_ERROR
-
-    if ! tar -czf "$output" .; then
-      __print_error "Failed to compress $output"
-      return $EC_ERROR
-    fi
-  else
-    # Create backup folder if it doesn't exist
-    if [ ! -d "$output" ]; then
-      if ! mkdir -p "$output"; then
-        __print_error "Error creating backup folder $output"
-        return $EC_ERROR
-      fi
-    fi
-
-    # Copy everything from the install directory into a backup folder
-    if ! cp -r "$instance_install_dir"/* "$output"/; then
-      __print_error "Failed to create backup $output"
-      rm -rf "${output:?}"
-      return $EC_ERROR
-    fi
+  if ! mkdir -p "$staging"; then
+    __print_error "Failed to create staging directory $staging"
+    return $EC_ERROR
   fi
 
-  __print_success "Backup created"
+  local compressed="false"
+  local size_bytes=0
+  local sha256="null"
+
+  if [[ "$instance_compress_backups" == "true" ]]; then
+    compressed="true"
+
+    if ! tar -czf "${staging}/data.tar.gz" -C "$instance_working_dir" "${sources[@]}"; then
+      __print_error "Failed to archive ${sources[*]}"
+      rm -rf "${staging:?}"
+      return $EC_ERROR
+    fi
+
+    size_bytes="$(stat -c %s "${staging}/data.tar.gz" 2>/dev/null || echo 0)"
+    sha256="\"$(sha256sum "${staging}/data.tar.gz" | cut -d' ' -f1)\""
+  else
+    if ! mkdir -p "${staging}/data"; then
+      __print_error "Failed to create staging data directory"
+      rm -rf "${staging:?}"
+      return $EC_ERROR
+    fi
+
+    local label
+    for label in "${sources[@]}"; do
+      if ! cp -a "${instance_working_dir}/${label}" "${staging}/data/${label}"; then
+        __print_error "Failed to copy ${label}"
+        rm -rf "${staging:?}"
+        return $EC_ERROR
+      fi
+    done
+
+    size_bytes="$(du -sb "${staging}/data" 2>/dev/null | cut -f1)"
+    [[ -z "$size_bytes" ]] && size_bytes=0
+    # An uncompressed backup is a tree, not a single artifact, so there is no one
+    # digest to record. Left null rather than filled with a meaningless value;
+    # restore skips verification when it is absent.
+  fi
+
+  # Count the captured files from the sources themselves — cheaper than walking
+  # the finished archive, and identical in result.
+  local file_count=0
+  local label count
+  for label in "${sources[@]}"; do
+    count="$(find "${instance_working_dir}/${label}" -type f 2>/dev/null | wc -l)"
+    file_count=$((file_count + count))
+  done
+
+  local installed_version blueprint_name
+  installed_version="$(_get_installed_version)"
+  blueprint_name="$(basename "${instance_blueprint_file:-}" .bp.yaml)"
+
+  if ! jq -n \
+    --arg id "$backup_id" \
+    --arg instance "$instance_name" \
+    --arg blueprint "$blueprint_name" \
+    --arg version "${installed_version:-}" \
+    --arg created_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+    --argjson compressed "$compressed" \
+    --argjson sha256 "$sha256" \
+    --argjson size_bytes "${size_bytes:-0}" \
+    --argjson file_count "$file_count" \
+    '{
+      schema_version: 1,
+      id: $id,
+      instance: $instance,
+      blueprint: (if $blueprint == "" then null else $blueprint end),
+      version: (if $version == "" then null else $version end),
+      created_at: $created_at,
+      compressed: $compressed,
+      consistency: "cold",
+      sources: $ARGS.positional,
+      size_bytes: $size_bytes,
+      file_count: $file_count,
+      sha256: $sha256
+    }' --args "${sources[@]}" >"${staging}/manifest.json"; then
+    __print_error "Failed to write backup manifest"
+    rm -rf "${staging:?}"
+    return $EC_ERROR
+  fi
+
+  # Publish atomically: until this rename the backup does not exist as far as
+  # _list_backups and every consumer above it are concerned.
+  if ! mv "$staging" "${instance_backups_dir}/${backup_id}"; then
+    __print_error "Failed to publish backup to ${instance_backups_dir}/${backup_id}"
+    rm -rf "${staging:?}"
+    return $EC_ERROR
+  fi
+
+  __print_success "Backup created: ${backup_id}"
+  # The id on stdout is the command's machine-readable result: callers (the kgsm
+  # CLI's event payload, the scheduler) use it instead of re-deriving "the newest
+  # entry", which races with a concurrent backup.
+  echo "$backup_id"
   return $EC_SUCCESS
 }
 
 function _restore_backup() {
-  local source="$instance_backups_dir/$1"
-  local backup_version
+  local backup_id="$1"
+  local source="${instance_backups_dir}/${backup_id}"
 
-  __print_info "Restoring ${source}..."
+  __print_info "Restoring ${backup_id}..."
 
-  if [[ ! -f "$source" ]] && [[ ! -d "$source" ]]; then
-    __print_error "Could not find backup $source"
+  local manifest
+  manifest="$(__backup_manifest_path "$source")"
+  if [[ -z "$manifest" ]]; then
+    __print_error "Not a backup: ${source} (no manifest.json)"
     return $EC_ERROR
   fi
 
-  # Get version number from $source with robust parsing and fallback
-  local backup_filename="${source#"$instance_backups_dir/"}"
-  local backup_version="unknown"
+  local backup_version compressed
+  backup_version="$(jq -r '.version // ""' "$manifest" 2>/dev/null)"
+  compressed="$(jq -r '.compressed' "$manifest" 2>/dev/null)"
 
-  # Try to parse version from filename format: instance-version-datetime.backup
-  if [[ "$backup_filename" =~ ^[^-]+-([^-]+)-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.backup ]]; then
-    # Extract version from regex match
-    backup_version="${BASH_REMATCH[1]}"
-    __print_info "Parsed version from backup filename: $backup_version"
-  else
-    # Fallback: try the original array-based parsing with bounds checking
-    IFS='-' read -ra backup_name <<<"$backup_filename"
-    if [[ ${#backup_name[@]} -ge 3 ]] && [[ -n "${backup_name[2]}" ]]; then
-      backup_version="${backup_name[2]}"
-      __print_info "Parsed version using array method: $backup_version"
-    else
-      # Final fallback: try to extract any version-like pattern from filename
-      if [[ "$backup_filename" =~ ([0-9]+\.[0-9]+(\.[0-9]+)?) ]]; then
-        backup_version="${BASH_REMATCH[1]}"
-        __print_info "Extracted version pattern from filename: $backup_version"
-      else
-        __print_warning "Could not parse version from backup filename, using 'unknown'"
-        backup_version="unknown"
-      fi
-    fi
-    unset IFS
+  local -a sources
+  mapfile -t sources < <(jq -r '.sources[]' "$manifest" 2>/dev/null)
+  if [[ ${#sources[@]} -eq 0 ]]; then
+    __print_error "Backup ${backup_id} records no sources; refusing to restore"
+    return $EC_ERROR
   fi
 
-  if [ -n "$(ls -A "$instance_install_dir")" ]; then
-    # $instance_install_dir is not empty, create new backup before proceeding
+  # Verify the archive BEFORE touching the instance: a corrupt backup must fail
+  # while the current state is still intact.
+  local expected_sha
+  expected_sha="$(jq -r '.sha256 // ""' "$manifest" 2>/dev/null)"
+  if [[ "$compressed" == "true" ]]; then
+    if [[ ! -f "${source}/data.tar.gz" ]]; then
+      __print_error "Backup ${backup_id} is marked compressed but has no data.tar.gz"
+      return $EC_ERROR
+    fi
+    if [[ -n "$expected_sha" ]]; then
+      __print_info "Verifying backup integrity..."
+      local actual_sha
+      actual_sha="$(sha256sum "${source}/data.tar.gz" | cut -d' ' -f1)"
+      if [[ "$actual_sha" != "$expected_sha" ]]; then
+        __print_error "Checksum mismatch for ${backup_id}; refusing to restore"
+        return $EC_ERROR
+      fi
+    fi
+  elif [[ ! -d "${source}/data" ]]; then
+    __print_error "Backup ${backup_id} is marked uncompressed but has no data directory"
+    return $EC_ERROR
+  fi
 
-    __print_warning "Current installation directory is not empty, creating a backup first..."
+  # Take a safety backup of the current state before overwriting it, and abort
+  # if that fails — a restore must never be the reason data is lost.
+  local label has_content="false"
+  for label in "${sources[@]}"; do
+    if [[ -d "${instance_working_dir}/${label}" ]] &&
+      [[ -n "$(ls -A "${instance_working_dir}/${label}" 2>/dev/null)" ]]; then
+      has_content="true"
+      break
+    fi
+  done
 
-    # Create backup and verify it succeeded
-    if ! _create_backup; then
+  if [[ "$has_content" == "true" ]]; then
+    __print_warning "Current instance data is not empty, creating a backup first..."
+
+    local safety_id
+    safety_id="$(_create_backup | tail -n1)"
+    if [[ -z "$safety_id" ]] || [[ ! -d "${instance_backups_dir}/${safety_id}" ]]; then
       __print_error "Failed to create backup before restore. Aborting to prevent data loss."
       return $EC_ERROR
     fi
+    __print_info "Backup created successfully: $safety_id"
 
-    # Verify backup was actually created and is accessible
-    local latest_backup
-    latest_backup=$(ls -t "$instance_backups_dir" | head -1 2>/dev/null)
-    if [[ -z "$latest_backup" ]] || [[ ! -e "$instance_backups_dir/$latest_backup" ]]; then
-      __print_error "Backup creation appeared to succeed but backup file is not accessible. Aborting to prevent data loss."
-      return $EC_ERROR
-    fi
-
-    __print_info "Backup created successfully: $latest_backup"
-
-    # Now safe to proceed with destructive operations
-    if ! rm -rf "${instance_install_dir:?}"/*; then
-      __print_error "Failed to clear $instance_install_dir, exiting"
-      return $EC_ERROR
-    fi
+    for label in "${sources[@]}"; do
+      if ! rm -rf "${instance_working_dir:?}/${label:?}"/*; then
+        __print_error "Failed to clear ${instance_working_dir}/${label}, exiting"
+        return $EC_ERROR
+      fi
+    done
   fi
 
-  if [[ "$source" == *.gz ]]; then
-    cd "$instance_install_dir" || return $EC_ERROR
+  for label in "${sources[@]}"; do
+    mkdir -p "${instance_working_dir}/${label}" || {
+      __print_error "Failed to create ${instance_working_dir}/${label}"
+      return $EC_ERROR
+    }
+  done
 
-    if ! tar -xzf "$source" .; then
-      __print_error "Failed to restore $source"
+  if [[ "$compressed" == "true" ]]; then
+    if ! tar -xzf "${source}/data.tar.gz" -C "$instance_working_dir" "${sources[@]}"; then
+      __print_error "Failed to extract ${backup_id}"
       return $EC_ERROR
     fi
   else
-    # $instance_install_dir is empty/user confirmed continue, move the backup into it
-    if ! cp -r "$source"/* "$instance_install_dir"/; then
-      __print_error "Failed to restore backup $source"
-      return $EC_ERROR
-    fi
+    for label in "${sources[@]}"; do
+      if ! cp -a "${source}/data/${label}/." "${instance_working_dir}/${label}/"; then
+        __print_error "Failed to restore ${label} from ${backup_id}"
+        return $EC_ERROR
+      fi
+    done
   fi
 
-  # Update instance version file with $backup_version
-  _save_version "$backup_version" || {
-    __print_error "Failed to save restored version $backup_version to file."
+  # The version comes from the manifest — the id is opaque and carries none.
+  _save_version "${backup_version:-unknown}" || {
+    __print_error "Failed to save restored version ${backup_version:-unknown} to file."
     return $EC_ERROR
   }
 
@@ -168,13 +319,31 @@ function _restore_backup() {
 }
 
 function _list_backups() {
-  shopt -s extglob nullglob
-
-  # Create array with contents of the backup dir
-  backups_array=("$instance_backups_dir"/*)
-  # remove leading $instance_backups_dir:
-  backups_array=("${backups_array[@]#"$instance_backups_dir/"}")
-
-  echo "${backups_array[@]}"
+  _backup_manifest_json | jq -r '.[].id'
 }
 
+# Every backup's manifest as a JSON array, newest first. This is the complete
+# machine-readable listing; _list_backups is the id-only projection of it.
+# Directories without a readable manifest are not backups and are skipped — that
+# is what makes a half-built or foreign directory invisible rather than
+# restorable.
+function _backup_manifest_json() {
+  if [[ -z "$instance_backups_dir" ]] || [[ ! -d "$instance_backups_dir" ]]; then
+    echo "[]"
+    return $EC_SUCCESS
+  fi
+
+  local -a manifests
+  mapfile -t manifests < <(find "$instance_backups_dir" -mindepth 2 -maxdepth 2 \
+    -name manifest.json -type f 2>/dev/null | sort)
+
+  if [[ ${#manifests[@]} -eq 0 ]]; then
+    echo "[]"
+    return $EC_SUCCESS
+  fi
+
+  # Order by the recorded creation time, not by mtime: mtime changes whenever
+  # anything touches the directory, which would silently reorder the history.
+  jq -s 'map(select(type == "object")) | sort_by(.created_at) | reverse' \
+    "${manifests[@]}" 2>/dev/null || echo "[]"
+}

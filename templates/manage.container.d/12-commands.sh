@@ -323,6 +323,12 @@ function _cmd_backup() {
 # -----------------------------------------------------------------------------
 
 function _cmd_backups() {
+  # --json emits the full manifests; the default emits ids only, one per line.
+  if [[ "${1:-}" == "--json" ]]; then
+    _backup_manifest_json
+    return $?
+  fi
+
   _list_backups
 }
 

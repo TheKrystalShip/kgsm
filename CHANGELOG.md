@@ -53,6 +53,39 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Changed
 
+- **Backups capture `saves/` as well as `install/`.** For many games the world lives in
+  `saves/` (terraria, factorio, projectzomboid and every blueprint that mounts
+  `${instance_saves_dir}`), while `install/` holds only re-downloadable game files. A
+  backup now archives both subtrees, rooted at their own names, and its manifest records
+  exactly which ones it captured.
+
+- **A backup is a directory identified by an opaque id**, holding a `manifest.json` plus
+  `data.tar.gz` (or a `data/` tree when `compress_backups=false`). The manifest carries the
+  creation time, captured version, size, file count, sources and sha256 — nothing parses the
+  id. Backups are built in the instance's temp directory and moved into place only when
+  complete, and only manifest-bearing directories are listed, so an interrupted build can
+  never be offered for restore. Restore verifies the recorded checksum before touching the
+  instance. **The previous `<instance>-<version>-<datetime>.backup[.tar.gz]` artifacts are
+  not readable by this version.**
+
+- **Backups live outside the instance's working directory**, in a per-instance subdirectory
+  of `$XDG_DATA_HOME/kgsm/backups` (override with the new `backups_directory` config key).
+  Removing an instance deletes its working directory wholesale, which used to destroy the
+  backups along with it; `uninstall` now keeps them and reports where they are. Pass
+  `--purge-backups` to delete them too. An instance created before this change is repointed
+  at the canonical path on the first backup command that touches it.
+
+### Added
+
+- **`instances backups <instance> --json`** emits every backup's full manifest as a JSON
+  array, newest first — the machine-readable form of the id listing that consumers such as
+  kgsm-api read to report a backup's size, age and captured version.
+
+- **Config schema v5** adds `backups_directory` to `[instance_defaults]`
+  (`migrations/config/005_v4_to_v5_backups_directory.sh`). Empty means the XDG default.
+
+### Changed
+
 - **`event_socket_filenames` ships the assistant's socket** — `/run/kgsm-assistant/events.sock`
   joins the four other ecosystem consumer sockets in the default list. The assistant caches the
   blueprint catalog, so a blueprint written through the Control Panel needs to reach it for the

@@ -176,11 +176,18 @@ function test_create_directories_success() {
   working_dir=$(__get_instance_config_value "$instance_name" "working_dir" 2>/dev/null)
 
   assert_dir_exists "$working_dir" "working_dir should exist after create"
-  assert_dir_exists "$working_dir/backups" "backups dir should exist after create"
   assert_dir_exists "$working_dir/install" "install dir should exist after create"
   assert_dir_exists "$working_dir/saves" "saves dir should exist after create"
   assert_dir_exists "$working_dir/temp" "temp dir should exist after create"
   assert_dir_exists "$working_dir/logs" "logs dir should exist after create"
+
+  # Backups live outside working_dir so that uninstalling the instance (which
+  # removes working_dir wholesale) leaves them intact.
+  local backups_dir
+  backups_dir=$(__get_instance_config_value "$instance_name" "backups_dir" 2>/dev/null)
+  assert_dir_exists "$backups_dir" "backups dir should exist after create"
+  assert_equals "${backups_dir#"$working_dir"}" "$backups_dir" \
+    "backups dir must not live under working_dir"
 
   remove_test_instance "$TEST_BLUEPRINT" "$instance_name" "$TEST_INSTALL_DIR"
 }

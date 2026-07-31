@@ -166,7 +166,7 @@ The following `$instance_*` variables are available in templates that are expand
 |---|---|
 | `$instance_working_dir` | Root working directory for all instance files |
 | `$instance_install_dir` | Directory where server binaries are installed |
-| `$instance_backups_dir` | Directory for backup archives |
+| `$instance_backups_dir` | Directory holding this instance's backups (outside `working_dir`) |
 | `$instance_saves_dir` | Directory for save files |
 | `$instance_temp_dir` | Temporary directory for downloads and processing |
 | `$instance_logs_dir` | Directory for server log output |

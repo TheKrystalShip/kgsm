@@ -23,6 +23,38 @@ fi
 # DIRECTORY STRUCTURE MANAGEMENT
 # =============================================================================
 
+# Resolves the canonical backups directory for an instance.
+# Args: $1 = _instance_name
+# Prints: the absolute path; prints nothing and returns EC_INVALID_ARG on no name
+#
+# Backups are deliberately kept outside the instance's working directory, so
+# that removing the instance (which removes working_dir wholesale) leaves the
+# backups intact. The root is the `backups_directory` config key when set, and
+# $KGSM_BACKUPS_DIR otherwise; each instance gets its own subdirectory of it.
+function __logic_resolve_backups_dir() {
+  local _instance_name="$1"
+
+  if [[ -z "$_instance_name" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  local root="${config_backups_directory:-}"
+  if [[ -z "$root" ]]; then
+    root="${KGSM_BACKUPS_DIR:-${KGSM_DATA_DIR}/backups}"
+  fi
+
+  # A relative override would resolve against whatever directory the caller
+  # happens to be in; refuse it rather than scatter backups unpredictably.
+  if [[ ! "$root" = /* ]]; then
+    return $EC_INVALID_CONFIG
+  fi
+
+  echo "${root}/${_instance_name}"
+  return 0
+}
+
+export -f __logic_resolve_backups_dir
+
 # Creates directory structure for an instance
 # Args: $1 = _instance_name, $2 = instance_config_file, $3 = instance_working_dir
 # Returns: EC_SUCCESS_DIRECTORIES_CREATED on success (triggers directories-created event), error codes on failure
@@ -49,14 +81,28 @@ function __logic_create_directories() {
     return $EC_INVALID_CONFIG
   fi
 
+  # Resolve the out-of-tree backups directory up front: an unusable backups root
+  # (e.g. a relative `backups_directory`) must fail the whole create rather than
+  # silently yield an empty path that would be created at the filesystem root.
+  local instance_backups_dir
+  instance_backups_dir="$(__logic_resolve_backups_dir "$_instance_name")" || return $EC_INVALID_CONFIG
+  if [[ -z "$instance_backups_dir" ]]; then
+    return $EC_INVALID_CONFIG
+  fi
+
   # Define directory structure
   # events_dir: a DIRECTORY bind-mounted to /run/kgsm in container instances. The
   # in-container player-presence shim writes events.ndjson inside it; created
   # here (not pre-touched as a file) so it exists with correct ownership before
   # the container starts and Docker mounts a real directory, never a stray file.
+  #
+  # backups_dir is the one entry that does NOT live under working_dir: removing an
+  # instance deletes its working directory wholesale, which would take the backups
+  # with it. It resolves under the shared backups root instead — see
+  # __logic_resolve_backups_dir.
   declare -A DIR_ARRAY=(
     ["working_dir"]="$instance_working_dir"
-    ["backups_dir"]="${instance_working_dir}/backups"
+    ["backups_dir"]="$instance_backups_dir"
     ["install_dir"]="${instance_working_dir}/install"
     ["saves_dir"]="${instance_working_dir}/saves"
     ["temp_dir"]="${instance_working_dir}/temp"

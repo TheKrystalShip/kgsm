@@ -36,8 +36,8 @@ ${UNDERLINE}Commands:${END}
                               Set a runtime value in the instance config
   backups <instance>          List available backups
   create-backup <instance>    Create a backup (instance must be stopped)
-  restore-backup <instance> <source>
-                              Restore a named backup
+  restore-backup <instance> <id>
+                              Restore the backup with this id
   prune-backups <instance>    Prune old backups, keeping the N most recent
   update <instance>           Update to the latest version (must be stopped)
   check-update <instance>     Check whether a newer version is available
@@ -67,7 +67,7 @@ ${UNDERLINE}Examples:${END}
   $self config-set factorio-01 \"executable_arguments=--start-server saves/world.zip\"
   $self backups factorio-01
   $self create-backup factorio-01
-  $self restore-backup factorio-01 factorio-01-1234-2026-06-21T10:00:00.backup
+  $self restore-backup factorio-01 factorio-01-20260731T142233Z-a3f9c1
   $self update factorio-01
   $self check-update factorio-01
   $self version factorio-01 --latest
@@ -105,7 +105,7 @@ ${UNDERLINE}Description:${END}
 Creates a new instance configuration file and sets up the instance structure.
 If --name is not provided, a unique name will be auto-generated based on the
 blueprint name. The installation directory must be specified and will contain
-all instance data, saves, backups, and logs.
+all instance data, saves and logs. Backups are kept outside it.
 
 ${UNDERLINE}Examples:${END}
   $self create factorio --install-dir /opt/gameservers
@@ -421,6 +421,16 @@ events_library=$(__find_core_module events.sh)
 # shellcheck source=../core/events.sh
 source "$events_library" || {
   __print_error "Failed to load events library"
+  exit $EC_FAILED_SOURCE
+}
+
+# Directory logic — the backup commands resolve the canonical out-of-tree backups
+# path through __logic_resolve_backups_dir, the same function instance creation
+# uses, so the two can never disagree about where an instance's backups live.
+logic_directories=$(__find_command_handler directories.sh)
+# shellcheck source=handlers/directories.sh
+source "$logic_directories" || {
+  __print_error "Failed to load directories logic library"
   exit $EC_FAILED_SOURCE
 }
 
@@ -1216,19 +1226,25 @@ function show_usage_backups() {
 
   echo -e "${UNDERLINE}List Instance Backups${END}
 
-List the available backups for an instance, one name per line.
+List an instance's backups, newest first — one opaque backup id per line.
+
+Each backup carries a manifest recording what it is: when it was taken, the
+version it captured, its size, and which directories it holds. --json emits
+those manifests instead of the bare ids.
 
 ${UNDERLINE}Usage:${END}
-  $self backups <instance>
+  $self backups <instance> [--json]
 
 ${UNDERLINE}Arguments:${END}
   instance                    Instance name
 
 ${UNDERLINE}Options:${END}
+  --json                      Emit the full manifests as a JSON array
   --help                      Display this help information
 
 ${UNDERLINE}Examples:${END}
   $self backups factorio-01
+  $self backups factorio-01 --json
 "
 }
 
@@ -1238,8 +1254,11 @@ function show_usage_create_backup() {
 
   echo -e "${UNDERLINE}Create Instance Backup${END}
 
-Create a backup of an instance's current server files. The instance must be
-stopped first.
+Create a backup of an instance's install and saves directories. The instance
+must be stopped first. Prints the new backup's id.
+
+Backups are stored outside the instance's working directory, so uninstalling
+the instance leaves them intact.
 
 ${UNDERLINE}Usage:${END}
   $self create-backup <instance>
@@ -1261,20 +1280,22 @@ function show_usage_restore_backup() {
 
   echo -e "${UNDERLINE}Restore Instance Backup${END}
 
-Restore an instance from a named backup. The current files are backed up first.
+Restore an instance from one of its backups. The backup is verified against its
+recorded checksum, and the current files are backed up, before anything is
+overwritten. Only the directories the backup captured are replaced.
 
 ${UNDERLINE}Usage:${END}
-  $self restore-backup <instance> <source>
+  $self restore-backup <instance> <id>
 
 ${UNDERLINE}Arguments:${END}
   instance                    Instance name
-  source                      Backup name (see '$self backups <instance>')
+  id                          Backup id (see '$self backups <instance>')
 
 ${UNDERLINE}Options:${END}
   --help                      Display this help information
 
 ${UNDERLINE}Examples:${END}
-  $self restore-backup factorio-01 factorio-01-1234-2026-06-21T10:00:00.backup
+  $self restore-backup factorio-01 factorio-01-20260731T142233Z-a3f9c1
 "
 }
 
@@ -1285,7 +1306,9 @@ function show_usage_prune_backups() {
   echo -e "${UNDERLINE}Prune Instance Backups${END}
 
 Prune old backups for an instance, keeping the N most recent. Backups are
-sorted by modification time (newest first); all beyond position N are deleted.
+ordered by their recorded creation time (newest first); all beyond position N
+are deleted. Directories in the backups store that are not backups (no
+manifest) are left alone.
 Safe to call on an empty or missing backups directory (exits 0 with no action).
 
 ${UNDERLINE}Usage:${END}
@@ -1362,6 +1385,29 @@ function _management_supports_ops() {
   "$management_file" --help 2> /dev/null | grep -q "check-update"
 }
 
+# Whether an instance's management file writes the manifest-based backup format.
+# A file generated before that format still writes the old flat artifacts, which
+# nothing in this version can list or restore — the distinctive `backups [--json]`
+# token in --help marks support.
+function _management_supports_backup_manifest() {
+  local management_file="$1"
+  [[ -f "$management_file" && -x "$management_file" ]] || return 1
+  "$management_file" --help 2> /dev/null | grep -q 'backups \[--json\]'
+}
+
+# Honest gate for the backup commands: refuse rather than let an old management
+# file write a backup this version cannot read back. $1=instance, $2=management_file.
+function _require_backup_manifest_support() {
+  local instance="$1"
+  local management_file="$2"
+  if ! _management_supports_backup_manifest "$management_file"; then
+    __print_error "Instance '$instance' uses a management file that predates the current backup format."
+    __print_error "Its backups would not be listable or restorable by this version of KGSM."
+    __print_error "Regenerate it with: kgsm files management create $instance"
+    exit $EC_ERROR
+  fi
+}
+
 # Honest gate: exit with a regenerate hint when the management file is too old
 # to support the requested ops command. $1=instance, $2=management_file.
 function _require_ops_support() {
@@ -1374,14 +1420,65 @@ function _require_ops_support() {
   fi
 }
 
+# Instances created before backups moved out of the working directory still
+# carry backups_dir="<working_dir>/backups" in their config, where an uninstall
+# would destroy the store along with the instance. Repoint any such instance at
+# the canonical out-of-tree path, once, on the first backup command that touches
+# it. Idempotent: an instance already pointing outside working_dir is untouched.
+#
+# The config file is the only thing rewritten. A container instance additionally
+# has the old path baked into its generated docker-compose.yml as a bind mount,
+# but backups are archived from host paths for both runtimes, so that mount is
+# not on the backup path; it follows on the next compose regeneration.
+function _repoint_backups_dir() {
+  local instance="$1"
+
+  # shellcheck disable=SC2154
+  [[ -n "$instance_working_dir" ]] || return 0
+  [[ "$instance_backups_dir" == "${instance_working_dir}/"* ]] || return 0
+
+  local canonical
+  canonical="$(__logic_resolve_backups_dir "$instance")" || {
+    __print_warning "Could not resolve a backups directory for '$instance'" >&2
+    return 0
+  }
+
+  # __source_instance keeps its config path local, so resolve it here.
+  local config_file
+  config_file="$(__find_instance_config "$instance")"
+  if [[ -z "$config_file" ]] || [[ ! -f "$config_file" ]]; then
+    __print_warning "Could not locate the config file for '$instance'" >&2
+    return 0
+  fi
+
+  if ! __add_or_update_config "$config_file" "backups_dir" "\"$canonical\"" >/dev/null 2>&1; then
+    __print_warning "Could not repoint the backups directory for '$instance'" >&2
+    return 0
+  fi
+
+  mkdir -p "$canonical" 2>/dev/null
+
+  __print_info "Backups for '$instance' now live in $canonical (outside the instance directory)" >&2
+  export instance_backups_dir="$canonical"
+  return 0
+}
+
 function _cmd_backups() {
   local instance=""
+  # --json is lifted out of the argument list by the global flag extractor before
+  # dispatch, so it arrives as $json_format rather than as an argument. The local
+  # case below keeps the function correct if it is ever called directly.
+  local json="false"
+  [[ "${json_format:-0}" -eq 1 ]] && json="true"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -h | --help | help)
         show_usage_backups
         return 0
+        ;;
+      --json)
+        json="true"
         ;;
       -*)
         __print_error "Invalid option for backups command: $1"
@@ -1413,13 +1510,25 @@ function _cmd_backups() {
     # Warning to stderr only — stdout is the machine-parsed listing (kgsm-api),
     # and __print_warning routes to stdout by convention, so redirect it.
     __print_warning "Instance '$instance' has no configured backups directory; reporting no backups" >&2
+    if [[ "$json" == "true" ]]; then echo "[]"; fi
     exit 0
   fi
 
-  # Normalize to one backup name per line. The management file's listing may be
+  _require_backup_manifest_support "$instance" "$instance_management_file"
+  _repoint_backups_dir "$instance"
+
+  local rc
+
+  if [[ "$json" == "true" ]]; then
+    # A JSON document must reach the caller byte-for-byte; the id normalization
+    # below would mangle it.
+    "$instance_management_file" backups --json 2> /dev/null
+    exit $?
+  fi
+
+  # Normalize to one backup id per line. The management file's listing may be
   # space- or newline-separated (older files / overrides differ); consumers such
   # as kgsm-api parse one-per-line. Empty output = no backups (honest, never 0).
-  local rc
   "$instance_management_file" backups 2> /dev/null | tr -s ' \t\n' '\n' | grep -v '^[[:space:]]*$'
   rc=${PIPESTATUS[0]}
   exit $rc
@@ -1454,22 +1563,27 @@ function _cmd_create_backup() {
 
   __source_instance "$instance"
   _require_ops_support "$instance" "$instance_management_file"
+  _require_backup_manifest_support "$instance" "$instance_management_file"
+  _repoint_backups_dir "$instance"
 
-  "$instance_management_file" create-backup
-  local rc=$?
+  # create-backup prints its progress lines and then the new backup's id as the
+  # last line. Take the id from there rather than re-deriving "the newest entry
+  # in the backups dir", which races with any concurrent backup.
+  local output rc
+  output="$("$instance_management_file" create-backup)"
+  rc=$?
+  [[ -n "$output" ]] && printf '%s\n' "$output"
 
   if [[ $rc -eq 0 ]]; then
-    # Derive the created snapshot (newest entry in the backups dir) and the
-    # version it captured, for the event payload — the same "latest backup"
-    # heuristic _restore_backup uses internally.
-    local backup_file version
-    # instance_backups_dir / instance_version_file are set by __source_instance.
-    # shellcheck disable=SC2012,SC2154
-    backup_file="$(ls -t "$instance_backups_dir" 2> /dev/null | head -n1)"
+    local backup_id version
+    backup_id="$(printf '%s' "$output" | tail -n1)"
     # shellcheck disable=SC2154
     version="$(cat "$instance_version_file" 2> /dev/null)"
-    if [[ -n "$backup_file" ]]; then
-      events.sh emit instance-backup-created "$instance" "$backup_file" "$version"
+    # Only announce a backup that exists. create-backup succeeds without making
+    # one when the instance has no data yet, and the last line is then a progress
+    # message — emitting that as a backup id would fabricate an event.
+    if [[ -n "$backup_id" ]] && [[ -d "${instance_backups_dir}/${backup_id}" ]]; then
+      events.sh emit instance-backup-created "$instance" "$backup_id" "$version"
     fi
   fi
 
@@ -1520,6 +1634,8 @@ function _cmd_restore_backup() {
 
   __source_instance "$instance"
   _require_ops_support "$instance" "$instance_management_file"
+  _require_backup_manifest_support "$instance" "$instance_management_file"
+  _repoint_backups_dir "$instance"
 
   "$instance_management_file" restore-backup "$backup"
   local rc=$?
@@ -1571,6 +1687,8 @@ function _cmd_prune_backups() {
 
   __source_instance "$instance"
   _require_ops_support "$instance" "$instance_management_file"
+  _require_backup_manifest_support "$instance" "$instance_management_file"
+  _repoint_backups_dir "$instance"
 
   # shellcheck disable=SC2154
   if [[ -z "$instance_backups_dir" ]] || [[ ! -d "$instance_backups_dir" ]]; then
@@ -1578,10 +1696,12 @@ function _cmd_prune_backups() {
     exit 0
   fi
 
-  # List entries sorted by mtime (newest first), skip the first $keep, delete the rest.
+  # Order by the engine's own listing (newest first, by each backup's recorded
+  # creation time), skip the first $keep, delete the rest. Anything in the store
+  # that the engine does not report is not a backup and is never deleted.
   local -a to_delete
-  # shellcheck disable=SC2012
-  mapfile -t to_delete < <(ls -t "$instance_backups_dir" 2> /dev/null | tail -n +"$((keep + 1))")
+  mapfile -t to_delete < <("$instance_management_file" backups 2> /dev/null |
+    tr -s ' \t\n' '\n' | grep -v '^[[:space:]]*$' | tail -n +"$((keep + 1))")
 
   if [[ ${#to_delete[@]} -eq 0 ]]; then
     __print_info "Nothing to prune for '$instance' (≤$keep backups present)"

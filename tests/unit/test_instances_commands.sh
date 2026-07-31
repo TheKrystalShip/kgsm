@@ -611,8 +611,25 @@ function _seed_backups_dir() {
   printf 'backups_dir="%s"\n' "$bdir" >> "$cfg"
 }
 
+# Write one backup into a seeded store: a directory holding the manifest that
+# makes it a backup. A directory without a manifest is not a backup, which is
+# what test_backups_ignores_unmanifested_dirs relies on.
+# Args: $1 = backups dir, $2 = backup id, $3 = created_at (ISO-8601 UTC)
+function _seed_backup() {
+  local bdir="$1"
+  local id="$2"
+  local created_at="$3"
+
+  mkdir -p "$bdir/$id" || return 1
+  jq -n --arg id "$id" --arg created_at "$created_at" \
+    '{schema_version: 1, id: $id, instance: "seeded", blueprint: "factorio",
+      version: "1.0.0", created_at: $created_at, compressed: true,
+      consistency: "cold", sources: ["install", "saves"], size_bytes: 1024,
+      file_count: 3, sha256: null}' > "$bdir/$id/manifest.json"
+}
+
 function test_backups_lists_one_per_line() {
-  log_test_step "Testing 'backups' prints each snapshot on its own line"
+  log_test_step "Testing 'backups' prints each backup id on its own line, newest first"
 
   local instance_name="test-backups-$$"
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
@@ -622,27 +639,91 @@ function test_backups_lists_one_per_line() {
   local bdir="$TEST_INSTALL_DIR/${instance_name}-backups"
   _seed_backups_dir "$instance_name" "$bdir"
   assert_equals 0 "$?" "should be able to seed a backups dir for the instance"
-  touch "$bdir/${instance_name}-1-2026-06-21T10:00:00.backup"
-  touch "$bdir/${instance_name}-1-2026-06-21T11:00:00.backup"
+
+  local older="${instance_name}-20260621T100000Z-aaaaaa"
+  local newer="${instance_name}-20260621T110000Z-bbbbbb"
+  _seed_backup "$bdir" "$older" "2026-06-21T10:00:00Z"
+  _seed_backup "$bdir" "$newer" "2026-06-21T11:00:00Z"
 
   local output line_count
   output=$("$MODULE" backups "$instance_name" 2>/dev/null)
   assert_equals 0 "$?" "backups should succeed"
-  # One snapshot per line — the contract kgsm-api parses. A regression to
-  # space-separated output would collapse both names onto a single line.
-  line_count=$(printf '%s\n' "$output" | grep -c '\.backup')
-  assert_equals 2 "$line_count" "backups should print exactly two snapshot lines"
-  assert_contains "$output" "${instance_name}-1-2026-06-21T10:00:00.backup" \
-    "backups should list the first snapshot"
-  assert_contains "$output" "${instance_name}-1-2026-06-21T11:00:00.backup" \
-    "backups should list the second snapshot"
+  # One backup per line — the contract kgsm-api parses. A regression to
+  # space-separated output would collapse both ids onto a single line.
+  line_count=$(printf '%s\n' "$output" | grep -c "^${instance_name}-")
+  assert_equals 2 "$line_count" "backups should print exactly two backup lines"
+  assert_contains "$output" "$older" "backups should list the older backup"
+  assert_contains "$output" "$newer" "backups should list the newer backup"
+
+  # Newest first, ordered by the manifest's created_at.
+  assert_equals "$newer" "$(printf '%s\n' "$output" | head -n1)" \
+    "backups should list the newest backup first"
+}
+
+function test_backups_json_emits_manifests() {
+  log_test_step "Testing 'backups --json' emits the full manifests"
+
+  local instance_name="test-backups-json-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Instance should be created for backups --json test"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
+
+  local bdir="$TEST_INSTALL_DIR/${instance_name}-backups-json"
+  _seed_backups_dir "$instance_name" "$bdir"
+  assert_equals 0 "$?" "should be able to seed a backups dir for the instance"
+
+  local id="${instance_name}-20260621T100000Z-aaaaaa"
+  _seed_backup "$bdir" "$id" "2026-06-21T10:00:00Z"
+
+  local output
+  output=$("$MODULE" backups "$instance_name" --json 2>/dev/null)
+  assert_equals 0 "$?" "backups --json should succeed"
+
+  # Must be valid JSON — the API deserializes it directly, so any stray progress
+  # line or normalization would break the consumer.
+  assert_command_succeeds "printf '%s' '$output' | jq -e 'type == \"array\"'" \
+    "backups --json should emit a JSON array"
+
+  assert_equals "$id" "$(printf '%s' "$output" | jq -r '.[0].id')" \
+    "the manifest should carry the backup id"
+  assert_equals "1024" "$(printf '%s' "$output" | jq -r '.[0].size_bytes')" \
+    "the manifest should carry the recorded size"
+  assert_equals "saves" "$(printf '%s' "$output" | jq -r '.[0].sources[1]')" \
+    "the manifest should record that saves were captured"
+}
+
+function test_backups_ignores_unmanifested_dirs() {
+  log_test_step "Testing 'backups' ignores store directories that carry no manifest"
+
+  local instance_name="test-backups-nomanifest-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
+
+  local bdir="$TEST_INSTALL_DIR/${instance_name}-backups-nomanifest"
+  _seed_backups_dir "$instance_name" "$bdir"
+  assert_equals 0 "$?" "should be able to seed a backups dir for the instance"
+
+  local id="${instance_name}-20260621T100000Z-aaaaaa"
+  _seed_backup "$bdir" "$id" "2026-06-21T10:00:00Z"
+
+  # An interrupted build leaves a directory with no manifest. It is not a backup
+  # and must never be offered for restore.
+  mkdir -p "$bdir/${instance_name}-20260621T120000Z-cccccc"
+
+  local output line_count
+  output=$("$MODULE" backups "$instance_name" 2>/dev/null)
+  assert_equals 0 "$?" "backups should succeed"
+  line_count=$(printf '%s\n' "$output" | grep -c "^${instance_name}-")
+  assert_equals 1 "$line_count" "only the manifest-bearing directory is a backup"
+  assert_equals "$id" "$output" "backups should list only the complete backup"
 }
 
 # Container parity: the dash-free commands + one-per-line listing are added
 # identically to manage.container.d, so a container instance must behave the
 # same. (vrising is the suite's standard container blueprint.)
 function test_backups_container_lists_one_per_line() {
-  log_test_step "Testing 'backups' on a container instance lists one snapshot per line"
+  log_test_step "Testing 'backups' on a container instance lists one backup per line"
 
   local instance_name="test-backups-ctr-$$"
   create_test_instance "vrising" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
@@ -652,14 +733,14 @@ function test_backups_container_lists_one_per_line() {
   local bdir="$TEST_INSTALL_DIR/${instance_name}-backups"
   _seed_backups_dir "$instance_name" "$bdir"
   assert_equals 0 "$?" "should be able to seed a backups dir for the container instance"
-  touch "$bdir/${instance_name}-1-2026-06-21T10:00:00.backup"
-  touch "$bdir/${instance_name}-1-2026-06-21T11:00:00.backup"
+  _seed_backup "$bdir" "${instance_name}-20260621T100000Z-aaaaaa" "2026-06-21T10:00:00Z"
+  _seed_backup "$bdir" "${instance_name}-20260621T110000Z-bbbbbb" "2026-06-21T11:00:00Z"
 
   local output line_count
   output=$("$MODULE" backups "$instance_name" 2>/dev/null)
   assert_equals 0 "$?" "backups should succeed for a container instance"
-  line_count=$(printf '%s\n' "$output" | grep -c '\.backup')
-  assert_equals 2 "$line_count" "container backups should print exactly two snapshot lines"
+  line_count=$(printf '%s\n' "$output" | grep -c "^${instance_name}-")
+  assert_equals 2 "$line_count" "container backups should print exactly two backup lines"
 }
 
 function test_backups_empty_is_honest() {

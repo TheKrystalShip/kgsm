@@ -38,6 +38,13 @@ export KGSM_CONFIG_FILE="${KGSM_CONFIG_DIR}/config.ini"
 export KGSM_INSTANCES_DIR="${KGSM_DATA_DIR}/instances"
 export KGSM_LOGS_DIR="${KGSM_DATA_DIR}/logs"
 
+# Backups live OUTSIDE every instance's working directory, under their own root
+# with a per-instance subdirectory. Uninstalling an instance removes its working
+# directory wholesale, so a store kept inside it would be destroyed along with
+# the thing it exists to protect. The root is overridable with the
+# `backups_directory` config key (e.g. to put backups on another filesystem).
+export KGSM_BACKUPS_DIR="${KGSM_DATA_DIR}/backups"
+
 export KGSM_USER_BLUEPRINTS_DIR="${KGSM_DATA_DIR}/blueprints"
 
 export KGSM_USER_OVERRIDES_DIR="${KGSM_DATA_DIR}/overrides"
@@ -52,6 +59,7 @@ function __init_user_directories() {
     "$KGSM_DATA_DIR"
     "$KGSM_INSTANCES_DIR"
     "$KGSM_LOGS_DIR"
+    "$KGSM_BACKUPS_DIR"
     "$KGSM_USER_BLUEPRINTS_DIR"
     "$KGSM_USER_OVERRIDES_DIR"
   )

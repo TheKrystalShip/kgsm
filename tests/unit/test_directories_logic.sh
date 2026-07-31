@@ -261,15 +261,24 @@ function test_create_directories_success() {
   assert_equals "$exit_code" "$EC_SUCCESS_DIRECTORIES_CREATED" \
     "Should return EC_SUCCESS_DIRECTORIES_CREATED"
 
-  # Verify all 7 directories were created (working_dir + 6 subdirs, incl. the
-  # player-presence events dir bind-mounted into container instances).
+  # Verify all 7 directories were created: working_dir + 5 subdirs (incl. the
+  # player-presence events dir bind-mounted into container instances), plus the
+  # backups dir, which is the one that lives OUTSIDE working_dir so that removing
+  # the instance cannot destroy its backups.
   assert_dir_exists "$working_dir" "working_dir should be created"
-  assert_dir_exists "$working_dir/backups" "backups_dir should be created"
   assert_dir_exists "$working_dir/install" "install_dir should be created"
   assert_dir_exists "$working_dir/saves" "saves_dir should be created"
   assert_dir_exists "$working_dir/temp" "temp_dir should be created"
   assert_dir_exists "$working_dir/logs" "logs_dir should be created"
   assert_dir_exists "$working_dir/events" "events_dir should be created"
+
+  # The backups dir resolves under the shared backups root, in its own
+  # per-instance subdirectory — never inside working_dir.
+  local expected_backups_dir
+  expected_backups_dir="$(__logic_resolve_backups_dir "$instance_name")"
+  assert_dir_exists "$expected_backups_dir" "backups_dir should be created"
+  assert_equals "${expected_backups_dir#"$working_dir"}" "$expected_backups_dir" \
+    "backups_dir must not live under working_dir"
 
   # Verify config file was updated
   assert_file_contains "$config_file" "working_dir" "Config should contain working_dir"
@@ -304,10 +313,13 @@ function test_create_directories_idempotent() {
 
   # Verify directories still exist
   assert_dir_exists "$working_dir" "working_dir should still exist"
-  assert_dir_exists "$working_dir/backups" "backups_dir should still exist"
+
+  local backups_dir
+  backups_dir="$(__logic_resolve_backups_dir "$instance_name")"
+  assert_dir_exists "$backups_dir" "backups_dir should still exist"
 
   # Cleanup
-  rm -rf "$working_dir" "$config_file"
+  rm -rf "$working_dir" "$config_file" "$backups_dir"
 }
 
 function test_create_directories_missing_instance_name() {

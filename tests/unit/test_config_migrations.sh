@@ -32,6 +32,8 @@ function setup_file() {
   assert_file_executable "$MIGRATION_DIR/003_v2_to_v3_remove_services_section.sh" "Migration 003 should be executable"
   assert_file_exists "$MIGRATION_DIR/004_v3_to_v4_cgroup_base_delegated.sh" "Migration 004 should exist"
   assert_file_executable "$MIGRATION_DIR/004_v3_to_v4_cgroup_base_delegated.sh" "Migration 004 should be executable"
+  assert_file_exists "$MIGRATION_DIR/005_v4_to_v5_backups_directory.sh" "Migration 005 should exist"
+  assert_file_executable "$MIGRATION_DIR/005_v4_to_v5_backups_directory.sh" "Migration 005 should be executable"
 
   log_test_step "Config migration test environment validated"
 }
@@ -583,4 +585,77 @@ EOF
   schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
   assert_equals "$schema_version" "4" "Schema version should be 4"
   assert_command_succeeds "grep -q '^cgroup_base_name=kgsm.slice/kgsm-watchdog.service$' '$test_config'"
+}
+
+# =============================================================================
+# TEST: Migration 005 - adds backups_directory to [instance_defaults]
+# =============================================================================
+
+function test_migration_005_adds_backups_directory() {
+  log_test_step "Testing migration 005 adds backups_directory to [instance_defaults]"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v4_add_backups_dir.ini"
+  cat > "$test_config" << 'INI'
+config_schema_version=4
+
+[instance_defaults]
+default_install_directory=
+instance_suffix_length=2
+
+[accessibility]
+enable_command_shortcuts=false
+INI
+
+  bash "$MIGRATION_DIR/005_v4_to_v5_backups_directory.sh" "$test_config"
+  assert_equals "$?" "0" "Migration 005 should succeed"
+
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "5" "Schema version should be 5"
+
+  # The key is added, empty (empty = the XDG default backups root)
+  assert_command_succeeds "grep -q '^backups_directory=$' '$test_config'"
+
+  # …inside [instance_defaults], not appended past the following section
+  local key_line next_section_line
+  key_line=$(grep -n '^backups_directory=' "$test_config" | cut -d: -f1)
+  next_section_line=$(grep -n '^\[accessibility\]' "$test_config" | cut -d: -f1)
+  assert_command_succeeds "[[ $key_line -lt $next_section_line ]]"
+
+  # Existing keys preserved
+  assert_command_succeeds "grep -q '^instance_suffix_length=2' '$test_config'"
+  assert_command_succeeds "grep -q '^enable_command_shortcuts=false' '$test_config'"
+
+  assert_file_exists "${test_config}.pre-migration-v5.bak"
+}
+
+# =============================================================================
+# TEST: Migration 005 - Idempotency (key already present)
+# =============================================================================
+
+function test_migration_005_idempotent() {
+  log_test_step "Testing migration 005 idempotency"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v4_backups_dir_idempotent.ini"
+  cat > "$test_config" << 'INI'
+config_schema_version=4
+
+[instance_defaults]
+backups_directory=/mnt/backups
+INI
+
+  bash "$MIGRATION_DIR/005_v4_to_v5_backups_directory.sh" "$test_config"
+  assert_equals "$?" "0" "First run should succeed"
+
+  bash "$MIGRATION_DIR/005_v4_to_v5_backups_directory.sh" "$test_config"
+  assert_equals "$?" "0" "Second run should succeed (idempotent)"
+
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "5" "Schema version should be 5"
+
+  # An operator-set root is never clobbered, and never duplicated
+  assert_command_succeeds "grep -q '^backups_directory=/mnt/backups$' '$test_config'"
+  assert_equals "1" "$(grep -c '^backups_directory=' "$test_config")" \
+    "backups_directory should appear exactly once"
 }

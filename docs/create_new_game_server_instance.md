@@ -146,11 +146,15 @@ This generates the instance configuration file (`<instance>.config.ini`) inside 
 
 This creates the following subdirectories inside the working directory:
 
-- `backups/` — Instance backup files
 - `install/` — Game server installation files
 - `saves/` — Game save files and world data
 - `temp/` — Temporary files during operations
 - `logs/` — Instance-specific log files
+
+It also creates the instance's backups directory, which lives **outside** the
+working directory — under `$XDG_DATA_HOME/kgsm/backups/<instance>/` by default,
+or under the `backups_directory` config key when set. Keeping it out of the
+working directory is what lets backups survive uninstalling the instance.
 
 ---
 
