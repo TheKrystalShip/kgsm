@@ -53,6 +53,12 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Changed
 
+- **Scheduled backups have their own cadence.** New instance config keys `backup_schedule`
+  (off | daily | weekly | 6h), `backup_time` and `backup_day` drive a backup schedule that is
+  independent of `scheduled_restart`; `auto_backup_on_restart` is removed. A backup is taken
+  against the instance as it is, running or not, so it no longer needs a restart window to happen
+  in. `timezone` now serves both schedules. Enforced by the kgsm-scheduler leaf; inert without it.
+
 - **A backup records the state it was captured in.** `manifest.consistency` is measured per
   backup instead of being written as the constant `"cold"` it always was: `cold` when the
   instance was stopped, `flushed` when it was running and the game wrote its world out first,
