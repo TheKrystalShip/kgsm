@@ -53,6 +53,20 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Changed
 
+- **Instance config lookup resolves the path instead of searching for it.** The layout
+  `$KGSM_INSTANCES_DIR/<blueprint>/<instance>/<instance>.config.ini` is deterministic, so a
+  single-level glob finds the file directly. The previous recursive `find -L` followed the
+  instance symlink into the game's working directory and walked the whole installation —
+  over 300,000 files on a host with Project Zomboid installed — to locate a file whose path
+  was already known, making the cost of every instance-scoped command scale with the size of
+  the installed games. Instances outside the standard layout still resolve by search.
+  `kgsm instances backups <instance> --json` drops from ~456ms to ~143ms.
+
+- **The two management-file capability gates share one `--help` probe.** `backups` and the
+  other gated ops commands executed the 60KB+ generated management script twice per
+  invocation to read the same help text; the probe is now run once and both gates read the
+  memoized result.
+
 - **Backups capture `saves/` as well as `install/`.** For many games the world lives in
   `saves/` (terraria, factorio, projectzomboid and every blueprint that mounts
   `${instance_saves_dir}`), while `install/` holds only re-downloadable game files. A

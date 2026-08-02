@@ -1374,6 +1374,27 @@ ${UNDERLINE}Examples:${END}
 "
 }
 
+# The management file's --help text, memoized per file for the life of the
+# process. Both capability gates below read it, and a management file is a
+# 60KB+ generated script, so executing it once per gate makes every gated
+# command pay two full interpreter startups for one signal. The probe stays the
+# authoritative one — the file is still executed, just not twice.
+#
+# The result is published in a global rather than echoed because a caller that
+# reads it through a pipe or `$(...)` runs this in a subshell, where the cached
+# value is discarded on return and every call re-executes the file. Callers must
+# load, then read the global.
+_management_help_file=""
+_management_help_text=""
+
+function _management_help_load() {
+  local management_file="$1"
+  if [[ "$management_file" != "$_management_help_file" ]]; then
+    _management_help_file="$management_file"
+    _management_help_text="$("$management_file" --help 2> /dev/null)"
+  fi
+}
+
 # Whether an instance's management file exposes the newer dash-free ops commands
 # (backups / create-backup / restore-backup / check-update). Older generated
 # files predate them; the distinctive `check-update` token in --help marks
@@ -1382,7 +1403,8 @@ ${UNDERLINE}Examples:${END}
 function _management_supports_ops() {
   local management_file="$1"
   [[ -f "$management_file" && -x "$management_file" ]] || return 1
-  "$management_file" --help 2> /dev/null | grep -q "check-update"
+  _management_help_load "$management_file"
+  grep -q "check-update" <<< "$_management_help_text"
 }
 
 # Whether an instance's management file writes the manifest-based backup format.
@@ -1392,7 +1414,8 @@ function _management_supports_ops() {
 function _management_supports_backup_manifest() {
   local management_file="$1"
   [[ -f "$management_file" && -x "$management_file" ]] || return 1
-  "$management_file" --help 2> /dev/null | grep -q 'backups \[--json\]'
+  _management_help_load "$management_file"
+  grep -q 'backups \[--json\]' <<< "$_management_help_text"
 }
 
 # Honest gate for the backup commands: refuse rather than let an old management

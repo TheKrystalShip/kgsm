@@ -138,10 +138,29 @@ export -f __find_command_handler
 function __find_instance_config() {
   local instance=$1
 
-  # Find config files in the instance directories (through symlinks)
-  # The structure is: $KGSM_INSTANCES_DIR/<blueprint>/<instance>/<instance>.config.ini
-  # where <instance> is a symlink to the actual working directory
-  # Use -L to follow symbolic links during traversal
+  # The layout is deterministic:
+  #   $KGSM_INSTANCES_DIR/<blueprint>/<instance>/<instance>.config.ini
+  # where <instance> is a symlink to the working directory. Only <blueprint> is
+  # unknown, so a single-level glob resolves the path outright.
+  #
+  # Resolving it this way rather than by searching is load-bearing, not a
+  # micro-optimization: the instance symlink points at the game's working
+  # directory, so a recursive `find -L` rooted at $KGSM_INSTANCES_DIR follows it
+  # and walks the entire installation — hundreds of thousands of files for a
+  # large game — to locate a file whose path is already known. That search
+  # dominates the cost of every instance-scoped command, and grows with the size
+  # of the installed games rather than with the number of instances.
+  local candidate
+  for candidate in "$KGSM_INSTANCES_DIR"/*/"${instance}/${instance}.config.ini"; do
+    if [[ -f "$candidate" ]]; then
+      echo "$candidate"
+      return 0
+    fi
+  done
+
+  # Anything not in the standard layout still resolves by search. This is the
+  # correctness net for an instance the glob cannot describe; it is not reached
+  # for a normally-installed one.
   local config_file
   config_file="$(__find_or_fail "${instance}.config.ini" "$KGSM_INSTANCES_DIR")"
 
