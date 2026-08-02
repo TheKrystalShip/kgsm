@@ -53,6 +53,43 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Changed
 
+- **A backup records the state it was captured in.** `manifest.consistency` is measured per
+  backup instead of being written as the constant `"cold"` it always was: `cold` when the
+  instance was stopped, `flushed` when it was running and the game wrote its world out first,
+  `hot` when it was running with no usable save command, and `null` when the run state could
+  not be determined. A native instance is spawned by the watchdog, which owns the process and
+  writes no pid file, so the management file cannot see it — the command layer resolves the
+  state and passes it in with `create-backup --run-state`.
+
+  **A management file generated before this keeps writing the constant `"cold"`.** Run
+  `kgsm files management create <instance>` on each instance to pick the measurement up.
+
+- **A running instance can be backed up.** The refusal that required a stopped instance is
+  gone. It had stopped working on its own — it probed a pid file the watchdog no longer
+  writes, so it silently passed for every supervised instance — and what it protected against
+  is now recorded in `manifest.consistency` instead of forbidden.
+
+- **A backup of a running instance captures `saves/` alone when it has content.** `install/`
+  is the bulk of a game and is re-downloadable, so skipping it is what keeps a frequent backup
+  cadence affordable — a running Project Zomboid backup drops from 11.9GB to 2.75GB. When
+  `saves/` is empty the whole tree is captured instead, because several games keep their world
+  inside `install/` and capturing `saves/` alone would back up nothing of value.
+
+- **A backup flushes the game to disk first when it can.** A running instance whose blueprint
+  declares a save command is told to write its world out before the archive is taken. A save
+  command identical to the instance's stop command is not a usable save command — some
+  blueprints declare both as `exit`, and issuing it would shut the server down to back it up.
+
+- **Writing to an instance's command FIFO cannot hang.** The FIFO is opened read-write rather
+  than appended to; a plain append blocks until something opens the read end, so a server that
+  died leaving its socket behind would hang the caller forever. This covers both the save
+  flush and console input.
+
+### Fixed
+
+- **A backup with nothing to capture fails instead of reporting success.** It returned success
+  having created no backup, so a scheduled run would record protection that does not exist.
+
 - **Instance config lookup resolves the path instead of searching for it.** The layout
   `$KGSM_INSTANCES_DIR/<blueprint>/<instance>/<instance>.config.ini` is deterministic, so a
   single-level glob finds the file directly. The previous recursive `find -L` followed the

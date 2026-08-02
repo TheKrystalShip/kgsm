@@ -333,7 +333,7 @@ function _cmd_backups() {
 }
 
 function _cmd_create_backup() {
-  _create_backup
+  _create_backup "$@"
 }
 
 function _cmd_restore_backup() {

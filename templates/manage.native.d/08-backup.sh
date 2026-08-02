@@ -77,7 +77,30 @@ function __backup_manifest_path() {
   [[ -f "${dir}/manifest.json" ]] && echo "${dir}/manifest.json"
 }
 
+# A backup records the state it was captured in, because that is what a restore
+# decision hinges on. The value is measured per backup, never assumed:
+#
+#   cold     the instance was stopped; nothing could write mid-archive
+#   flushed  running, and the game wrote its world out before the archive
+#   hot      running with no usable save command; the archive may be torn
+#   null     the run state could not be determined, so nothing is claimed
+#
+# A native instance is spawned by the watchdog, which owns the process and writes
+# no pid file, so _is_active cannot see it. The caller passes the state in with
+# --run-state; a container is probed here, where docker is the authority.
 function _create_backup() {
+  local run_state=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --run-state)
+      run_state="${2:-}"
+      shift 2
+      ;;
+    *) shift ;;
+    esac
+  done
+
   __print_info "Creating backup..."
 
   if [[ ! -d "${instance_install_dir}" ]]; then
@@ -85,17 +108,62 @@ function _create_backup() {
     return $EC_ERROR
   fi
 
-  # Check instance running state before attempting to create backup
-  if _is_active &>/dev/null; then
-    __print_error "$self is currently running, please shut down before attempting to create a backup"
-    return $EC_ERROR
+  if [[ -z "$run_state" ]]; then
+    if _is_active &>/dev/null; then
+      run_state="active"
+    else
+      run_state="inactive"
+    fi
   fi
+
+  # Tell the game to write its world to disk before archiving it. Some blueprints
+  # declare the same token for save_command and stop_command ("exit"), which would
+  # shut the server down to back it up — that is not a usable save command.
+  local flushed=0
+  if [[ "$run_state" == "active" ]] &&
+    [[ -n "${instance_save_command:-}" ]] &&
+    [[ "${instance_save_command}" != "${instance_stop_command:-}" ]]; then
+    if _send_save_command; then
+      flushed=1
+    else
+      __print_warning "Save command failed; archiving without a flush"
+    fi
+  fi
+
+  local consistency
+  case "$run_state" in
+  inactive) consistency='"cold"' ;;
+  active)
+    if [[ $flushed -eq 1 ]]; then
+      consistency='"flushed"'
+    else
+      consistency='"hot"'
+    fi
+    ;;
+  *) consistency='null' ;;
+  esac
 
   local -a sources
   mapfile -t sources < <(__backup_sources) || return $EC_ERROR
+
+  # A running instance rewrites saves/ but not install/, and install/ is both the
+  # bulk of a game and re-downloadable — capturing saves/ alone is what keeps a
+  # frequent cadence affordable. That shortcut only holds while saves/ has
+  # content: several games keep their world inside install/, and there capturing
+  # saves/ alone would back up nothing of value, so the whole tree is taken.
+  if [[ "$run_state" == "active" ]]; then
+    local label
+    for label in "${sources[@]}"; do
+      if [[ "$label" == "saves" ]]; then
+        sources=(saves)
+        break
+      fi
+    done
+  fi
+
   if [[ ${#sources[@]} -eq 0 ]]; then
-    __print_warning "Nothing to back up for ${instance_name} (install and saves are empty)"
-    return $EC_SUCCESS
+    __print_error "Nothing to back up for ${instance_name} (install and saves are empty)"
+    return $EC_ERROR
   fi
 
   if [[ ! -d "${instance_backups_dir}" ]]; then
@@ -172,6 +240,7 @@ function _create_backup() {
     --arg version "${installed_version:-}" \
     --arg created_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
     --argjson compressed "$compressed" \
+    --argjson consistency "$consistency" \
     --argjson sha256 "$sha256" \
     --argjson size_bytes "${size_bytes:-0}" \
     --argjson file_count "$file_count" \
@@ -183,7 +252,7 @@ function _create_backup() {
       version: (if $version == "" then null else $version end),
       created_at: $created_at,
       compressed: $compressed,
-      consistency: "cold",
+      consistency: $consistency,
       sources: $ARGS.positional,
       size_bytes: $size_bytes,
       file_count: $file_count,

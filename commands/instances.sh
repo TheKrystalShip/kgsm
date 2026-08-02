@@ -1589,11 +1589,41 @@ function _cmd_create_backup() {
   _require_backup_manifest_support "$instance" "$instance_management_file"
   _repoint_backups_dir "$instance"
 
+  # The management file records whether the instance was running when the archive
+  # was taken, and cannot determine that itself for a native instance: the
+  # watchdog owns the process and writes no pid file, so the script's own probe
+  # would report every supervised instance stopped. Resolve it here, where the
+  # watchdog is reachable, and pass it in. An empty answer means the watchdog did
+  # not know, which is passed through as "unknown" rather than guessed — the
+  # manifest then records no consistency instead of a fabricated one. A container
+  # is left to probe itself, where docker is the authority.
+  local run_state=""
+  # shellcheck disable=SC2154
+  if [[ "$instance_runtime" == "native" ]]; then
+    if ! __watchdog_available; then
+      run_state="unknown"
+    else
+      # The watchdog is the only thing that starts a native instance, and it
+      # re-adopts live cgroups when it restarts. So a reachable daemon that does
+      # not report an instance running is evidence it is not running — both
+      # "tracked, stopped" and "not tracked at all" mean stopped. Only an
+      # unreachable daemon leaves the answer genuinely unknown.
+      case "$(__watchdog_active_value "$instance")" in
+        true) run_state="active" ;;
+        *) run_state="inactive" ;;
+      esac
+    fi
+  fi
+
   # create-backup prints its progress lines and then the new backup's id as the
   # last line. Take the id from there rather than re-deriving "the newest entry
   # in the backups dir", which races with any concurrent backup.
   local output rc
-  output="$("$instance_management_file" create-backup)"
+  if [[ -n "$run_state" ]]; then
+    output="$("$instance_management_file" create-backup --run-state "$run_state")"
+  else
+    output="$("$instance_management_file" create-backup)"
+  fi
   rc=$?
   [[ -n "$output" ]] && printf '%s\n' "$output"
 
@@ -1602,9 +1632,8 @@ function _cmd_create_backup() {
     backup_id="$(printf '%s' "$output" | tail -n1)"
     # shellcheck disable=SC2154
     version="$(cat "$instance_version_file" 2> /dev/null)"
-    # Only announce a backup that exists. create-backup succeeds without making
-    # one when the instance has no data yet, and the last line is then a progress
-    # message — emitting that as a backup id would fabricate an event.
+    # Only announce a backup that exists. Emitting a progress line as a backup id
+    # would fabricate an event, so the id is confirmed on disk first.
     if [[ -n "$backup_id" ]] && [[ -d "${instance_backups_dir}/${backup_id}" ]]; then
       events.sh emit instance-backup-created "$instance" "$backup_id" "$version"
     fi

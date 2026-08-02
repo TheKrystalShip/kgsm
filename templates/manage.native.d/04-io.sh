@@ -58,7 +58,18 @@ function _send_save_command() {
   if [[ -p "${instance_socket_file}" ]]; then
     # Check if save command is defined
     if [[ -n "${instance_save_command}" ]]; then
-      echo "${instance_save_command}" >>"${instance_socket_file}"
+      # Open the FIFO read-write rather than appending to it. A plain append
+      # blocks until something opens the read end, so a server that died leaving
+      # its socket behind would hang this call forever — and with it any
+      # unattended backup that asks for a flush first. Holding the read end
+      # ourselves makes the write complete whether or not the game is listening.
+      local _save_fd
+      if ! exec {_save_fd}<>"${instance_socket_file}"; then
+        __print_error "Save failed: could not open ${instance_socket_file}"
+        return $EC_ERROR
+      fi
+      printf '%s\n' "${instance_save_command}" >&"${_save_fd}"
+      exec {_save_fd}>&-
       # Sleep to give the server time to process the save command
       sleep "${instance_save_command_timeout_seconds:-5}"
       return $EC_SUCCESS

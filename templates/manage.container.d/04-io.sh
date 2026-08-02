@@ -72,10 +72,21 @@ function _send_input() {
     return $EC_ERROR
   fi
 
-  if ! printf '%s\n' "$command" >>"$command_fifo"; then
+  # Open the FIFO read-write rather than appending to it. A plain append blocks
+  # until something opens the read end, so a container that died leaving its
+  # command FIFO behind would hang this call forever — and with it whatever is
+  # waiting on it, from an unattended backup's flush to a console send.
+  local _cmd_fd
+  if ! exec {_cmd_fd}<>"$command_fifo"; then
+    __print_error "Input failed: could not open $command_fifo"
+    return $EC_ERROR
+  fi
+  if ! printf '%s\n' "$command" >&"${_cmd_fd}"; then
+    exec {_cmd_fd}>&-
     __print_error "Failed to send command to container '$instance_name'"
     return $EC_ERROR
   fi
+  exec {_cmd_fd}>&-
 
   __print_success "Command sent to container"
   return $EC_SUCCESS

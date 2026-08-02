@@ -53,7 +53,7 @@ fi
 # multi-entrypoint CLI: a module under commands/ can be invoked directly, and
 # anything that stamps a version (event payloads, the webhook User-Agent) must
 # report the same value no matter which entrypoint reached it.
-declare -g KGSM_VERSION="3.2.0-rc1"
+declare -g KGSM_VERSION="3.3.0-rc1"
 export KGSM_VERSION
 
 if [[ -n "${KGSM_BOOTSTRAP_LOADED:-}" ]]; then
