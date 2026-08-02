@@ -281,6 +281,22 @@ function _create_backup() {
 
 function _restore_backup() {
   local backup_id="$1"
+  shift
+
+  # Carried straight through to the safety backup below, so that archive records
+  # what it was taken against instead of falling back to a probe this script
+  # cannot answer for a native instance.
+  local run_state=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --run-state)
+      run_state="${2:-}"
+      shift 2
+      ;;
+    *) shift ;;
+    esac
+  done
+
   local source="${instance_backups_dir}/${backup_id}"
 
   __print_info "Restoring ${backup_id}..."
@@ -340,8 +356,11 @@ function _restore_backup() {
   if [[ "$has_content" == "true" ]]; then
     __print_warning "Current instance data is not empty, creating a backup first..."
 
+    local -a safety_args=()
+    [[ -n "$run_state" ]] && safety_args+=(--run-state "$run_state")
+
     local safety_id
-    safety_id="$(_create_backup | tail -n1)"
+    safety_id="$(_create_backup "${safety_args[@]}" | tail -n1)"
     if [[ -z "$safety_id" ]] || [[ ! -d "${instance_backups_dir}/${safety_id}" ]]; then
       __print_error "Failed to create backup before restore. Aborting to prevent data loss."
       return $EC_ERROR

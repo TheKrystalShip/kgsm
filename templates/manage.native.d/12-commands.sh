@@ -236,12 +236,31 @@ function _cmd_deploy() {
   __print_success "Deployment process completed successfully"
 }
 
+# An update replaces the installed game in place, so the state it is about to
+# overwrite is captured first. The caller passes --run-state so that backup can
+# record what it was taken against; see _create_backup for why the script cannot
+# measure that itself.
 function _update() {
+  local run_state=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --run-state)
+      run_state="${2:-}"
+      shift 2
+      ;;
+    *) shift ;;
+    esac
+  done
 
   __print_info "Starting update..."
 
-  # Check if the instance is active
-  if _is_active &>/dev/null; then
+  # Deploying over a running game copies onto its own open executable and fails
+  # partway with "Text file busy", leaving install/ half-replaced. _is_active is
+  # the only probe this script has and it cannot see a watchdog-owned process,
+  # which is why the state the caller resolved is consulted first — without it
+  # this refusal never fires for a native instance.
+  if [[ "$run_state" == "active" ]] || _is_active &>/dev/null; then
     __print_error "$self is currently running, please shut down before attempting to update"
     return $EC_ERROR
   fi
@@ -263,6 +282,22 @@ function _update() {
     __print_info "Local version is already up-to-date"
     return $EC_SUCCESS
   fi
+
+  # Everything past this point overwrites the installed game, and for several
+  # games the world lives inside install/ — so capture it while it is still
+  # intact. A plain restart cannot lose data and takes no backup; only an update
+  # does. A capture that fails abandons the update, because laying a new version
+  # over an unprotected world is precisely what this guards against.
+  local -a backup_args=()
+  [[ -n "$run_state" ]] && backup_args+=(--run-state "$run_state")
+
+  local backup_id
+  backup_id="$(_create_backup "${backup_args[@]}" | tail -n1)"
+  if [[ -z "$backup_id" ]] || [[ ! -d "${instance_backups_dir}/${backup_id}" ]]; then
+    __print_error "Backup before update failed; leaving $instance_name on version $installed_version"
+    return $EC_ERROR
+  fi
+  __print_success "Backup before update: $backup_id"
 
   # Download the latest version
   if ! _download "$latest_version"; then
@@ -288,7 +323,7 @@ function _update() {
 }
 
 function _cmd_update() {
-  _update
+  _update "$@"
 }
 
 function _cmd_backup() {
@@ -348,7 +383,9 @@ function _cmd_restore_backup() {
     __print_error "Missing argument: <source>"
     return $EC_MISSING_ARG
   fi
-  _restore_backup "$1"
+  local backup="$1"
+  shift
+  _restore_backup "$backup" "$@"
 }
 
 function _cmd_check_update() {

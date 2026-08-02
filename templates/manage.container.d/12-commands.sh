@@ -254,8 +254,38 @@ function _cmd_deploy() {
   __print_success "Deployment process completed successfully"
 }
 
+# An update recreates the container from a freshly pulled image, so the state it
+# is about to replace is captured first. The caller passes --run-state so that
+# backup can record what it was taken against.
 function _update() {
+  local run_state=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+    --run-state)
+      run_state="${2:-}"
+      shift 2
+      ;;
+    *) shift ;;
+    esac
+  done
+
   __print_info "Updating Docker container..."
+
+  # Capture the current state before the recreate can replace it. A plain restart
+  # cannot lose data and takes no backup; only an update does. A capture that
+  # fails abandons the update, because laying a new image over an unprotected
+  # world is precisely what this guards against.
+  local -a backup_args=()
+  [[ -n "$run_state" ]] && backup_args+=(--run-state "$run_state")
+
+  local backup_id
+  backup_id="$(_create_backup "${backup_args[@]}" | tail -n1)"
+  if [[ -z "$backup_id" ]] || [[ ! -d "${instance_backups_dir}/${backup_id}" ]]; then
+    __print_error "Backup before update failed; not updating $instance_name"
+    return $EC_ERROR
+  fi
+  __print_success "Backup before update: $backup_id"
 
   # For container instances, updating means:
   # 1. Pull the latest images defined in the docker-compose file
@@ -281,7 +311,7 @@ function _update() {
 }
 
 function _cmd_update() {
-  _update
+  _update "$@"
 }
 
 function _cmd_backup() {
@@ -341,7 +371,9 @@ function _cmd_restore_backup() {
     __print_error "Missing argument: <source>"
     return $EC_MISSING_ARG
   fi
-  _restore_backup "$1"
+  local backup="$1"
+  shift
+  _restore_backup "$backup" "$@"
 }
 
 function _cmd_check_update() {

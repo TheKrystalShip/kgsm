@@ -70,6 +70,18 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   **A management file generated before this keeps writing the constant `"cold"`.** Run
   `kgsm files management create <instance>` on each instance to pick the measurement up.
 
+- **An update backs the instance up before it applies.** `update` archives what it is about to
+  overwrite and abandons the update if that archive cannot be made, so a new version is never
+  laid over an unprotected world. An instance already on the latest version is a no-op and takes
+  no backup, and a plain restart — which cannot lose data — takes none either. This is not tied
+  to `backup_schedule`: it happens whenever an update applies, including the one `auto_update`
+  triggers on start.
+
+- **A restore's safety backup records the state it was taken against.** `restore-backup` accepts
+  `--run-state` and carries it into the archive it takes before overwriting, so that archive is
+  subject to the same measurement rule as any other instead of falling back to a probe the
+  management file cannot answer.
+
 - **A running instance can be backed up.** The refusal that required a stopped instance is
   gone. It had stopped working on its own — it probed a pid file the watchdog no longer
   writes, so it silently passed for every supervised instance — and what it protected against
@@ -92,6 +104,13 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   flush and console input.
 
 ### Fixed
+
+- **An update of a running native instance is refused.** The refusal probed the pid file the
+  watchdog does not write, so it never fired for a supervised instance: the update ran, downloaded,
+  and failed partway through deploy with `cp: … Text file busy`, leaving `install/` half-replaced.
+  It now consults the run state the command layer resolves, and fails before downloading anything.
+  `kgsm-api` already rejected an update on a running server on the grounds that the engine does
+  this — that is now true.
 
 - **A backup with nothing to capture fails instead of reporting success.** It returned success
   having created no backup, so a scheduled run would record protection that does not exist.

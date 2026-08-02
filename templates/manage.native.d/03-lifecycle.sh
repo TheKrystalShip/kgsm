@@ -72,9 +72,11 @@ function _start_background() {
     return $EC_ERROR
   fi
 
-  # Handle auto-update before changing directory
+  # Handle auto-update before changing directory. The instance is stopped by
+  # definition here — this is the path that starts it — so the backup _update
+  # takes first is told so rather than left to a probe.
   if [[ "$instance_auto_update" == "true" ]]; then
-    if ! _update; then
+    if ! _update --run-state inactive; then
       __print_error "Failed to update $self, exiting"
       return $EC_ERROR
     fi

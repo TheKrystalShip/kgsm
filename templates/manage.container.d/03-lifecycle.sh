@@ -67,8 +67,10 @@ function _start() {
     __print_warning "Failed to rotate log file, continuing"
   fi
 
+  # The instance is stopped by definition here — this is the path that starts it
+  # — so the backup _update takes first is told so rather than left to a probe.
   if [[ "$instance_auto_update" == "true" ]]; then
-    _update
+    _update --run-state inactive
   fi
 
   # Save the current shell PID to track the foreground process

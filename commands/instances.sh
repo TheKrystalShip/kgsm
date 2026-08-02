@@ -1486,6 +1486,41 @@ function _repoint_backups_dir() {
   return 0
 }
 
+# Resolve the run state a backup will be recorded against, and echo it. Every
+# command that makes the management file archive something calls this and passes
+# the answer in with --run-state.
+#
+# The management file cannot determine this itself for a native instance: the
+# watchdog owns the process and writes no pid file, so the script's own probe
+# would report every supervised instance stopped. It is resolved here, where the
+# watchdog is reachable. An unreachable watchdog yields "unknown", which is
+# passed through rather than guessed — the manifest then records no consistency
+# instead of a fabricated one. A container is left to probe itself, where docker
+# is the authority, so this echoes nothing for one.
+#
+# Requires __source_instance to have run for $instance.
+function __resolve_run_state() {
+  local instance="$1"
+
+  # shellcheck disable=SC2154
+  [[ "$instance_runtime" == "native" ]] || return 0
+
+  if ! __watchdog_available; then
+    echo "unknown"
+    return 0
+  fi
+
+  # The watchdog is the only thing that starts a native instance, and it
+  # re-adopts live cgroups when it restarts. So a reachable daemon that does not
+  # report an instance running is evidence it is not running — both "tracked,
+  # stopped" and "not tracked at all" mean stopped. Only an unreachable daemon
+  # leaves the answer genuinely unknown.
+  case "$(__watchdog_active_value "$instance")" in
+    true) echo "active" ;;
+    *) echo "inactive" ;;
+  esac
+}
+
 function _cmd_backups() {
   local instance=""
   # --json is lifted out of the argument list by the global flag extractor before
@@ -1589,31 +1624,8 @@ function _cmd_create_backup() {
   _require_backup_manifest_support "$instance" "$instance_management_file"
   _repoint_backups_dir "$instance"
 
-  # The management file records whether the instance was running when the archive
-  # was taken, and cannot determine that itself for a native instance: the
-  # watchdog owns the process and writes no pid file, so the script's own probe
-  # would report every supervised instance stopped. Resolve it here, where the
-  # watchdog is reachable, and pass it in. An empty answer means the watchdog did
-  # not know, which is passed through as "unknown" rather than guessed — the
-  # manifest then records no consistency instead of a fabricated one. A container
-  # is left to probe itself, where docker is the authority.
-  local run_state=""
-  # shellcheck disable=SC2154
-  if [[ "$instance_runtime" == "native" ]]; then
-    if ! __watchdog_available; then
-      run_state="unknown"
-    else
-      # The watchdog is the only thing that starts a native instance, and it
-      # re-adopts live cgroups when it restarts. So a reachable daemon that does
-      # not report an instance running is evidence it is not running — both
-      # "tracked, stopped" and "not tracked at all" mean stopped. Only an
-      # unreachable daemon leaves the answer genuinely unknown.
-      case "$(__watchdog_active_value "$instance")" in
-        true) run_state="active" ;;
-        *) run_state="inactive" ;;
-      esac
-    fi
-  fi
+  local run_state
+  run_state="$(__resolve_run_state "$instance")"
 
   # create-backup prints its progress lines and then the new backup's id as the
   # last line. Take the id from there rather than re-deriving "the newest entry
@@ -1689,7 +1701,17 @@ function _cmd_restore_backup() {
   _require_backup_manifest_support "$instance" "$instance_management_file"
   _repoint_backups_dir "$instance"
 
-  "$instance_management_file" restore-backup "$backup"
+  # Restoring overwrites the instance's current data, so the management file
+  # backs that up first — and needs the run state to record what that safety
+  # archive was taken against.
+  local run_state
+  run_state="$(__resolve_run_state "$instance")"
+
+  if [[ -n "$run_state" ]]; then
+    "$instance_management_file" restore-backup "$backup" --run-state "$run_state"
+  else
+    "$instance_management_file" restore-backup "$backup"
+  fi
   local rc=$?
 
   if [[ $rc -eq 0 ]]; then
@@ -1816,6 +1838,15 @@ function _cmd_update() {
 
   __source_instance "$instance"
 
+  # An update overwrites the installed game, and the management file archives it
+  # first. Point the backups directory outside the instance before that happens,
+  # the same way the backup commands do, so a pre-update archive is not left
+  # somewhere an uninstall would destroy it.
+  _repoint_backups_dir "$instance"
+
+  local run_state
+  run_state="$(__resolve_run_state "$instance")"
+
   # `update` ships on every management file (no ops gate). Capture the version
   # before and after so we can emit instance-version-updated ONLY when it
   # actually changed — an already-current instance is a successful no-op and
@@ -1823,7 +1854,11 @@ function _cmd_update() {
   local old_version new_version
   old_version="$(cat "$instance_version_file" 2> /dev/null)"
 
-  "$instance_management_file" update
+  if [[ -n "$run_state" ]]; then
+    "$instance_management_file" update --run-state "$run_state"
+  else
+    "$instance_management_file" update
+  fi
   local rc=$?
 
   if [[ $rc -eq 0 ]]; then
