@@ -75,6 +75,12 @@ export -f discover_tests
 #
 # Determine if a discovered test should be executed based on skip conditions and filters.
 #
+# A test runs unless its SKIP_<NAME> variable is set, or --pattern was given and
+# none of the patterns match. A pattern matches either as a filename glob
+# (`test_config_*.sh`, extension optional) or as a fragment of the file's name
+# (`config`). Patterns are matched against the name as written on disk, and
+# repeating --pattern unions them.
+#
 # Arguments:
 #   $1 - test_file (string, required): Absolute path to test file
 #
@@ -99,9 +105,22 @@ function should_run_test() {
 
   # Check inclusion patterns (if any specified)
   if [[ ${#TEST_PATTERNS[@]} -gt 0 ]]; then
+    local file_name
+    file_name=$(basename "$test_file")
+
     local matched=false
+    local pattern
     for pattern in "${TEST_PATTERNS[@]}"; do
-      if [[ "$test_name" =~ $pattern ]]; then
+      # A pattern selects a test two ways: as a filename glob
+      # (`test_config_*.sh`, extension optional), or as a fragment of the name
+      # (`config`). The glob comparisons leave their right-hand side unquoted on
+      # purpose -- quoting it would make the glob a literal string and match
+      # nothing -- while the fragment comparison quotes it so a pattern carrying
+      # glob characters is not matched twice over.
+      # shellcheck disable=SC2053
+      if [[ "$file_name" == $pattern ]] ||
+        [[ "$test_name" == $pattern ]] ||
+        [[ "$file_name" == *"$pattern"* ]]; then
         matched=true
         break
       fi

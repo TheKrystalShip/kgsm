@@ -454,6 +454,15 @@ function main() {
   echo "TAP version 14"
   echo "1..${total_tests}"
 
+  # A --pattern that selects nothing is a typo, not an empty success. Reporting
+  # it as a pass leaves no way to tell "that test is green" from "that test was
+  # never run", and would take a mistyped filter through CI green.
+  if [[ $total_tests -eq 0 ]] && [[ ${#TEST_PATTERNS[@]} -gt 0 ]]; then
+    echo "# no test matched: ${TEST_PATTERNS[*]}"
+    echo "# patterns are filename globs, e.g. --pattern 'test_config_*.sh'"
+    return 1
+  fi
+
   # Initialize streaming TAP state
   TAP_TEST_NUM=0
   TAP_HAS_FAILURES=0

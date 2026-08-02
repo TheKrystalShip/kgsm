@@ -17,7 +17,7 @@ shellcheck path/to/script.sh
 # Tests
 ./tests/run.sh                                   # all (unit + integration + e2e)
 ./tests/run.sh unit                              # one type (unit | integration | e2e)
-./tests/run.sh --pattern 'test_config_*.sh'      # filename glob
+./tests/run.sh --pattern 'test_config_*.sh'      # filename glob (or a fragment: 'config')
 ./tests/run.sh --pattern 'test_config_merge_logic.sh' --function 'test_merge_preserves_user_values'
 ./tests/run.sh --debug-run tests/unit/test_x.sh  # inline run of one file, full trace, for debugging
 ```
