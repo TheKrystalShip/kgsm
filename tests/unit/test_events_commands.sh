@@ -11,12 +11,12 @@
 # - status subcommand
 # - test subcommand (argument parsing)
 # - emit subcommand (argument parsing, journal append, diagnostics)
-# - socket/webhook delegation
+# - webhook delegation
 # - Invalid command/argument handling
 #
 # Does NOT duplicate:
 # - Pure logic function tests (covered by test_events_logic.sh)
-# - Event transport internals (events.socket.sh, events.webhook.sh)
+# - Event transport internals (events.webhook.sh)
 
 # =============================================================================
 # TEST SETUP
@@ -95,8 +95,6 @@ function test_help_lists_subcommands() {
     "help output should mention test command"
   assert_contains "$output" "emit" \
     "help output should mention emit command"
-  assert_contains "$output" "socket" \
-    "help output should mention socket command"
   assert_contains "$output" "webhook" \
     "help output should mention webhook command"
 }
@@ -129,16 +127,6 @@ function test_help_emit_subcommand() {
 
   assert_command_output "$MODULE help emit" "event-type" \
     "help emit output should contain event-type"
-}
-
-function test_help_socket_subcommand() {
-  log_test_step "Testing: help socket delegates to events.socket.sh help"
-
-  assert_command_succeeds "$MODULE help socket" \
-    "help socket should succeed"
-
-  assert_command_output "$MODULE help socket" "Socket" \
-    "help socket output should contain Socket"
 }
 
 function test_help_webhook_subcommand() {
@@ -389,34 +377,6 @@ function test_emit_missing_params_error_message() {
 
   assert_contains "$output" "parameters" \
     "emit with missing params should show a parameters error"
-}
-
-# =============================================================================
-# socket DELEGATION TESTS
-# =============================================================================
-
-function test_socket_help_delegation() {
-  log_test_step "Testing: socket help delegates to events.socket.sh"
-
-  assert_command_succeeds "$MODULE socket help" \
-    "socket help should succeed"
-
-  assert_command_output "$MODULE socket help" "Socket" \
-    "socket help output should contain Socket"
-}
-
-function test_socket_status_delegation() {
-  log_test_step "Testing: socket status delegates to events.socket.sh"
-
-  assert_command_succeeds "$MODULE socket status" \
-    "socket status should succeed"
-}
-
-function test_socket_help_flag_delegation() {
-  log_test_step "Testing: socket --help delegates to events.socket.sh"
-
-  assert_command_succeeds "$MODULE socket --help" \
-    "socket --help should succeed"
 }
 
 # =============================================================================

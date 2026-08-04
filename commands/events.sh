@@ -36,8 +36,7 @@ ${UNDERLINE}Usage:${END}
 ${UNDERLINE}Commands:${END}
   status                      Show comprehensive event system status
   journal <command>           Inspect and prune the event journal
-  test <transport>            Test event transports (all, socket, webhook)
-  socket <command>            Manage Unix Domain Socket transport
+  test <transport>            Test event transports (all, webhook)
   webhook <command>           Manage HTTP webhook transport
   emit <event-type> [params]  Emit specific event with parameters
   help [command]              Show help information
@@ -49,17 +48,15 @@ ${UNDERLINE}Options:${END}
 ${UNDERLINE}Examples:${END}
   ${self} status
   ${self} test all
-  ${self} socket enable
   ${self} webhook configure
   ${self} emit instance-created myserver factorio
   ${self} emit instance-version-updated myserver 1.0.0 1.1.0
   ${self} help emit
 
 ${UNDERLINE}Notes:${END}
-  • Multiple transports can be enabled simultaneously
-  • Each transport has independent configuration and testing
+  • Events are always appended to the journal; the webhook is an optional copy
   • Use 'status' to verify system health after configuration changes
-  • Transport-specific help: ${self} socket help or ${self} webhook help
+  • Transport-specific help: ${self} webhook help
   • Event types use dash-separated names (instance-created, instance-started, etc.)
   • All events include timestamp, actor, hostname, and KGSM version metadata
   • Actor (who triggered the event) comes from \$KGSM_EVENT_ACTOR, else the OS user
@@ -80,7 +77,6 @@ ${UNDERLINE}Usage:${END}
 
 ${UNDERLINE}Description:${END}
 The status command aggregates information from all event transports:
-  • Socket transport: Configuration, socket file status, dependencies
   • Webhook transport: Configured URLs, authentication status, connectivity
 
 No configuration changes are made by this command.
@@ -103,14 +99,13 @@ ${UNDERLINE}Usage:${END}
 
 ${UNDERLINE}Arguments:${END}
   transport                   Which transport(s) to test
-                              Options: all, socket, webhook
+                              Options: all, webhook
 
 ${UNDERLINE}Options:${END}
   --help                      Display this help information
 
 ${UNDERLINE}Description:${END}
 The test command validates that configured event transports are functional:
-  • Socket: Creates listener, sends test event, verifies reception
   • Webhook: Sends test event to configured URLs, checks responses
   • All: Tests all enabled transports sequentially
 
@@ -119,7 +114,6 @@ will report an error.
 
 ${UNDERLINE}Examples:${END}
   ${self} test all
-  ${self} test socket
   ${self} test webhook
 "
 }
@@ -237,8 +231,6 @@ function _cmd_status() {
   echo ""
 
   # Delegate to transport modules
-  events.socket.sh status
-  echo ""
   events.webhook.sh status
 
   return $EC_SUCCESS
@@ -249,7 +241,7 @@ function _cmd_test() {
   local transport="$1"
 
   if [[ -z "$transport" ]]; then
-    __print_error "Transport argument required: all, socket, or webhook"
+    __print_error "Transport argument required: all or webhook"
     usage_test
     return $EC_MISSING_ARG
   fi
@@ -261,23 +253,11 @@ function _cmd_test() {
       ;;
     all)
       # shellcheck disable=SC2154
-      local socket_enabled="$config_enable_socket_events"
-      # shellcheck disable=SC2154
       local webhook_enabled="$config_enable_webhook_events"
       local overall_result=0
 
       __print_info "Testing all configured event transports..."
       echo ""
-
-      if [[ "$socket_enabled" == "true" ]]; then
-        if events.socket.sh test; then
-          __print_success "Socket transport: PASSED"
-        else
-          __print_error "Socket transport: FAILED"
-          overall_result=1
-        fi
-        echo ""
-      fi
 
       if [[ "$webhook_enabled" == "true" ]]; then
         if events.webhook.sh test; then
@@ -289,9 +269,10 @@ function _cmd_test() {
         echo ""
       fi
 
-      if [[ "$socket_enabled" != "true" && "$webhook_enabled" != "true" ]]; then
-        __print_error "No event transports are enabled"
-        __print_info "Enable transports with: ${self} socket enable OR ${self} webhook enable"
+      if [[ "$webhook_enabled" != "true" ]]; then
+        __print_error "No optional event transports are enabled"
+        __print_info "Enable one with: ${self} webhook enable"
+        __print_info "The journal is always written; inspect it with: ${self} journal status"
         return $EC_ERROR
       fi
 
@@ -303,26 +284,16 @@ function _cmd_test() {
 
       return $overall_result
       ;;
-    socket)
-      events.socket.sh test
-      return $?
-      ;;
     webhook)
       events.webhook.sh test
       return $?
       ;;
     *)
       __print_error "Unknown transport: $transport"
-      __print_info "Valid options: all, socket, webhook"
+      __print_info "Valid options: all, webhook"
       return $EC_INVALID_ARG
       ;;
   esac
-}
-
-# Delegate to socket transport module
-function _cmd_socket() {
-  events.socket.sh "$@"
-  return $?
 }
 
 # Delegate to webhook transport module
@@ -410,9 +381,6 @@ function _cmd_help() {
     emit)
       usage_emit
       ;;
-    socket)
-      events.socket.sh help
-      ;;
     webhook)
       events.webhook.sh help
       ;;
@@ -446,10 +414,6 @@ case "$command" in
     ;;
   test)
     _cmd_test "$@"
-    exit $?
-    ;;
-  socket)
-    _cmd_socket "$@"
     exit $?
     ;;
   webhook)

@@ -24,7 +24,7 @@ Related commands cluster by prefix — keep new files in the existing family:
   `blueprints.container.sh` split is gone, since runtime is now a blueprint field)
 - `files.sh`, `files.management.sh`, `files.firewall.sh`,
   `files.symlink.sh` (+ paired handlers)
-- `events.sh`, `events.socket.sh`, `events.webhook.sh`
+- `events.sh`, `events.journal.sh`, `events.webhook.sh`
 - `watcher.sh`, `watcher.logs.sh`, `watcher.ports.sh`
 - lifecycle: `install.sh`, `uninstall.sh`, `lifecycle.sh`, `instances.sh`,
   `autostart.sh` (boot auto-start enable/disable via the watchdog)

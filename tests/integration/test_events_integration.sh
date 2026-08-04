@@ -3,21 +3,17 @@
 # KGSM Events Integration Tests
 #
 # Test Type: INTEGRATION
-# Target: Interaction between commands/events.sh, commands/events.socket.sh,
-#         and commands/events.webhook.sh
+# Target: Interaction between commands/events.sh and commands/events.webhook.sh
 #
 # Integration points tested:
-# - events.sh status aggregates output from both socket and webhook transports
-# - events.sh delegates socket/webhook sub-commands to the transport modules
+# - events.sh delegates the webhook sub-command to the transport module
 # - events.sh test command routes to the correct transport
 # - events.sh emit validates the event type unconditionally
-# - events.sh emit appends to the journal
-# - events.sh emit with valid event + no transports fails at delivery
-# - Socket transport enable/disable cycle reflects in config and status
+# - events.sh emit appends to the journal, unconditionally
+# - the emitted payload's shape, read back off the journal it was written to
 # - Webhook transport enable/disable cycle reflects in config and status
-# - events.socket.sh emit is graceful when no socket file exists
 # - events.webhook.sh emit fails when no URLs are configured
-# - events.sh test all fails when no transports are enabled
+# - events.sh test all fails when no optional transport is enabled
 
 # =============================================================================
 # TEST SETUP
@@ -25,7 +21,6 @@
 
 readonly TEST_NAME="events_integration"
 readonly EVENTS_MODULE="$KGSM_ROOT/commands/events.sh"
-readonly SOCKET_MODULE="$KGSM_ROOT/commands/events.socket.sh"
 readonly WEBHOOK_MODULE="$KGSM_ROOT/commands/events.webhook.sh"
 
 # =============================================================================
@@ -37,12 +32,15 @@ readonly WEBHOOK_MODULE="$KGSM_ROOT/commands/events.webhook.sh"
 # set, so bootstrap skips config re-load and uses the inherited config_* values).
 # We can therefore control subprocess behavior by exporting config_* variables.
 
-function _enable_socket_events() {
-  export config_enable_socket_events="true"
-}
-
-function _disable_socket_events() {
-  export config_enable_socket_events="false"
+# The journal is where an emitted event actually lands, so payload-shape tests read
+# it back from there. The sandbox redirects event_journal_dir into itself, so this
+# never touches the host's real journal. Newest segment, last line — segment names
+# are dates, so ordinal order is chronological.
+function _last_journal_event() {
+  local journal_dir="${config_event_journal_dir:-$KGSM_TEST_SANDBOX/events}"
+  local segment
+  segment=$(find "$journal_dir" -maxdepth 1 -type f -name '*.ndjson' 2> /dev/null | sort | tail -1)
+  [[ -n "$segment" ]] && tail -n 1 "$segment"
 }
 
 function _enable_webhook_events() {
@@ -67,71 +65,12 @@ function setup_file() {
   assert_file_exists "$EVENTS_MODULE" "events.sh module should exist"
   assert_file_executable "$EVENTS_MODULE" "events.sh module should be executable"
 
-  assert_file_exists "$SOCKET_MODULE" "events.socket.sh module should exist"
-  assert_file_executable "$SOCKET_MODULE" "events.socket.sh module should be executable"
-
   assert_file_exists "$WEBHOOK_MODULE" "events.webhook.sh module should exist"
   assert_file_executable "$WEBHOOK_MODULE" "events.webhook.sh module should be executable"
 
   assert_file_exists "$KGSM_ROOT/config.ini" "config.ini should exist in sandbox"
 
   log_test_step "Events integration test environment validated"
-}
-
-# =============================================================================
-# TEST 1: events.sh status aggregates both transport outputs
-# events.sh status must invoke both events.socket.sh status and
-# events.webhook.sh status, producing a combined output.
-# =============================================================================
-
-function test_status_aggregates_both_transports() {
-  log_test_step "Testing: events.sh status aggregates socket and webhook transport status"
-
-  assert_command_succeeds "$EVENTS_MODULE status" \
-    "events.sh status should succeed"
-
-  local output
-  output=$("$EVENTS_MODULE" status 2>&1)
-
-  assert_contains "$output" "Unix Domain Socket" \
-    "events.sh status should include Unix Domain Socket transport section"
-
-  assert_contains "$output" "Webhook" \
-    "events.sh status should include Webhook transport section"
-}
-
-# =============================================================================
-# TEST 2: events.sh delegates 'socket status' to events.socket.sh
-# Both commands should produce the same core content.
-# =============================================================================
-
-function test_socket_delegation_status() {
-  log_test_step "Testing: events.sh socket status delegates to events.socket.sh status"
-
-  local events_output
-  events_output=$("$EVENTS_MODULE" socket status 2>&1)
-  local events_exit=$?
-
-  local socket_output
-  socket_output=$("$SOCKET_MODULE" status 2>&1)
-  local socket_exit=$?
-
-  assert_equals 0 "$events_exit" "events.sh socket status should succeed"
-  assert_equals 0 "$socket_exit" "events.socket.sh status should succeed"
-
-  # Both outputs should contain the same section header
-  assert_contains "$events_output" "Unix Domain Socket" \
-    "events.sh socket status should show socket section header"
-
-  assert_contains "$socket_output" "Unix Domain Socket" \
-    "events.socket.sh status should show socket section header"
-
-  # Both should reflect the same enabled/disabled state
-  assert_contains "$events_output" "Disabled" \
-    "events.sh socket status should show Disabled by default"
-
-  assert_contains "$socket_output" "Disabled" \
-    "events.socket.sh status should show Disabled by default"
 }
 
 # =============================================================================
@@ -169,15 +108,15 @@ function test_webhook_delegation_status() {
 }
 
 # =============================================================================
-# TEST 4: events.sh test all fails when no transports are enabled
-# When both socket and webhook transports are disabled, 'test all' must fail.
+# TEST 4: events.sh test all fails when no optional transport is enabled
+# The journal is unconditional and has nothing to test; with the webhook off,
+# 'test all' has no transport to exercise and must fail.
 # =============================================================================
 
 function test_test_all_fails_with_no_transports() {
-  log_test_step "Testing: events.sh test all fails when no transports are enabled"
+  log_test_step "Testing: events.sh test all fails when no optional transport is enabled"
 
-  # Ensure both transports are disabled (default state in sandbox)
-  _disable_socket_events
+  # Sandbox default: the webhook is off.
   _disable_webhook_events
 
   assert_command_fails "$EVENTS_MODULE test all" \
@@ -186,8 +125,8 @@ function test_test_all_fails_with_no_transports() {
   local output
   output=$("$EVENTS_MODULE" test all 2>&1 || true)
 
-  assert_contains "$output" "No event transports are enabled" \
-    "Should report that no transports are enabled"
+  assert_contains "$output" "No optional event transports are enabled" \
+    "Should report that no optional transports are enabled"
 }
 
 # =============================================================================
@@ -250,7 +189,6 @@ function test_emit_always_validates_the_event_name() {
 function test_emit_no_arguments_fails() {
   log_test_step "Testing: events.sh emit with no arguments fails"
 
-  _disable_socket_events
   _disable_webhook_events
 
   assert_command_fails "$EVENTS_MODULE emit" \
@@ -287,7 +225,6 @@ function test_emit_invalid_event_when_enabled_fails() {
 function test_emit_valid_event_succeeds_without_optional_transports() {
   log_test_step "Testing: events.sh emit succeeds when only the journal receives it"
 
-  _disable_socket_events
   _disable_webhook_events
 
   assert_command_succeeds "$EVENTS_MODULE emit instance-created test-server factorio" \
@@ -298,26 +235,6 @@ function test_emit_valid_event_succeeds_without_optional_transports() {
     "the journal segment should exist after emitting"
   assert_file_contains "$segment" '"EventType":"instance_created"' \
     "the journal should carry the emitted event"
-}
-
-# =============================================================================
-# TEST 11: events.socket.sh emit is graceful when no socket file exists
-# When no socket file exists, emit returns 0 (sends to nothing, no error).
-# =============================================================================
-
-function test_socket_emit_graceful_with_no_socket_file() {
-  log_test_step "Testing: events.socket.sh emit is graceful when no socket file exists"
-
-  # Ensure socket file doesn't exist
-  local socket_file="$KGSM_ROOT/kgsm.sock"
-  rm -f "$socket_file"
-  assert_file_not_exists "$socket_file" "Socket file should not exist before test"
-
-  local test_payload
-  test_payload='{"EventType":"test_event","Data":{"InstanceName":"test"},"Timestamp":"2024-01-01T00:00:00Z"}'
-
-  assert_command_succeeds "$SOCKET_MODULE emit '$test_payload'" \
-    "events.socket.sh emit should succeed gracefully when no socket file exists"
 }
 
 # =============================================================================
@@ -342,24 +259,6 @@ function test_webhook_emit_fails_with_no_urls() {
 }
 
 # =============================================================================
-# TEST 13: events.socket.sh status shows disabled by default
-# Default config has socket transport disabled.
-# =============================================================================
-
-function test_socket_status_shows_disabled_by_default() {
-  log_test_step "Testing: events.socket.sh status shows Disabled in default config"
-
-  assert_command_succeeds "$SOCKET_MODULE status" \
-    "events.socket.sh status should always succeed"
-
-  local output
-  output=$("$SOCKET_MODULE" status 2>&1)
-
-  assert_contains "$output" "Disabled" \
-    "Socket status should show Disabled in default config"
-}
-
-# =============================================================================
 # TEST 14: events.webhook.sh status shows disabled by default
 # Default config has webhook transport disabled.
 # =============================================================================
@@ -378,22 +277,6 @@ function test_webhook_status_shows_disabled_by_default() {
 }
 
 # =============================================================================
-# TEST 15: events.socket.sh disable command shows the disabling message
-# Disable returns EC_SUCCESS_CONFIG_SET (240), not 0.
-# Verify via output inspection.
-# =============================================================================
-
-function test_socket_disable_command() {
-  log_test_step "Testing: events.socket.sh disable command shows disabling message"
-
-  local output
-  output=$("$SOCKET_MODULE" disable 2>&1 || true)
-
-  assert_contains "$output" "Disabling Unix Domain Socket" \
-    "disable output should mention 'Disabling Unix Domain Socket'"
-}
-
-# =============================================================================
 # TEST 16: events.webhook.sh disable command shows the disabling message
 # Disable returns EC_SUCCESS_CONFIG_SET (240), not 0.
 # Verify via output inspection.
@@ -407,36 +290,6 @@ function test_webhook_disable_command() {
 
   assert_contains "$output" "Disabling HTTP webhook" \
     "disable output should mention 'Disabling HTTP webhook'"
-}
-
-# =============================================================================
-# TEST 17: events.socket.sh enable/disable cycle (requires socat)
-# If socat is available: enable and disable produce the expected output messages.
-# Note: enable/disable return EC_SUCCESS_CONFIG_SET (240) not 0, so we use
-# output inspection with '|| true' rather than assert_command_succeeds.
-# =============================================================================
-
-function test_socket_enable_disable_cycle() {
-  log_test_step "Testing: events.socket.sh enable/disable cycle"
-
-  if ! command -v socat > /dev/null 2>&1; then
-    skip_test "socat not available - skipping socket enable/disable cycle test"
-    return
-  fi
-
-  # Enable socket transport - verify output message
-  local enable_output
-  enable_output=$("$SOCKET_MODULE" enable 2>&1 || true)
-
-  assert_contains "$enable_output" "Enabling Unix Domain Socket" \
-    "enable output should mention 'Enabling Unix Domain Socket'"
-
-  # Disable socket transport - verify output message
-  local disable_output
-  disable_output=$("$SOCKET_MODULE" disable 2>&1 || true)
-
-  assert_contains "$disable_output" "Disabling Unix Domain Socket" \
-    "disable output should mention 'Disabling Unix Domain Socket'"
 }
 
 # =============================================================================
@@ -470,33 +323,6 @@ function test_webhook_enable_disable_cycle() {
 }
 
 # =============================================================================
-# TEST 19: events.sh socket help delegates to events.socket.sh help
-# The help for the socket subcommand should come from the transport module.
-# =============================================================================
-
-function test_events_socket_help_delegation() {
-  log_test_step "Testing: events.sh socket help delegates to events.socket.sh help"
-
-  local events_output
-  events_output=$("$EVENTS_MODULE" socket help 2>&1)
-  local events_exit=$?
-
-  local socket_output
-  socket_output=$("$SOCKET_MODULE" help 2>&1)
-
-  assert_equals 0 "$events_exit" "events.sh socket help should succeed"
-
-  assert_contains "$events_output" "enable" \
-    "events.sh socket help should mention enable command"
-
-  assert_contains "$events_output" "disable" \
-    "events.sh socket help should mention disable command"
-
-  assert_contains "$socket_output" "enable" \
-    "events.socket.sh help should mention enable command"
-}
-
-# =============================================================================
 # TEST 20: events.sh webhook help delegates to events.webhook.sh help
 # The help for the webhook subcommand should come from the transport module.
 # =============================================================================
@@ -524,26 +350,6 @@ function test_events_webhook_help_delegation() {
 }
 
 # =============================================================================
-# TEST 21: events.sh test socket routes to socket test (disabled path)
-# When socket transport is disabled, the socket test must fail with
-# the appropriate message.
-# =============================================================================
-
-function test_test_socket_routes_to_socket_module() {
-  log_test_step "Testing: events.sh test socket routes to events.socket.sh test"
-
-
-  assert_command_fails "$EVENTS_MODULE test socket" \
-    "events.sh test socket should fail when socket transport is disabled"
-
-  local output
-  output=$("$EVENTS_MODULE" test socket 2>&1 || true)
-
-  assert_contains "$output" "not enabled" \
-    "Should report that socket transport is not enabled"
-}
-
-# =============================================================================
 # TEST 22: events.sh test webhook routes to webhook test (disabled path)
 # When webhook transport is disabled, the webhook test must fail.
 # =============================================================================
@@ -564,86 +370,22 @@ function test_test_webhook_routes_to_webhook_module() {
 }
 
 # =============================================================================
-# TEST 23: events.socket.sh socket file location is within KGSM_ROOT
-# The socket file should be located inside the KGSM root directory.
-# =============================================================================
-
-function test_socket_file_path_within_kgsm_root() {
-  log_test_step "Testing: a relative socket name resolves within KGSM_ROOT"
-
-  # A bare/relative socket name still resolves under KGSM_ROOT (absolute names are
-  # used as-is — see __socket_resolve_path). Force a deterministic relative name so
-  # this does not depend on the configured default (which is now absolute /run paths).
-  export config_event_socket_filenames="kgsm.sock"
-
-  local output
-  output=$("$SOCKET_MODULE" status 2>&1)
-
-  assert_contains "$output" "$KGSM_ROOT/kgsm.sock" \
-    "Socket status should resolve a relative socket name within KGSM_ROOT"
-}
-
-# =============================================================================
 # TEST 24: emitted event payload carries the Actor field (audit enrichment)
-# A real event emitted over the socket transport must include a top-level
-# Actor field, and KGSM_EVENT_ACTOR must override the OS-user default. Captures
-# the actual _build_event_payload output via a one-shot socat listener.
+# A real emitted event must carry a top-level Actor field, and KGSM_EVENT_ACTOR
+# must override the OS-user default. Read back off the journal the emit wrote to,
+# so this pins the actual _build_event_payload output rather than the template.
 # =============================================================================
 
 function test_emit_payload_includes_actor() {
   log_test_step "Testing: emitted payload includes Actor and honors KGSM_EVENT_ACTOR"
 
-  if ! command -v socat > /dev/null 2>&1; then
-    skip_test "socat not available - skipping payload capture test"
-    return
-  fi
-
-  # Deterministic socket path (don't depend on sandbox config defaults).
-  export config_event_socket_filenames=""
-  export config_event_socket_filename="kgsm.sock"
-  local socket_file="$KGSM_ROOT/kgsm.sock"
-  local capture="$KGSM_TEST_SANDBOX/actor-capture.json"
-  rm -f "$socket_file" "$capture"
-
-  # One-shot listener: accept a single connection, copy its bytes to the file.
-  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
-  local listener_pid=$!
-
-  # Bounded wait for the socket node to exist (listen() has run by then, so a
-  # connect from emit queues in the backlog — no accept race on Unix sockets).
-  local i=0
-  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-  # A Unix socket is type -S, not a regular file (-f), so assert_file_exists
-  # would wrongly fail here — assert the socket node via assert_true instead.
-  local sock_ready="false"
-  [[ -S "$socket_file" ]] && sock_ready="true"
-  assert_true "$sock_ready" "socat listener should create the socket node"
-
-  _enable_socket_events
-
   # Emit a real lifecycle event with an explicit actor supplied via the env var.
   KGSM_EVENT_ACTOR="discord:tester" "$EVENTS_MODULE" emit instance-started actor-test-server > /dev/null 2>&1 || true
 
-  # Bounded wait for the captured payload to land.
-  i=0
-  while [[ ! -s "$capture" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-
-  # Tear down the listener and restore transport config before asserting.
-  kill "$listener_pid" 2> /dev/null || true
-  wait "$listener_pid" 2> /dev/null || true
-  _disable_socket_events
-  rm -f "$socket_file"
-
   local payload
-  payload=$(cat "$capture" 2> /dev/null)
+  payload=$(_last_journal_event)
 
-  assert_not_null "$payload" "Captured event payload should not be empty"
+  assert_not_null "$payload" "Journaled event payload should not be empty"
   assert_contains "$payload" '"Actor"' \
     "Emitted payload should include a top-level Actor field"
 
@@ -677,55 +419,14 @@ function test_emit_payload_includes_actor() {
 function test_emit_payload_honors_event_origin() {
   log_test_step "Testing: emitted payload honors KGSM_EVENT_ORIGIN"
 
-  if ! command -v socat > /dev/null 2>&1; then
-    skip_test "socat not available - skipping payload capture test"
-    return
-  fi
-
-  # Deterministic socket path (don't depend on sandbox config defaults).
-  export config_event_socket_filenames=""
-  export config_event_socket_filename="kgsm.sock"
-  local socket_file="$KGSM_ROOT/kgsm.sock"
-  local capture="$KGSM_TEST_SANDBOX/origin-capture.json"
-  rm -f "$socket_file" "$capture"
-
-  # One-shot listener: accept a single connection, copy its bytes to the file.
-  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
-  local listener_pid=$!
-
-  # Bounded wait for the socket node to exist.
-  local i=0
-  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-  local sock_ready="false"
-  [[ -S "$socket_file" ]] && sock_ready="true"
-  assert_true "$sock_ready" "socat listener should create the socket node"
-
-  _enable_socket_events
-
   # Emit with both provenance fields supplied via env vars.
   KGSM_EVENT_ACTOR="discord:tester" KGSM_EVENT_ORIGIN="assistant" \
     "$EVENTS_MODULE" emit instance-started origin-test-server > /dev/null 2>&1 || true
 
-  # Bounded wait for the captured payload to land.
-  i=0
-  while [[ ! -s "$capture" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-
-  # Tear down the listener and restore transport config before asserting.
-  kill "$listener_pid" 2> /dev/null || true
-  wait "$listener_pid" 2> /dev/null || true
-  _disable_socket_events
-  rm -f "$socket_file"
-
   local payload
-  payload=$(cat "$capture" 2> /dev/null)
+  payload=$(_last_journal_event)
 
-  assert_not_null "$payload" "Captured event payload should not be empty"
+  assert_not_null "$payload" "Journaled event payload should not be empty"
 
   local origin
   origin=$(echo "$payload" | jq -r '.Origin' 2> /dev/null)
@@ -739,62 +440,21 @@ function test_emit_payload_honors_event_origin() {
 # ExitCode/Restarts Data fields, and when the watchdog stamps
 # KGSM_EVENT_ACTOR/ORIGIN=system the payload reflects actor=system / origin=system.
 # Exercises the EVENT_CONFIGS param-spec -> jq-var mapping AND the env -> payload
-# provenance derivation end-to-end over the real socket transport (not just the
-# jq template), capturing the actual _build_event_payload output.
+# provenance derivation end-to-end (not just the jq template), reading the actual
+# _build_event_payload output back off the journal.
 # =============================================================================
 
 function test_emit_crashed_payload_carries_fields_and_system_provenance() {
   log_test_step "Testing: instance_crashed payload carries ExitCode/Restarts + actor/origin=system"
-
-  if ! command -v socat > /dev/null 2>&1; then
-    skip_test "socat not available - skipping payload capture test"
-    return
-  fi
-
-  # Deterministic socket path (don't depend on sandbox config defaults).
-  export config_event_socket_filenames=""
-  export config_event_socket_filename="kgsm.sock"
-  local socket_file="$KGSM_ROOT/kgsm.sock"
-  local capture="$KGSM_TEST_SANDBOX/crashed-capture.json"
-  rm -f "$socket_file" "$capture"
-
-  # One-shot listener: accept a single connection, copy its bytes to the file.
-  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
-  local listener_pid=$!
-
-  # Bounded wait for the socket node to exist.
-  local i=0
-  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-  local sock_ready="false"
-  [[ -S "$socket_file" ]] && sock_ready="true"
-  assert_true "$sock_ready" "socat listener should create the socket node"
-
-  _enable_socket_events
 
   # Emit the crash event exactly as the watchdog does: actor+origin=system, with the
   # instance, exit code, and restart-attempt count as the three positional params.
   KGSM_EVENT_ACTOR="system" KGSM_EVENT_ORIGIN="system" \
     "$EVENTS_MODULE" emit instance-crashed crash-test-server 139 2 > /dev/null 2>&1 || true
 
-  # Bounded wait for the captured payload to land.
-  i=0
-  while [[ ! -s "$capture" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-
-  # Tear down the listener and restore transport config before asserting.
-  kill "$listener_pid" 2> /dev/null || true
-  wait "$listener_pid" 2> /dev/null || true
-  _disable_socket_events
-  rm -f "$socket_file"
-
   local payload
-  payload=$(cat "$capture" 2> /dev/null)
-  assert_not_null "$payload" "Captured event payload should not be empty"
+  payload=$(_last_journal_event)
+  assert_not_null "$payload" "Journaled event payload should not be empty"
 
   # Event type round-trips to the underscore wire form.
   local event_type
@@ -826,55 +486,14 @@ function test_emit_crashed_payload_carries_fields_and_system_provenance() {
 function test_emit_ports_opened_payload_carries_structured_ports() {
   log_test_step "Testing: instance_ports_opened payload carries structured [{start,end,protocol}] ports"
 
-  if ! command -v socat > /dev/null 2>&1; then
-    skip_test "socat not available - skipping payload capture test"
-    return
-  fi
-
-  # Deterministic socket path (don't depend on sandbox config defaults).
-  export config_event_socket_filenames=""
-  export config_event_socket_filename="kgsm.sock"
-  local socket_file="$KGSM_ROOT/kgsm.sock"
-  local capture="$KGSM_TEST_SANDBOX/ports-opened-capture.json"
-  rm -f "$socket_file" "$capture"
-
-  # One-shot listener: accept a single connection, copy its bytes to the file.
-  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
-  local listener_pid=$!
-
-  # Bounded wait for the socket node to exist.
-  local i=0
-  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-  local sock_ready="false"
-  [[ -S "$socket_file" ]] && sock_ready="true"
-  assert_true "$sock_ready" "socat listener should create the socket node"
-
-  _enable_socket_events
-
   # Emit exactly as the firewall command layer does: the instance, then the
   # UFW-format port spec as the single 'ports' positional param.
   "$EVENTS_MODULE" emit instance-ports-opened ports-test-server '34197/udp|27015:27020/tcp' \
     > /dev/null 2>&1 || true
 
-  # Bounded wait for the captured payload to land.
-  i=0
-  while [[ ! -s "$capture" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-
-  # Tear down the listener and restore transport config before asserting.
-  kill "$listener_pid" 2> /dev/null || true
-  wait "$listener_pid" 2> /dev/null || true
-  _disable_socket_events
-  rm -f "$socket_file"
-
   local payload
-  payload=$(cat "$capture" 2> /dev/null)
-  assert_not_null "$payload" "Captured event payload should not be empty"
+  payload=$(_last_journal_event)
+  assert_not_null "$payload" "Journaled event payload should not be empty"
 
   local event_type instance
   event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)
@@ -903,63 +522,22 @@ function test_emit_ports_opened_payload_carries_structured_ports() {
 
 # =============================================================================
 # TEST: instance_player_joined renders id AND name when both are supplied.
-# Captures the real _build_event_payload output over the socket transport to
-# prove the PlayerId/PlayerName Data shape (the keys this repo DEFINES — only the
-# param names were frozen in the contract, not the Data keys).
+# Reads the real _build_event_payload output back off the journal to prove the
+# PlayerId/PlayerName Data shape (the keys this repo DEFINES — only the param
+# names were frozen in the contract, not the Data keys).
 # =============================================================================
 
 function test_emit_player_joined_payload_carries_id_and_name() {
   log_test_step "Testing: instance_player_joined payload carries PlayerId and PlayerName"
-
-  if ! command -v socat > /dev/null 2>&1; then
-    skip_test "socat not available - skipping payload capture test"
-    return
-  fi
-
-  # Deterministic socket path (don't depend on sandbox config defaults).
-  export config_event_socket_filenames=""
-  export config_event_socket_filename="kgsm.sock"
-  local socket_file="$KGSM_ROOT/kgsm.sock"
-  local capture="$KGSM_TEST_SANDBOX/player-joined-capture.json"
-  rm -f "$socket_file" "$capture"
-
-  # One-shot listener: accept a single connection, copy its bytes to the file.
-  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
-  local listener_pid=$!
-
-  # Bounded wait for the socket node to exist.
-  local i=0
-  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-  local sock_ready="false"
-  [[ -S "$socket_file" ]] && sock_ready="true"
-  assert_true "$sock_ready" "socat listener should create the socket node"
-
-  _enable_socket_events
 
   # Emit exactly as the watchdog forwarder does: instance, player_id, player_name
   # as the three positional params (the latter two are NOT in EVENT_CONFIGS).
   "$EVENTS_MODULE" emit instance-player-joined player-test-server \
     "76561198000000000" "Alice" > /dev/null 2>&1 || true
 
-  # Bounded wait for the captured payload to land.
-  i=0
-  while [[ ! -s "$capture" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-
-  # Tear down the listener and restore transport config before asserting.
-  kill "$listener_pid" 2> /dev/null || true
-  wait "$listener_pid" 2> /dev/null || true
-  _disable_socket_events
-  rm -f "$socket_file"
-
   local payload
-  payload=$(cat "$capture" 2> /dev/null)
-  assert_not_null "$payload" "Captured event payload should not be empty"
+  payload=$(_last_journal_event)
+  assert_not_null "$payload" "Journaled event payload should not be empty"
 
   local event_type instance player_id player_name
   event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)
@@ -987,55 +565,14 @@ function test_emit_player_joined_payload_carries_id_and_name() {
 function test_emit_player_left_payload_renders_missing_id_as_json_null() {
   log_test_step "Testing: instance_player_left renders an absent player_id as JSON null"
 
-  if ! command -v socat > /dev/null 2>&1; then
-    skip_test "socat not available - skipping payload capture test"
-    return
-  fi
-
-  # Deterministic socket path (don't depend on sandbox config defaults).
-  export config_event_socket_filenames=""
-  export config_event_socket_filename="kgsm.sock"
-  local socket_file="$KGSM_ROOT/kgsm.sock"
-  local capture="$KGSM_TEST_SANDBOX/player-left-capture.json"
-  rm -f "$socket_file" "$capture"
-
-  # One-shot listener: accept a single connection, copy its bytes to the file.
-  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
-  local listener_pid=$!
-
-  # Bounded wait for the socket node to exist.
-  local i=0
-  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-  local sock_ready="false"
-  [[ -S "$socket_file" ]] && sock_ready="true"
-  assert_true "$sock_ready" "socat listener should create the socket node"
-
-  _enable_socket_events
-
   # Only a name is known: pass an EMPTY player_id positional, then the name. The
   # empty id must surface as JSON null, never the string "".
   "$EVENTS_MODULE" emit instance-player-left player-test-server \
     "" "Bob" > /dev/null 2>&1 || true
 
-  # Bounded wait for the captured payload to land.
-  i=0
-  while [[ ! -s "$capture" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-
-  # Tear down the listener and restore transport config before asserting.
-  kill "$listener_pid" 2> /dev/null || true
-  wait "$listener_pid" 2> /dev/null || true
-  _disable_socket_events
-  rm -f "$socket_file"
-
   local payload
-  payload=$(cat "$capture" 2> /dev/null)
-  assert_not_null "$payload" "Captured event payload should not be empty"
+  payload=$(_last_journal_event)
+  assert_not_null "$payload" "Journaled event payload should not be empty"
 
   local event_type player_name id_type player_name_type
   event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)
@@ -1063,55 +600,14 @@ function test_emit_player_left_payload_renders_missing_id_as_json_null() {
 function test_emit_player_joined_payload_carries_addr_and_session_key() {
   log_test_step "Testing: instance_player_joined payload renders PlayerAddr null and carries SessionKey"
 
-  if ! command -v socat > /dev/null 2>&1; then
-    skip_test "socat not available - skipping payload capture test"
-    return
-  fi
-
-  # Deterministic socket path (don't depend on sandbox config defaults).
-  export config_event_socket_filenames=""
-  export config_event_socket_filename="kgsm.sock"
-  local socket_file="$KGSM_ROOT/kgsm.sock"
-  local capture="$KGSM_TEST_SANDBOX/player-joined-addr-capture.json"
-  rm -f "$socket_file" "$capture"
-
-  # One-shot listener: accept a single connection, copy its bytes to the file.
-  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
-  local listener_pid=$!
-
-  # Bounded wait for the socket node to exist.
-  local i=0
-  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-  local sock_ready="false"
-  [[ -S "$socket_file" ]] && sock_ready="true"
-  assert_true "$sock_ready" "socat listener should create the socket node"
-
-  _enable_socket_events
-
   # No real network address (empty addr positional), only an opaque session
   # token. Params: instance, player_id, player_name, player_addr, session_key.
   "$EVENTS_MODULE" emit instance-player-joined player-test-server \
     "" "Carol" "" "651023867:1" > /dev/null 2>&1 || true
 
-  # Bounded wait for the captured payload to land.
-  i=0
-  while [[ ! -s "$capture" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-
-  # Tear down the listener and restore transport config before asserting.
-  kill "$listener_pid" 2> /dev/null || true
-  wait "$listener_pid" 2> /dev/null || true
-  _disable_socket_events
-  rm -f "$socket_file"
-
   local payload
-  payload=$(cat "$capture" 2> /dev/null)
-  assert_not_null "$payload" "Captured event payload should not be empty"
+  payload=$(_last_journal_event)
+  assert_not_null "$payload" "Journaled event payload should not be empty"
 
   local addr_type session_key
   addr_type=$(echo "$payload" | jq -r '.Data.PlayerAddr | type' 2> /dev/null)
@@ -1132,49 +628,13 @@ function test_emit_player_joined_payload_carries_addr_and_session_key() {
 function test_emit_player_left_payload_carries_reason() {
   log_test_step "Testing: instance_player_left payload carries a real Reason"
 
-  if ! command -v socat > /dev/null 2>&1; then
-    skip_test "socat not available - skipping payload capture test"
-    return
-  fi
-
-  export config_event_socket_filenames=""
-  export config_event_socket_filename="kgsm.sock"
-  local socket_file="$KGSM_ROOT/kgsm.sock"
-  local capture="$KGSM_TEST_SANDBOX/player-left-reason-capture.json"
-  rm -f "$socket_file" "$capture"
-
-  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
-  local listener_pid=$!
-
-  local i=0
-  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-  local sock_ready="false"
-  [[ -S "$socket_file" ]] && sock_ready="true"
-  assert_true "$sock_ready" "socat listener should create the socket node"
-
-  _enable_socket_events
-
   # Params: instance, player_id, player_name, player_addr, session_key, reason.
   "$EVENTS_MODULE" emit instance-player-left player-test-server \
     "" "" "" "userid:3801603394" "App_Min" > /dev/null 2>&1 || true
 
-  i=0
-  while [[ ! -s "$capture" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-
-  kill "$listener_pid" 2> /dev/null || true
-  wait "$listener_pid" 2> /dev/null || true
-  _disable_socket_events
-  rm -f "$socket_file"
-
   local payload
-  payload=$(cat "$capture" 2> /dev/null)
-  assert_not_null "$payload" "Captured event payload should not be empty"
+  payload=$(_last_journal_event)
+  assert_not_null "$payload" "Journaled event payload should not be empty"
 
   local reason
   reason=$(echo "$payload" | jq -r '.Data.Reason' 2> /dev/null)
@@ -1186,49 +646,13 @@ function test_emit_player_left_payload_carries_reason() {
 function test_emit_player_left_payload_renders_missing_reason_as_json_null() {
   log_test_step "Testing: instance_player_left renders an absent Reason as JSON null"
 
-  if ! command -v socat > /dev/null 2>&1; then
-    skip_test "socat not available - skipping payload capture test"
-    return
-  fi
-
-  export config_event_socket_filenames=""
-  export config_event_socket_filename="kgsm.sock"
-  local socket_file="$KGSM_ROOT/kgsm.sock"
-  local capture="$KGSM_TEST_SANDBOX/player-left-no-reason-capture.json"
-  rm -f "$socket_file" "$capture"
-
-  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
-  local listener_pid=$!
-
-  local i=0
-  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-  local sock_ready="false"
-  [[ -S "$socket_file" ]] && sock_ready="true"
-  assert_true "$sock_ready" "socat listener should create the socket node"
-
-  _enable_socket_events
-
   # Reason positional (6th) left empty — the game's quit path logged nothing.
   "$EVENTS_MODULE" emit instance-player-left player-test-server \
     "" "Bob" "" "sess-key-1" "" > /dev/null 2>&1 || true
 
-  i=0
-  while [[ ! -s "$capture" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-
-  kill "$listener_pid" 2> /dev/null || true
-  wait "$listener_pid" 2> /dev/null || true
-  _disable_socket_events
-  rm -f "$socket_file"
-
   local payload
-  payload=$(cat "$capture" 2> /dev/null)
-  assert_not_null "$payload" "Captured event payload should not be empty"
+  payload=$(_last_journal_event)
+  assert_not_null "$payload" "Journaled event payload should not be empty"
 
   local reason_type
   reason_type=$(echo "$payload" | jq -r '.Data.Reason | type' 2> /dev/null)
@@ -1249,34 +673,6 @@ function test_emit_player_left_payload_renders_missing_reason_as_json_null() {
 function test_emit_config_changed_payload_carries_key_never_value() {
   log_test_step "Testing: instance_config_changed payload carries Key but never the value"
 
-  if ! command -v socat > /dev/null 2>&1; then
-    skip_test "socat not available - skipping payload capture test"
-    return
-  fi
-
-  # Deterministic socket path (don't depend on sandbox config defaults).
-  export config_event_socket_filenames=""
-  export config_event_socket_filename="kgsm.sock"
-  local socket_file="$KGSM_ROOT/kgsm.sock"
-  local capture="$KGSM_TEST_SANDBOX/config-changed-capture.json"
-  rm -f "$socket_file" "$capture"
-
-  # One-shot listener: accept a single connection, copy its bytes to the file.
-  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
-  local listener_pid=$!
-
-  # Bounded wait for the socket node to exist.
-  local i=0
-  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-  local sock_ready="false"
-  [[ -S "$socket_file" ]] && sock_ready="true"
-  assert_true "$sock_ready" "socat listener should create the socket node"
-
-  _enable_socket_events
-
   # Emit exactly as the config-set command layer does: instance, then the key.
   # The event interface itself takes ONLY instance + key — there is no value
   # parameter at all, so the value structurally cannot enter the payload. The
@@ -1287,22 +683,9 @@ function test_emit_config_changed_payload_carries_key_never_value() {
   "$EVENTS_MODULE" emit instance-config-changed config-test-server rcon_password \
     > /dev/null 2>&1 || true
 
-  # Bounded wait for the captured payload to land.
-  i=0
-  while [[ ! -s "$capture" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-
-  # Tear down the listener and restore transport config before asserting.
-  kill "$listener_pid" 2> /dev/null || true
-  wait "$listener_pid" 2> /dev/null || true
-  _disable_socket_events
-  rm -f "$socket_file"
-
   local payload
-  payload=$(cat "$capture" 2> /dev/null)
-  assert_not_null "$payload" "Captured event payload should not be empty"
+  payload=$(_last_journal_event)
+  assert_not_null "$payload" "Journaled event payload should not be empty"
 
   local event_type instance key
   event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)
@@ -1332,8 +715,8 @@ function test_emit_config_changed_payload_carries_key_never_value() {
 # The blueprint events are the only ones whose Data is keyed on BlueprintName
 # instead of InstanceName, and the only ones carrying real JSON booleans. Both
 # properties live in the _build_event_payload jq template, so they are proven
-# here against the actual payload captured off the socket, not by inspecting the
-# template. Also pins the two contracts the downstream audit row depends on: a
+# here against the actual payload read back off the journal, not by inspecting
+# the template. Also pins the two contracts the downstream audit row depends on: a
 # human's actor/origin survives the emit (a browser edit must not be attributed
 # to a service account), and the file CONTENT never appears in the payload.
 # =============================================================================
@@ -1341,50 +724,14 @@ function test_emit_config_changed_payload_carries_key_never_value() {
 function test_emit_blueprint_updated_payload_is_blueprint_scoped() {
   log_test_step "Testing: blueprint_updated payload keys Data on BlueprintName with real booleans"
 
-  if ! command -v socat > /dev/null 2>&1; then
-    skip_test "socat not available - skipping payload capture test"
-    return
-  fi
-
-  export config_event_socket_filenames=""
-  export config_event_socket_filename="kgsm.sock"
-  local socket_file="$KGSM_ROOT/kgsm.sock"
-  local capture="$KGSM_TEST_SANDBOX/blueprint-updated-capture.json"
-  rm -f "$socket_file" "$capture"
-
-  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
-  local listener_pid=$!
-
-  local i=0
-  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-  local sock_ready="false"
-  [[ -S "$socket_file" ]] && sock_ready="true"
-  assert_true "$sock_ready" "socat listener should create the socket node"
-
-  _enable_socket_events
-
   # Emit exactly as kgsm-lib does for a browser edit: the human's identity is
   # threaded through, NOT the hardcoded system stamp the watchdog uses.
   KGSM_EVENT_ACTOR="discord:123456789" KGSM_EVENT_ORIGIN="ui" \
     "$EVENTS_MODULE" emit blueprint-updated terraria user true native > /dev/null 2>&1 || true
 
-  i=0
-  while [[ ! -s "$capture" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-
-  kill "$listener_pid" 2> /dev/null || true
-  wait "$listener_pid" 2> /dev/null || true
-  _disable_socket_events
-  rm -f "$socket_file"
-
   local payload
-  payload=$(cat "$capture" 2> /dev/null)
-  assert_not_null "$payload" "Captured event payload should not be empty"
+  payload=$(_last_journal_event)
+  assert_not_null "$payload" "Journaled event payload should not be empty"
 
   local event_type name tier runtime
   event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)
@@ -1460,47 +807,14 @@ function test_emit_blueprint_updated_payload_is_blueprint_scoped() {
 function test_emit_blueprint_removed_payload_renders_false_and_null_honestly() {
   log_test_step "Testing: blueprint_removed carries boolean false; unknown runtime renders as null"
 
-  if ! command -v socat > /dev/null 2>&1; then
-    skip_test "socat not available - skipping payload capture test"
-    return
-  fi
-
-  export config_event_socket_filenames=""
-  export config_event_socket_filename="kgsm.sock"
-  local socket_file="$KGSM_ROOT/kgsm.sock"
-  local capture="$KGSM_TEST_SANDBOX/blueprint-removed-capture.json"
-  rm -f "$socket_file" "$capture"
-
-  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
-  local listener_pid=$!
-
-  local i=0
-  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-
-  _enable_socket_events
-
   # A custom blueprint with no shipped counterpart: deleting it removes the
   # blueprint from the host entirely, so nothing is reverted to.
   KGSM_EVENT_ACTOR="discord:123456789" KGSM_EVENT_ORIGIN="ui" \
     "$EVENTS_MODULE" emit blueprint-removed mycustomgame user false > /dev/null 2>&1 || true
 
-  i=0
-  while [[ ! -s "$capture" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-
-  kill "$listener_pid" 2> /dev/null || true
-  wait "$listener_pid" 2> /dev/null || true
-  _disable_socket_events
-  rm -f "$socket_file"
-
   local payload
-  payload=$(cat "$capture" 2> /dev/null)
-  assert_not_null "$payload" "Captured event payload should not be empty"
+  payload=$(_last_journal_event)
+  assert_not_null "$payload" "Journaled event payload should not be empty"
 
   local event_type name reverted reverted_type
   event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)
@@ -1527,46 +841,13 @@ function test_emit_blueprint_removed_payload_renders_false_and_null_honestly() {
 function test_emit_blueprint_created_payload_renders_unknown_runtime_as_null() {
   log_test_step "Testing: blueprint_created renders an omitted runtime as JSON null"
 
-  if ! command -v socat > /dev/null 2>&1; then
-    skip_test "socat not available - skipping payload capture test"
-    return
-  fi
-
-  export config_event_socket_filenames=""
-  export config_event_socket_filename="kgsm.sock"
-  local socket_file="$KGSM_ROOT/kgsm.sock"
-  local capture="$KGSM_TEST_SANDBOX/blueprint-created-capture.json"
-  rm -f "$socket_file" "$capture"
-
-  socat -u UNIX-LISTEN:"$socket_file",reuseaddr OPEN:"$capture",creat,trunc &
-  local listener_pid=$!
-
-  local i=0
-  while [[ ! -S "$socket_file" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-
-  _enable_socket_events
-
   # Runtime omitted: the emitter could not read one out of the file. KGSM must
   # report that as unknown, never guess a default.
   "$EVENTS_MODULE" emit blueprint-created mycustomgame user false > /dev/null 2>&1 || true
 
-  i=0
-  while [[ ! -s "$capture" && $i -lt 50 ]]; do
-    sleep 0.1
-    i=$((i + 1))
-  done
-
-  kill "$listener_pid" 2> /dev/null || true
-  wait "$listener_pid" 2> /dev/null || true
-  _disable_socket_events
-  rm -f "$socket_file"
-
   local payload
-  payload=$(cat "$capture" 2> /dev/null)
-  assert_not_null "$payload" "Captured event payload should not be empty"
+  payload=$(_last_journal_event)
+  assert_not_null "$payload" "Journaled event payload should not be empty"
 
   local event_type runtime_type overrides
   event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)

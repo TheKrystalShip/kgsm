@@ -723,11 +723,6 @@ function __logic_emit_event() {
   fi
 
   # shellcheck disable=SC2154
-  if [[ "${config_enable_socket_events:-false}" == "true" ]]; then
-    events.socket.sh emit "$payload" &
-  fi
-
-  # shellcheck disable=SC2154
   if [[ "${config_enable_webhook_events:-false}" == "true" ]]; then
     events.webhook.sh emit "$payload" &
   fi

@@ -72,7 +72,7 @@ The testing framework has its own substantial conventions (per-test setup/teardo
 
 ## Integration points
 
-UFW firewall rules (`enable_firewall_management`) and optional webhook/socket event transports (`commands/events.*.sh`). Events themselves are always emitted to the on-disk journal (`commands/events.journal.sh`, `docs/events.md`) — that is not optional. Log/port watchers live in `commands/watcher.*.sh`.
+UFW firewall rules (`enable_firewall_management`) and the optional webhook event transport (`commands/events.webhook.sh`). Events themselves are always appended to the on-disk journal (`commands/events.journal.sh`, `docs/events.md`) — that is the transport and the audit record, and it is not optional. Log/port watchers live in `commands/watcher.*.sh`.
 
 Native instances are supervised by the resident **kgsm-watchdog** daemon (cgroup-v2 spawn + crash-restart). `kgsm start/stop` route to it when present (`commands/handlers/watchdog.sh`), and `kgsm autostart enable|disable|status|list` controls boot auto-start via its persisted desired-state — the in-house replacement for systemd's `enable`/`WantedBy=`. systemd is no longer an instance lifecycle manager.
 

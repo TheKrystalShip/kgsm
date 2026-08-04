@@ -262,7 +262,7 @@ graph TD
 5. **Download**: The generated management script is called with `--download` to fetch game files via the override's `_download()` function.
 6. **Deploy**: `--deploy` moves files from the temp directory to the install directory via `_deploy()`.
 7. **Version record**: The resolved version string is persisted to the instance config.
-8. **Events**: Named events are emitted at each stage (`instance-installation-started`, `instance-downloaded`, `instance-installed`, etc.) for webhook or socket consumers.
+8. **Events**: Named events are emitted at each stage (`instance-installation-started`, `instance-downloaded`, `instance-installed`, etc.), appended to the event journal for any consumer tailing it.
 
 ---
 
@@ -525,4 +525,4 @@ KGSM integrates with external systems through dedicated sub-commands and optiona
 - **UFW**: Firewall rule management (`files.firewall.sh`, enabled via `config_enable_firewall_management`)
 - **Steam**: Game file downloading via SteamCMD (implemented in override `_download()` functions)
 - **Docker**: Container-based servers declare `runtime: container` and embed their Docker Compose under `container.compose` in the unified `.bp.yaml` blueprint
-- **Webhooks / Unix sockets**: Event delivery via `commands/events.webhook.sh` and `commands/events.socket.sh`
+- **Event journal**: every event is appended by `commands/events.journal.sh`; `commands/events.webhook.sh` POSTs an optional extra copy

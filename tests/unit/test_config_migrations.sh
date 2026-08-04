@@ -701,7 +701,8 @@ INI
   # switch invites an operator to set it and expect events to stop.
   assert_command_fails "grep -q 'enable_event_broadcasting' '$test_config'"
 
-  # The socket transport keys survive — they retire with the transport itself
+  # 006 leaves the socket keys alone; 007 is what retires them, together with
+  # the transport module itself
   assert_command_succeeds "grep -q '^enable_socket_events=true$' '$test_config'"
   assert_command_succeeds "grep -q '^enable_webhook_events=false$' '$test_config'"
   assert_command_succeeds "grep -q '^enable_command_shortcuts=false$' '$test_config'"
@@ -740,4 +741,117 @@ INI
   assert_command_succeeds "grep -q '^event_journal_retention_days=30$' '$test_config'"
   assert_equals "1" "$(grep -c '^event_journal_dir=' "$test_config")" \
     "event_journal_dir should appear exactly once"
+}
+
+# =============================================================================
+# TEST: Migration 007 - Drops the socket transport keys
+# =============================================================================
+
+function test_migration_007_drops_socket_keys() {
+  log_test_step "Testing migration 007 removes the socket transport keys from [events]"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v6_drop_socket.ini"
+  cat > "$test_config" << 'INI'
+config_schema_version=6
+
+[events]
+event_journal_dir=/var/lib/kgsm/events
+event_journal_retention_days=90
+
+# ENABLE SOCKET EVENTS
+# Should KGSM use Unix Domain Sockets for event broadcasting?
+# Default: false
+enable_socket_events=true
+
+# EVENT SOCKET NAMES
+# Which Unix Domain Sockets should KGSM deliver events to?
+# Default: the five ecosystem consumer sockets
+event_socket_filenames=/run/kgsm-api/kgsm-events.sock,/run/kgsm-bot/kgsm-events.sock
+
+enable_webhook_events=false
+
+[accessibility]
+enable_command_shortcuts=false
+INI
+
+  bash "$MIGRATION_DIR/007_v6_to_v7_drop_socket_transport.sh" "$test_config"
+  assert_equals "$?" "0" "Migration 007 should succeed"
+
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "7" "Schema version should be 7"
+
+  # Both keys are REMOVED, not commented out: a dead switch left in the file
+  # invites an operator to set it and expect delivery somewhere.
+  assert_command_fails "grep -q 'enable_socket_events' '$test_config'"
+  assert_command_fails "grep -q 'event_socket_filenames' '$test_config'"
+
+  # …and so are the comment blocks documenting them
+  assert_command_fails "grep -q 'ENABLE SOCKET EVENTS' '$test_config'"
+  assert_command_fails "grep -q 'EVENT SOCKET NAMES' '$test_config'"
+
+  # Everything else survives untouched — the journal keys, the webhook switch
+  # (an unrelated optional transport), and later sections
+  assert_command_succeeds "grep -q '^event_journal_dir=/var/lib/kgsm/events$' '$test_config'"
+  assert_command_succeeds "grep -q '^event_journal_retention_days=90$' '$test_config'"
+  assert_command_succeeds "grep -q '^enable_webhook_events=false$' '$test_config'"
+  assert_command_succeeds "grep -q '^enable_command_shortcuts=false$' '$test_config'"
+  assert_command_succeeds "grep -q '^\\[accessibility\\]$' '$test_config'"
+
+  assert_file_exists "${test_config}.pre-migration-v7.bak"
+}
+
+# =============================================================================
+# TEST: Migration 007 - Idempotency (socket keys already absent)
+# =============================================================================
+
+function test_migration_007_idempotent() {
+  log_test_step "Testing migration 007 idempotency"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v6_drop_socket_idempotent.ini"
+  cat > "$test_config" << 'INI'
+config_schema_version=6
+
+[events]
+event_journal_dir=/srv/kgsm-events
+enable_socket_events=true
+INI
+
+  bash "$MIGRATION_DIR/007_v6_to_v7_drop_socket_transport.sh" "$test_config"
+  assert_equals "$?" "0" "First run should succeed"
+
+  bash "$MIGRATION_DIR/007_v6_to_v7_drop_socket_transport.sh" "$test_config"
+  assert_equals "$?" "0" "Second run should succeed (idempotent)"
+
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "7" "Schema version should be 7"
+
+  assert_command_fails "grep -q 'enable_socket_events' '$test_config'"
+  assert_command_succeeds "grep -q '^event_journal_dir=/srv/kgsm-events$' '$test_config'"
+}
+
+# =============================================================================
+# TEST: Migration 007 - A hand-edited config with no comment blocks
+# =============================================================================
+
+function test_migration_007_handles_bare_keys() {
+  log_test_step "Testing migration 007 removes bare keys with no documenting comments"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v6_bare_socket_keys.ini"
+  cat > "$test_config" << 'INI'
+config_schema_version=6
+
+[events]
+enable_socket_events=true
+event_socket_filenames=kgsm.sock
+event_journal_dir=/var/lib/kgsm/events
+INI
+
+  bash "$MIGRATION_DIR/007_v6_to_v7_drop_socket_transport.sh" "$test_config"
+  assert_equals "$?" "0" "Migration 007 should succeed on a hand-edited layout"
+
+  assert_command_fails "grep -q 'enable_socket_events' '$test_config'"
+  assert_command_fails "grep -q 'event_socket_filenames' '$test_config'"
+  assert_command_succeeds "grep -q '^event_journal_dir=/var/lib/kgsm/events$' '$test_config'"
 }

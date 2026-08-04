@@ -51,6 +51,23 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Removed
+
+- **The Unix Domain Socket event transport is gone** — `commands/events.socket.sh`, the
+  `events socket` verb, `events test socket`, and both config keys (`enable_socket_events`,
+  `event_socket_filenames`). Config schema 7 (migration `007_v6_to_v7_drop_socket_transport.sh`)
+  removes the keys rather than commenting them out, so a dead switch cannot invite an operator to
+  set it and expect delivery somewhere.
+
+  Socket binding is exclusive, which is the whole reason the engine had to be configured with a
+  list of consumer paths at all: one socket, one reader, so every new consumer meant a new path in
+  KGSM's config. A journal segment is a plain file — any number of readers, no registration, no
+  coordination — so the fan-out has nothing left to buy. Measured on a live host with five
+  configured consumer sockets, none of which had a reader: an emit fell from **111ms to 76ms**.
+
+  The webhook transport is untouched. It delivers to remote endpoints a local consumer cannot tail,
+  and it never carried the consumer-registry problem.
+
 ### Changed
 
 - **Events are recorded in an append-only journal, and always emitted.** KGSM appends one JSON
@@ -58,15 +75,14 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   and holds no list of consumers: each one tails the journal at its own pace with its own cursor,
   so adding or removing a consumer needs no engine configuration. `enable_event_broadcasting` is
   removed — the journal is KGSM's audit record, and an audit trail that can be silently switched
-  off is worse than none. The socket and webhook transports stay, now purely additive copies.
+  off is worse than none. The webhook transport stays, as a purely additive copy.
   `events journal status|prune|verify` inspects and maintains it; `event_journal_retention_days`
   (default 90) bounds it, pruned by a user systemd timer that `deploy/setup.sh` installs.
   Config schema 6 (migration `006_v5_to_v6_event_journal.sh`).
 
 - **Emitting an event no longer re-executes `events.sh`.** The payload is built and written from
   inside the running KGSM process, so an emission costs one in-process append rather than a full
-  bash bootstrap per event: 110ms → 59ms with the socket transport still on, 13ms with the journal
-  alone. Payloads are written compact, since one event per line is the contract every consumer's
+  bash bootstrap per event: 110ms → 59ms, and 13ms once the journal was the only transport. Payloads are written compact, since one event per line is the contract every consumer's
   cursor depends on.
 
 - **Scheduled backups have their own cadence.** New instance config keys `backup_schedule`

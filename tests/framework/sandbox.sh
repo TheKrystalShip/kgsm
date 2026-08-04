@@ -214,13 +214,10 @@ log_console_enabled=false
 log_max_size_kb=1024
 
 [events]
-# Disable network-based event transports
-enable_socket_events=false
+# Disable the optional outbound transport — a test run must never POST synthetic
+# events to a real endpoint. The journal is unconditional and is redirected into
+# the sandbox below instead.
 enable_webhook_events=false
-# No default socket targets: config.default.ini lists the real ecosystem consumer
-# sockets, and a test run must never deliver synthetic events into live services.
-# A test that exercises socket delivery sets its own path.
-event_socket_filenames=
 
 EOF
 

@@ -54,7 +54,6 @@ grep jq wget unzip tar sed coreutils findutils steamcmd inotify-tools
 | Package     | Purpose             | Config Setting                    |
 | ----------- | ------------------- | --------------------------------- |
 | `ufw`   | Firewall management | `enable_firewall_management=true` |
-| `socat` | Optional socket event transport | `enable_socket_events=true` |
 
 > **Note:** If SteamCMD isn't in your package manager, [install manually](https://developer.valvesoftware.com/wiki/SteamCMD#Linux).
 

@@ -23,14 +23,15 @@ One event per line is the contract every consumer's cursor depends on, so payloa
 
 **The journal is the record; a consumer's database is an index.** A consumer that stores events into SQLite or Postgres to make them queryable holds a *derived* copy — one it can rebuild from these files, and one that is authoritative for nothing. Two rules follow. A consumer's own retention must never exceed `event_journal_retention_days`, or rebuilding it returns less than it already held. And a consumer that persists events must key them idempotently (delivery is at-least-once, below), so replaying a segment corrects the index instead of duplicating it.
 
-### Optional transports
+### The optional transport
 
-Two additional transports can be switched on. Both are **additive** — they deliver copies, and neither is load-bearing:
+One additional transport can be switched on. It is **additive** — it delivers a copy and is not load-bearing:
 
 | Transport | Protocol | Dependency | Use Case |
 |-----------|----------|------------|----------|
-| Unix Domain Socket | Local IPC | `socat` | Same-host daemons and bots |
 | HTTP Webhook | HTTP POST | `wget` | Remote services, cloud integrations |
+
+A local consumer needs none of this: it tails the journal directly.
 
 ### ⚠️ Important Note on Event Emission
 
@@ -158,8 +159,7 @@ events.sh <command> [arguments] [options]
 Commands:
   status                      Show comprehensive event system status
   journal <command>           Inspect and prune the event journal
-  test <transport>            Test event transports (all, socket, webhook)
-  socket <command>            Manage Unix Domain Socket transport
+  test <transport>            Test event transports (all, webhook)
   webhook <command>           Manage HTTP webhook transport
   emit <event-type> [params]  Emit a specific event with parameters
   help [command]              Show help information
@@ -187,18 +187,6 @@ segment, so one malformed line desynchronizes every reader past that point.
 of who reads the journal. A consumer absent longer than the retention window
 detects the gap and cold-starts. `deploy/setup.sh` installs a user systemd timer
 that runs `prune` daily.
-
-### `events.sh socket` — Unix Domain Socket transport
-
-```
-events.sh socket <command>
-
-Commands:
-  enable      Enable Unix Domain Socket event transport
-  disable     Disable Unix Domain Socket event transport
-  test        Test socket functionality
-  status      Show socket transport status
-```
 
 ### `events.sh webhook` — HTTP Webhook transport
 
@@ -281,19 +269,6 @@ All event settings live in the `[events]` section of `config.ini`.
 
 There is no key that disables emission.
 
-### Unix Domain Socket Transport
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `enable_socket_events` | bool | `false` | Enable Unix Domain Socket delivery |
-| `event_socket_filenames` | string | `kgsm.sock` | Comma-separated list of socket filenames created under `$KGSM_ROOT` |
-
-Multiple socket files are useful when multiple applications (e.g., a bot and a monitoring daemon) each own their own socket:
-
-```ini
-event_socket_filenames=kgsm.sock,monitoring.sock
-```
-
 ### HTTP Webhook Transport
 
 | Key | Type | Default | Description |
@@ -305,12 +280,6 @@ event_socket_filenames=kgsm.sock,monitoring.sock
 | `webhook_secret` | string | _(empty)_ | Optional HMAC-SHA256 signing secret. When set, requests include an `X-KGSM-Signature: sha256=<sig>` header |
 
 ### Quick-start examples
-
-**Enable socket transport:**
-
-```bash
-events.sh socket enable
-```
 
 **Enable webhook transport (interactive wizard):**
 
@@ -330,7 +299,7 @@ events.sh test all
 
 A consumer tails the journal and remembers where it stopped. Nothing needs to be
 registered with KGSM, and any number of readers can tail the same segments
-concurrently — unlike a socket, a file has no exclusive binding.
+concurrently — a file has no exclusive binding, so readers need no coordination.
 
 ### The cursor
 
@@ -404,65 +373,6 @@ def run(segment=None, offset=0):
             time.sleep(1)
 ```
 
-## 🔌 Socket Transport — Integration Guide
-
-The socket transport uses `socat` to connect to a pre-existing Unix Domain Socket and write the JSON payload. **Your application creates and owns the socket**; KGSM connects to it as a client.
-
-### Listening with socat
-
-```bash
-socat UNIX-LISTEN:$KGSM_ROOT/kgsm.sock,fork -
-```
-
-### Sample Client (Python)
-
-```python
-import socket
-import json
-import os
-
-SOCKET_PATH = "/path/to/kgsm.sock"
-
-def listen_for_events():
-    if os.path.exists(SOCKET_PATH):
-        os.unlink(SOCKET_PATH)
-
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-    sock.bind(SOCKET_PATH)
-    sock.listen(1)
-
-    print(f"Listening on {SOCKET_PATH}")
-
-    while True:
-        connection, _ = sock.accept()
-        try:
-            data = connection.recv(4096)
-            if data:
-                event = json.loads(data.decode("utf-8"))
-                process_event(event)
-        finally:
-            connection.close()
-
-def process_event(event):
-    event_type = event["EventType"]
-    data = event["Data"]
-
-    # Instance events key Data on InstanceName, blueprint events on
-    # BlueprintName — read the one the event type actually carries.
-    if event_type == "instance_started":
-        print(f"Server {data['InstanceName']} has started!")
-    elif event_type == "instance_stopped":
-        print(f"Server {data['InstanceName']} has stopped!")
-    elif event_type == "blueprint_updated":
-        print(f"Blueprint {data['BlueprintName']} changed — refresh your cache")
-```
-
-**Reliability tips:**
-- Recreate and re-bind the socket if it is deleted while your application is running.
-- Filter for only the event types your application cares about.
-- Always validate the JSON structure before accessing fields.
-- Do not assume `Data.InstanceName` exists — the blueprint events are blueprint-scoped and carry `Data.BlueprintName` instead.
-
 ## 🌐 Webhook Transport — Integration Guide
 
 When webhook delivery is enabled, KGSM sends an HTTP POST request with a `Content-Type: application/json` body to each configured URL. Requests are sent in parallel. Failed requests are retried with exponential backoff up to `webhook_retry_count` times.
@@ -502,7 +412,6 @@ events.sh status
 
 ```bash
 events.sh test all
-events.sh test socket
 events.sh test webhook
 ```
 
@@ -511,19 +420,18 @@ events.sh test webhook
 | Symptom | Check |
 |---------|-------|
 | No events in the journal | Check `kgsm events journal status` — an unwritable `event_journal_dir` is reported there |
-| Socket events missing | Confirm `enable_socket_events=true` and `socat` is installed |
-| Socket file not found | Your listener application must create the socket file first |
+| A consumer sees no events | Confirm the journal is growing (`events.sh journal status`); the consumer's cursor is its own business |
 | Webhook events missing | Confirm `enable_webhook_events=true`, `webhook_urls` is set, and `wget` is installed |
 | Webhook authentication errors | Confirm `webhook_secret` matches on both sides |
 
 ## 💡 Best Practices
 
-1. **Reconnection logic** — Socket client applications should recreate the socket and re-listen if the file is removed.
+1. **Idempotent handling** — Delivery is at-least-once, so key anything you persist by the event's own content and let a repeat be a no-op.
 2. **Selective handling** — Process only the event types relevant to your integration.
 3. **Payload validation** — Always validate the JSON structure before accessing fields.
 4. **Atomic handlers** — Avoid creating complex dependencies between event handlers.
 5. **Logging** — Record received events to aid troubleshooting.
-6. **Multiple sockets** — Use `event_socket_filenames` with a comma-separated list when multiple consumers need isolated sockets.
+6. **No registration** — A file has no exclusive binding, so any number of consumers tail the same segments concurrently. Nothing needs to be added to KGSM's config to add a reader.
 
 ---
 

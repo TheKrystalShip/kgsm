@@ -25,9 +25,8 @@ enable_firewall_management=false
 firewall_rules_dir=/etc/ufw/applications.d
 
 [events]
-enable_event_broadcasting=false
-enable_socket_events=false
-event_socket_filenames=kgsm.sock
+event_journal_dir=/var/lib/kgsm/events
+event_journal_retention_days=90
 enable_webhook_events=false
 webhook_urls=
 webhook_timeout_seconds=10
