@@ -1,19 +1,34 @@
 # 📡 KGSM Event System
 
-KGSM features a robust event broadcasting system that notifies external applications of game server lifecycle events in real-time. The system supports two independent transport mechanisms—**Unix Domain Sockets** and **HTTP Webhooks**—which can be enabled simultaneously. External applications (like [kgsm-bot](https://github.com/TheKrystalShip/kgsm-bot)) can consume these events to build monitoring dashboards, automated responses, or custom integrations without modifying KGSM's core.
+KGSM records every game-server lifecycle event in an append-only **journal** on disk. External applications (like [kgsm-bot](https://github.com/TheKrystalShip/kgsm-bot)) tail that journal to build monitoring dashboards, automated responses, or custom integrations without modifying KGSM's core.
 
 ## 🔌 How It Works
 
-When a KGSM operation completes (starting a server, creating a backup, installing an update, etc.), `core/events.sh` maps the operation's result code to a specific event type and calls `events.sh emit`. The emit command builds a JSON payload and dispatches it in parallel to every enabled transport.
+When a KGSM operation completes (starting a server, creating a backup, installing an update, etc.), `core/events.sh` maps the operation's result code to a specific event type and emits it in-process: the payload is built and appended to the journal without leaving the running KGSM process.
 
-### Transports at a Glance
+**KGSM appends; it does not deliver.** The engine holds no list of consumers and no delivery configuration. Each consumer tails the journal at its own pace, holding its own cursor, so adding or removing a consumer needs no change to KGSM.
+
+### The journal
+
+| Property | Value |
+|----------|-------|
+| Location | `event_journal_dir` (default `/var/lib/kgsm/events`) |
+| Format | Newline-delimited JSON — one event per line |
+| Segments | `YYYY-MM-DD.ndjson`, sorting lexically in chronological order |
+| Retention | `event_journal_retention_days` (default 90), pruned by `events journal prune` |
+
+One event per line is the contract every consumer's cursor depends on, so payloads are always written compact and never span lines.
+
+**Emission is unconditional.** There is deliberately no switch that disables it: the journal is KGSM's audit record, and an audit trail that can be silently switched off is worse than none at all.
+
+### Optional transports
+
+Two additional transports can be switched on. Both are **additive** — they deliver copies, and neither is load-bearing:
 
 | Transport | Protocol | Dependency | Use Case |
 |-----------|----------|------------|----------|
 | Unix Domain Socket | Local IPC | `socat` | Same-host daemons and bots |
 | HTTP Webhook | HTTP POST | `wget` | Remote services, cloud integrations |
-
-Both transports are independent. Enabling one does not affect the other.
 
 ### ⚠️ Important Note on Event Emission
 
@@ -140,6 +155,7 @@ events.sh <command> [arguments] [options]
 
 Commands:
   status                      Show comprehensive event system status
+  journal <command>           Inspect and prune the event journal
   test <transport>            Test event transports (all, socket, webhook)
   socket <command>            Manage Unix Domain Socket transport
   webhook <command>           Manage HTTP webhook transport
@@ -150,6 +166,25 @@ Options:
   -h, --help                  Display this help information
   --debug                     Enable debug output
 ```
+
+### `events.sh journal` — the event journal
+
+```
+events.sh journal <command>
+
+Commands:
+  status                      Show journal location, segments, event count and size
+  prune                       Delete segments past the retention window
+  verify                      Check every segment is well-formed NDJSON
+```
+
+`verify` matters more than it looks: a consumer's cursor is a byte offset into a
+segment, so one malformed line desynchronizes every reader past that point.
+
+`prune` is time-based only and never consults a consumer — KGSM holds no knowledge
+of who reads the journal. A consumer absent longer than the retention window
+detects the gap and cold-starts. `deploy/setup.sh` installs a user systemd timer
+that runs `prune` daily.
 
 ### `events.sh socket` — Unix Domain Socket transport
 
@@ -235,11 +270,14 @@ events.sh emit blueprint-removed terraria user true
 
 All event settings live in the `[events]` section of `config.ini`.
 
-### Master Switch
+### Journal
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `enable_event_broadcasting` | bool | `false` | Master switch — must be `true` for any events to be emitted |
+| `event_journal_dir` | string | `/var/lib/kgsm/events` | Where segments are appended. `~` expands to `$HOME` |
+| `event_journal_retention_days` | int | `90` | Days of segments to keep. Must be **≥** the retention of any index built from the journal |
+
+There is no key that disables emission.
 
 ### Unix Domain Socket Transport
 
@@ -284,6 +322,77 @@ events.sh webhook enable
 ```bash
 events.sh status
 events.sh test all
+```
+
+## 📖 Journal — Integration Guide
+
+A consumer tails the journal and remembers where it stopped. Nothing needs to be
+registered with KGSM, and any number of readers can tail the same segments
+concurrently — unlike a socket, a file has no exclusive binding.
+
+### The cursor
+
+A cursor is `(segment filename, byte offset)`. Persist it wherever the consumer
+already keeps state; if that is a database, write the cursor in the **same
+transaction** as whatever the event produced, and crash consistency comes free.
+
+### Reading
+
+1. Open the segment named by the cursor and `seek()` to its offset.
+2. Read whole lines; each is one complete JSON event. Update the offset only
+   after the event is durably handled.
+3. At EOF, if a lexically-greater segment exists, move to it — then re-check the
+   previous segment once, to catch a write that landed just after midnight.
+
+### Cold start and gaps
+
+A consumer with **no** cursor picks a start position deliberately:
+
+| Intent | Start at | Why |
+|--------|----------|-----|
+| Build an index of history | the oldest segment | it must replay to be complete |
+| React to what happens next | the end of the newest segment | replaying would re-fire stale reactions |
+
+If a saved cursor names a segment retention has already deleted, that is a real
+**gap**. Report it — never resume silently, and never present the resulting
+history as complete — then cold-start on the policy above.
+
+### Sample tailer (Python)
+
+```python
+import json, os, time
+
+JOURNAL = "/var/lib/kgsm/events"
+
+def segments():
+    return sorted(f for f in os.listdir(JOURNAL) if f.endswith(".ndjson"))
+
+def tail(segment, offset, handle):
+    path = os.path.join(JOURNAL, segment)
+    with open(path) as fh:
+        fh.seek(offset)
+        for line in fh:
+            if not line.endswith("\n"):
+                break          # a partial trailing write; re-read it next pass
+            handle(json.loads(line))
+            offset = fh.tell()
+    return offset
+
+def run(segment=None, offset=0):
+    while True:
+        available = segments()
+        if not available:
+            time.sleep(1)
+            continue
+        if segment is None or segment not in available:
+            segment, offset = available[-1], 0   # cold start at the tail
+        offset = tail(segment, offset, print)
+        later = [s for s in available if s > segment]
+        if later:
+            offset = tail(segment, offset, print)  # re-check before advancing
+            segment, offset = later[0], 0
+        else:
+            time.sleep(1)
 ```
 
 ## 🔌 Socket Transport — Integration Guide
@@ -392,7 +501,7 @@ events.sh test webhook
 
 | Symptom | Check |
 |---------|-------|
-| No events received | Verify `enable_event_broadcasting=true` in `config.ini` |
+| No events in the journal | Check `kgsm events journal status` — an unwritable `event_journal_dir` is reported there |
 | Socket events missing | Confirm `enable_socket_events=true` and `socat` is installed |
 | Socket file not found | Your listener application must create the socket file first |
 | Webhook events missing | Confirm `enable_webhook_events=true`, `webhook_urls` is set, and `wget` is installed |

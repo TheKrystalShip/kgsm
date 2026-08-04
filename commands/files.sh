@@ -208,7 +208,7 @@ function _cmd_create() {
   fi
 
   # Emit event
-  events.sh emit instance-files-created "${instance_name}"
+  __emit_event instance-files-created "${instance_name}"
 
   __print_success "All files and integrations created successfully"
   return 0
@@ -278,7 +278,7 @@ function _cmd_remove() {
   # for other modules to work during cleanup.
 
   # Emit event
-  events.sh emit instance-files-removed "${instance_name}"
+  __emit_event instance-files-removed "${instance_name}"
 
   __print_success "All files and integrations removed successfully"
   return 0

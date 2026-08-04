@@ -4,9 +4,9 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
-# Disabling SC2016:
-# jq syntax uses single quotes intentionally for variable interpolation
-# shellcheck disable=SC2016
+# Disabling SC2254:
+# Exit code variables are guaranteed to be numeric and safe as case patterns.
+# shellcheck disable=SC2254
 
 # shellcheck source=../core/bootstrap.sh
 source "$(dirname "$(readlink -f "$0")")/../core/bootstrap.sh"
@@ -35,6 +35,7 @@ ${UNDERLINE}Usage:${END}
 
 ${UNDERLINE}Commands:${END}
   status                      Show comprehensive event system status
+  journal <command>           Inspect and prune the event journal
   test <transport>            Test event transports (all, socket, webhook)
   socket <command>            Manage Unix Domain Socket transport
   webhook <command>           Manage HTTP webhook transport
@@ -260,7 +261,7 @@ function _cmd_test() {
       ;;
     all)
       # shellcheck disable=SC2154
-      local socket_enabled="$config_enable_event_broadcasting"
+      local socket_enabled="$config_enable_socket_events"
       # shellcheck disable=SC2154
       local webhook_enabled="$config_enable_webhook_events"
       local overall_result=0
@@ -330,258 +331,22 @@ function _cmd_webhook() {
   return $?
 }
 
-# Build JSON event payload
-# Args: $1 = event_type, $2... = parameters
-# Returns: echoes JSON payload or returns error code
-function _build_event_payload() {
-  local event_type="$1"
-  shift
-  local params=("$@")
-
-  # Get required parameters specification
-  local required_params=(${EVENT_CONFIGS[$event_type]})
-  local param_names=()
-
-  # Build parameter arrays for jq
-  for i in "${!required_params[@]}"; do
-    local param_name="${required_params[$i]}"
-    local param_value="${params[$i]:-}"
-
-    param_names+=("--arg" "$param_name" "$param_value")
-  done
-
-  # Resolve the actor (who triggered this event) for audit/correlation downstream.
-  # KGSM is a stateless, multi-entrypoint CLI: it cannot itself know the semantic
-  # principal, so the caller (bot/assistant/watchdog) supplies it via KGSM_EVENT_ACTOR.
-  # For a bare CLI invocation that sets nothing, fall back to the OS user — an honest
-  # "who ran this", never a fabricated identity.
-  local actor="${KGSM_EVENT_ACTOR:-}"
-  if [[ -z "$actor" ]]; then
-    actor="${SUDO_USER:-${USER:-}}"
-  fi
-  if [[ -z "$actor" ]]; then
-    actor="$(id -un 2>/dev/null || echo "system")"
-  fi
-
-  # Resolve the origin: the surface that drove this event
-  # (ui|assistant|discord|system|api), the companion to the actor for downstream
-  # audit/correlation. The caller (bot/assistant/watchdog/API) supplies it via
-  # KGSM_EVENT_ORIGIN. Unlike the actor there is NO honest fallback — a bare CLI
-  # invocation has no product surface — so an unset origin stays empty and is
-  # emitted as JSON null below, never a fabricated surface.
-  local origin="${KGSM_EVENT_ORIGIN:-}"
-
-  # Generate JSON payload
-  local jq_args=("${param_names[@]}"
-    --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-    --arg actor "$actor"
-    --arg origin "$origin"
-    --arg hostname "$(hostname 2>/dev/null || cat /etc/hostname 2>/dev/null || echo "${HOSTNAME:-localhost}")"
-    --arg kgsm_version "$KGSM_VERSION")
-
-  # Build data object based on event type
-  local data_object=""
-  case "$event_type" in
-    "$EVENT_INSTANCE_CREATED" | "$EVENT_INSTANCE_INSTALLATION_STARTED" | "$EVENT_INSTANCE_INSTALLATION_FINISHED" | "$EVENT_INSTANCE_INSTALLED")
-      data_object='{
-        InstanceName: $instance,
-        Blueprint: $blueprint
-      }'
-      ;;
-    "$EVENT_INSTANCE_VERSION_UPDATED")
-      data_object='{
-        InstanceName: $instance,
-        OldVersion: $old_version,
-        NewVersion: $new_version
-      }'
-      ;;
-    "$EVENT_INSTANCE_BACKUP_CREATED" | "$EVENT_INSTANCE_BACKUP_RESTORED")
-      data_object='{
-        InstanceName: $instance,
-        Source: $source,
-        Version: $version
-      }'
-      ;;
-    "$EVENT_INSTANCE_STARTED" | "$EVENT_INSTANCE_STOPPED" | "$EVENT_INSTANCE_RESTARTED")
-      data_object='{
-        InstanceName: $instance
-      }'
-      ;;
-    "$EVENT_INSTANCE_CONFIG_CHANGED")
-      # Key only — the value is deliberately never carried (instance config holds
-      # secrets like RCON/admin passwords). `$key` binds because `key` is the 2nd
-      # EVENT_CONFIGS param name (rendered via --arg in the loop above).
-      data_object='{
-        InstanceName: $instance,
-        Key: $key
-      }'
-      ;;
-    "$EVENT_INSTANCE_INPUT_SENT")
-      # The verbatim console command. Carried in full on purpose (unlike the
-      # config-changed key-only rule) so the audit records exactly what was run.
-      # `$command` binds because `command` is the 2nd EVENT_CONFIGS param name.
-      data_object='{
-        InstanceName: $instance,
-        Command: $command
-      }'
-      ;;
-    "$EVENT_INSTANCE_CRASHED" | "$EVENT_INSTANCE_FAILED")
-      data_object='{
-        InstanceName: $instance,
-        ExitCode: $exit_code,
-        Restarts: $restarts
-      }'
-      ;;
-    "$EVENT_INSTANCE_PORTS_OPENED" | "$EVENT_INSTANCE_PORTS_CLOSED" | "$EVENT_INSTANCE_UPNP_OPENED" | "$EVENT_INSTANCE_UPNP_CLOSED")
-      # The `ports` param is the UFW-format spec; surface it as the canonical
-      # structured array [{start,end,protocol}] — the same shape `instances
-      # info --json` emits — never the opaque UFW string. Converted here and
-      # passed via --argjson (the one non-string Data field in this builder).
-      # Shared by the firewall (instance_ports_*) and UPnP (instance_upnp_*)
-      # events — both carry the same structured Ports payload; the event TYPE
-      # distinguishes router NAT forward from host ufw rule downstream.
-      local ports_json
-      ports_json="$(__ufw_ports_to_json "${params[1]:-}")" || ports_json="[]"
-      jq_args+=(--argjson ports_json "$ports_json")
-      data_object='{
-        InstanceName: $instance,
-        Ports: $ports_json
-      }'
-      ;;
-    "$EVENT_INSTANCE_PLAYER_JOINED")
-      # player_id/player_name/player_addr are NULLABLE and are NOT in the
-      # EVENT_CONFIGS spec (only `instance` is required), so they are read
-      # positionally here rather than through param_names. An absent/empty
-      # value renders as JSON null — the same honest-null rule used for
-      # Origin — never an empty string posing as a real id/name/addr. The
-      # at-least-one-non-null guarantee belongs to the emitting shim, not to
-      # KGSM (a faithful emitter). session_key is the watchdog's per-session
-      # correlation token and is ALWAYS a non-empty string — never
-      # null-coalesced like the others.
-      jq_args+=(--arg player_id "${params[1]:-}"
-        --arg player_name "${params[2]:-}"
-        --arg player_addr "${params[3]:-}"
-        --arg session_key "${params[4]:-}")
-      data_object='{
-        InstanceName: $instance,
-        PlayerId: ($player_id | if . == "" then null else . end),
-        PlayerName: ($player_name | if . == "" then null else . end),
-        PlayerAddr: ($player_addr | if . == "" then null else . end),
-        SessionKey: $session_key
-      }'
-      ;;
-    "$EVENT_INSTANCE_PLAYER_LEFT")
-      # Same nullable/positional rules as the joined case above, plus `reason`
-      # (left-only): the disconnect reason the game logged, honest-null when
-      # the game's quit path doesn't log one.
-      jq_args+=(--arg player_id "${params[1]:-}"
-        --arg player_name "${params[2]:-}"
-        --arg player_addr "${params[3]:-}"
-        --arg session_key "${params[4]:-}"
-        --arg reason "${params[5]:-}")
-      data_object='{
-        InstanceName: $instance,
-        PlayerId: ($player_id | if . == "" then null else . end),
-        PlayerName: ($player_name | if . == "" then null else . end),
-        PlayerAddr: ($player_addr | if . == "" then null else . end),
-        SessionKey: $session_key,
-        Reason: ($reason | if . == "" then null else . end)
-      }'
-      ;;
-    "$EVENT_BLUEPRINT_CREATED" | "$EVENT_BLUEPRINT_UPDATED")
-      # The only Data shape keyed on a blueprint instead of an instance: the
-      # subject is a file in the blueprint catalog, and no instance is involved.
-      # `$blueprint`/`$tier`/`$overrides_system` bind from the EVENT_CONFIGS
-      # spec; `runtime` is read positionally because it is nullable — a
-      # blueprint can be saved in a state the parser cannot read a runtime out
-      # of, and an unknown runtime renders as JSON null rather than a guess.
-      # OverridesSystem is a real JSON boolean, not the string "true": anything
-      # other than true/false is a value the emitter could not determine, so it
-      # renders null on the same honest-null rule.
-      jq_args+=(--arg runtime "${params[3]:-}")
-      data_object='{
-        BlueprintName: $blueprint,
-        Tier: $tier,
-        OverridesSystem: ($overrides_system | if . == "true" then true elif . == "false" then false else null end),
-        Runtime: ($runtime | if . == "" then null else . end)
-      }'
-      ;;
-    "$EVENT_BLUEPRINT_REMOVED")
-      # No Runtime: the file is gone, so its runtime is no longer a fact this
-      # event can state. RevertedToSystem follows the same boolean/honest-null
-      # rule as OverridesSystem above — true when deleting the user file
-      # uncovers a shipped blueprint that takes over, false when the blueprint
-      # leaves the host entirely.
-      data_object='{
-        BlueprintName: $blueprint,
-        Tier: $tier,
-        RevertedToSystem: ($reverted_to_system | if . == "true" then true elif . == "false" then false else null end)
-      }'
-      ;;
-    *)
-      data_object='{
-        InstanceName: $instance
-      }'
-      ;;
-  esac
-
-  local payload
-  if ! payload=$(jq -n "${jq_args[@]}" "{
-    EventType: \"$event_type\",
-    Data: $data_object,
-    Timestamp: \$timestamp,
-    Actor: \$actor,
-    Origin: (\$origin | if . == \"\" then null else . end),
-    Hostname: \$hostname,
-    KGSMVersion: \$kgsm_version
-  }"); then
-    return $EC_EVENT_JSON_FAILED
-  fi
-
-  echo "$payload"
-  return $EC_SUCCESS
-}
-
-# Delegate event payload to all enabled transports
-# Args: $1 = payload (JSON string)
-# Returns: EC_SUCCESS on success, EC_EVENT_TRANSPORT_FAILED if all fail
-function _delegate_to_transports() {
-  local payload="$1"
-  local any_success=false
-
-  # Delegate to transport modules in parallel
-  # shellcheck disable=SC2154
-  if [[ "$config_enable_socket_events" == "true" ]]; then
-    events.socket.sh emit "$payload" &
-    any_success=true
-  fi
-
-  # shellcheck disable=SC2154
-  if [[ "$config_enable_webhook_events" == "true" ]]; then
-    events.webhook.sh emit "$payload" &
-    any_success=true
-  fi
-
-  # Wait for all background jobs
-  wait
-
-  if [[ "$any_success" != "true" ]]; then
-    return $EC_EVENT_TRANSPORT_FAILED
-  fi
-
-  return $EC_SUCCESS
+# Delegate to the journal module
+function _cmd_journal() {
+  events.journal.sh "$@"
+  return $?
 }
 
 # Emit event
+#
+# The I/O half of emission: help, then the diagnostics for whichever stage
+# __logic_emit_event reports as failed. The emission itself — validation,
+# payload, journal append, optional transports — lives in the handler so this
+# path and core/events.sh's exit-code dispatch share one implementation.
 function _cmd_emit() {
   local event_name="$1"
   shift
   local params=("$@")
-
-  # If event broadcasting is disabled, exit early
-  if [[ "${config_enable_event_broadcasting:-false}" != "true" ]]; then
-    return $EC_SUCCESS
-  fi
 
   if [[ -z "$event_name" ]]; then
     __print_error "Event type is required"
@@ -594,37 +359,36 @@ function _cmd_emit() {
     return $EC_SUCCESS
   fi
 
-  # Convert dash-separated name to underscore type
-  local event_type
-  if ! event_type=$(__logic_event_name_to_type "$event_name"); then
-    __print_error "Invalid event type: $event_name"
-    __print_info "Use '${self} help emit' to see all available event types"
-    return $EC_EVENT_TYPE_INVALID
-  fi
+  local _result=$EC_SUCCESS
+  __logic_emit_event "$event_name" "${params[@]}" || _result=$?
 
-  # Validate parameters
-  if ! __logic_validate_event_params "$event_type" "${params[@]}"; then
-    local param_spec
-    param_spec=$(__logic_get_event_param_spec "$event_type")
-    __print_error "Invalid parameters for event '$event_name'"
-    __print_info "Required parameters: $param_spec"
-    return $EC_EVENT_PARAMS_INVALID
-  fi
+  case $_result in
+    $EC_SUCCESS)
+      return $EC_SUCCESS
+      ;;
+    $EC_EVENT_TYPE_INVALID)
+      __print_error "Invalid event type: $event_name"
+      __print_info "Use '${self} help emit' to see all available event types"
+      ;;
+    $EC_EVENT_PARAMS_INVALID)
+      local param_spec
+      param_spec=$(__logic_get_event_param_spec \
+        "$(__logic_event_name_to_type "$event_name")")
+      __print_error "Invalid parameters for event '$event_name'"
+      __print_info "Required parameters: $param_spec"
+      ;;
+    $EC_EVENT_JSON_FAILED)
+      __print_error "Failed to generate event payload"
+      ;;
+    $EC_EVENT_JOURNAL_FAILED)
+      __print_error "Failed to append the event to the journal at $(__logic_journal_dir)"
+      ;;
+    *)
+      __print_error "Failed to emit event '$event_name'"
+      ;;
+  esac
 
-  # Build payload
-  local payload
-  if ! payload=$(_build_event_payload "$event_type" "${params[@]}"); then
-    __print_error "Failed to generate event payload"
-    return $EC_EVENT_JSON_FAILED
-  fi
-
-  # Delegate to transports
-  if ! _delegate_to_transports "$payload"; then
-    __print_error "Failed to emit event to any transport"
-    return $EC_EVENT_TRANSPORT_FAILED
-  fi
-
-  return $EC_SUCCESS
+  return $_result
 }
 
 # Help command
@@ -690,6 +454,10 @@ case "$command" in
     ;;
   webhook)
     _cmd_webhook "$@"
+    exit $?
+    ;;
+  journal)
+    _cmd_journal "$@"
     exit $?
     ;;
   emit)

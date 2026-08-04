@@ -158,6 +158,9 @@ export EC_CGROUP_UNSUPPORTED
 declare -g -r EC_FIREWALL_UNREACHABLE=49
 export EC_FIREWALL_UNREACHABLE
 
+declare -g -r EC_EVENT_JOURNAL_FAILED=50
+export EC_EVENT_JOURNAL_FAILED
+
 # =============================================================================
 # EVENT SUCCESS CODES (200-255 range)
 # =============================================================================
@@ -349,6 +352,7 @@ declare -A EXIT_CODES=(
    [$EC_EVENT_PARAMS_INVALID]="Invalid event parameters"
    [$EC_EVENT_TRANSPORT_FAILED]="Event transport failed"
    [$EC_EVENT_JSON_FAILED]="Failed to generate event JSON payload"
+   [$EC_EVENT_JOURNAL_FAILED]="Failed to append event to the journal"
    [$EC_WATCHER_TIMEOUT]="Watcher timed out waiting for instance readiness"
    [$EC_WATCHER_NO_STRATEGY]="No watcher strategy configured for instance"
    [$EC_WATCHER_PATTERN_NOT_FOUND]="Log pattern not found in instance configuration"

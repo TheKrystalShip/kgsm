@@ -10,7 +10,7 @@
 # - No arguments behavior
 # - status subcommand
 # - test subcommand (argument parsing)
-# - emit subcommand (argument parsing, broadcasting disabled/enabled paths)
+# - emit subcommand (argument parsing, journal append, diagnostics)
 # - socket/webhook delegation
 # - Invalid command/argument handling
 #
@@ -249,14 +249,16 @@ function test_test_invalid_transport_error_message() {
 }
 
 # =============================================================================
-# emit SUBCOMMAND TESTS (broadcasting disabled - default config)
+# emit SUBCOMMAND TESTS
+#
+# Emission is unconditional: there is no switch that turns the journal off, so
+# emit always validates and always writes. Every case below asserts a real
+# outcome rather than a config-gated early return.
 # =============================================================================
 
 function test_emit_help_flag() {
   log_test_step "Testing: emit --help shows emit help"
 
-  # When broadcasting is disabled, emit checks config first and returns EC_SUCCESS.
-  # We use 'help emit' to verify emit help is accessible.
   assert_command_succeeds "$MODULE help emit" \
     "help emit should succeed"
 
@@ -266,163 +268,127 @@ function test_emit_help_flag() {
     "emit help should list event types like instance-created"
 }
 
-function test_emit_broadcasting_disabled_succeeds() {
-  log_test_step "Testing: emit exits successfully when broadcasting is disabled"
+function test_emit_without_arguments_fails() {
+  log_test_step "Testing: emit without an event type fails"
 
-  # With default config (enable_event_broadcasting=false), emit always returns EC_SUCCESS
-  assert_command_succeeds "$MODULE emit" \
-    "emit should succeed when broadcasting is disabled (no-op)"
+  assert_command_fails "$MODULE emit" \
+    "emit should fail when no event type is given"
 }
 
-function test_emit_any_event_broadcasting_disabled_succeeds() {
-  log_test_step "Testing: emit with any event name succeeds when broadcasting disabled"
+function test_emit_valid_events_succeed() {
+  log_test_step "Testing: emit succeeds for valid event types"
 
   assert_command_succeeds "$MODULE emit instance-created myserver factorio" \
-    "emit instance-created should succeed when broadcasting is disabled"
+    "emit instance-created should succeed"
 
   assert_command_succeeds "$MODULE emit instance-started myserver" \
-    "emit instance-started should succeed when broadcasting is disabled"
+    "emit instance-started should succeed"
 
   assert_command_succeeds "$MODULE emit instance-version-updated myserver 1.0.0 2.0.0" \
-    "emit instance-version-updated should succeed when broadcasting is disabled"
+    "emit instance-version-updated should succeed"
 }
 
-function test_emit_invalid_event_broadcasting_disabled_succeeds() {
-  log_test_step "Testing: emit with invalid event name also succeeds when broadcasting disabled"
+function test_emit_invalid_event_type_fails() {
+  log_test_step "Testing: emit with an invalid event name fails"
 
-  # Broadcasting disabled → early return EC_SUCCESS, no validation occurs
-  assert_command_succeeds "$MODULE emit completely-invalid-event-type" \
-    "emit with invalid event type should succeed when broadcasting is disabled (early exit)"
+  assert_command_fails "$MODULE emit completely-invalid-event-type" \
+    "emit with an invalid event type should fail"
+}
+
+function test_emit_appends_one_line_to_the_journal() {
+  log_test_step "Testing: emit appends exactly one JSON line to the journal"
+
+  local journal_dir="${KGSM_ROOT}/events"
+  local segment="${journal_dir}/$(date -u +%Y-%m-%d).ndjson"
+
+  local before=0
+  if [[ -f "$segment" ]]; then
+    before=$(wc -l < "$segment")
+  fi
+
+  assert_command_succeeds "$MODULE emit instance-stopped journaltest" \
+    "emit should succeed"
+
+  assert_file_exists "$segment" \
+    "the journal segment should exist after emitting"
+
+  local after
+  after=$(wc -l < "$segment")
+  assert_equals "$((before + 1))" "$after" \
+    "emit should append exactly one line to the journal segment"
+
+  # One event per line is the contract every consumer's cursor depends on, so
+  # the last line must be complete, parseable JSON on its own.
+  local last_line
+  last_line=$(tail -n 1 "$segment")
+  assert_contains "$last_line" '"EventType":"instance_stopped"' \
+    "the appended line should carry the emitted event type"
+  assert_contains "$last_line" '"InstanceName":"journaltest"' \
+    "the appended line should carry the instance name"
+
+  if command -v jq > /dev/null 2>&1; then
+    assert_command_succeeds "printf '%s' '$last_line' | jq -e ." \
+      "the appended line should be valid standalone JSON"
+  fi
 }
 
 # =============================================================================
-# emit SUBCOMMAND TESTS (broadcasting enabled)
+# emit DIAGNOSTICS TESTS
 #
-# The module loads config from ${XDG_CONFIG_HOME:-~/.config}/kgsm/config.ini.
-# The test framework exports KGSM_BOOTSTRAP_LOADED and other guards that prevent
-# fresh config loading in subprocesses. We use a clean subshell that unsets
-# those guards and sets XDG_CONFIG_HOME to a temp config with broadcasting enabled.
+# Emission is unconditional, so these call the module directly — there is no
+# config state to force on first. They assert the operator-facing message for
+# each way an emit can be rejected, which the exit-code tests above do not.
 # =============================================================================
 
-# Create a temp XDG config dir with broadcasting enabled.
-# Echoes the temp dir path. Caller must remove it after use.
-function _create_broadcasting_config() {
-  local temp_dir
-  temp_dir=$(mktemp -d)
-  mkdir -p "$temp_dir/kgsm"
-
-  cat > "$temp_dir/kgsm/config.ini" << 'EOF'
-# Test config with event broadcasting enabled
-[events]
-enable_event_broadcasting=true
-enable_socket_events=false
-enable_webhook_events=false
-EOF
-
-  echo "$temp_dir"
-}
-
-# Run a command with broadcasting enabled, bypassing inherited module load guards.
-# Usage: _emit_with_broadcasting <module> [args...]
-# Returns: exit code of the module command
-function _emit_with_broadcasting() {
-  local module="$1"
-  shift
-  local args=("$@")
-
-  local temp_xdg
-  temp_xdg=$(_create_broadcasting_config)
-
-  local exit_code=0
-  local output
-  output=$(
-    # shellcheck disable=SC2030
-    unset KGSM_BOOTSTRAP_LOADED KGSM_CONFIG_LOADED KGSM_COMMON_LOADED KGSM_PATHS_LOADED
-    unset config_enable_event_broadcasting KGSM_EVENTS_LOADED KGSM_LOGGING_LOADED
-    export XDG_CONFIG_HOME="$temp_xdg"
-    "$module" emit "${args[@]}" 2>&1
-  ) || exit_code=$?
-
-  rm -rf "$temp_xdg"
-  echo "$output"
-  return $exit_code
-}
-
-function test_emit_enabled_no_event_type_fails() {
-  log_test_step "Testing: emit with no event type fails when broadcasting enabled"
-
-  _emit_with_broadcasting "$MODULE" >/dev/null 2>&1
-  local exit_code=$?
-
-  assert_not_equals "$exit_code" "0" \
-    "emit with no event type should fail when broadcasting is enabled"
-}
-
-function test_emit_enabled_no_event_shows_usage() {
-  log_test_step "Testing: emit with no event type shows usage when broadcasting enabled"
+function test_emit_no_event_type_shows_usage() {
+  log_test_step "Testing: emit with no event type shows usage"
 
   local output
-  output=$(_emit_with_broadcasting "$MODULE" 2>&1 || true)
+  output=$("$MODULE" emit 2>&1 || true)
 
   assert_contains "$output" "event-type" \
     "emit with no event type should show event-type in usage"
 }
 
-function test_emit_enabled_help_flag_shows_usage() {
-  log_test_step "Testing: emit --help shows usage when broadcasting enabled"
+function test_emit_help_flag_shows_usage() {
+  log_test_step "Testing: emit --help shows usage"
 
-  _emit_with_broadcasting "$MODULE" --help >/dev/null 2>&1
-  local exit_code=$?
-
-  assert_equals "$exit_code" "0" \
-    "emit --help should succeed when broadcasting is enabled"
+  assert_command_succeeds "$MODULE emit --help" \
+    "emit --help should succeed"
 
   local output
-  output=$(_emit_with_broadcasting "$MODULE" --help 2>&1)
+  output=$("$MODULE" emit --help 2>&1)
 
   assert_contains "$output" "event-type" \
-    "emit --help should show event-type usage when broadcasting is enabled"
+    "emit --help should show event-type usage"
 }
 
-function test_emit_enabled_invalid_event_fails() {
-  log_test_step "Testing: emit with invalid event type fails when broadcasting enabled"
-
-  _emit_with_broadcasting "$MODULE" invalid-event-type-xyz >/dev/null 2>&1
-  local exit_code=$?
-
-  assert_not_equals "$exit_code" "0" \
-    "emit with invalid event type should fail when broadcasting is enabled"
-}
-
-function test_emit_enabled_invalid_event_error_message() {
-  log_test_step "Testing: emit with invalid event type shows error message when broadcasting enabled"
+function test_emit_invalid_event_error_message() {
+  log_test_step "Testing: emit with an invalid event type explains why"
 
   local output
-  output=$(_emit_with_broadcasting "$MODULE" invalid-event-xyz 2>&1 || true)
+  output=$("$MODULE" emit invalid-event-xyz 2>&1 || true)
 
   assert_contains "$output" "Invalid event type" \
-    "emit with invalid event type should show 'Invalid event type' error"
+    "emit with an invalid event type should show 'Invalid event type'"
 }
 
-function test_emit_enabled_missing_params_fails() {
-  log_test_step "Testing: emit with missing required parameters fails when broadcasting enabled"
+function test_emit_missing_params_fails() {
+  log_test_step "Testing: emit with missing required parameters fails"
 
   # instance-created requires: instance blueprint (2 params)
-  _emit_with_broadcasting "$MODULE" instance-created >/dev/null 2>&1
-  local exit_code=$?
-
-  assert_not_equals "$exit_code" "0" \
-    "emit instance-created with no params should fail when broadcasting is enabled"
+  assert_command_fails "$MODULE emit instance-created" \
+    "emit instance-created with no params should fail"
 }
 
-function test_emit_enabled_missing_params_error_message() {
-  log_test_step "Testing: emit with missing parameters shows error message when broadcasting enabled"
+function test_emit_missing_params_error_message() {
+  log_test_step "Testing: emit with missing parameters explains why"
 
   local output
-  output=$(_emit_with_broadcasting "$MODULE" instance-created 2>&1 || true)
+  output=$("$MODULE" emit instance-created 2>&1 || true)
 
   assert_contains "$output" "parameters" \
-    "emit with missing params should show parameters error"
+    "emit with missing params should show a parameters error"
 }
 
 # =============================================================================

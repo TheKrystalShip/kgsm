@@ -187,7 +187,6 @@ function create_test_config() {
 # Disable system integrations that require root or external services
 enable_firewall_management=false
 enable_port_forwarding=false
-enable_event_broadcasting=false
 enable_command_shortcuts=false
 
 [instance_defaults]
@@ -215,10 +214,23 @@ log_console_enabled=false
 log_max_size_kb=1024
 
 [events]
-# Disable network-based event systems
-enable_event_broadcasting=false
+# Disable network-based event transports
 enable_socket_events=false
 enable_webhook_events=false
+# No default socket targets: config.default.ini lists the real ecosystem consumer
+# sockets, and a test run must never deliver synthetic events into live services.
+# A test that exercises socket delivery sets its own path.
+event_socket_filenames=
+
+EOF
+
+  # Event emission is unconditional, so the journal is redirected into the
+  # sandbox: a test run must never append to the host's real event journal.
+  # Written outside the quoted heredoc above because it interpolates the
+  # sandbox path.
+  cat >> "$config_file" << EOF
+event_journal_dir=${sandbox_path}/events
+event_journal_retention_days=90
 
 EOF
 

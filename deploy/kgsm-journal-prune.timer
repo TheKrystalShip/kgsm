@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily prune of KGSM event journal segments
+
+[Timer]
+# Daily is ample: segments are date-named, so a day's worth of events is the
+# smallest unit retention can ever remove.
+OnCalendar=daily
+Persistent=true
+RandomizedDelaySec=1h
+
+[Install]
+WantedBy=timers.target

@@ -156,7 +156,7 @@ function _uninstall() {
 
   __print_info "Uninstalling instance '$instance'..."
 
-  events.sh emit instance-uninstall-started "${instance}"
+  __emit_event instance-uninstall-started "${instance}"
 
   # Deregister from the watchdog BEFORE any files are removed: the daemon stops the
   # instance as part of deregistering, and a graceful stop needs the instance's FIFO and
@@ -175,7 +175,7 @@ function _uninstall() {
       2)
         __print_error "Instance '$instance' is still running; the watchdog could not stop it"
         __print_error "Uninstall aborted — stop it manually, then retry"
-        events.sh emit instance-uninstall-failed "${instance}"
+        __emit_event instance-uninstall-failed "${instance}"
         return $EC_ERROR
         ;;
       *)
@@ -194,7 +194,7 @@ function _uninstall() {
   directories.sh remove "$instance" || {
     exit_code=$?
     __print_error "Failed to remove instance directories"
-    events.sh emit instance-uninstall-failed "${instance}"
+    __emit_event instance-uninstall-failed "${instance}"
     return $exit_code
   }
 
@@ -217,11 +217,11 @@ function _uninstall() {
     __print_info "Backups for '$instance' kept in $backups_dir"
   fi
 
-  events.sh emit instance-uninstall-finished "${instance}"
+  __emit_event instance-uninstall-finished "${instance}"
 
   __print_success "Instance '${instance}' uninstalled"
 
-  events.sh emit instance-uninstalled "${instance}"
+  __emit_event instance-uninstalled "${instance}"
 
   return 0
 }

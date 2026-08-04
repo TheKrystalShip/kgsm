@@ -4,6 +4,10 @@
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.
 # shellcheck disable=SC2086
 
+# Disabling SC2016:
+# jq syntax uses single quotes intentionally for variable interpolation
+# shellcheck disable=SC2016
+
 # KGSM Events Logic Library
 #
 # This module provides pure logic functions for event validation and management.
@@ -372,6 +376,368 @@ function __logic_event_name_to_type() {
 }
 
 export -f __logic_event_name_to_type
+
+# Build JSON event payload
+# Args: $1 = event_type, $2... = parameters
+# Returns: echoes JSON payload or returns error code
+function __logic_build_event_payload() {
+  local event_type="$1"
+  shift
+  local params=("$@")
+
+  # Get required parameters specification
+  local required_params=(${EVENT_CONFIGS[$event_type]})
+  local param_names=()
+
+  # Build parameter arrays for jq
+  for i in "${!required_params[@]}"; do
+    local param_name="${required_params[$i]}"
+    local param_value="${params[$i]:-}"
+
+    param_names+=("--arg" "$param_name" "$param_value")
+  done
+
+  # Resolve the actor (who triggered this event) for audit/correlation downstream.
+  # KGSM is a stateless, multi-entrypoint CLI: it cannot itself know the semantic
+  # principal, so the caller (bot/assistant/watchdog) supplies it via KGSM_EVENT_ACTOR.
+  # For a bare CLI invocation that sets nothing, fall back to the OS user — an honest
+  # "who ran this", never a fabricated identity.
+  local actor="${KGSM_EVENT_ACTOR:-}"
+  if [[ -z "$actor" ]]; then
+    actor="${SUDO_USER:-${USER:-}}"
+  fi
+  if [[ -z "$actor" ]]; then
+    actor="$(id -un 2>/dev/null || echo "system")"
+  fi
+
+  # Resolve the origin: the surface that drove this event
+  # (ui|assistant|discord|system|api), the companion to the actor for downstream
+  # audit/correlation. The caller (bot/assistant/watchdog/API) supplies it via
+  # KGSM_EVENT_ORIGIN. Unlike the actor there is NO honest fallback — a bare CLI
+  # invocation has no product surface — so an unset origin stays empty and is
+  # emitted as JSON null below, never a fabricated surface.
+  local origin="${KGSM_EVENT_ORIGIN:-}"
+
+  # Generate JSON payload
+  local jq_args=("${param_names[@]}"
+    --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    --arg actor "$actor"
+    --arg origin "$origin"
+    --arg hostname "$(hostname 2>/dev/null || cat /etc/hostname 2>/dev/null || echo "${HOSTNAME:-localhost}")"
+    --arg kgsm_version "$KGSM_VERSION")
+
+  # Build data object based on event type
+  local data_object=""
+  case "$event_type" in
+    "$EVENT_INSTANCE_CREATED" | "$EVENT_INSTANCE_INSTALLATION_STARTED" | "$EVENT_INSTANCE_INSTALLATION_FINISHED" | "$EVENT_INSTANCE_INSTALLED")
+      data_object='{
+        InstanceName: $instance,
+        Blueprint: $blueprint
+      }'
+      ;;
+    "$EVENT_INSTANCE_VERSION_UPDATED")
+      data_object='{
+        InstanceName: $instance,
+        OldVersion: $old_version,
+        NewVersion: $new_version
+      }'
+      ;;
+    "$EVENT_INSTANCE_BACKUP_CREATED" | "$EVENT_INSTANCE_BACKUP_RESTORED")
+      data_object='{
+        InstanceName: $instance,
+        Source: $source,
+        Version: $version
+      }'
+      ;;
+    "$EVENT_INSTANCE_STARTED" | "$EVENT_INSTANCE_STOPPED" | "$EVENT_INSTANCE_RESTARTED")
+      data_object='{
+        InstanceName: $instance
+      }'
+      ;;
+    "$EVENT_INSTANCE_CONFIG_CHANGED")
+      # Key only — the value is deliberately never carried (instance config holds
+      # secrets like RCON/admin passwords). `$key` binds because `key` is the 2nd
+      # EVENT_CONFIGS param name (rendered via --arg in the loop above).
+      data_object='{
+        InstanceName: $instance,
+        Key: $key
+      }'
+      ;;
+    "$EVENT_INSTANCE_INPUT_SENT")
+      # The verbatim console command. Carried in full on purpose (unlike the
+      # config-changed key-only rule) so the audit records exactly what was run.
+      # `$command` binds because `command` is the 2nd EVENT_CONFIGS param name.
+      data_object='{
+        InstanceName: $instance,
+        Command: $command
+      }'
+      ;;
+    "$EVENT_INSTANCE_CRASHED" | "$EVENT_INSTANCE_FAILED")
+      data_object='{
+        InstanceName: $instance,
+        ExitCode: $exit_code,
+        Restarts: $restarts
+      }'
+      ;;
+    "$EVENT_INSTANCE_PORTS_OPENED" | "$EVENT_INSTANCE_PORTS_CLOSED" | "$EVENT_INSTANCE_UPNP_OPENED" | "$EVENT_INSTANCE_UPNP_CLOSED")
+      # The `ports` param is the UFW-format spec; surface it as the canonical
+      # structured array [{start,end,protocol}] — the same shape `instances
+      # info --json` emits — never the opaque UFW string. Converted here and
+      # passed via --argjson (the one non-string Data field in this builder).
+      # Shared by the firewall (instance_ports_*) and UPnP (instance_upnp_*)
+      # events — both carry the same structured Ports payload; the event TYPE
+      # distinguishes router NAT forward from host ufw rule downstream.
+      local ports_json
+      ports_json="$(__ufw_ports_to_json "${params[1]:-}")" || ports_json="[]"
+      jq_args+=(--argjson ports_json "$ports_json")
+      data_object='{
+        InstanceName: $instance,
+        Ports: $ports_json
+      }'
+      ;;
+    "$EVENT_INSTANCE_PLAYER_JOINED")
+      # player_id/player_name/player_addr are NULLABLE and are NOT in the
+      # EVENT_CONFIGS spec (only `instance` is required), so they are read
+      # positionally here rather than through param_names. An absent/empty
+      # value renders as JSON null — the same honest-null rule used for
+      # Origin — never an empty string posing as a real id/name/addr. The
+      # at-least-one-non-null guarantee belongs to the emitting shim, not to
+      # KGSM (a faithful emitter). session_key is the watchdog's per-session
+      # correlation token and is ALWAYS a non-empty string — never
+      # null-coalesced like the others.
+      jq_args+=(--arg player_id "${params[1]:-}"
+        --arg player_name "${params[2]:-}"
+        --arg player_addr "${params[3]:-}"
+        --arg session_key "${params[4]:-}")
+      data_object='{
+        InstanceName: $instance,
+        PlayerId: ($player_id | if . == "" then null else . end),
+        PlayerName: ($player_name | if . == "" then null else . end),
+        PlayerAddr: ($player_addr | if . == "" then null else . end),
+        SessionKey: $session_key
+      }'
+      ;;
+    "$EVENT_INSTANCE_PLAYER_LEFT")
+      # Same nullable/positional rules as the joined case above, plus `reason`
+      # (left-only): the disconnect reason the game logged, honest-null when
+      # the game's quit path doesn't log one.
+      jq_args+=(--arg player_id "${params[1]:-}"
+        --arg player_name "${params[2]:-}"
+        --arg player_addr "${params[3]:-}"
+        --arg session_key "${params[4]:-}"
+        --arg reason "${params[5]:-}")
+      data_object='{
+        InstanceName: $instance,
+        PlayerId: ($player_id | if . == "" then null else . end),
+        PlayerName: ($player_name | if . == "" then null else . end),
+        PlayerAddr: ($player_addr | if . == "" then null else . end),
+        SessionKey: $session_key,
+        Reason: ($reason | if . == "" then null else . end)
+      }'
+      ;;
+    "$EVENT_BLUEPRINT_CREATED" | "$EVENT_BLUEPRINT_UPDATED")
+      # The only Data shape keyed on a blueprint instead of an instance: the
+      # subject is a file in the blueprint catalog, and no instance is involved.
+      # `$blueprint`/`$tier`/`$overrides_system` bind from the EVENT_CONFIGS
+      # spec; `runtime` is read positionally because it is nullable — a
+      # blueprint can be saved in a state the parser cannot read a runtime out
+      # of, and an unknown runtime renders as JSON null rather than a guess.
+      # OverridesSystem is a real JSON boolean, not the string "true": anything
+      # other than true/false is a value the emitter could not determine, so it
+      # renders null on the same honest-null rule.
+      jq_args+=(--arg runtime "${params[3]:-}")
+      data_object='{
+        BlueprintName: $blueprint,
+        Tier: $tier,
+        OverridesSystem: ($overrides_system | if . == "true" then true elif . == "false" then false else null end),
+        Runtime: ($runtime | if . == "" then null else . end)
+      }'
+      ;;
+    "$EVENT_BLUEPRINT_REMOVED")
+      # No Runtime: the file is gone, so its runtime is no longer a fact this
+      # event can state. RevertedToSystem follows the same boolean/honest-null
+      # rule as OverridesSystem above — true when deleting the user file
+      # uncovers a shipped blueprint that takes over, false when the blueprint
+      # leaves the host entirely.
+      data_object='{
+        BlueprintName: $blueprint,
+        Tier: $tier,
+        RevertedToSystem: ($reverted_to_system | if . == "true" then true elif . == "false" then false else null end)
+      }'
+      ;;
+    *)
+      data_object='{
+        InstanceName: $instance
+      }'
+      ;;
+  esac
+
+  local payload
+  # -c keeps the payload on ONE line: the journal is newline-delimited JSON and
+  # every consumer's cursor is a byte offset into it, so a pretty-printed
+  # payload would break the one-event-per-line contract readers depend on.
+  if ! payload=$(jq -c -n "${jq_args[@]}" "{
+    EventType: \"$event_type\",
+    Data: $data_object,
+    Timestamp: \$timestamp,
+    Actor: \$actor,
+    Origin: (\$origin | if . == \"\" then null else . end),
+    Hostname: \$hostname,
+    KGSMVersion: \$kgsm_version
+  }"); then
+    return $EC_EVENT_JSON_FAILED
+  fi
+
+  echo "$payload"
+  return $EC_SUCCESS
+}
+
+export -f __logic_build_event_payload
+# ---------------------------------------------------------------------------
+# Journal
+#
+# The event journal is the durable transport: KGSM appends one JSON line per
+# event to a date-named segment and knows nothing about who reads it.
+# Consumers tail the segments at their own pace holding their own cursor, so
+# adding or removing a consumer needs no engine configuration.
+#
+# Emission is unconditional. The journal is the audit record, so there is no
+# switch that turns it off — a silently disabled audit trail is indisputably
+# worse than a noisy one.
+# ---------------------------------------------------------------------------
+
+# Default journal directory when config supplies none.
+declare -g -r KGSM_DEFAULT_EVENT_JOURNAL_DIR="/var/lib/kgsm/events"
+export KGSM_DEFAULT_EVENT_JOURNAL_DIR
+
+# Resolves the journal directory.
+# Returns: EC_SUCCESS and echoes the directory path, always.
+function __logic_journal_dir() {
+  # shellcheck disable=SC2154
+  if [[ -n "${config_event_journal_dir:-}" ]]; then
+    echo "${config_event_journal_dir/#\~/$HOME}"
+  else
+    echo "$KGSM_DEFAULT_EVENT_JOURNAL_DIR"
+  fi
+
+  return $EC_SUCCESS
+}
+
+export -f __logic_journal_dir
+
+# Resolves the path of the segment the current UTC day writes to.
+# Segments are date-named so rotation needs no writer coordination and
+# filenames sort lexically in chronological order.
+# Returns: EC_SUCCESS and echoes the segment path, always.
+function __logic_journal_segment() {
+  local _dir
+  _dir="$(__logic_journal_dir)"
+
+  echo "${_dir}/$(date -u +%Y-%m-%d).ndjson"
+  return $EC_SUCCESS
+}
+
+export -f __logic_journal_segment
+
+# Appends one event payload to the journal.
+#
+# The payload is written as a single line by a single printf: O_APPEND makes
+# one sub-PIPE_BUF write atomic, so concurrent KGSM invocations interleave
+# whole lines and never partial ones. No locking is needed or wanted.
+#
+# A payload spanning multiple lines would break the one-event-per-line
+# contract every consumer's cursor depends on, so it is rejected rather than
+# written malformed — never emit data a reader cannot trust.
+#
+# Args: $1 = payload (single-line JSON string)
+# Returns: EC_SUCCESS, EC_MISSING_ARG, or EC_EVENT_JOURNAL_FAILED
+function __logic_journal_append() {
+  local payload="$1"
+
+  if [[ -z "$payload" ]]; then
+    return $EC_MISSING_ARG
+  fi
+
+  if [[ "$payload" == *$'\n'* ]]; then
+    return $EC_EVENT_JOURNAL_FAILED
+  fi
+
+  local _dir
+  _dir="$(__logic_journal_dir)"
+
+  if [[ ! -d "$_dir" ]] && ! mkdir -p "$_dir" 2>/dev/null; then
+    return $EC_EVENT_JOURNAL_FAILED
+  fi
+
+  local _segment
+  _segment="$(__logic_journal_segment)"
+
+  if ! printf '%s\n' "$payload" >> "$_segment" 2>/dev/null; then
+    return $EC_EVENT_JOURNAL_FAILED
+  fi
+
+  return $EC_SUCCESS
+}
+
+export -f __logic_journal_append
+
+# Emits one event: validate, build the payload, append it to the journal, then
+# hand the same payload to any optional transport that is switched on.
+#
+# The journal append is the emission — its failure is the function's failure.
+# Optional transports are best-effort by design: a webhook endpoint being down
+# is that endpoint's problem, never a reason to fail the operation that emitted
+# the event.
+#
+# This is the single emit implementation. `events.sh emit` and the exit-code
+# dispatch in core/events.sh both route here, so the wire format has exactly
+# one definition.
+#
+# Args: $1 = event_name (dash- or underscore-separated), $2... = parameters
+# Returns: EC_SUCCESS, or the failing stage's code
+function __logic_emit_event() {
+  local event_name="$1"
+  shift
+  local params=("$@")
+
+  if [[ -z "$event_name" ]]; then
+    return $EC_MISSING_ARG
+  fi
+
+  local event_type
+  if ! event_type=$(__logic_event_name_to_type "$event_name"); then
+    return $EC_EVENT_TYPE_INVALID
+  fi
+
+  if ! __logic_validate_event_params "$event_type" "${params[@]}"; then
+    return $EC_EVENT_PARAMS_INVALID
+  fi
+
+  local payload
+  if ! payload=$(__logic_build_event_payload "$event_type" "${params[@]}"); then
+    return $EC_EVENT_JSON_FAILED
+  fi
+
+  if ! __logic_journal_append "$payload"; then
+    return $EC_EVENT_JOURNAL_FAILED
+  fi
+
+  # shellcheck disable=SC2154
+  if [[ "${config_enable_socket_events:-false}" == "true" ]]; then
+    events.socket.sh emit "$payload" &
+  fi
+
+  # shellcheck disable=SC2154
+  if [[ "${config_enable_webhook_events:-false}" == "true" ]]; then
+    events.webhook.sh emit "$payload" &
+  fi
+
+  wait
+
+  return $EC_SUCCESS
+}
+
+export -f __logic_emit_event
 
 # Mark module as loaded
 declare -g KGSM_LOGIC_EVENTS_LOADED=1

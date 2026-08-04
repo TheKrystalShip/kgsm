@@ -53,6 +53,22 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Changed
 
+- **Events are recorded in an append-only journal, and always emitted.** KGSM appends one JSON
+  line per event to a date-named segment under `event_journal_dir` (default `/var/lib/kgsm/events`)
+  and holds no list of consumers: each one tails the journal at its own pace with its own cursor,
+  so adding or removing a consumer needs no engine configuration. `enable_event_broadcasting` is
+  removed — the journal is KGSM's audit record, and an audit trail that can be silently switched
+  off is worse than none. The socket and webhook transports stay, now purely additive copies.
+  `events journal status|prune|verify` inspects and maintains it; `event_journal_retention_days`
+  (default 90) bounds it, pruned by a user systemd timer that `deploy/setup.sh` installs.
+  Config schema 6 (migration `006_v5_to_v6_event_journal.sh`).
+
+- **Emitting an event no longer re-executes `events.sh`.** The payload is built and written from
+  inside the running KGSM process, so an emission costs one in-process append rather than a full
+  bash bootstrap per event: 110ms → 59ms with the socket transport still on, 13ms with the journal
+  alone. Payloads are written compact, since one event per line is the contract every consumer's
+  cursor depends on.
+
 - **Scheduled backups have their own cadence.** New instance config keys `backup_schedule`
   (off | daily | weekly | 6h), `backup_time` and `backup_day` drive a backup schedule that is
   independent of `scheduled_restart`; `auto_backup_on_restart` is removed. A backup is taken

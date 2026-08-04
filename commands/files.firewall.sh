@@ -163,7 +163,7 @@ function _cmd_enable() {
       local _ports
       _ports=$(__get_config_value "$instance_config_file" "ports" 2> /dev/null)
       if [[ -n "$_ports" ]]; then
-        events.sh emit instance-ports-opened "$instance_name" "$_ports"
+        __emit_event instance-ports-opened "$instance_name" "$_ports"
       fi
       return 0
       ;;
@@ -253,7 +253,7 @@ function _cmd_disable() {
       local _ports
       _ports=$(__get_config_value "$instance_config_file" "ports" 2> /dev/null)
       if [[ -n "$_ports" ]]; then
-        events.sh emit instance-ports-closed "$instance_name" "$_ports"
+        __emit_event instance-ports-closed "$instance_name" "$_ports"
       fi
       return 0
       ;;

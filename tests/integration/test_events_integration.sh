@@ -10,8 +10,8 @@
 # - events.sh status aggregates output from both socket and webhook transports
 # - events.sh delegates socket/webhook sub-commands to the transport modules
 # - events.sh test command routes to the correct transport
-# - events.sh emit with broadcasting disabled always succeeds
-# - events.sh emit with broadcasting enabled validates event type
+# - events.sh emit validates the event type unconditionally
+# - events.sh emit appends to the journal
 # - events.sh emit with valid event + no transports fails at delivery
 # - Socket transport enable/disable cycle reflects in config and status
 # - Webhook transport enable/disable cycle reflects in config and status
@@ -36,14 +36,6 @@ readonly WEBHOOK_MODULE="$KGSM_ROOT/commands/events.webhook.sh"
 # Subprocess commands inherit these exported variables (KGSM_BOOTSTRAP_LOADED is
 # set, so bootstrap skips config re-load and uses the inherited config_* values).
 # We can therefore control subprocess behavior by exporting config_* variables.
-
-function _enable_broadcasting() {
-  export config_enable_event_broadcasting="true"
-}
-
-function _disable_broadcasting() {
-  export config_enable_event_broadcasting="false"
-}
 
 function _enable_socket_events() {
   export config_enable_socket_events="true"
@@ -185,7 +177,6 @@ function test_test_all_fails_with_no_transports() {
   log_test_step "Testing: events.sh test all fails when no transports are enabled"
 
   # Ensure both transports are disabled (default state in sandbox)
-  _disable_broadcasting
   _disable_socket_events
   _disable_webhook_events
 
@@ -236,54 +227,48 @@ function test_test_missing_transport_fails() {
 }
 
 # =============================================================================
-# TEST 7: events.sh emit with broadcasting disabled always succeeds
-# When config_enable_event_broadcasting=false, emit exits 0 unconditionally.
+# TEST 7: events.sh emit always validates
+# Emission is unconditional, so there is no configuration under which an
+# invalid event name is accepted.
 # =============================================================================
 
-function test_emit_with_broadcasting_disabled_returns_success() {
-  log_test_step "Testing: events.sh emit returns success when broadcasting is disabled"
-
-  _disable_broadcasting
+function test_emit_always_validates_the_event_name() {
+  log_test_step "Testing: events.sh emit validates the event name unconditionally"
 
   assert_command_succeeds "$EVENTS_MODULE emit instance-created test-server factorio" \
-    "emit should succeed when broadcasting is disabled"
+    "emit should succeed for a valid event"
 
-  # Even with invalid event name, should succeed (disabled = early return)
-  assert_command_succeeds "$EVENTS_MODULE emit completely-invalid-event-xyz" \
-    "emit with invalid event should succeed when broadcasting is disabled"
+  assert_command_fails "$EVENTS_MODULE emit completely-invalid-event-xyz" \
+    "emit should fail for an invalid event name"
 }
 
 # =============================================================================
-# TEST 8: events.sh emit without arguments fails when broadcasting is enabled
-# When broadcasting is enabled, missing event type must be rejected.
-# When disabled, emit returns EC_SUCCESS immediately (even with no args).
+# TEST 8: events.sh emit without arguments fails
+# A missing event type is always rejected.
 # =============================================================================
 
 function test_emit_no_arguments_fails() {
-  log_test_step "Testing: events.sh emit with no arguments fails when broadcasting is enabled"
+  log_test_step "Testing: events.sh emit with no arguments fails"
 
-  _enable_broadcasting
   _disable_socket_events
   _disable_webhook_events
 
   assert_command_fails "$EVENTS_MODULE emit" \
-    "events.sh emit without arguments should fail when broadcasting is enabled"
+    "events.sh emit without arguments should fail"
 
-  _disable_broadcasting
 }
 
 # =============================================================================
-# TEST 9: events.sh emit invalid event type when broadcasting enabled fails
-# When broadcasting is enabled, invalid event names must be rejected.
+# TEST 9: events.sh emit with an invalid event type fails
+# Invalid event names are always rejected.
 # =============================================================================
 
 function test_emit_invalid_event_when_enabled_fails() {
-  log_test_step "Testing: events.sh emit with invalid event type fails when broadcasting is enabled"
+  log_test_step "Testing: events.sh emit with an invalid event type fails"
 
-  _enable_broadcasting
 
   assert_command_fails "$EVENTS_MODULE emit completely-invalid-event-xyz" \
-    "emit with invalid event type should fail when broadcasting is enabled"
+    "emit with an invalid event type should fail"
 
   local output
   output=$("$EVENTS_MODULE" emit completely-invalid-event-xyz 2>&1 || true)
@@ -291,25 +276,28 @@ function test_emit_invalid_event_when_enabled_fails() {
   assert_contains "$output" "Invalid event type" \
     "Should report invalid event type"
 
-  _disable_broadcasting
 }
 
 # =============================================================================
-# TEST 10: events.sh emit valid event when broadcasting enabled but no transports
-# When enabled and event is valid but no transports are configured, delivery fails.
+# TEST 10: events.sh emit succeeds with no optional transport configured
+# The journal is the transport, so a valid event is always delivered. Socket
+# and webhook are additive: switching both off removes nothing load-bearing.
 # =============================================================================
 
-function test_emit_valid_event_no_transports_fails() {
-  log_test_step "Testing: events.sh emit valid event fails when no transports are configured"
+function test_emit_valid_event_succeeds_without_optional_transports() {
+  log_test_step "Testing: events.sh emit succeeds when only the journal receives it"
 
-  _enable_broadcasting
   _disable_socket_events
   _disable_webhook_events
 
-  assert_command_fails "$EVENTS_MODULE emit instance-created test-server factorio" \
-    "emit should fail when no transports are configured"
+  assert_command_succeeds "$EVENTS_MODULE emit instance-created test-server factorio" \
+    "emit should succeed when the journal is the only transport"
 
-  _disable_broadcasting
+  local segment="${KGSM_ROOT}/events/$(date -u +%Y-%m-%d).ndjson"
+  assert_file_exists "$segment" \
+    "the journal segment should exist after emitting"
+  assert_file_contains "$segment" '"EventType":"instance_created"' \
+    "the journal should carry the emitted event"
 }
 
 # =============================================================================
@@ -544,7 +532,6 @@ function test_events_webhook_help_delegation() {
 function test_test_socket_routes_to_socket_module() {
   log_test_step "Testing: events.sh test socket routes to events.socket.sh test"
 
-  _disable_broadcasting
 
   assert_command_fails "$EVENTS_MODULE test socket" \
     "events.sh test socket should fail when socket transport is disabled"
@@ -635,7 +622,6 @@ function test_emit_payload_includes_actor() {
   [[ -S "$socket_file" ]] && sock_ready="true"
   assert_true "$sock_ready" "socat listener should create the socket node"
 
-  _enable_broadcasting
   _enable_socket_events
 
   # Emit a real lifecycle event with an explicit actor supplied via the env var.
@@ -652,7 +638,6 @@ function test_emit_payload_includes_actor() {
   kill "$listener_pid" 2> /dev/null || true
   wait "$listener_pid" 2> /dev/null || true
   _disable_socket_events
-  _disable_broadcasting
   rm -f "$socket_file"
 
   local payload
@@ -718,7 +703,6 @@ function test_emit_payload_honors_event_origin() {
   [[ -S "$socket_file" ]] && sock_ready="true"
   assert_true "$sock_ready" "socat listener should create the socket node"
 
-  _enable_broadcasting
   _enable_socket_events
 
   # Emit with both provenance fields supplied via env vars.
@@ -736,7 +720,6 @@ function test_emit_payload_honors_event_origin() {
   kill "$listener_pid" 2> /dev/null || true
   wait "$listener_pid" 2> /dev/null || true
   _disable_socket_events
-  _disable_broadcasting
   rm -f "$socket_file"
 
   local payload
@@ -789,7 +772,6 @@ function test_emit_crashed_payload_carries_fields_and_system_provenance() {
   [[ -S "$socket_file" ]] && sock_ready="true"
   assert_true "$sock_ready" "socat listener should create the socket node"
 
-  _enable_broadcasting
   _enable_socket_events
 
   # Emit the crash event exactly as the watchdog does: actor+origin=system, with the
@@ -808,7 +790,6 @@ function test_emit_crashed_payload_carries_fields_and_system_provenance() {
   kill "$listener_pid" 2> /dev/null || true
   wait "$listener_pid" 2> /dev/null || true
   _disable_socket_events
-  _disable_broadcasting
   rm -f "$socket_file"
 
   local payload
@@ -871,7 +852,6 @@ function test_emit_ports_opened_payload_carries_structured_ports() {
   [[ -S "$socket_file" ]] && sock_ready="true"
   assert_true "$sock_ready" "socat listener should create the socket node"
 
-  _enable_broadcasting
   _enable_socket_events
 
   # Emit exactly as the firewall command layer does: the instance, then the
@@ -890,7 +870,6 @@ function test_emit_ports_opened_payload_carries_structured_ports() {
   kill "$listener_pid" 2> /dev/null || true
   wait "$listener_pid" 2> /dev/null || true
   _disable_socket_events
-  _disable_broadcasting
   rm -f "$socket_file"
 
   local payload
@@ -958,7 +937,6 @@ function test_emit_player_joined_payload_carries_id_and_name() {
   [[ -S "$socket_file" ]] && sock_ready="true"
   assert_true "$sock_ready" "socat listener should create the socket node"
 
-  _enable_broadcasting
   _enable_socket_events
 
   # Emit exactly as the watchdog forwarder does: instance, player_id, player_name
@@ -977,7 +955,6 @@ function test_emit_player_joined_payload_carries_id_and_name() {
   kill "$listener_pid" 2> /dev/null || true
   wait "$listener_pid" 2> /dev/null || true
   _disable_socket_events
-  _disable_broadcasting
   rm -f "$socket_file"
 
   local payload
@@ -1036,7 +1013,6 @@ function test_emit_player_left_payload_renders_missing_id_as_json_null() {
   [[ -S "$socket_file" ]] && sock_ready="true"
   assert_true "$sock_ready" "socat listener should create the socket node"
 
-  _enable_broadcasting
   _enable_socket_events
 
   # Only a name is known: pass an EMPTY player_id positional, then the name. The
@@ -1055,7 +1031,6 @@ function test_emit_player_left_payload_renders_missing_id_as_json_null() {
   kill "$listener_pid" 2> /dev/null || true
   wait "$listener_pid" 2> /dev/null || true
   _disable_socket_events
-  _disable_broadcasting
   rm -f "$socket_file"
 
   local payload
@@ -1114,7 +1089,6 @@ function test_emit_player_joined_payload_carries_addr_and_session_key() {
   [[ -S "$socket_file" ]] && sock_ready="true"
   assert_true "$sock_ready" "socat listener should create the socket node"
 
-  _enable_broadcasting
   _enable_socket_events
 
   # No real network address (empty addr positional), only an opaque session
@@ -1133,7 +1107,6 @@ function test_emit_player_joined_payload_carries_addr_and_session_key() {
   kill "$listener_pid" 2> /dev/null || true
   wait "$listener_pid" 2> /dev/null || true
   _disable_socket_events
-  _disable_broadcasting
   rm -f "$socket_file"
 
   local payload
@@ -1182,7 +1155,6 @@ function test_emit_player_left_payload_carries_reason() {
   [[ -S "$socket_file" ]] && sock_ready="true"
   assert_true "$sock_ready" "socat listener should create the socket node"
 
-  _enable_broadcasting
   _enable_socket_events
 
   # Params: instance, player_id, player_name, player_addr, session_key, reason.
@@ -1198,7 +1170,6 @@ function test_emit_player_left_payload_carries_reason() {
   kill "$listener_pid" 2> /dev/null || true
   wait "$listener_pid" 2> /dev/null || true
   _disable_socket_events
-  _disable_broadcasting
   rm -f "$socket_file"
 
   local payload
@@ -1238,7 +1209,6 @@ function test_emit_player_left_payload_renders_missing_reason_as_json_null() {
   [[ -S "$socket_file" ]] && sock_ready="true"
   assert_true "$sock_ready" "socat listener should create the socket node"
 
-  _enable_broadcasting
   _enable_socket_events
 
   # Reason positional (6th) left empty — the game's quit path logged nothing.
@@ -1254,7 +1224,6 @@ function test_emit_player_left_payload_renders_missing_reason_as_json_null() {
   kill "$listener_pid" 2> /dev/null || true
   wait "$listener_pid" 2> /dev/null || true
   _disable_socket_events
-  _disable_broadcasting
   rm -f "$socket_file"
 
   local payload
@@ -1306,7 +1275,6 @@ function test_emit_config_changed_payload_carries_key_never_value() {
   [[ -S "$socket_file" ]] && sock_ready="true"
   assert_true "$sock_ready" "socat listener should create the socket node"
 
-  _enable_broadcasting
   _enable_socket_events
 
   # Emit exactly as the config-set command layer does: instance, then the key.
@@ -1330,7 +1298,6 @@ function test_emit_config_changed_payload_carries_key_never_value() {
   kill "$listener_pid" 2> /dev/null || true
   wait "$listener_pid" 2> /dev/null || true
   _disable_socket_events
-  _disable_broadcasting
   rm -f "$socket_file"
 
   local payload
@@ -1397,7 +1364,6 @@ function test_emit_blueprint_updated_payload_is_blueprint_scoped() {
   [[ -S "$socket_file" ]] && sock_ready="true"
   assert_true "$sock_ready" "socat listener should create the socket node"
 
-  _enable_broadcasting
   _enable_socket_events
 
   # Emit exactly as kgsm-lib does for a browser edit: the human's identity is
@@ -1414,7 +1380,6 @@ function test_emit_blueprint_updated_payload_is_blueprint_scoped() {
   kill "$listener_pid" 2> /dev/null || true
   wait "$listener_pid" 2> /dev/null || true
   _disable_socket_events
-  _disable_broadcasting
   rm -f "$socket_file"
 
   local payload
@@ -1515,7 +1480,6 @@ function test_emit_blueprint_removed_payload_renders_false_and_null_honestly() {
     i=$((i + 1))
   done
 
-  _enable_broadcasting
   _enable_socket_events
 
   # A custom blueprint with no shipped counterpart: deleting it removes the
@@ -1532,7 +1496,6 @@ function test_emit_blueprint_removed_payload_renders_false_and_null_honestly() {
   kill "$listener_pid" 2> /dev/null || true
   wait "$listener_pid" 2> /dev/null || true
   _disable_socket_events
-  _disable_broadcasting
   rm -f "$socket_file"
 
   local payload
@@ -1584,7 +1547,6 @@ function test_emit_blueprint_created_payload_renders_unknown_runtime_as_null() {
     i=$((i + 1))
   done
 
-  _enable_broadcasting
   _enable_socket_events
 
   # Runtime omitted: the emitter could not read one out of the file. KGSM must
@@ -1600,7 +1562,6 @@ function test_emit_blueprint_created_payload_renders_unknown_runtime_as_null() {
   kill "$listener_pid" 2> /dev/null || true
   wait "$listener_pid" 2> /dev/null || true
   _disable_socket_events
-  _disable_broadcasting
   rm -f "$socket_file"
 
   local payload

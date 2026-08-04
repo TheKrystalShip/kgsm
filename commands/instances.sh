@@ -1054,9 +1054,9 @@ function _cmd_input() {
   if [[ $exit_code -eq 0 ]]; then
     # Audit the delivered command (instance + verbatim command). Emitted from the
     # command layer, not the management script (a standalone artifact without the
-    # event helpers), and only on a successful send. `events.sh emit` no-ops when
-    # broadcasting is off. Matches the config-set convention.
-    events.sh emit instance-input-sent "$instance" "$command"
+    # event helpers), and only on a successful send. Matches the config-set
+    # convention.
+    __emit_event instance-input-sent "$instance" "$command"
   fi
 
   exit $exit_code
@@ -1172,8 +1172,7 @@ function _cmd_config_set() {
       # Audit the change (instance + key only — never the value: instance config
       # holds secrets). Emitted from the command layer, not the handler, so internal
       # default-writes stay event-free (matches the create/backup convention).
-      # `events.sh emit` no-ops when broadcasting is off.
-      events.sh emit instance-config-changed "$instance" "$key"
+      __emit_event instance-config-changed "$instance" "$key"
       __print_success "Set '$key' on instance '$instance'"
       exit 0
       ;;
@@ -1647,7 +1646,7 @@ function _cmd_create_backup() {
     # Only announce a backup that exists. Emitting a progress line as a backup id
     # would fabricate an event, so the id is confirmed on disk first.
     if [[ -n "$backup_id" ]] && [[ -d "${instance_backups_dir}/${backup_id}" ]]; then
-      events.sh emit instance-backup-created "$instance" "$backup_id" "$version"
+      __emit_event instance-backup-created "$instance" "$backup_id" "$version"
     fi
   fi
 
@@ -1717,7 +1716,7 @@ function _cmd_restore_backup() {
   if [[ $rc -eq 0 ]]; then
     local version
     version="$(cat "$instance_version_file" 2> /dev/null)"
-    events.sh emit instance-backup-restored "$instance" "$backup" "$version"
+    __emit_event instance-backup-restored "$instance" "$backup" "$version"
   fi
 
   exit $rc
@@ -1864,7 +1863,7 @@ function _cmd_update() {
   if [[ $rc -eq 0 ]]; then
     new_version="$(cat "$instance_version_file" 2> /dev/null)"
     if [[ -n "$new_version" && "$new_version" != "$old_version" ]]; then
-      events.sh emit instance-version-updated "$instance" "$old_version" "$new_version"
+      __emit_event instance-version-updated "$instance" "$old_version" "$new_version"
     fi
   fi
 

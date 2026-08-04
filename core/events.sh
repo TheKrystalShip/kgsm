@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 
-# Disable SC2254 globally:
-# Exit code variables are guaranteed to be numeric and safe for use in case statements.
-# shellcheck disable=SC2254
+# Disable SC2254 and SC2086 globally:
+# Exit code variables are guaranteed to be numeric and safe both unquoted and
+# as case patterns. Declared here, before any code, so the directives cover the
+# whole file rather than only the command that follows them.
+# shellcheck disable=SC2254,SC2086
 
 # KGSM Event Dispatcher Library
 #
@@ -15,12 +17,44 @@ if [[ -n "${KGSM_EVENTS_LIBRARY_LOADED:-}" ]]; then
   return 0
 fi
 
-# Disabling SC2086 globally:
-# Exit code variables are guaranteed to be numeric and safe for unquoted use.
-# shellcheck disable=SC2086
-
 # Success event exit codes are now centralized in core/errors.sh
 # They are automatically available through the bootstrap process
+
+# Emits an event from inside the running KGSM process.
+#
+# Emission happens in-process rather than by re-executing `events.sh emit`:
+# that re-exec costs a full bash bootstrap per event, which dominates the cost
+# of emitting one. The events logic library is sourced on first use — every
+# invocation loads this core module, but only the few that complete a
+# lifecycle action ever emit.
+#
+# Args: $1 = event_name, $2... = event parameters
+# Returns: EC_SUCCESS, EC_FAILED_SOURCE, or the failing stage's code
+function __emit_event() {
+  if [[ -z "${KGSM_LOGIC_EVENTS_LOADED:-}" ]]; then
+    local _handler
+    _handler="$(__find_command_handler events.sh)" || return $EC_FAILED_SOURCE
+
+    # shellcheck disable=SC1090
+    source "$_handler" || return $EC_FAILED_SOURCE
+  fi
+
+  local _result=$EC_SUCCESS
+  __logic_emit_event "$@" || _result=$?
+
+  # A journal write that fails is never silent: the operation itself already
+  # happened, and an unrecorded operation that looks recorded is the failure
+  # mode the journal exists to prevent. The caller decides what to do with the
+  # code — callers on the completion path deliberately do not fail an
+  # already-completed operation just because recording it did not work.
+  if [[ $_result -eq $EC_EVENT_JOURNAL_FAILED ]]; then
+    __print_warning "Event '${1:-}' was NOT recorded: the journal at $(__logic_journal_dir) could not be written"
+  fi
+
+  return $_result
+}
+
+export -f __emit_event
 
 # Dispatches events based on exit codes from logic functions
 # Args: $1 = exit_code, $2 = instance_name, $3... = additional parameters
@@ -43,35 +77,35 @@ function __dispatch_event_from_exit_code() {
   # Map exit codes to event emissions
   case $exit_code in
     $EC_SUCCESS_DIRECTORIES_CREATED)
-      events.sh emit instance-directories-created "$instance_name"
+      __emit_event instance-directories-created "$instance_name"
       return $?
       ;;
     $EC_SUCCESS_DIRECTORIES_REMOVED)
-      events.sh emit instance-directories-removed "$instance_name"
+      __emit_event instance-directories-removed "$instance_name"
       return $?
       ;;
     $EC_SUCCESS_INSTANCE_CREATED)
-      events.sh emit instance-created "$instance_name" "${additional_params[@]}"
+      __emit_event instance-created "$instance_name" "${additional_params[@]}"
       return $?
       ;;
     $EC_SUCCESS_INSTANCE_REMOVED)
-      events.sh emit instance-removed "$instance_name"
+      __emit_event instance-removed "$instance_name"
       return $?
       ;;
     $EC_SUCCESS_INSTANCE_STARTED)
-      events.sh emit instance-started "$instance_name" "${additional_params[@]}"
+      __emit_event instance-started "$instance_name" "${additional_params[@]}"
       return $?
       ;;
     $EC_SUCCESS_INSTANCE_STOPPED)
-      events.sh emit instance-stopped "$instance_name" "${additional_params[@]}"
+      __emit_event instance-stopped "$instance_name" "${additional_params[@]}"
       return $?
       ;;
     $EC_SUCCESS_INSTANCE_RESTARTED)
-      events.sh emit instance-restarted "$instance_name" "${additional_params[@]}"
+      __emit_event instance-restarted "$instance_name" "${additional_params[@]}"
       return $?
       ;;
     $EC_SUCCESS_INSTANCE_READY)
-      events.sh emit instance-ready "$instance_name"
+      __emit_event instance-ready "$instance_name"
       return $?
       ;;
     $EC_SUCCESS_CONFIG_SET)

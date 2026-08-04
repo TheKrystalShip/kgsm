@@ -182,7 +182,7 @@ function _cmd_install() {
 
 
   # Emit after the instance has been created, so we can use the identifier
-  events.sh emit instance-installation-started "${instance}" "${blueprint}"
+  __emit_event instance-installation-started "${instance}" "${blueprint}"
 
   # Create directory structure
   directories.sh create "$instance" || {
@@ -206,36 +206,36 @@ function _cmd_install() {
   fi
 
   # Download game files
-  events.sh emit instance-download-started "${instance}"
+  __emit_event instance-download-started "${instance}"
   "$instance_management_file" download "${version}" || {
     __print_error "Failed to download game files"
-    events.sh emit instance-download-failed "${instance}"
+    __emit_event instance-download-failed "${instance}"
     return $EC_FAILED_DOWNLOAD
   }
-  events.sh emit instance-download-finished "${instance}"
-  events.sh emit instance-downloaded "${instance}"
+  __emit_event instance-download-finished "${instance}"
+  __emit_event instance-downloaded "${instance}"
 
   # Deploy the instance
-  events.sh emit instance-deploy-started "${instance}"
+  __emit_event instance-deploy-started "${instance}"
   "$instance_management_file" deploy || {
     __print_error "Failed to deploy instance"
-    events.sh emit instance-deploy-failed "${instance}"
+    __emit_event instance-deploy-failed "${instance}"
     return $EC_FAILED_DEPLOY
   }
-  events.sh emit instance-deploy-finished "${instance}"
-  events.sh emit instance-deployed "${instance}"
+  __emit_event instance-deploy-finished "${instance}"
+  __emit_event instance-deployed "${instance}"
 
   # Save version
   "$instance_management_file" version --save "$version" || {
     __print_error "Failed to save version information"
     return $EC_FAILED_VERSION_SAVE
   }
-  events.sh emit instance-version-updated "${instance}" "0" "${version}"
+  __emit_event instance-version-updated "${instance}" "0" "${version}"
 
-  events.sh emit instance-installation-finished "${instance}" "${blueprint}"
+  __emit_event instance-installation-finished "${instance}" "${blueprint}"
 
   __print_success "Instance '${instance}', version '${version}', has been created in '${install_dir}'"
-  events.sh emit instance-installed "${instance}" "${blueprint}"
+  __emit_event instance-installed "${instance}" "${blueprint}"
 
   # Start immediately after install when --start was passed (one-shot start,
   # not watchdog boot-autostart). A failure to start does not invalidate the

@@ -236,7 +236,7 @@ function _cmd_enable() {
   fi
 
   # Enable in configuration
-  __set_config_value "enable_event_broadcasting" "true"
+  __set_config_value "enable_socket_events" "true"
   local result=$?
   if [[ $result -eq 0 ]]; then
     __print_success "Unix Domain Socket event transport enabled"
@@ -280,7 +280,7 @@ function _cmd_disable() {
   __print_info "Disabling Unix Domain Socket event transport..."
 
   # Disable in configuration
-  __set_config_value "enable_event_broadcasting" "false"
+  __set_config_value "enable_socket_events" "false"
   local result=$?
   if [[ $result -eq 0 ]]; then
     __print_success "Unix Domain Socket event transport disabled"
@@ -322,7 +322,7 @@ function _cmd_test() {
   __print_info "Testing Unix Domain Socket event transport..."
 
   # Check if enabled
-  if [[ "$config_enable_event_broadcasting" != "true" ]]; then
+  if [[ "$config_enable_socket_events" != "true" ]]; then
     __print_error "Socket transport is not enabled"
     __print_error "Use '${self} enable' to activate socket transport first"
     return 1
@@ -481,7 +481,7 @@ function _cmd_status() {
 
   # Configuration status
   echo -e "${BOLD}Configuration:${END}"
-  if [[ "$config_enable_event_broadcasting" == "true" ]]; then
+  if [[ "$config_enable_socket_events" == "true" ]]; then
     echo -e "  Status: ${GREEN}Enabled${END}"
   else
     echo -e "  Status: ${RED}Disabled${END}"

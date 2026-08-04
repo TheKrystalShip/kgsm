@@ -34,6 +34,11 @@ PREFIX="/opt/kgsm"
 BIN_LINK="/usr/local/bin/kgsm"
 ENTRYPOINT="kgsm.sh"
 
+# Where kgsm appends its event journal. setup.sh creates it owned by the deploying
+# user; kgsm writes it unprivileged and consumers read it. Keep in step with
+# `event_journal_dir` in config.default.ini.
+JOURNAL_DIR="/var/lib/kgsm/events"
+
 # Everything that is checkout-only and must never reach the deployed copy. Anything present in
 # PREFIX but not in the checkout (and not excluded here) is pruned on deploy, so the deployed
 # tree always matches the source exactly.

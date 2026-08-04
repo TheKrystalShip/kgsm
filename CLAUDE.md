@@ -70,9 +70,9 @@ Tests run against full sandboxed copies of KGSM under `/tmp/kgsm-test-sandbox-*/
 
 The testing framework has its own substantial conventions (per-test setup/teardown hooks, the assertion library, the test template, TAP output, discovery). Before writing or modifying anything under `tests/`, read `docs/specs/testing-framework/testing_specification.md` and `tests/templates/test.template.sh`, and model new tests on an existing file of the same type. This area is treated as its own specialized domain — `.github/agents/testing.agent.md` and `.github/skills/create-test/` describe the workflow the project uses for test work; the key transferable rule is to follow the documented spec rather than improvising test structure.
 
-## Integration points (all opt-in via config flags)
+## Integration points
 
-UFW firewall rules (`enable_firewall_management`) and a webhook/socket event system (`commands/events.*.sh`, `enable_event_broadcasting`). Log/port watchers live in `commands/watcher.*.sh`.
+UFW firewall rules (`enable_firewall_management`) and optional webhook/socket event transports (`commands/events.*.sh`). Events themselves are always emitted to the on-disk journal (`commands/events.journal.sh`, `docs/events.md`) — that is not optional. Log/port watchers live in `commands/watcher.*.sh`.
 
 Native instances are supervised by the resident **kgsm-watchdog** daemon (cgroup-v2 spawn + crash-restart). `kgsm start/stop` route to it when present (`commands/handlers/watchdog.sh`), and `kgsm autostart enable|disable|status|list` controls boot auto-start via its persisted desired-state — the in-house replacement for systemd's `enable`/`WantedBy=`. systemd is no longer an instance lifecycle manager.
 

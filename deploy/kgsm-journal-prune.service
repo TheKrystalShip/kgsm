@@ -1,0 +1,11 @@
+[Unit]
+Description=Prune KGSM event journal segments past their retention window
+Documentation=file:/opt/kgsm/docs/events.md
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/kgsm events journal prune
+
+# Retention is time-based only and never consults a consumer: kgsm holds no
+# knowledge of who reads the journal. A consumer absent longer than the window
+# detects the gap and cold-starts.

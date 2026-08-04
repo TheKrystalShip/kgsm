@@ -659,3 +659,85 @@ INI
   assert_equals "1" "$(grep -c '^backups_directory=' "$test_config")" \
     "backups_directory should appear exactly once"
 }
+
+# =============================================================================
+# TEST: Migration 006 - event journal keys in, broadcasting switch out
+# =============================================================================
+
+function test_migration_006_adds_journal_keys() {
+  log_test_step "Testing migration 006 adds the event journal keys to [events]"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v5_add_journal.ini"
+  cat > "$test_config" << 'INI'
+config_schema_version=5
+
+[events]
+enable_event_broadcasting=true
+enable_socket_events=true
+enable_webhook_events=false
+
+[accessibility]
+enable_command_shortcuts=false
+INI
+
+  bash "$MIGRATION_DIR/006_v5_to_v6_event_journal.sh" "$test_config"
+  assert_equals "$?" "0" "Migration 006 should succeed"
+
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "6" "Schema version should be 6"
+
+  # Journal keys added with their documented defaults
+  assert_command_succeeds "grep -q '^event_journal_dir=/var/lib/kgsm/events$' '$test_config'"
+  assert_command_succeeds "grep -q '^event_journal_retention_days=90$' '$test_config'"
+
+  # …inside [events], not appended past the following section
+  local key_line next_section_line
+  key_line=$(grep -n '^event_journal_dir=' "$test_config" | cut -d: -f1)
+  next_section_line=$(grep -n '^\[accessibility\]' "$test_config" | cut -d: -f1)
+  assert_command_succeeds "[[ $key_line -lt $next_section_line ]]"
+
+  # The broadcasting switch is REMOVED, not commented out: leaving a dead
+  # switch invites an operator to set it and expect events to stop.
+  assert_command_fails "grep -q 'enable_event_broadcasting' '$test_config'"
+
+  # The socket transport keys survive — they retire with the transport itself
+  assert_command_succeeds "grep -q '^enable_socket_events=true$' '$test_config'"
+  assert_command_succeeds "grep -q '^enable_webhook_events=false$' '$test_config'"
+  assert_command_succeeds "grep -q '^enable_command_shortcuts=false$' '$test_config'"
+
+  assert_file_exists "${test_config}.pre-migration-v6.bak"
+}
+
+# =============================================================================
+# TEST: Migration 006 - Idempotency (journal keys already present)
+# =============================================================================
+
+function test_migration_006_idempotent() {
+  log_test_step "Testing migration 006 idempotency"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v5_journal_idempotent.ini"
+  cat > "$test_config" << 'INI'
+config_schema_version=5
+
+[events]
+event_journal_dir=/srv/kgsm-events
+event_journal_retention_days=30
+INI
+
+  bash "$MIGRATION_DIR/006_v5_to_v6_event_journal.sh" "$test_config"
+  assert_equals "$?" "0" "First run should succeed"
+
+  bash "$MIGRATION_DIR/006_v5_to_v6_event_journal.sh" "$test_config"
+  assert_equals "$?" "0" "Second run should succeed (idempotent)"
+
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "6" "Schema version should be 6"
+
+  # An operator-set journal location is never clobbered, and never duplicated
+  assert_command_succeeds "grep -q '^event_journal_dir=/srv/kgsm-events$' '$test_config'"
+  assert_command_succeeds "grep -q '^event_journal_retention_days=30$' '$test_config'"
+  assert_equals "1" "$(grep -c '^event_journal_dir=' "$test_config")" \
+    "event_journal_dir should appear exactly once"
+}

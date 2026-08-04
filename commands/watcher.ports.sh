@@ -279,7 +279,7 @@ function _cmd_watch() {
   case $exit_code in
     $EC_SUCCESS_INSTANCE_READY)
       # Emit event
-      events.sh emit instance-ready "${instance%.ini}"
+      __emit_event instance-ready "${instance%.ini}"
       return 0
       ;;
     $EC_WATCHER_TIMEOUT)
