@@ -21,6 +21,8 @@ One event per line is the contract every consumer's cursor depends on, so payloa
 
 **Emission is unconditional.** There is deliberately no switch that disables it: the journal is KGSM's audit record, and an audit trail that can be silently switched off is worse than none at all.
 
+**The journal is the record; a consumer's database is an index.** A consumer that stores events into SQLite or Postgres to make them queryable holds a *derived* copy — one it can rebuild from these files, and one that is authoritative for nothing. Two rules follow. A consumer's own retention must never exceed `event_journal_retention_days`, or rebuilding it returns less than it already held. And a consumer that persists events must key them idempotently (delivery is at-least-once, below), so replaying a segment corrects the index instead of duplicating it.
+
 ### Optional transports
 
 Two additional transports can be switched on. Both are **additive** — they deliver copies, and neither is load-bearing:
@@ -333,8 +335,15 @@ concurrently — unlike a socket, a file has no exclusive binding.
 ### The cursor
 
 A cursor is `(segment filename, byte offset)`. Persist it wherever the consumer
-already keeps state; if that is a database, write the cursor in the **same
-transaction** as whatever the event produced, and crash consistency comes free.
+already keeps state; if that is a database, keep the cursor **inside** it, so the
+position and whatever was built from it cannot end up in different places.
+
+**Delivery is at-least-once.** The cursor advances only past events already
+handled, so a crash costs a re-read and never a loss — which means a consumer
+that persists what it reads **must be idempotent**. Key each row by something
+derived from the event's own content and let a repeat insert be a no-op. Storing
+the cursor in the same transaction as the row does not buy exactly-once; it only
+narrows the window, and idempotence closes it completely.
 
 ### Reading
 
