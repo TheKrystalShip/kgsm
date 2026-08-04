@@ -50,7 +50,8 @@ Required: `native.executable_file`. Common optional under `native:`: `ports`,
 
 Top-level, runtime-agnostic fields (both native and container):
 `player_joined_regex`, `player_left_regex`, `rcon_port`, `rcon_password`,
-`rcon_poll_interval_seconds`, `rcon_players_command`.
+`rcon_poll_interval_seconds`, `rcon_players_command`, `kick_command`,
+`ban_command`, `unban_command`.
 
 - `ports` is **single-quoted, pipe-separated** UFW format:
   `ports: '1111:2222/tcp|3333/udp'`.
@@ -70,6 +71,23 @@ Top-level, runtime-agnostic fields (both native and container):
 - `rcon_players_command` (string) — the RCON command to query connected players
   (default "players"). Game-specific: PZ uses "players", Source engine games
   use "status" or "listplayers".
+
+## Player moderation (`kick_command`, `ban_command`, `unban_command`)
+
+The console commands the game accepts to remove a player, block them, and lift
+that block. KGSM sends them down the same channel as `save_command` — the
+instance's console — so author them from real server commands.
+
+Each is a **template with exactly one placeholder, and the placeholder names the
+identity token the game expects**: `{ip}`, `{name}`, or `{id}`. `kick {ip}`
+says both "the verb is `kick`" and "hand it an IP address". That name is the
+contract a caller reads to know what to send, which is why the kind lives in the
+template and is not duplicated into a separate field where the two could
+disagree. Text outside the placeholder is sent verbatim.
+
+Empty/unset means the game has no such command. KGSM then **refuses** the
+action — it never substitutes a different one, because a kick standing in for a
+ban is a fabricated outcome.
 
 ## Container blueprint (`runtime: container`)
 

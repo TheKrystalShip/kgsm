@@ -15,6 +15,14 @@ metadata:
 # endpoint, so `addr` is the correlation token on both sides.
 player_joined_regex: 'Character ''(?<name>[^'']+)'' \(Peer \d+ - (?<addr>[\d.]+:\d+)\) logged in'
 player_left_regex: 'Peer (?<addr>[\d.]+:\d+) disconnected'
+# Player moderation. Romestead addresses a player by IP address alone — it has
+# no notion of a persistent account id — so every template takes {ip}.
+# Disconnect the player at this address; they may reconnect immediately.
+kick_command: 'kick {ip}'
+# Disconnect the player at this address and refuse future connections from it.
+ban_command: 'ban {ip}'
+# Lift a ban, allowing this address to connect again.
+unban_command: 'unban {ip}'
 native:
   ports: 8050/udp
   steam_app_id: 4763510

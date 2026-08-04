@@ -260,6 +260,13 @@ function __logic_create_base_instance() {
   fi
   export instance_stop_command="${blueprint_stop_command:-}"
   export instance_save_command="${blueprint_save_command:-}"
+
+  # Player-moderation templates, carried through verbatim. Empty means the game
+  # declares no such command; the management script refuses that action rather
+  # than sending a different one in its place.
+  export instance_kick_command="${blueprint_kick_command:-}"
+  export instance_ban_command="${blueprint_ban_command:-}"
+  export instance_unban_command="${blueprint_unban_command:-}"
   export instance_platform="${blueprint_platform:-linux}"
   export instance_level_name="${blueprint_level_name:-default}"
   export instance_steam_app_id="${blueprint_steam_app_id:-0}"

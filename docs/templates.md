@@ -60,6 +60,11 @@ The low-level file discovery is handled by `__find_template` in `core/loader.sh`
 | `save_command` | No | Command sent to the input socket to save the game |
 | `startup_success_regex` | No | Regex matched against server log to detect successful startup |
 
+Three further fields sit at the **top level** (they apply to both runtimes) and
+declare the game's player-moderation commands: `kick_command`, `ban_command`,
+`unban_command`. Each is a template carrying exactly one placeholder — `{ip}`,
+`{name}` or `{id}` — naming the identity token the game expects.
+
 For a container blueprint (`runtime: container`), the body is instead a `container.compose` literal block scalar holding the Docker Compose verbatim; firewall ports are derived from it.
 
 ---
@@ -83,7 +88,7 @@ For a container blueprint (`runtime: container`), the body is instead a `contain
 | Game Server Executable Configuration | `level_name`, `executable_arguments` |
 | Steam Integration | `steam_app_id`, `steamcmd_arguments`, `is_steam_account_required` |
 | Network Configuration | `ports`, `enable_firewall_management`, `firewall_rule_file`, `wget_timeout_seconds` |
-| Server Control Commands | `stop_command`, `save_command`, `save_command_timeout_seconds`, `stop_command_timeout_seconds` |
+| Server Control Commands | `stop_command`, `save_command`, `save_command_timeout_seconds`, `stop_command_timeout_seconds`, `kick_command`, `ban_command`, `unban_command` |
 | Backup Configuration | `compress_backups` |
 | Management Features | `enable_command_shortcuts`, `command_shortcut_file` |
 

@@ -51,6 +51,35 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Added
+
+- **Player moderation: `kgsm instances kick|ban|unban <instance> <target>`.** Three optional
+  top-level blueprint fields — `kick_command`, `ban_command`, `unban_command` — declare the console
+  commands a game accepts to remove a player, block them, and lift that block. Each is a template
+  carrying exactly one placeholder, and the placeholder *names* the identity token the game expects:
+  `{ip}`, `{name}`, or `{id}`. So `kick {ip}` says both "the verb is `kick`" and "hand it an IP
+  address", and a caller reads the token to know what to send.
+
+  The kind lives in the template rather than in a second field beside it, because two fields can
+  disagree — one of them would then be describing a substitution that does not happen. The
+  templates flow blueprint → instance config → management script (`kick`/`ban`/`unban` verbs), and
+  `blueprints info --json` reports all three as `KickCommand`/`BanCommand`/`UnbanCommand`.
+
+  An undeclared action is **refused**, never approximated with a different command — a kick
+  standing in for a ban is a fabricated outcome. A target containing a line break is rejected: the
+  console reads one command per line, so it would deliver a second command nobody issued. For a
+  native instance the run state is resolved through the watchdog before sending, because the FIFO
+  outlives the process that read it and a write into a stopped instance is accepted by the kernel
+  and delivered to nobody.
+
+- **Player-moderation audit events: `instance_player_kicked`, `instance_player_banned`,
+  `instance_player_unbanned`**, carrying `InstanceName`, `Target` (the identity the operator
+  supplied, verbatim — KGSM does not classify it, the blueprint is where that meaning is declared)
+  and `Command` (the resolved console command that was delivered). Their own types rather than a
+  console-input record because the subject is a player, not a command: a consumer asking "who was
+  banned on this server" filters on the type instead of pattern-matching command text — text a
+  hand-typed `instances input` could produce with no moderation intent behind it.
+
 ### Removed
 
 - **The Unix Domain Socket event transport is gone** — `commands/events.socket.sh`, the

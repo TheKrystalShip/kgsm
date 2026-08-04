@@ -122,6 +122,53 @@ metadata:
 > emits these under a nested `Metadata` object, with unknown numerics as JSON
 > `null`.)
 
+## Player Moderation
+
+Three optional **top-level** fields (they apply to both runtimes) declare the
+console commands the game accepts to remove a player, block them, and lift that
+block:
+
+```yaml
+kick_command: 'kick {ip}'
+ban_command: 'ban {ip}'
+unban_command: 'unban {ip}'
+```
+
+Each value is a **template with exactly one placeholder, and the placeholder
+names the identity token the game expects**:
+
+| Placeholder | The caller supplies | Example template |
+|-------------|---------------------|------------------|
+| `{ip}` | an IP address | `'kick {ip}'` |
+| `{name}` | a player / character name | `'ban {name}'` |
+| `{id}` | an account or user id | `'banid {id}'` |
+
+So `kick {ip}` says both *"the verb is `kick`"* and *"hand it an IP address"*.
+That name is the contract a caller reads to know what to send — a control-panel
+roster button picks the right token off the player entry instead of guessing —
+which is why the kind lives in the template and is not duplicated into a
+separate field the template could disagree with. Text outside the placeholder
+is sent verbatim.
+
+KGSM substitutes the caller's target into the placeholder and delivers the
+result to the instance's console, the same channel `save_command` and
+`kgsm instances input` use. A target containing a line break is rejected: the
+console reads one command per line, so an embedded newline would deliver a
+second command nobody issued.
+
+> [!IMPORTANT]
+> Leave a field empty/unset when the game has no such command. KGSM then
+> **refuses** that action — it never substitutes a different one, because a kick
+> standing in for a ban is a fabricated outcome.
+
+Usage:
+
+```bash
+kgsm instances kick   <instance> <target>
+kgsm instances ban    <instance> <target>
+kgsm instances unban  <instance> <target>
+```
+
 ## Managing Blueprints
 
 ### Listing Available Blueprints
@@ -443,6 +490,9 @@ The following variables can be used inside `executable_arguments` and are resolv
 | `$instance_save_command` | Command to save the game state |
 | `$instance_save_command_timeout_seconds` | Timeout for the save command |
 | `$instance_stop_command_timeout_seconds` | Timeout for the stop command |
+| `$instance_kick_command` | Template to disconnect a player |
+| `$instance_ban_command` | Template to block a player |
+| `$instance_unban_command` | Template to lift a block |
 
 **Backup Configuration**
 

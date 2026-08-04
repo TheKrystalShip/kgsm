@@ -28,6 +28,11 @@ ${BOLD}${UNDERLINE}Server Commands:${END}
   status [--json] [--fast]    Display comprehensive runtime status
   logs [-f] [--tail N]        View server logs
 
+${BOLD}${UNDERLINE}Player Moderation:${END}
+  kick <target>               Disconnect a player
+  ban <target>                Disconnect a player and block them
+  unban <target>              Lift a block
+
 ${BOLD}${UNDERLINE}Version & Update Commands:${END}
   version [--latest|--compare|--save <ver>]  Version management
   check-update                Check whether a newer version is available
@@ -182,6 +187,41 @@ ${UNDERLINE}Examples:${END}
 "
 }
 
+function show_usage_moderation() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Player Moderation${END}
+
+Disconnect a player, block them, or lift a block.
+
+${UNDERLINE}Usage:${END}
+  $self kick <target>
+  $self ban <target>
+  $self unban <target>
+
+${UNDERLINE}Arguments:${END}
+  target                      The player identity this game addresses
+
+${UNDERLINE}Description:${END}
+Each action sends this game's own console command with <target> substituted
+in. The blueprint declares which identity the game expects by the placeholder
+it uses — {ip}, {name} or {id} — and this instance's templates are:
+
+  kick:  ${instance_kick_command:-<unsupported>}
+  ban:   ${instance_ban_command:-<unsupported>}
+  unban: ${instance_unban_command:-<unsupported>}
+
+An action with no declared command is refused; KGSM never substitutes a
+different one.
+
+${UNDERLINE}Examples:${END}
+  $self kick 192.168.1.42
+  $self ban 192.168.1.42
+  $self unban 192.168.1.42
+"
+}
+
 function show_usage_version() {
   local UNDERLINE="\e[4m"
   local END="\e[0m"
@@ -333,6 +373,9 @@ function _cmd_help() {
     ;;
   update)
     show_usage_update
+    ;;
+  kick | ban | unban)
+    show_usage_moderation
     ;;
   kill | save | input | is-active)
     show_usage

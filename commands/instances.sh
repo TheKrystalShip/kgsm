@@ -31,6 +31,9 @@ ${UNDERLINE}Commands:${END}
   generate-id <blueprint>     Generate unique instance identifier
   save <instance>             Send save command to instance
   input <instance> <command>  Send command to instance console
+  kick <instance> <target>    Disconnect a player
+  ban <instance> <target>     Disconnect a player and block them
+  unban <instance> <target>   Lift a block
   config-get <instance> <key> Read a value from the instance config
   config-set <instance> <key>=<value>
                               Set a runtime value in the instance config
@@ -62,6 +65,9 @@ ${UNDERLINE}Examples:${END}
   $self find terraria-01
   $self save factorio-01
   $self input factorio-01 \"/say Hello players!\"
+  $self kick romestead 192.168.1.42
+  $self ban romestead 192.168.1.42
+  $self unban romestead 192.168.1.42
   $self config-get factorio-01 auto_update
   $self config-set factorio-01 auto_update=true
   $self config-set factorio-01 \"executable_arguments=--start-server saves/world.zip\"
@@ -338,6 +344,42 @@ Sends a command directly to the instance's console and displays the last
 ${UNDERLINE}Examples:${END}
   $self input factorio-01 \"/say Hello world\"
   $self input terraria-main \"save-all\"
+"
+}
+
+function show_usage_moderation() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Player Moderation${END}
+
+Disconnect a player from an instance, block them, or lift that block.
+
+${UNDERLINE}Usage:${END}
+  $self kick <instance> <target>
+  $self ban <instance> <target>
+  $self unban <instance> <target>
+
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
+  target                      The player identity the game addresses
+
+${UNDERLINE}Options:${END}
+  --help                      Display this help information
+
+${UNDERLINE}Description:${END}
+Each action sends the game's own console command with <target> substituted in.
+The blueprint declares which identity the game expects through the placeholder
+in its template — {ip}, {name} or {id} — so read that placeholder to know what
+to pass; \`blueprints info <name> --json\` reports all three templates.
+
+A game that declares no command for an action is refused it. KGSM never
+substitutes a different command in its place.
+
+${UNDERLINE}Examples:${END}
+  $self kick romestead 192.168.1.42
+  $self ban romestead 192.168.1.42
+  $self unban romestead 192.168.1.42
 "
 }
 
@@ -1057,6 +1099,105 @@ function _cmd_input() {
     # event helpers), and only on a successful send. Matches the config-set
     # convention.
     __emit_event instance-input-sent "$instance" "$command"
+  fi
+
+  exit $exit_code
+}
+
+# Shared implementation of kick/ban/unban. The three differ only in which
+# blueprint-declared template the management script resolves, so the CLI layer
+# carries one argument parser and passes the action through.
+# Args: $1 = action (kick|ban|unban), $2.. = the user's arguments
+function _cmd_moderation() {
+  local action="$1"
+  shift
+
+  local instance=""
+  local target=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_moderation
+        return 0
+        ;;
+      *)
+        break
+        ;;
+    esac
+    shift
+  done
+
+  if [[ $# -gt 0 ]] && [[ "$1" != --* ]]; then
+    instance="$1"
+    shift
+  fi
+
+  if [[ $# -gt 0 ]] && [[ "$1" != --* ]]; then
+    target="$1"
+    shift
+  fi
+
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self $action --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  if [[ -z "$target" ]]; then
+    __print_error "Missing required argument: <target>"
+    __print_error "Use '$self $action --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  __source_instance "$instance"
+
+  # A moderation command only means anything to a running game. A native
+  # instance's FIFO outlives the process that read it, so a send into a stopped
+  # instance is accepted by the kernel and delivered to nobody — reported as a
+  # kick that never happened. The watchdog owns the process and is the only
+  # thing that can answer, so the state is resolved here (the management script's
+  # own probe reports every supervised instance stopped). A container probes
+  # itself against docker and echoes nothing here.
+  local run_state
+  run_state="$(__resolve_run_state "$instance")"
+  case "$run_state" in
+    inactive)
+      __print_error "Cannot $action on '$instance': the server is not running"
+      exit $EC_ERROR
+      ;;
+    unknown)
+      __print_error "Cannot $action on '$instance': the watchdog is unreachable"
+      __print_error "Whether the server is running cannot be determined"
+      exit $EC_ERROR
+      ;;
+  esac
+
+  "$instance_management_file" "$action" "$target"
+  local exit_code=$?
+
+  if [[ $exit_code -eq 0 ]]; then
+    # Audited under its own event type, not as console input: the subject here
+    # is a player, so a consumer asking "who was banned on this server" filters
+    # on the type instead of pattern-matching command text — text a hand-typed
+    # `instances input` could produce with no moderation intent behind it. The
+    # resolved command rides along so the trail keeps the literal effect beside
+    # its subject. Emitted from the command layer (the management script is a
+    # standalone artifact without the event helpers) and only on a successful
+    # send.
+    local template_var="instance_${action}_command"
+    local resolved="${!template_var}"
+    resolved="${resolved//\{ip\}/$target}"
+    resolved="${resolved//\{name\}/$target}"
+    resolved="${resolved//\{id\}/$target}"
+
+    local event_name
+    case "$action" in
+      kick) event_name="instance-player-kicked" ;;
+      ban) event_name="instance-player-banned" ;;
+      unban) event_name="instance-player-unbanned" ;;
+    esac
+    __emit_event "$event_name" "$instance" "$target" "$resolved"
   fi
 
   exit $exit_code
@@ -2019,6 +2160,9 @@ function _cmd_help() {
     input)
       show_usage_input
       ;;
+    kick | ban | unban)
+      show_usage_moderation
+      ;;
     config-get)
       show_usage_config_get
       ;;
@@ -2122,6 +2266,9 @@ case "$command" in
     ;;
   input)
     _cmd_input "$@"
+    ;;
+  kick | ban | unban)
+    _cmd_moderation "$command" "$@"
     ;;
   config-get)
     _cmd_config_get "$@"

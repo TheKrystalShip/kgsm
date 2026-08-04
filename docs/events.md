@@ -88,6 +88,23 @@ Event types use **underscore-separated** names in JSON payloads and **dash-separ
 | `instance_uninstall_finished` | Uninstallation process completed | `InstanceName` |
 | `instance_uninstalled` | Server fully uninstalled | `InstanceName` |
 
+### 👤 Player Moderation Events
+
+Emitted when an operator removes a player from a running server, blocks them, or lifts that block, and only once the command has been delivered.
+
+| Event Name | Description | Data Fields |
+|------------|-------------|-------------|
+| `instance_player_kicked` | A player was disconnected | `InstanceName`, `Target`, `Command` |
+| `instance_player_banned` | A player was disconnected and blocked | `InstanceName`, `Target`, `Command` |
+| `instance_player_unbanned` | A block was lifted | `InstanceName`, `Target`, `Command` |
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `Target` | string | The player identity the operator supplied — whichever kind the blueprint's template declared (`{ip}`, `{name}` or `{id}`). Carried verbatim; KGSM does not classify it, since the blueprint is where that meaning is declared |
+| `Command` | string | The resolved console command that was delivered, so the trail records the literal effect beside its subject |
+
+These are their own event types rather than a console-input record because the subject is a **player**, not a command: a consumer asking "who was banned on this server" filters on the type instead of pattern-matching command text — text a hand-typed `instances input` could produce with no moderation intent behind it.
+
 ### 📘 Blueprint Events
 
 These are the only events whose subject is **not an instance**. They fire when a blueprint file in the catalog is written or deleted, so that no consumer serves a stale blueprint and the change lands in event history.

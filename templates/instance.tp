@@ -230,6 +230,14 @@ save_command_timeout_seconds="${instance_save_command_timeout_seconds}"
 # Timeout in seconds to wait after sending stop command
 stop_command_timeout_seconds="${instance_stop_command_timeout_seconds}"
 
+# Player-moderation command templates (from the blueprint). Each carries exactly
+# one placeholder — {ip}, {name} or {id} — naming the identity token this game
+# expects; KGSM substitutes the caller's target into it and sends the result to
+# the console. Empty = the game has no such command and the action is refused.
+kick_command="${instance_kick_command}"
+ban_command="${instance_ban_command}"
+unban_command="${instance_unban_command}"
+
 #=============================================================================
 # BACKUP CONFIGURATION
 # Settings related to backup and data preservation

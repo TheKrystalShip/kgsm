@@ -333,6 +333,18 @@ function __source_blueprint() {
   declare -g blueprint_rcon_players_command
   blueprint_rcon_players_command=$(__bp_yaml_field "$bp" '.rcon_players_command')
 
+  # Player-moderation command templates (top-level, runtime-agnostic). Each
+  # carries exactly one placeholder — {ip}, {name} or {id} — naming the identity
+  # token the game expects, so a caller reads the token off the template instead
+  # of guessing what to send. Empty means the game has no such command, and the
+  # action is refused rather than approximated with a different one.
+  declare -g blueprint_kick_command
+  blueprint_kick_command=$(__bp_yaml_field "$bp" '.kick_command')
+  declare -g blueprint_ban_command
+  blueprint_ban_command=$(__bp_yaml_field "$bp" '.ban_command')
+  declare -g blueprint_unban_command
+  blueprint_unban_command=$(__bp_yaml_field "$bp" '.unban_command')
+
   # Native field family — default everything empty so a container source (or a
   # re-source of a different blueprint) cannot leak stale values.
   declare -g blueprint_ports=""
@@ -377,7 +389,8 @@ function __source_blueprint() {
     blueprint_startup_success_regex \
     blueprint_player_joined_regex blueprint_player_left_regex \
     blueprint_rcon_port blueprint_rcon_password \
-    blueprint_rcon_poll_interval_seconds blueprint_rcon_players_command
+    blueprint_rcon_poll_interval_seconds blueprint_rcon_players_command \
+    blueprint_kick_command blueprint_ban_command blueprint_unban_command
 }
 
 export -f __source_blueprint

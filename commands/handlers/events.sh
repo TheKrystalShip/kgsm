@@ -168,6 +168,29 @@ export EVENT_INSTANCE_PLAYER_JOINED
 declare -g -r EVENT_INSTANCE_PLAYER_LEFT="instance_player_left"
 export EVENT_INSTANCE_PLAYER_LEFT
 
+# Player-moderation audit events. Emitted by the command layer when an operator
+# removes a player, blocks them, or lifts that block, and only on a successful
+# send. They are their own types rather than a console-input record because the
+# subject is a PLAYER, not a command: a consumer filtering "who was banned on
+# this server" must not have to pattern-match command text to find out, and the
+# same text could be typed by hand through `instances input` with no moderation
+# intent behind it.
+#
+# `target` is the identity token the operator supplied — whichever kind the
+# game's blueprint template declared ({ip}, {name} or {id}). KGSM carries it
+# verbatim and does not classify it: the blueprint is where that meaning is
+# declared, and re-deriving it here would be a second, drifting answer.
+# `command` is the resolved console command that was actually delivered, so the
+# trail records the literal effect alongside its subject.
+declare -g -r EVENT_INSTANCE_PLAYER_KICKED="instance_player_kicked"
+export EVENT_INSTANCE_PLAYER_KICKED
+
+declare -g -r EVENT_INSTANCE_PLAYER_BANNED="instance_player_banned"
+export EVENT_INSTANCE_PLAYER_BANNED
+
+declare -g -r EVENT_INSTANCE_PLAYER_UNBANNED="instance_player_unbanned"
+export EVENT_INSTANCE_PLAYER_UNBANNED
+
 # Instance config-change audit event. Emitted by the command layer when a
 # `.config.ini` key is set via `instances config-set`. Carries the instance name
 # and the changed key ONLY — NEVER the value: instance config holds secrets
@@ -267,6 +290,9 @@ declare -g -A EVENT_CONFIGS=(
   # validated/rendered out-of-band (see _build_event_payload).
   ["$EVENT_INSTANCE_PLAYER_JOINED"]="instance"
   ["$EVENT_INSTANCE_PLAYER_LEFT"]="instance"
+  ["$EVENT_INSTANCE_PLAYER_KICKED"]="instance target command"
+  ["$EVENT_INSTANCE_PLAYER_BANNED"]="instance target command"
+  ["$EVENT_INSTANCE_PLAYER_UNBANNED"]="instance target command"
   # `key` only — NEVER the value (instance config holds secrets). The matching
   # case arm in _build_event_payload renders Data { InstanceName, Key }.
   ["$EVENT_INSTANCE_CONFIG_CHANGED"]="instance key"
@@ -469,6 +495,17 @@ function __logic_build_event_payload() {
       # `$command` binds because `command` is the 2nd EVENT_CONFIGS param name.
       data_object='{
         InstanceName: $instance,
+        Command: $command
+      }'
+      ;;
+    "$EVENT_INSTANCE_PLAYER_KICKED" | "$EVENT_INSTANCE_PLAYER_BANNED" | "$EVENT_INSTANCE_PLAYER_UNBANNED")
+      # The moderated player and the command that carried it out. `$target` and
+      # `$command` bind because `target`/`command` are the 2nd and 3rd
+      # EVENT_CONFIGS param names. Both are required, so neither is
+      # null-coalesced — the event type distinguishes kick from ban from unban.
+      data_object='{
+        InstanceName: $instance,
+        Target: $target,
         Command: $command
       }'
       ;;

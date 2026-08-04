@@ -94,6 +94,18 @@ function _cmd_input() {
   _send_input "$1"
 }
 
+function _cmd_kick() {
+  _send_moderation_command "${instance_kick_command}" "${1:-}" "kick"
+}
+
+function _cmd_ban() {
+  _send_moderation_command "${instance_ban_command}" "${1:-}" "ban"
+}
+
+function _cmd_unban() {
+  _send_moderation_command "${instance_unban_command}" "${1:-}" "unban"
+}
+
 function _cmd_is_active() {
   _is_active
 }

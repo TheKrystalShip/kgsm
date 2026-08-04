@@ -232,6 +232,9 @@ function __logic_get_blueprint_info_json() {
     --arg executable_arguments "$blueprint_executable_arguments" \
     --arg stop_command "$blueprint_stop_command" \
     --arg save_command "$blueprint_save_command" \
+    --arg kick_command "$blueprint_kick_command" \
+    --arg ban_command "$blueprint_ban_command" \
+    --arg unban_command "$blueprint_unban_command" \
     --argjson metadata "$metadata_json" \
     '{
       Name: $name,
@@ -246,6 +249,9 @@ function __logic_get_blueprint_info_json() {
       ExecutableArguments: $executable_arguments,
       StopCommand: $stop_command,
       SaveCommand: $save_command,
+      KickCommand: $kick_command,
+      BanCommand: $ban_command,
+      UnbanCommand: $unban_command,
       Metadata: $metadata
     }'
 

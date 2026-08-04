@@ -51,6 +51,18 @@ input)
   _cmd_input "$@"
   exit $?
   ;;
+kick)
+  _cmd_kick "$@"
+  exit $?
+  ;;
+ban)
+  _cmd_ban "$@"
+  exit $?
+  ;;
+unban)
+  _cmd_unban "$@"
+  exit $?
+  ;;
 status)
   _cmd_status "$@"
   exit $?
