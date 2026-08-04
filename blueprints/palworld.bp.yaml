@@ -20,6 +20,15 @@ metadata:
 # and the two number spaces (17-digit SteamID64, 16-digit XUID) don't collide.
 player_joined_regex: '\[LOG\] (?<name>.+?) joined the server\. \(User id: (?:steam|gdk)_(?<id>\d+)'
 player_left_regex: '\[LOG\] (?<name>.+?) left the server\. \(User id: (?:steam|gdk)_(?<id>\d+)'
+# Player moderation. Palworld addresses a player by account id — the bare number
+# the join line carries and `/ShowPlayers` lists — so every template takes {id},
+# the same token the presence regexes capture.
+# Disconnect this account; they may reconnect immediately.
+kick_command: '/KickPlayer {id}'
+# Disconnect this account and refuse future connections from it.
+ban_command: '/BanPlayer {id}'
+# Lift a ban, allowing this account to connect again.
+unban_command: '/UnBanPlayer {id}'
 native:
   ports: 8211/udp|27015/udp
   steam_app_id: 2394010

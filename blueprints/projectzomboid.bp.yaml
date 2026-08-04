@@ -10,6 +10,29 @@ metadata:
   min_ram_mb: 2048
   recommended_ram_mb: 4096
   base_disk_mb: 5120
+# Player-presence detection, authored from real server output. The console log
+# names a player only by Steam id — the name appears in the game's own user log,
+# which is a different file — so `id` is the correlation token here. There is no
+# leave line on the console at all, which is why RCON polling below carries the
+# other half of presence.
+player_joined_regex: 'Steam client (?<id>\d+) is initiating a connection'
+player_left_regex: ''
+# RCON polling. `players` answers with one `id name` line per connected player,
+# so this is where a roster entry gets its NAME — and moderation addresses
+# players by name, so it needs RCON. Set rcon_password (and the matching value
+# in the game's own server config) to turn it on; empty leaves RCON off.
+rcon_port: 27015
+rcon_password: ""
+rcon_poll_interval_seconds: 10
+rcon_players_command: "players"
+# Player moderation. Project Zomboid addresses a player by their in-game user
+# name, so every template takes {name}.
+# Disconnect this player; they may reconnect immediately.
+kick_command: 'kick {name}'
+# Disconnect this player and refuse future connections from them.
+ban_command: 'banuser {name}'
+# Lift a ban, allowing this player to connect again.
+unban_command: 'unbanuser {name}'
 native:
   ports: 16261:16262/udp
   steam_app_id: 380870
@@ -24,9 +47,3 @@ native:
   stop_command: quit
   save_command: save
   startup_success_regex: SERVER STARTED
-  player_joined_regex: 'Steam client (?<id>\d+) is initiating a connection'
-  player_left_regex: ''
-  rcon_port: 27015
-  rcon_password: ""
-  rcon_poll_interval_seconds: 10
-  rcon_players_command: "players"

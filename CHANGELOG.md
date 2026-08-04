@@ -53,6 +53,18 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Added
 
+- **Palworld and Project Zomboid declare their moderation commands.** Palworld addresses a player
+  by account id (`/KickPlayer {id}`, `/BanPlayer {id}`, `/UnBanPlayer {id}`) — the bare number its
+  join line carries, so the presence capture and the moderation target are the same token. Project
+  Zomboid addresses one by user name (`kick {name}`, `banuser {name}`, `unbanuser {name}`).
+
+- **Project Zomboid detects presence and polls RCON.** Its `player_joined_regex`, `player_left_regex`
+  and the four `rcon_*` fields sit at the blueprint's top level, where the loader reads them, so the
+  watchdog gets both the join pattern and the RCON connection it needs. The console log names a
+  player only by Steam id, so the RCON `players` poll is what supplies the user name a moderation
+  command addresses — which makes `rcon_password` (set on the instance and in the game's own server
+  config) the switch that turns Project Zomboid moderation from declared into usable.
+
 - **Player moderation: `kgsm instances kick|ban|unban <instance> <target>`.** Three optional
   top-level blueprint fields — `kick_command`, `ban_command`, `unban_command` — declare the console
   commands a game accepts to remove a player, block them, and lift that block. Each is a template
