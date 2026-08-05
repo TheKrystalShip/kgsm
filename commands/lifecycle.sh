@@ -275,22 +275,38 @@ function _cmd_stop() {
 
   # Call pure logic function
   __print_info "Stopping instance $instance_name"
+
+  # A stop is not instant: the supervisor sends the game its stop command and then waits for the
+  # process to drain, which for a game that saves its world on the way out is seconds to a minute,
+  # and up to the instance's whole stop timeout when the game ignores it. These bracket that wait so
+  # a consumer can show the instance as stopping while it happens, whichever entrypoint drove it —
+  # the same bracket `instances update` carries. Finished is emitted on every outcome: it says the
+  # run ENDED, while instance_stopped (emitted below, on success only) says the instance is down.
+  __emit_event instance-stop-started "$instance_name"
+
   local exit_code
   __logic_instance_stop "$instance_name"
   exit_code=$?
 
   # Handle results based on exit code
+  local result=$EC_SUCCESS
   case $exit_code in
     $EC_SUCCESS_INSTANCE_STOPPED)
       __print_success "Instance $instance_name stopped successfully"
       __dispatch_event_from_exit_code "$exit_code" "$instance_name"
-      return $EC_SUCCESS
       ;;
     *)
       __print_error "Failed to stop instance $instance_name"
-      return $exit_code
+      result=$exit_code
       ;;
   esac
+
+  # Emitted LAST, after instance-stopped on the success path: a consumer that reads "the run ended"
+  # and re-reads the instance must find the outcome already recorded, or it briefly reports the state
+  # the instance was in before the stop.
+  __emit_event instance-stop-finished "$instance_name"
+
+  return $result
 }
 
 # Restart command implementation

@@ -53,6 +53,14 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Added
 
+- **`stop` brackets its run with events.** `instance_stop_started` is emitted before the shutdown and
+  `instance_stop_finished` after it returns, on every outcome — so a consumer can show an instance as
+  stopping for as long as the supervisor waits for the game to drain and save, which is seconds to a
+  minute for most games and the whole stop timeout for one that ignores its stop command. Finished
+  says the run ENDED; `instance_stopped` still says the instance is down, and is still emitted on
+  success only. This gives `stop` the same shape `update` has, so a surface learns about either from
+  the journal alone, no matter which entrypoint drove it.
+
 - **`instances update` brackets its run with events.** `instance_update_started` is emitted before
   the management file runs and `instance_update_finished` after it returns, on every outcome — so a
   consumer can tell that an instance is busy updating for the whole minutes-long download-and-deploy,

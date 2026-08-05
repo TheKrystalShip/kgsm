@@ -1016,12 +1016,15 @@ function test_edge_case_all_events_have_configs() {
 }
 
 function test_edge_case_event_count_matches_configs() {
-  log_test_step "Testing EVENT_CONFIGS count matches expected 44 events"
+  # A canary, not a rule: the number itself carries no meaning, but a change to it means the event
+  # vocabulary grew or shrank, which is worth being deliberate about. Update it in the same commit
+  # that adds or removes an event, together with the param spec beside it.
+  log_test_step "Testing EVENT_CONFIGS count matches expected 49 events"
 
   local config_count="${#EVENT_CONFIGS[@]}"
 
-  assert_equals "$config_count" "44" \
-    "EVENT_CONFIGS should contain exactly 44 entries (found: $config_count)"
+  assert_equals "$config_count" "49" \
+    "EVENT_CONFIGS should contain exactly 49 entries (found: $config_count)"
 }
 
 # Conformance guard: every event a call site actually emits must be registered

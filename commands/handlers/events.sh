@@ -53,6 +53,12 @@ export EVENT_INSTANCE_DEPLOY_FAILED
 declare -g -r EVENT_INSTANCE_DEPLOYED="instance_deployed"
 export EVENT_INSTANCE_DEPLOYED
 
+declare -g -r EVENT_INSTANCE_STOP_STARTED="instance_stop_started"
+export EVENT_INSTANCE_STOP_STARTED
+
+declare -g -r EVENT_INSTANCE_STOP_FINISHED="instance_stop_finished"
+export EVENT_INSTANCE_STOP_FINISHED
+
 declare -g -r EVENT_INSTANCE_UPDATE_STARTED="instance_update_started"
 export EVENT_INSTANCE_UPDATE_STARTED
 
@@ -260,6 +266,8 @@ declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_DEPLOY_FINISHED"]="instance"
   ["$EVENT_INSTANCE_DEPLOY_FAILED"]="instance"
   ["$EVENT_INSTANCE_DEPLOYED"]="instance"
+  ["$EVENT_INSTANCE_STOP_STARTED"]="instance"
+  ["$EVENT_INSTANCE_STOP_FINISHED"]="instance"
   ["$EVENT_INSTANCE_UPDATE_STARTED"]="instance"
   ["$EVENT_INSTANCE_UPDATE_FINISHED"]="instance"
   ["$EVENT_INSTANCE_UPDATED"]="instance"
