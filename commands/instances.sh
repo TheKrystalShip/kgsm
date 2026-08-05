@@ -1994,12 +1994,23 @@ function _cmd_update() {
   local old_version new_version
   old_version="$(cat "$instance_version_file" 2> /dev/null)"
 
+  # An update runs for as long as the game takes to download and deploy, and
+  # nothing else tells a consumer that the instance is busy in the meantime —
+  # the version event only lands at the end. These two bracket the whole run so
+  # a surface can show the instance as updating while it happens, no matter
+  # which entrypoint drove it. Finished is emitted on every outcome (including
+  # a refusal or a failed download): it states that the run ENDED, not that it
+  # succeeded — instance-version-updated is what says the version moved.
+  __emit_event instance-update-started "${instance}"
+
   if [[ -n "$run_state" ]]; then
     "$instance_management_file" update --run-state "$run_state"
   else
     "$instance_management_file" update
   fi
   local rc=$?
+
+  __emit_event instance-update-finished "${instance}"
 
   if [[ $rc -eq 0 ]]; then
     new_version="$(cat "$instance_version_file" 2> /dev/null)"

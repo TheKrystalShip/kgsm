@@ -53,6 +53,13 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Added
 
+- **`instances update` brackets its run with events.** `instance_update_started` is emitted before
+  the management file runs and `instance_update_finished` after it returns, on every outcome — so a
+  consumer can tell that an instance is busy updating for the whole minutes-long download-and-deploy,
+  instead of learning about it only when `instance_version_updated` lands at the end. Finished states
+  that the run ended, not that it succeeded; the version event remains the one that says the version
+  moved. Both event types were already declared and carry the instance name.
+
 - **Palworld and Project Zomboid declare their moderation commands.** Palworld addresses a player
   by account id (`/KickPlayer {id}`, `/BanPlayer {id}`, `/UnBanPlayer {id}`) — the bare number its
   join line carries, so the presence capture and the moderation target are the same token. Project
