@@ -337,22 +337,38 @@ function _cmd_restart() {
 
   # Call pure logic function
   __print_info "Restarting instance $instance_name"
+
+  # A restart is a stop and a start back to back, so it lasts at least as long as the shutdown drain
+  # plus the game's boot — the longest of the lifecycle verbs. It runs through the pure logic
+  # functions rather than the stop and start COMMANDS, so none of their events fire along the way and
+  # instance-restarted at the end is the only thing a consumer would otherwise see. These bracket the
+  # whole thing, the same way stop and update are bracketed. Finished is emitted on every outcome: it
+  # says the run ENDED, while instance-restarted says the instance came back.
+  __emit_event instance-restart-started "$instance_name"
+
   local exit_code
   __logic_instance_restart "$instance_name"
   exit_code=$?
 
   # Handle results based on exit code
+  local result=$EC_SUCCESS
   case $exit_code in
     $EC_SUCCESS_INSTANCE_RESTARTED)
       __print_success "Instance $instance_name restarted successfully"
       __dispatch_event_from_exit_code "$exit_code" "$instance_name"
-      return 0
       ;;
     *)
       __print_error "Failed to restart instance $instance_name"
-      return $exit_code
+      result=$exit_code
       ;;
   esac
+
+  # Emitted LAST, after instance-restarted on the success path, for the same reason the stop bracket
+  # is: a consumer that reads "the run ended" and re-reads the instance must find the outcome already
+  # recorded rather than the state it was in before.
+  __emit_event instance-restart-finished "$instance_name"
+
+  return $result
 }
 
 # Status command implementation

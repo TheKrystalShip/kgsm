@@ -77,6 +77,9 @@ Event types use **underscore-separated** names in JSON payloads and **dash-separ
 | `instance_stop_started` | Shutdown initiated — the supervisor has asked the game to stop and is waiting for it to drain | `InstanceName` |
 | `instance_stop_finished` | The shutdown run ended, whatever its outcome | `InstanceName` |
 | `instance_stopped` | Server process stopped | `InstanceName` |
+| `instance_restart_started` | Restart initiated — the instance is going down and coming back | `InstanceName` |
+| `instance_restart_finished` | The restart run ended, whatever its outcome | `InstanceName` |
+| `instance_restarted` | Server restarted and is back up | `InstanceName` |
 | `instance_ready` | Server is accepting connections | `InstanceName` |
 | `instance_backup_created` | Backup created | `InstanceName`, `Source`, `Version` |
 | `instance_backup_restored` | Backup restored | `InstanceName`, `Source`, `Version` |

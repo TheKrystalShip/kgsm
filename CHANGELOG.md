@@ -53,6 +53,14 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Added
 
+- **`restart` brackets its run with events.** `instance_restart_started` before and
+  `instance_restart_finished` after, on every outcome. A restart is a stop and a start back to back —
+  the longest of the lifecycle verbs — and it runs through the pure logic functions rather than the
+  stop and start commands, so none of their events fire along the way: `instance_restarted` at the end
+  was the only thing a consumer ever saw, and until it arrived the instance still looked like it was
+  running normally. Finished says the run ENDED; `instance_restarted` still says the instance came
+  back. With this, every long lifecycle verb — update, stop, restart — is bracketed the same way.
+
 - **`stop` brackets its run with events.** `instance_stop_started` is emitted before the shutdown and
   `instance_stop_finished` after it returns, on every outcome — so a consumer can show an instance as
   stopping for as long as the supervisor waits for the game to drain and save, which is seconds to a
