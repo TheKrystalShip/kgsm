@@ -28,6 +28,13 @@ if [[ -z "${KGSM_LOGIC_WATCHDOG_LOADED}" ]]; then
   source "$(__find_command_handler watchdog.sh)" || return $EC_FAILED_SOURCE
 fi
 
+# Load firewall integration logic (__logic_ensure_firewall_open), so a bring-up
+# can re-assert the instance's host firewall rule before the server comes up.
+if [[ -z "${KGSM_LOGIC_FILES_FIREWALL_LOADED}" ]]; then
+  # shellcheck source=files.firewall.sh
+  source "$(__find_command_handler files.firewall.sh)" || return $EC_FAILED_SOURCE
+fi
+
 # Success event exit codes are now centralized in core/errors.sh
 # They are automatically available through the bootstrap process
 
@@ -49,6 +56,15 @@ function __logic_instance_start() {
   if [[ $exit_code -ne 0 ]]; then
     return $exit_code
   fi
+
+  # Re-assert the host firewall rule before the server is reachable. Opening the
+  # ports at install alone leaves an instance silently unreachable if the host
+  # ruleset is reset or rebuilt underneath it, so every bring-up asks the
+  # authority again — idempotent, and a no-op for an instance with firewall
+  # management off or no ports. Deliberately not fatal: a firewall authority that
+  # is down must not keep a game server off the air, and the authority's own
+  # stderr already says so.
+  __logic_ensure_firewall_open "$_instance_config_file"
 
   # Native instances are the only kind KGSM starts here (the watchdog, or the
   # direct management script when it is absent). Container instances run their own

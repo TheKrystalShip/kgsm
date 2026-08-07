@@ -299,3 +299,107 @@ function test_disable_op_failed_is_soft_but_flips_config() {
 
   rm -f "$cfg"
 }
+
+# =============================================================================
+# __logic_ensure_firewall_open() — the start-path reconcile
+# =============================================================================
+
+function test_ensure_open_empty_arg() {
+  log_test_step "ensure-open: empty argument -> EC_INVALID_ARG"
+  __logic_ensure_firewall_open "" 2> /dev/null
+  assert_equals "$EC_INVALID_ARG" "$?" "Empty config path should return EC_INVALID_ARG"
+}
+
+function test_ensure_open_file_not_found() {
+  log_test_step "ensure-open: missing config file -> EC_FILE_NOT_FOUND"
+  __logic_ensure_firewall_open "/nonexistent/instance.ini" 2> /dev/null
+  assert_equals "$EC_FILE_NOT_FOUND" "$?" "Missing config should return EC_FILE_NOT_FOUND"
+}
+
+function test_ensure_open_reasserts_the_rule_with_the_canonical_tokens() {
+  log_test_step "ensure-open: management on -> ensure-open argv, EC_SUCCESS"
+  unset instance_name instance_ports instance_enable_firewall_management
+
+  local cfg args_file
+  cfg=$(mktemp)
+  args_file=$(mktemp)
+  __write_instance_config "$cfg" "ufw_ensure_$$" "25565"
+  echo "enable_firewall_management=true" >> "$cfg"
+
+  STUB_EXIT=0 STUB_ARGS_FILE="$args_file" KGSM_FIREWALL_BIN="$FW_STUB" \
+    __logic_ensure_firewall_open "$cfg" 2> /dev/null
+  local rc=$?
+
+  assert_equals "$EC_SUCCESS" "$rc" "A reconciled rule should return EC_SUCCESS"
+  # A proto-less spec opens both protocols, the way ufw reads it.
+  assert_file_contains "$args_file" "ensure-open ufw_ensure_$$ 25565/tcp 25565/udp" \
+    "The authority should receive ensure-open with the canonical port tokens"
+
+  rm -f "$cfg" "$args_file"
+}
+
+function test_ensure_open_respects_an_instance_with_management_off() {
+  log_test_step "ensure-open: management off -> authority NOT called, EC_SUCCESS"
+  unset instance_name instance_ports instance_enable_firewall_management
+
+  local cfg args_file
+  cfg=$(mktemp)
+  args_file=$(mktemp)
+  __write_instance_config "$cfg" "ufw_ensure_off_$$" "25565/tcp"
+  echo "enable_firewall_management=false" >> "$cfg"
+
+  # STUB_EXIT=3 would surface IF the authority were called — proving the skip.
+  STUB_EXIT=3 STUB_ARGS_FILE="$args_file" KGSM_FIREWALL_BIN="$FW_STUB" \
+    __logic_ensure_firewall_open "$cfg" 2> /dev/null
+  local rc=$?
+
+  assert_equals "$EC_SUCCESS" "$rc" "An opted-out instance is a no-op, not a failure"
+
+  local called
+  called=$(cat "$args_file" 2> /dev/null)
+  assert_null "$called" "A start must not re-open ports the operator turned off"
+
+  rm -f "$cfg" "$args_file"
+}
+
+function test_ensure_open_empty_ports_skips_authority() {
+  log_test_step "ensure-open: no ports -> authority NOT called, EC_SUCCESS"
+  unset instance_name instance_ports instance_enable_firewall_management
+
+  local cfg args_file
+  cfg=$(mktemp)
+  args_file=$(mktemp)
+  __write_instance_config "$cfg" "ufw_ensure_noports_$$" ""
+  echo "enable_firewall_management=true" >> "$cfg"
+
+  STUB_EXIT=3 STUB_ARGS_FILE="$args_file" KGSM_FIREWALL_BIN="$FW_STUB" \
+    __logic_ensure_firewall_open "$cfg" 2> /dev/null
+  local rc=$?
+
+  assert_equals "$EC_SUCCESS" "$rc" "An instance with no ports has nothing to open"
+
+  local called
+  called=$(cat "$args_file" 2> /dev/null)
+  assert_null "$called" "The authority must NOT be invoked for a port-less instance"
+
+  rm -f "$cfg" "$args_file"
+}
+
+function test_ensure_open_surfaces_an_unreachable_authority() {
+  log_test_step "ensure-open: authority unreachable -> EC_FIREWALL_UNREACHABLE"
+  unset instance_name instance_ports instance_enable_firewall_management
+
+  local cfg
+  cfg=$(mktemp)
+  __write_instance_config "$cfg" "ufw_ensure_unreach_$$" "25565/tcp"
+  echo "enable_firewall_management=true" >> "$cfg"
+
+  STUB_EXIT=3 KGSM_FIREWALL_BIN="$FW_STUB" \
+    __logic_ensure_firewall_open "$cfg" 2> /dev/null
+  local rc=$?
+  rm -f "$cfg"
+
+  # Reported, not fatal — the start path warns and brings the server up anyway.
+  assert_equals "$EC_FIREWALL_UNREACHABLE" "$rc" \
+    "An unreachable authority should be reported to the caller"
+}

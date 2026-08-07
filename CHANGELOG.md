@@ -53,6 +53,26 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Added
 
+- **A start re-asserts the instance's firewall rule.** Every bring-up hands the instance's ports
+  back to the kgsm-firewall authority before the server comes up, rather than trusting the rule
+  written once at install. The host ruleset is not something KGSM holds a lock on — a `ufw reset`,
+  a hand-edited ruleset or a reprovisioned host drops the rule while the instance config still says
+  firewall management is on — and the symptom is a server that runs perfectly and is unreachable,
+  with nothing in KGSM to say why. `ensure-open` is idempotent, so the already-open case costs one
+  round trip. An instance whose operator turned firewall management off is left alone, and an
+  authority that is down is reported but never keeps a game server off the air.
+
+- **Minecraft detects presence and declares its moderation commands.** `player_joined_regex` and
+  `player_left_regex` match the connection pair (`logged in with entity id` / `lost connection:`)
+  rather than the "joined/left the game" chat broadcasts: those are core server logging a mod does
+  not reword, and they carry the player's address and the disconnect reason. The account UUID is
+  logged on its own line, which a per-line matcher cannot correlate, so the username is the identity
+  and `key` pins the session key to it on both sides — the address appears on the join line alone.
+  The username is matched as Minecraft's legal charset anchored to the start of the message, so a
+  pre-login `GameProfile@…` disconnect by someone who never joined raises no phantom leave. The
+  game addresses a player by that same username, so moderation is `/kick {name}`, `/ban {name}`,
+  `/pardon {name}`.
+
 - **`restart` brackets its run with events.** `instance_restart_started` before and
   `instance_restart_finished` after, on every outcome. A restart is a stop and a start back to back —
   the longest of the lifecycle verbs — and it runs through the pure logic functions rather than the
@@ -200,6 +220,12 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   flush and console input.
 
 ### Fixed
+
+- **Minecraft's blueprint opens the port the game actually listens on.** It declared `25565/udp`,
+  but the Java server serves the game over TCP; UDP on that number is only the optional GS4 query
+  listener. An instance came up with its game port shut and needed a hand-written ufw rule to be
+  reachable at all. The protocol is now left off the spec, which opens both — the way ufw reads a
+  bare port — so enabling query later needs no firewall change.
 
 - **An update of a running native instance is refused.** The refusal probed the pid file the
   watchdog does not write, so it never fired for a supervised instance: the update ran, downloaded,
