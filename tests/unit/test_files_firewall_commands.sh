@@ -269,8 +269,8 @@ function test_enable_succeeds_when_authority_ok() {
   remove_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
-function test_enable_hard_fails_when_authority_unreachable() {
-  log_test_step "enable: authority unreachable (stub exit 3) -> hard-fail (non-zero) + explicit message"
+function test_enable_succeeds_when_the_authority_is_unreachable() {
+  log_test_step "enable: authority unreachable (stub exit 3) -> still succeeds, nothing was asked of it"
 
   local blueprint="factorio"
   local instance_name
@@ -284,10 +284,10 @@ function test_enable_hard_fails_when_authority_unreachable() {
   output=$(KGSM_FIREWALL_BIN="$FW_STUB" STUB_EXIT=3 "$MODULE" enable "$instance_name" 2>&1)
   exit_code=$?
 
-  # §7g hard-fail: a firewall-enabled enable must NOT silently proceed when the
-  # authority is down.
-  assert_not_equals 0 "$exit_code" "enable must hard-fail when the authority is unreachable"
-  assert_contains "$output" "not reachable" "Should surface the explicit authority-unreachable message"
+  # Enable states intent — the ports open on the start that follows — so there is
+  # nothing for a down authority to fail at, and no reason to refuse the install.
+  assert_equals 0 "$exit_code" "enable records intent and does not depend on the authority"
+  assert_contains "$output" "while" "Should say the ports open while the instance runs"
 
   remove_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR"
 }

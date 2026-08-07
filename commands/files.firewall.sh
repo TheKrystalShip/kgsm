@@ -156,35 +156,14 @@ function _cmd_enable() {
   case $exit_code in
     $EC_SUCCESS_FIREWALL_ENABLED)
       __print_success "Firewall integration enabled successfully"
-      __print_info "Ports opened via the kgsm-firewall authority"
-      # Audit event: record which ports were opened. The payload carries them as
-      # the canonical structured array; an instance with no ports opens nothing,
-      # so no event is emitted.
-      local _ports
-      _ports=$(__get_config_value "$instance_config_file" "ports" 2> /dev/null)
-      if [[ -n "$_ports" ]]; then
-        __emit_event instance-ports-opened "$instance_name" "$_ports"
-      fi
+      # Nothing was opened, and saying otherwise would describe a rule that does
+      # not exist: the ports open on the next start and close on the stop, so
+      # that a server that is not running holds nothing open on the host.
+      __print_info "Ports open while '$instance_name' is running"
       return 0
       ;;
     $EC_INVALID_CONFIG)
       __print_error "Invalid instance configuration - missing required fields"
-      return $exit_code
-      ;;
-    $EC_FIREWALL_UNREACHABLE)
-      # Hard-fail (B): a firewall-enabled install must NOT silently proceed when
-      # the authority is down — be explicit and self-explanatory.
-      __print_error "kgsm-firewall authority not reachable — cannot open ports for '$instance_name'"
-      __print_error "The authority at $(__firewall_socket_path) is down or not installed"
-      __print_error "Start/install kgsm-firewall (or disable firewall management) and retry"
-      return $exit_code
-      ;;
-    $EC_FIREWALL)
-      __print_error "The firewall backend could not apply the rules for '$instance_name'"
-      return $exit_code
-      ;;
-    $EC_ERROR)
-      __print_error "Invalid port definition in instance configuration"
       return $exit_code
       ;;
     $EC_FAILED_UPDATE_CONFIG)

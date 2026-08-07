@@ -31,12 +31,16 @@ if [[ -z "${KGSM_LOGIC_FIREWALL_LOADED}" ]]; then
   source "$(__find_command_handler firewall.sh)" || return $EC_FAILED_SOURCE
 fi
 
-# Enable firewall integration for an instance by handing its ports to the
-# kgsm-firewall authority (the host-firewall owner). kgsm no longer renders a
-# ufw profile or shells `ufw` itself — the authority owns rule rendering and the
-# backend, tagging rules `kgsm-<instance>`. Hard-fail (B): if the authority is
-# unreachable the original EC_FIREWALL_UNREACHABLE propagates so the install
-# aborts rather than silently proceeding.
+# Enable firewall integration for an instance: mark it as one whose ports KGSM
+# manages. It opens nothing. An instance's ports are open exactly while it is
+# running, so the rule is written on the bring-up that follows and removed on the
+# stop — the same lifetime as its UPnP mapping, and for the same reason: a
+# stopped server has no business holding an open port on the host.
+#
+# That makes this toggle a statement of intent, which is what every other
+# consumer reads it as: the supervisor asks the authority to open the ports of an
+# instance carrying it, and skips one that does not.
+#
 # Args: $1 = instance_config_file
 # Returns: EC_SUCCESS_FIREWALL_ENABLED on success, error code on failure
 function __logic_enable_firewall_integration() {
@@ -51,37 +55,19 @@ function __logic_enable_firewall_integration() {
     return $EC_FILE_NOT_FOUND
   fi
 
-  # Source the instance config to expose its name + UFW-format port spec
-  # (instance_name / instance_ports).
-  # shellcheck disable=SC1090
-  __source_instance "$instance_config_file" || return $EC_FAILED_SOURCE
+  # The name is what the authority tags a rule with, so a config that cannot
+  # name itself cannot be managed — refuse rather than record an intent nothing
+  # could act on.
+  local _instance_name
+  _instance_name=$(__get_config_value "$instance_config_file" "name" 2> /dev/null)
 
-  local _instance_name="${instance_name:-}"
   if [[ -z "$_instance_name" ]]; then
     return $EC_INVALID_CONFIG
   fi
 
-  # Convert the UFW spec into the kgsm-firewall CLI's port tokens. An instance
-  # with no ports has nothing to open: record the toggle and return without
-  # bothering the authority (`ensure-open` requires >=1 port).
-  local _tokens
-  if ! _tokens=$(__firewall_ports_to_tokens "${instance_ports:-}"); then
-    return $EC_ERROR
-  fi
-
-  if [[ -n "$_tokens" ]]; then
-    local -a _token_arr
-    read -ra _token_arr <<< "$_tokens"
-    __firewall_ensure_open "$_instance_name" "${_token_arr[@]}"
-    local _rc=$?
-    if [[ $_rc -ne $EC_SUCCESS ]]; then
-      return $_rc
-    fi
-  fi
-
   # Record that firewall management is on for this instance. The authority owns
-  # the host rule now (tagged kgsm-<instance>), so firewall_rule_file — the path
-  # of the old kgsm-rendered ufw profile — is no longer written.
+  # the host rule (tagged kgsm-<instance>), so firewall_rule_file — the path of
+  # the old kgsm-rendered ufw profile — is no longer written.
   if ! __add_or_update_config "$instance_config_file" "enable_firewall_management" "true"; then
     return $EC_FAILED_UPDATE_CONFIG
   fi
@@ -91,13 +77,9 @@ function __logic_enable_firewall_integration() {
 
 export -f __logic_enable_firewall_integration
 
-# Re-assert an instance's firewall rule, for the bring-up path to call on every
-# start. The rule the authority owns is host state KGSM does not hold a lock on
-# — a `ufw reset`, a hand-edited ruleset or a reprovisioned host drops it while
-# the instance config still says firewall management is on — and a game server
-# whose ports are shut is unreachable with nothing in KGSM to say so. Asking the
-# authority every time closes that window: `ensure-open` is idempotent, so the
-# already-open case costs one round trip and changes nothing.
+# Open an instance's ports for the run that is starting. An instance's ports are
+# open exactly while it is running, so this is the bring-up half of that lifetime
+# and __logic_ensure_firewall_closed is the teardown half.
 #
 # Two things make it a no-op rather than a failure: an instance whose operator
 # turned firewall management off (that is an explicit "stop managing this", and
@@ -105,8 +87,13 @@ export -f __logic_enable_firewall_integration
 #
 # Best-effort by design: the caller starts the server whatever this returns. A
 # firewall authority that is down is a reason to warn, not a reason to refuse to
-# run a game server — the opposite of the install path's hard-fail, where there
-# is no server yet to keep off the air.
+# run a game server.
+#
+# For a NATIVE instance under the resident supervisor this is belt-and-braces:
+# kgsm-watchdog opens the same rule as it spawns, and it is the only thing that
+# can, for the bring-ups kgsm never sees (boot auto-start, crash-respawn). This
+# path is what covers a container instance and a host with no watchdog. Both are
+# idempotent, so the overlap costs one round trip.
 # Args: $1 = instance_config_file
 # Returns: EC_SUCCESS when the ports are open or the instance opts out;
 #          EC_FIREWALL_UNREACHABLE / EC_FIREWALL when the authority could not
@@ -151,6 +138,55 @@ function __logic_ensure_firewall_open() {
 }
 
 export -f __logic_ensure_firewall_open
+
+# Release an instance's ports on a deliberate stop — the teardown half of
+# __logic_ensure_firewall_open. A stopped server holds no open port on the host.
+#
+# Removal is addressed by the instance's ownership tag rather than by its ports,
+# so it cleans up correctly even for an instance whose declared ports changed
+# while it was running.
+#
+# Distinct from __logic_disable_firewall_integration despite both removing the
+# rule: that one is the operator saying "stop managing this instance's firewall"
+# and flips the toggle off. This one leaves the toggle alone — the instance is
+# still managed, it is simply not running.
+#
+# Best-effort, and NOT applied to a crash: only this deliberate-stop path calls
+# it, because a crash is followed by a restart that still needs the ports, and a
+# process dying is not a reason to tear down host state.
+# Args: $1 = instance_config_file
+# Returns: EC_SUCCESS when the ports are closed or the instance opts out;
+#          EC_FIREWALL_UNREACHABLE / EC_FIREWALL when the authority could not
+#          confirm the removal; EC_INVALID_ARG / EC_FILE_NOT_FOUND /
+#          EC_INVALID_CONFIG on a malformed request.
+function __logic_ensure_firewall_closed() {
+  local instance_config_file="$1"
+
+  if [[ -z "$instance_config_file" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  if [[ ! -f "$instance_config_file" ]]; then
+    return $EC_FILE_NOT_FOUND
+  fi
+
+  # Exposes instance_name / instance_enable_firewall_management.
+  # shellcheck disable=SC1090
+  __source_instance "$instance_config_file" || return $EC_FAILED_SOURCE
+
+  if [[ "${instance_enable_firewall_management:-}" != "true" ]]; then
+    return $EC_SUCCESS
+  fi
+
+  local _instance_name="${instance_name:-}"
+  if [[ -z "$_instance_name" ]]; then
+    return $EC_INVALID_CONFIG
+  fi
+
+  __firewall_remove "$_instance_name"
+}
+
+export -f __logic_ensure_firewall_closed
 
 # Disable firewall integration for an instance by asking the kgsm-firewall
 # authority to remove every rule it owns for it. Deliberately best-effort

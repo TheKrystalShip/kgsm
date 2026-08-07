@@ -57,12 +57,10 @@ function __logic_instance_start() {
     return $exit_code
   fi
 
-  # Re-assert the host firewall rule before the server is reachable. Opening the
-  # ports at install alone leaves an instance silently unreachable if the host
-  # ruleset is reset or rebuilt underneath it, so every bring-up asks the
-  # authority again — idempotent, and a no-op for an instance with firewall
-  # management off or no ports. Deliberately not fatal: a firewall authority that
-  # is down must not keep a game server off the air, and the authority's own
+  # Open the host firewall for the run that is starting — an instance's ports are
+  # open exactly while it is running. A no-op for an instance with firewall
+  # management off or no ports, and deliberately not fatal: a firewall authority
+  # that is down must not keep a game server off the air, and the authority's own
   # stderr already says so.
   __logic_ensure_firewall_open "$_instance_config_file"
 
@@ -136,7 +134,17 @@ function __logic_instance_stop() {
 
   # Native instances only (watchdog, or the direct management script when absent).
   __logic_stop_standalone_instance "$_instance_name" "$_instance_config_file"
-  return $?
+  local _stop_rc=$?
+
+  # Release the ports the run held. Only on a stop that actually happened: a
+  # refused or failed stop leaves the server running, and closing its ports would
+  # strand a live instance behind a shut door. A crash never reaches here, which
+  # is correct — the restart that follows still needs the ports.
+  if [[ $_stop_rc -eq $EC_SUCCESS_INSTANCE_STOPPED ]]; then
+    __logic_ensure_firewall_closed "$_instance_config_file"
+  fi
+
+  return $_stop_rc
 }
 
 export -f __logic_instance_stop

@@ -122,8 +122,8 @@ function test_enable_missing_name() {
 # __logic_enable_firewall_integration() — authority routing
 # =============================================================================
 
-function test_enable_success_calls_authority_and_updates_config() {
-  log_test_step "enable: authority OK -> EC_SUCCESS_FIREWALL_ENABLED + config on + ensure-open argv"
+function test_enable_records_the_toggle_without_opening_anything() {
+  log_test_step "enable: records the toggle, authority NOT called"
   unset instance_name instance_ports
 
   local cfg args_file
@@ -131,82 +131,42 @@ function test_enable_success_calls_authority_and_updates_config() {
   args_file=$(mktemp)
   __write_instance_config "$cfg" "ufw_ok_$$" "34197/udp|27015:27020/tcp"
 
-  STUB_EXIT=0 STUB_ARGS_FILE="$args_file" KGSM_FIREWALL_BIN="$FW_STUB" \
+  # STUB_EXIT=3 would surface IF the authority were called — proving the skip.
+  STUB_EXIT=3 STUB_ARGS_FILE="$args_file" KGSM_FIREWALL_BIN="$FW_STUB" \
     __logic_enable_firewall_integration "$cfg" 2> /dev/null
   local rc=$?
 
   assert_equals "$EC_SUCCESS_FIREWALL_ENABLED" "$rc" "A clean enable should return EC_SUCCESS_FIREWALL_ENABLED"
   assert_file_contains "$cfg" "enable_firewall_management=true" \
     "Config should record firewall management as enabled"
-  assert_file_contains "$args_file" "ensure-open ufw_ok_$$ 34197/udp 27015:27020/tcp" \
-    "The authority should receive ensure-open with the canonical port tokens"
+
+  local called
+  called=$(cat "$args_file" 2> /dev/null)
+  assert_null "$called" \
+    "Enable states intent only — the ports open on the start that follows, not here"
 
   rm -f "$cfg" "$args_file"
 }
 
-function test_enable_hard_fail_when_authority_unreachable() {
-  log_test_step "enable: authority unreachable -> EC_FIREWALL_UNREACHABLE, config NOT enabled"
+function test_enable_succeeds_while_the_authority_is_down() {
+  log_test_step "enable: authority unreachable -> still enabled (nothing is asked of it)"
   unset instance_name instance_ports
 
   local cfg
   cfg=$(mktemp)
   __write_instance_config "$cfg" "ufw_unreach_$$" "34197/udp"
 
-  STUB_EXIT=3 KGSM_FIREWALL_BIN="$FW_STUB" \
-    __logic_enable_firewall_integration "$cfg" 2> /dev/null
-  local rc=$?
-
-  assert_equals "$EC_FIREWALL_UNREACHABLE" "$rc" \
-    "An unreachable authority must hard-fail the enable (§7g)"
-
-  local content
-  content=$(cat "$cfg")
-  assert_not_contains "$content" "enable_firewall_management=true" \
-    "A hard-failed enable must NOT mark the instance firewall-enabled"
-
-  rm -f "$cfg"
-}
-
-function test_enable_op_failed_maps_ufw() {
-  log_test_step "enable: backend op-failed -> EC_FIREWALL"
-  unset instance_name instance_ports
-
-  local cfg
-  cfg=$(mktemp)
-  __write_instance_config "$cfg" "ufw_opfail_$$" "34197/udp"
-
-  STUB_EXIT=5 KGSM_FIREWALL_BIN="$FW_STUB" \
-    __logic_enable_firewall_integration "$cfg" 2> /dev/null
-  local rc=$?
-  rm -f "$cfg"
-
-  assert_equals "$EC_FIREWALL" "$rc" "A reachable-but-failed apply should map to EC_FIREWALL"
-}
-
-function test_enable_empty_ports_skips_authority() {
-  log_test_step "enable: no ports -> authority NOT called, still EC_SUCCESS_FIREWALL_ENABLED"
-  unset instance_name instance_ports
-
-  local cfg args_file
-  cfg=$(mktemp)
-  args_file=$(mktemp)
-  __write_instance_config "$cfg" "ufw_noports_$$" ""
-
-  # STUB_EXIT=3 would hard-fail IF the authority were called — proving the skip.
-  STUB_EXIT=3 STUB_ARGS_FILE="$args_file" KGSM_FIREWALL_BIN="$FW_STUB" \
+  # No binary at all: the harshest form of "authority down".
+  KGSM_FIREWALL_BIN="/nonexistent/kgsm-firewall" \
     __logic_enable_firewall_integration "$cfg" 2> /dev/null
   local rc=$?
 
   assert_equals "$EC_SUCCESS_FIREWALL_ENABLED" "$rc" \
-    "An instance with no ports has nothing to open and should succeed"
+    "Marking an instance managed does not depend on the authority being up"
   assert_file_contains "$cfg" "enable_firewall_management=true" \
-    "The firewall toggle should still be recorded"
+    "The toggle should be recorded regardless of the authority"
 
-  local called
-  called=$(cat "$args_file" 2> /dev/null)
-  assert_null "$called" "The authority must NOT be invoked for a port-less instance"
-
-  rm -f "$cfg" "$args_file"
+  rm -f "$cfg"
 }
 
 # =============================================================================
@@ -400,6 +360,94 @@ function test_ensure_open_surfaces_an_unreachable_authority() {
   rm -f "$cfg"
 
   # Reported, not fatal — the start path warns and brings the server up anyway.
+  assert_equals "$EC_FIREWALL_UNREACHABLE" "$rc" \
+    "An unreachable authority should be reported to the caller"
+}
+
+# =============================================================================
+# __logic_ensure_firewall_closed() — the stop-path release
+# =============================================================================
+
+function test_ensure_closed_releases_the_rule_by_ownership_tag() {
+  log_test_step "ensure-closed: management on -> remove argv, EC_SUCCESS"
+  unset instance_name instance_ports instance_enable_firewall_management
+
+  local cfg args_file
+  cfg=$(mktemp)
+  args_file=$(mktemp)
+  __write_instance_config "$cfg" "ufw_close_$$" "25565"
+  echo "enable_firewall_management=true" >> "$cfg"
+
+  STUB_EXIT=0 STUB_ARGS_FILE="$args_file" KGSM_FIREWALL_BIN="$FW_STUB" \
+    __logic_ensure_firewall_closed "$cfg" 2> /dev/null
+  local rc=$?
+
+  assert_equals "$EC_SUCCESS" "$rc" "A clean release should return EC_SUCCESS"
+  # Addressed by name, not by ports — so it still cleans up after a port change.
+  assert_file_contains "$args_file" "remove ufw_close_$$" \
+    "The authority should be asked to remove the instance's rules by ownership tag"
+
+  rm -f "$cfg" "$args_file"
+}
+
+function test_ensure_closed_leaves_the_toggle_alone() {
+  log_test_step "ensure-closed: a stop does not un-manage the instance"
+  unset instance_name instance_ports instance_enable_firewall_management
+
+  local cfg
+  cfg=$(mktemp)
+  __write_instance_config "$cfg" "ufw_close_toggle_$$" "25565"
+  echo "enable_firewall_management=true" >> "$cfg"
+
+  STUB_EXIT=0 KGSM_FIREWALL_BIN="$FW_STUB" \
+    __logic_ensure_firewall_closed "$cfg" 2> /dev/null
+
+  # The difference from `files firewall disable`: the instance is still managed,
+  # it is simply not running, so the next start opens its ports again.
+  assert_file_contains "$cfg" "enable_firewall_management=true" \
+    "A stop must not flip the instance to unmanaged"
+
+  rm -f "$cfg"
+}
+
+function test_ensure_closed_respects_an_instance_with_management_off() {
+  log_test_step "ensure-closed: management off -> authority NOT called, EC_SUCCESS"
+  unset instance_name instance_ports instance_enable_firewall_management
+
+  local cfg args_file
+  cfg=$(mktemp)
+  args_file=$(mktemp)
+  __write_instance_config "$cfg" "ufw_close_off_$$" "25565"
+  echo "enable_firewall_management=false" >> "$cfg"
+
+  STUB_EXIT=3 STUB_ARGS_FILE="$args_file" KGSM_FIREWALL_BIN="$FW_STUB" \
+    __logic_ensure_firewall_closed "$cfg" 2> /dev/null
+  local rc=$?
+
+  assert_equals "$EC_SUCCESS" "$rc" "An unmanaged instance is a no-op, not a failure"
+
+  local called
+  called=$(cat "$args_file" 2> /dev/null)
+  assert_null "$called" "An unmanaged instance's rules are not KGSM's to remove"
+
+  rm -f "$cfg" "$args_file"
+}
+
+function test_ensure_closed_surfaces_an_unreachable_authority() {
+  log_test_step "ensure-closed: authority unreachable -> EC_FIREWALL_UNREACHABLE"
+  unset instance_name instance_ports instance_enable_firewall_management
+
+  local cfg
+  cfg=$(mktemp)
+  __write_instance_config "$cfg" "ufw_close_unreach_$$" "25565"
+  echo "enable_firewall_management=true" >> "$cfg"
+
+  STUB_EXIT=3 KGSM_FIREWALL_BIN="$FW_STUB" \
+    __logic_ensure_firewall_closed "$cfg" 2> /dev/null
+  local rc=$?
+  rm -f "$cfg"
+
+  # Reported, not fatal — a stop that cannot reach the authority still stopped.
   assert_equals "$EC_FIREWALL_UNREACHABLE" "$rc" \
     "An unreachable authority should be reported to the caller"
 }

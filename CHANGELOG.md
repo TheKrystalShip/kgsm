@@ -53,13 +53,19 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Added
 
-- **A start re-asserts the instance's firewall rule.** Every bring-up hands the instance's ports
-  back to the kgsm-firewall authority before the server comes up, rather than trusting the rule
-  written once at install. The host ruleset is not something KGSM holds a lock on — a `ufw reset`,
-  a hand-edited ruleset or a reprovisioned host drops the rule while the instance config still says
-  firewall management is on — and the symptom is a server that runs perfectly and is unreachable,
-  with nothing in KGSM to say why. `ensure-open` is idempotent, so the already-open case costs one
-  round trip. An instance whose operator turned firewall management off is left alone, and an
+- **An instance's ports are open exactly while it is running.** They open on every bring-up and are
+  released on a deliberate stop, so a server that is not running holds nothing open on the host —
+  the same lifetime its UPnP mapping already had, and for the same reason. `files firewall enable`
+  opens nothing now: it marks the instance as one whose ports KGSM manages, which is what every
+  consumer already read it as, and the rule is written by the start that follows. Because nothing is
+  opened at install, enabling no longer depends on the authority being up, so a firewall-enabled
+  install can no longer be blocked by it.
+
+  A crash is deliberately not a close — the restart that follows still needs the ports, and a
+  process dying is not a reason to tear down host state. `kgsm-watchdog` drives both edges for the
+  native instances it supervises, including the boot auto-starts and crash-respawns the CLI never
+  sees; this path is what covers a container instance and a host with no watchdog. Both are
+  idempotent. An instance whose operator turned firewall management off is left alone, and an
   authority that is down is reported but never keeps a game server off the air.
 
 - **Minecraft detects presence and declares its moderation commands.** `player_joined_regex` and
