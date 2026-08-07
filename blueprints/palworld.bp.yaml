@@ -40,6 +40,6 @@ native:
   executable_subdirectory: ""
   executable_file: PalServer.sh
   executable_arguments: -useperfthreads -NoAsyncLoadingThread -UseMultithreadForDS -publicport=8211 -players=32
-  stop_command: ""
-  save_command: ""
+  stop_command: "/Shutdown"
+  save_command: "/Save"
   startup_success_regex: Bringing World /Pal/Maps/MainWorld up for play

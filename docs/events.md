@@ -21,7 +21,9 @@ One event per line is the contract every consumer's cursor depends on, so payloa
 
 **Emission is unconditional.** There is deliberately no switch that disables it: the journal is KGSM's audit record, and an audit trail that can be silently switched off is worse than none at all.
 
-**The journal is the record; a consumer's database is an index.** A consumer that stores events into SQLite or Postgres to make them queryable holds a *derived* copy — one it can rebuild from these files, and one that is authoritative for nothing. Two rules follow. A consumer's own retention must never exceed `event_journal_retention_days`, or rebuilding it returns less than it already held. And a consumer that persists events must key them idempotently (delivery is at-least-once, below), so replaying a segment corrects the index instead of duplicating it.
+**The journal is the record, and it answers for itself.** Reading history is a query over these files, not a lookup in something built from them — from C#, `kgsm-lib`'s `IEventJournalHistory` does it in-process. That is deliberate: a derived copy is a thing that can disagree with the record, fall behind it, or need rebuilding, and a consumer holding one makes every other consumer depend on that consumer being installed.
+
+A consumer *may* still keep its own store — for its own rows, or as a cache. Two rules then apply. Its retention must never exceed `event_journal_retention_days`, or rebuilding it returns less than it already held. And it must key events idempotently (delivery is at-least-once, below), so replaying a segment corrects it instead of duplicating it.
 
 ### The optional transport
 
