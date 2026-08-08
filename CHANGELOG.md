@@ -53,6 +53,29 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Added
 
+- **`instances delete-backup <instance> <id>`** — remove one backup by id. Only an id the engine
+  itself lists is accepted, so a directory in the backups store carrying no manifest — a foreign
+  directory, or a backup still being staged — cannot be deleted by naming it.
+
+- **`instance_backup_deleted` and `instance_backups_pruned`** — the two backup-removal audit
+  events. They are separate types because they answer different questions: a delete is an operator
+  naming one snapshot, a prune is retention policy sweeping whatever fell outside the keep window.
+  A reader asking who threw away a backup should not have to infer intent from a count, and one
+  auditing retention should not have to filter out hand-deletes. The delete carries the backup id;
+  the prune carries `Deleted`/`Kept` counts as JSON numbers, and a sweep that removed nothing emits
+  nothing. Scheduled retention pruning was previously the one backup operation that destroyed data
+  without leaving a record.
+
+### Changed
+
+- **Backups are compressed by default** (`enable_backup_compression=true`, config schema v8). A
+  compressed backup is a single `data.tar.gz` with an sha256 digest in its manifest, and that digest
+  is what `restore-backup` verifies before it touches the instance; an uncompressed backup is a
+  `data/` tree with no single digest, so a restore has nothing to check it against. Backups already
+  on disk are untouched and stay restorable — each manifest records its own `compressed` flag and
+  restore reads that, not the config. An existing instance keeps the value baked into its own
+  `.config.ini` until it is flipped with `instances config-set <instance> compress_backups=true`.
+
 - **`instance_upnp_reasserted`** — a router forward that went missing while its instance kept
   running, put back by the watchdog's periodic sweep. Its own event type rather than a second
   `instance_upnp_opened` because the two answer different questions: an open accompanies a

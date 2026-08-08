@@ -83,6 +83,13 @@ Event types use **underscore-separated** names in JSON payloads and **dash-separ
 | `instance_ready` | Server is accepting connections | `InstanceName` |
 | `instance_backup_created` | Backup created | `InstanceName`, `Source`, `Version` |
 | `instance_backup_restored` | Backup restored | `InstanceName`, `Source`, `Version` |
+| `instance_backup_deleted` | One named backup removed | `InstanceName`, `Source` |
+| `instance_backups_pruned` | Retention swept old backups | `InstanceName`, `Deleted`, `Kept` |
+
+`Source` is the backup id on all three of the single-backup events. A delete
+names one backup; a prune reports the whole sweep, so it carries counts instead:
+`Deleted` is how many were actually removed and `Kept` the retention window it
+ran with. Both are JSON numbers. A prune that removed nothing emits nothing.
 
 ### 🗑️ Removal Events
 
@@ -259,6 +266,8 @@ events.sh emit <event-type> [parameters...]
 | `instance-version-updated` | `<instance>` `<old_version>` `<new_version>` |
 | `instance-backup-created` | `<instance>` `<source>` `<version>` |
 | `instance-backup-restored` | `<instance>` `<source>` `<version>` |
+| `instance-backup-deleted` | `<instance>` `<source>` |
+| `instance-backups-pruned` | `<instance>` `<deleted>` `<kept>` |
 | `instance-files-removed` | `<instance>` |
 | `instance-directories-removed` | `<instance>` |
 | `instance-uninstall-started` | `<instance>` |

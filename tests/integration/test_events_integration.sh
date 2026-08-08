@@ -861,3 +861,75 @@ function test_emit_blueprint_created_payload_renders_unknown_runtime_as_null() {
   assert_equals "false" "$overrides" \
     "Data.OverridesSystem should be false for a brand-new custom blueprint"
 }
+
+function test_emit_backup_deleted_payload_carries_the_backup_id() {
+  log_test_step "Testing: instance_backup_deleted payload carries the backup id as Source"
+
+  # Emitted exactly as the delete-backup command layer does: instance, then the
+  # backup id. `Source` is the id here, the same field the created/restored
+  # events carry it in.
+  "$EVENTS_MODULE" emit instance-backup-deleted backup-test-server \
+    backup-test-server-20260731T142233Z-a3f9c1 > /dev/null 2>&1 || true
+
+  local payload
+  payload=$(_last_journal_event)
+  assert_not_null "$payload" "Journaled event payload should not be empty"
+
+  local event_type instance source
+  event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)
+  instance=$(echo "$payload" | jq -r '.Data.InstanceName' 2> /dev/null)
+  source=$(echo "$payload" | jq -r '.Data.Source' 2> /dev/null)
+
+  assert_equals "instance_backup_deleted" "$event_type" \
+    "EventType should be instance_backup_deleted"
+  assert_equals "backup-test-server" "$instance" \
+    "Data.InstanceName should carry the instance"
+  assert_equals "backup-test-server-20260731T142233Z-a3f9c1" "$source" \
+    "Data.Source should carry the deleted backup's id"
+
+  # No Version: the deleted backup's manifest is gone with it, and reading the
+  # instance's current version would record a fact about the instance, not the
+  # backup.
+  local has_version
+  has_version=$(echo "$payload" | jq -r '.Data | has("Version")' 2> /dev/null)
+  assert_equals "false" "$has_version" \
+    "Data must NOT contain a Version field (the deleted manifest is gone)"
+}
+
+function test_emit_backups_pruned_payload_carries_numeric_counts() {
+  log_test_step "Testing: instance_backups_pruned payload carries Deleted/Kept as JSON numbers"
+
+  "$EVENTS_MODULE" emit instance-backups-pruned backup-test-server 3 5 \
+    > /dev/null 2>&1 || true
+
+  local payload
+  payload=$(_last_journal_event)
+  assert_not_null "$payload" "Journaled event payload should not be empty"
+
+  local event_type instance deleted kept
+  event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)
+  instance=$(echo "$payload" | jq -r '.Data.InstanceName' 2> /dev/null)
+  deleted=$(echo "$payload" | jq -r '.Data.Deleted' 2> /dev/null)
+  kept=$(echo "$payload" | jq -r '.Data.Kept' 2> /dev/null)
+
+  assert_equals "instance_backups_pruned" "$event_type" \
+    "EventType should be instance_backups_pruned"
+  assert_equals "backup-test-server" "$instance" \
+    "Data.InstanceName should carry the instance"
+  assert_equals "3" "$deleted" "Data.Deleted should carry what was removed"
+  assert_equals "5" "$kept" "Data.Kept should carry the retention window"
+
+  # Counts must be JSON numbers, not strings: a consumer sums them without
+  # re-parsing, and kgsm-lib deserializes them into int fields.
+  local deleted_type kept_type
+  deleted_type=$(echo "$payload" | jq -r '.Data.Deleted | type' 2> /dev/null)
+  kept_type=$(echo "$payload" | jq -r '.Data.Kept | type' 2> /dev/null)
+  assert_equals "number" "$deleted_type" "Data.Deleted must be a JSON number"
+  assert_equals "number" "$kept_type" "Data.Kept must be a JSON number"
+
+  # A prune reports the sweep, not the ids — one event covers all of them.
+  local has_source
+  has_source=$(echo "$payload" | jq -r '.Data | has("Source")' 2> /dev/null)
+  assert_equals "false" "$has_source" \
+    "Data must NOT contain a Source field (a prune is a sweep, not one backup)"
+}

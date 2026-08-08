@@ -115,6 +115,27 @@ export EVENT_INSTANCE_BACKUP_CREATED
 declare -g -r EVENT_INSTANCE_BACKUP_RESTORED="instance_backup_restored"
 export EVENT_INSTANCE_BACKUP_RESTORED
 
+# Backup-removal audit events. A backup is data, and its removal is the one
+# backup operation with no undo — so both paths that destroy one say so.
+#
+# They are separate types because they answer different questions. A delete is
+# an operator naming one snapshot and removing it; a prune is retention policy
+# running, deleting whatever fell outside the keep window. A reader asking "who
+# threw away that backup" must not have to infer intent from a count, and a
+# reader auditing retention must not have to filter out hand-deletes.
+#
+# instance_backup_deleted carries `source` — the backup id, the same parameter
+# name the created/restored events use for it. instance_backups_pruned carries
+# counts rather than ids: it is one event for the whole sweep, and the ids it
+# removed are exactly the ones no longer listed. `deleted` is what was actually
+# removed (never what was attempted) and `kept` is the retention window it ran
+# with, so the pair reads as a complete statement of what the policy did.
+declare -g -r EVENT_INSTANCE_BACKUP_DELETED="instance_backup_deleted"
+export EVENT_INSTANCE_BACKUP_DELETED
+
+declare -g -r EVENT_INSTANCE_BACKUPS_PRUNED="instance_backups_pruned"
+export EVENT_INSTANCE_BACKUPS_PRUNED
+
 declare -g -r EVENT_INSTANCE_FILES_REMOVED="instance_files_removed"
 export EVENT_INSTANCE_FILES_REMOVED
 
@@ -312,6 +333,11 @@ declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_READY"]="instance"
   ["$EVENT_INSTANCE_BACKUP_CREATED"]="instance source version"
   ["$EVENT_INSTANCE_BACKUP_RESTORED"]="instance source version"
+  # `source` is the backup id, as in the two events above. No version: the
+  # deleted backup's manifest is gone with it, and re-reading the instance's
+  # current version would record a fact about the instance, not the backup.
+  ["$EVENT_INSTANCE_BACKUP_DELETED"]="instance source"
+  ["$EVENT_INSTANCE_BACKUPS_PRUNED"]="instance deleted kept"
   ["$EVENT_INSTANCE_FILES_REMOVED"]="instance"
   ["$EVENT_INSTANCE_DIRECTORIES_REMOVED"]="instance"
   ["$EVENT_INSTANCE_REMOVED"]="instance"
@@ -511,6 +537,27 @@ function __logic_build_event_payload() {
         InstanceName: $instance,
         Source: $source,
         Version: $version
+      }'
+      ;;
+    "$EVENT_INSTANCE_BACKUP_DELETED")
+      # `$source` binds because `source` is the 2nd EVENT_CONFIGS param name.
+      data_object='{
+        InstanceName: $instance,
+        Source: $source
+      }'
+      ;;
+    "$EVENT_INSTANCE_BACKUPS_PRUNED")
+      # Counts, not ids — one event covers the whole sweep. Rendered as JSON
+      # numbers rather than the strings --arg would produce, so a consumer can
+      # sum them without re-parsing. Both are always supplied by the emitter
+      # (a prune that removed nothing emits nothing at all), so neither is
+      # null-coalesced.
+      jq_args+=(--argjson deleted_n "${params[1]:-0}"
+        --argjson kept_n "${params[2]:-0}")
+      data_object='{
+        InstanceName: $instance,
+        Deleted: $deleted_n,
+        Kept: $kept_n
       }'
       ;;
     "$EVENT_INSTANCE_STARTED" | "$EVENT_INSTANCE_STOPPED" | "$EVENT_INSTANCE_RESTARTED")

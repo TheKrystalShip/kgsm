@@ -276,7 +276,7 @@ function __logic_create_base_instance() {
 
   export instance_save_command_timeout_seconds="${config_instance_save_command_timeout_seconds:-5}"
   export instance_stop_command_timeout_seconds="${config_instance_stop_command_timeout_seconds:-30}"
-  export instance_compress_backups="${config_enable_backup_compression:-false}"
+  export instance_compress_backups="${config_enable_backup_compression:-true}"
 
   local instance_executable_file
 

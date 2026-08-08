@@ -855,3 +855,120 @@ INI
   assert_command_fails "grep -q 'event_socket_filenames' '$test_config'"
   assert_command_succeeds "grep -q '^event_journal_dir=/var/lib/kgsm/events$' '$test_config'"
 }
+
+# =============================================================================
+# TEST: Migration 008 - Enables backup compression
+# =============================================================================
+
+function test_migration_008_enables_backup_compression() {
+  log_test_step "Testing migration 008 re-values enable_backup_compression to true"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v7_compression.ini"
+  cat > "$test_config" << 'INI'
+config_schema_version=7
+
+[system]
+backups_directory=/srv/kgsm-backups
+
+# ENABLE BACKUP COMPRESSION
+# Should KGSM automatically compress backup files to save disk space?
+#
+# Expected values:
+#   false  - Store backups uncompressed
+#   true   - Automatically compress backups
+#
+# Default: false
+enable_backup_compression=false
+
+instance_backup_retention=5
+
+[accessibility]
+enable_command_shortcuts=false
+INI
+
+  bash "$MIGRATION_DIR/008_v7_to_v8_backup_compression_default.sh" "$test_config"
+  assert_equals "$?" "0" "Migration 008 should succeed"
+
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "8" "Schema version should be 8"
+
+  assert_command_succeeds "grep -q '^enable_backup_compression=true$' '$test_config'"
+  assert_command_fails "grep -q '^enable_backup_compression=false$' '$test_config'"
+
+  # The documenting comment must not keep claiming a default the key no longer
+  # has — a config that contradicts itself is worse than one with no comment.
+  assert_command_succeeds "grep -q '^# Default: true$' '$test_config'"
+  assert_command_fails "grep -q '^# Default: false$' '$test_config'"
+
+  # The "false - Store backups uncompressed" line documents a still-valid value
+  # and must survive; so must every unrelated key and section.
+  assert_command_succeeds "grep -q 'false  - Store backups uncompressed' '$test_config'"
+  assert_command_succeeds "grep -q '^backups_directory=/srv/kgsm-backups$' '$test_config'"
+  assert_command_succeeds "grep -q '^instance_backup_retention=5$' '$test_config'"
+  assert_command_succeeds "grep -q '^enable_command_shortcuts=false$' '$test_config'"
+  assert_command_succeeds "grep -q '^\\[accessibility\\]$' '$test_config'"
+
+  assert_file_exists "${test_config}.pre-migration-v8.bak"
+}
+
+# =============================================================================
+# TEST: Migration 008 - Idempotency (compression already enabled)
+# =============================================================================
+
+function test_migration_008_idempotent() {
+  log_test_step "Testing migration 008 idempotency"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v7_compression_idempotent.ini"
+  cat > "$test_config" << 'INI'
+config_schema_version=7
+
+[system]
+enable_backup_compression=false
+instance_backup_retention=3
+INI
+
+  bash "$MIGRATION_DIR/008_v7_to_v8_backup_compression_default.sh" "$test_config"
+  assert_equals "$?" "0" "First run should succeed"
+
+  bash "$MIGRATION_DIR/008_v7_to_v8_backup_compression_default.sh" "$test_config"
+  assert_equals "$?" "0" "Second run should succeed (idempotent)"
+
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "8" "Schema version should be 8"
+
+  local count
+  count=$(grep -c '^enable_backup_compression=' "$test_config")
+  assert_equals "$count" "1" "The key should appear exactly once"
+  assert_command_succeeds "grep -q '^enable_backup_compression=true$' '$test_config'"
+  assert_command_succeeds "grep -q '^instance_backup_retention=3$' '$test_config'"
+}
+
+# =============================================================================
+# TEST: Migration 008 - A config that never carried the key
+# =============================================================================
+
+function test_migration_008_handles_absent_key() {
+  log_test_step "Testing migration 008 bumps a config with no compression key"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v7_no_compression_key.ini"
+  cat > "$test_config" << 'INI'
+config_schema_version=7
+
+[system]
+instance_backup_retention=5
+INI
+
+  bash "$MIGRATION_DIR/008_v7_to_v8_backup_compression_default.sh" "$test_config"
+  assert_equals "$?" "0" "Migration 008 should succeed with the key absent"
+
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "8" "Schema version should be 8"
+
+  # The key is NOT invented here — the merge against config.default.ini is what
+  # delivers it, already carrying the new default.
+  assert_command_fails "grep -q 'enable_backup_compression' '$test_config'"
+  assert_command_succeeds "grep -q '^instance_backup_retention=5$' '$test_config'"
+}

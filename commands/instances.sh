@@ -41,6 +41,8 @@ ${UNDERLINE}Commands:${END}
   create-backup <instance>    Create a backup (instance must be stopped)
   restore-backup <instance> <id>
                               Restore the backup with this id
+  delete-backup <instance> <id>
+                              Delete the backup with this id
   prune-backups <instance>    Prune old backups, keeping the N most recent
   update <instance>           Update to the latest version (must be stopped)
   check-update <instance>     Check whether a newer version is available
@@ -74,6 +76,7 @@ ${UNDERLINE}Examples:${END}
   $self backups factorio-01
   $self create-backup factorio-01
   $self restore-backup factorio-01 factorio-01-20260731T142233Z-a3f9c1
+  $self delete-backup factorio-01 factorio-01-20260731T142233Z-a3f9c1
   $self update factorio-01
   $self check-update factorio-01
   $self version factorio-01 --latest
@@ -1439,6 +1442,34 @@ ${UNDERLINE}Examples:${END}
 "
 }
 
+function show_usage_delete_backup() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Delete Instance Backup${END}
+
+Delete one of an instance's backups by id. There is no undo: the backup and its
+manifest are removed from the backups store.
+
+Only an id the engine lists as a backup is accepted. A directory in the backups
+store that carries no manifest is not a backup and is never deleted, which is
+what keeps a half-built or foreign directory out of reach.
+
+${UNDERLINE}Usage:${END}
+  $self delete-backup <instance> <id>
+
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
+  id                          Backup id (see '$self backups <instance>')
+
+${UNDERLINE}Options:${END}
+  --help                      Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self delete-backup factorio-01 factorio-01-20260731T142233Z-a3f9c1
+"
+}
+
 function show_usage_prune_backups() {
   local UNDERLINE="\e[4m"
   local END="\e[0m"
@@ -1863,6 +1894,98 @@ function _cmd_restore_backup() {
   exit $rc
 }
 
+function _cmd_delete_backup() {
+  local instance=""
+  local backup=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_delete_backup
+        return 0
+        ;;
+      -*)
+        __print_error "Invalid option for delete-backup command: $1"
+        __print_error "Use '$self delete-backup --help' for usage information"
+        return $EC_INVALID_ARG
+        ;;
+      *)
+        if [[ -z "$instance" ]]; then
+          instance="$1"
+        else
+          backup="$1"
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self delete-backup --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  if [[ -z "$backup" ]]; then
+    __print_error "Missing required argument: <id>"
+    __print_error "Use '$self delete-backup --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  __source_instance "$instance"
+  _require_ops_support "$instance" "$instance_management_file"
+  _require_backup_manifest_support "$instance" "$instance_management_file"
+  _repoint_backups_dir "$instance"
+
+  # shellcheck disable=SC2154
+  if [[ -z "$instance_backups_dir" ]] || [[ ! -d "$instance_backups_dir" ]]; then
+    __print_error "No backups directory for '$instance'"
+    exit $EC_FILE_NOT_FOUND
+  fi
+
+  # The engine's own listing is the only authority on what is a backup: it
+  # reports the directories carrying a readable manifest and nothing else. An id
+  # absent from it is refused rather than resolved to a path and removed, which
+  # is what stops a caller from deleting an arbitrary directory — including a
+  # half-built backup still being staged — by naming it.
+  local -a known
+  mapfile -t known < <("$instance_management_file" backups 2> /dev/null |
+    tr -s ' \t\n' '\n' | grep -v '^[[:space:]]*$')
+
+  local found="false"
+  local name
+  for name in "${known[@]}"; do
+    if [[ "$name" == "$backup" ]]; then
+      found="true"
+      break
+    fi
+  done
+
+  if [[ "$found" != "true" ]]; then
+    __print_error "No such backup for '$instance': $backup"
+    __print_error "See '$self backups $instance' for this instance's backups"
+    exit $EC_FILE_NOT_FOUND
+  fi
+
+  local target="${instance_backups_dir}/${backup}"
+  if [[ ! -d "$target" ]]; then
+    __print_error "Backup directory not found: $target"
+    exit $EC_FILE_NOT_FOUND
+  fi
+
+  if ! rm -rf "${target:?}"; then
+    __print_error "Failed to remove backup directory: $target"
+    exit $EC_ERROR
+  fi
+
+  # Emitted from the command layer, on a confirmed removal only — matching the
+  # create/restore convention.
+  __emit_event instance-backup-deleted "$instance" "$backup"
+
+  __print_success "Deleted backup: $backup"
+  exit 0
+}
+
 function _cmd_prune_backups() {
   local instance=""
   local keep=5
@@ -1943,6 +2066,14 @@ function _cmd_prune_backups() {
       fi
     fi
   done
+
+  # Emitted on what was actually removed, not what was attempted: a sweep that
+  # deleted nothing (every removal failed) has nothing to record. A partial
+  # sweep still emits — those backups are genuinely gone — and then exits with
+  # the error, so the record and the exit code describe the same run.
+  if [[ $deleted -gt 0 ]]; then
+    __emit_event instance-backups-pruned "$instance" "$deleted" "$keep"
+  fi
 
   __print_info "Pruned $deleted backup(s) for '$instance' (kept: $keep)"
   [[ $failed -gt 0 ]] && exit $EC_ERROR
@@ -2189,6 +2320,9 @@ function _cmd_help() {
     restore-backup)
       show_usage_restore_backup
       ;;
+    delete-backup)
+      show_usage_delete_backup
+      ;;
     prune-backups)
       show_usage_prune_backups
       ;;
@@ -2295,6 +2429,9 @@ case "$command" in
     ;;
   restore-backup)
     _cmd_restore_backup "$@"
+    ;;
+  delete-backup)
+    _cmd_delete_backup "$@"
     ;;
   prune-backups)
     _cmd_prune_backups "$@"
