@@ -277,7 +277,7 @@ function test_ensure_open_file_not_found() {
 }
 
 function test_ensure_open_reasserts_the_rule_with_the_canonical_tokens() {
-  log_test_step "ensure-open: management on -> ensure-open argv, EC_SUCCESS"
+  log_test_step "ensure-open: management on -> ensure-open argv, PORTS_OPENED"
   unset instance_name instance_ports instance_enable_firewall_management
 
   local cfg args_file
@@ -290,7 +290,8 @@ function test_ensure_open_reasserts_the_rule_with_the_canonical_tokens() {
     __logic_ensure_firewall_open "$cfg" 2> /dev/null
   local rc=$?
 
-  assert_equals "$EC_SUCCESS" "$rc" "A reconciled rule should return EC_SUCCESS"
+  assert_equals "$EC_SUCCESS_FIREWALL_PORTS_OPENED" "$rc" \
+    "A confirmed rule should report the edge, so the caller can audit it"
   # A proto-less spec opens both protocols, the way ufw reads it.
   assert_file_contains "$args_file" "ensure-open ufw_ensure_$$ 25565/tcp 25565/udp" \
     "The authority should receive ensure-open with the canonical port tokens"
@@ -369,7 +370,7 @@ function test_ensure_open_surfaces_an_unreachable_authority() {
 # =============================================================================
 
 function test_ensure_closed_releases_the_rule_by_ownership_tag() {
-  log_test_step "ensure-closed: management on -> remove argv, EC_SUCCESS"
+  log_test_step "ensure-closed: management on -> remove argv, PORTS_CLOSED"
   unset instance_name instance_ports instance_enable_firewall_management
 
   local cfg args_file
@@ -382,7 +383,8 @@ function test_ensure_closed_releases_the_rule_by_ownership_tag() {
     __logic_ensure_firewall_closed "$cfg" 2> /dev/null
   local rc=$?
 
-  assert_equals "$EC_SUCCESS" "$rc" "A clean release should return EC_SUCCESS"
+  assert_equals "$EC_SUCCESS_FIREWALL_PORTS_CLOSED" "$rc" \
+    "A confirmed release should report the edge, so the caller can audit it"
   # Addressed by name, not by ports — so it still cleans up after a port change.
   assert_file_contains "$args_file" "remove ufw_close_$$" \
     "The authority should be asked to remove the instance's rules by ownership tag"
@@ -450,4 +452,32 @@ function test_ensure_closed_surfaces_an_unreachable_authority() {
   # Reported, not fatal — a stop that cannot reach the authority still stopped.
   assert_equals "$EC_FIREWALL_UNREACHABLE" "$rc" \
     "An unreachable authority should be reported to the caller"
+}
+
+# =============================================================================
+# The applied/no-op distinction the audit trail rests on
+# =============================================================================
+
+function test_applied_edges_are_distinguishable_from_a_no_op() {
+  log_test_step "the ports codes are distinct from EC_SUCCESS, so a no-op is not audited"
+
+  # The caller emits instance-ports-opened/-closed on these codes and nothing on
+  # EC_SUCCESS. Collapsing them would make every start of an opted-out or port-less
+  # instance claim ports it never opened — a fabricated rule in the audit trail.
+  assert_not_equals "$EC_SUCCESS" "$EC_SUCCESS_FIREWALL_PORTS_OPENED" \
+    "A confirmed open must not share a code with 'there was nothing to open'"
+  assert_not_equals "$EC_SUCCESS" "$EC_SUCCESS_FIREWALL_PORTS_CLOSED" \
+    "A confirmed close must not share a code with 'there was nothing to close'"
+  assert_not_equals "$EC_SUCCESS_FIREWALL_PORTS_OPENED" "$EC_SUCCESS_FIREWALL_PORTS_CLOSED" \
+    "The two edges must be distinguishable from each other"
+
+  # Success-with-event codes live in 200-255; bash truncates anything above to a
+  # single byte, which would land back on an error code.
+  local _code
+  for _code in "$EC_SUCCESS_FIREWALL_PORTS_OPENED" "$EC_SUCCESS_FIREWALL_PORTS_CLOSED"; do
+    local _in_range="false"
+    [[ $_code -ge 200 && $_code -le 255 ]] && _in_range="true"
+    assert_true "$_in_range" \
+      "Code $_code must sit in the 200-255 success-with-event range"
+  done
 }

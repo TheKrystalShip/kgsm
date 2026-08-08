@@ -136,13 +136,22 @@ export EVENT_INSTANCE_UNINSTALL_FAILED
 declare -g -r EVENT_INSTANCE_UNINSTALLED="instance_uninstalled"
 export EVENT_INSTANCE_UNINSTALLED
 
-# Host-firewall audit events. Emitted when kgsm asks the kgsm-firewall authority
-# to open/close an instance's ports (firewall enable/disable, and install/
-# uninstall). The `ports` parameter carries the instance's UFW-format spec; the
-# payload renders it as the canonical structured array. Only a confirmed
-# open/close emits — a down authority warns and emits nothing (never a
-# fabricated outcome). The C# path (kgsm-api via kgsm-lib) emits the same types
-# with EmitWithProvenance once it consumes them.
+# Host-firewall audit events. An instance's ports are open exactly while it runs,
+# so these mark that lifetime: opened on the bring-up, closed on the deliberate
+# stop, and closed again when an operator drops firewall management (`files
+# firewall disable`, which uninstall runs). A crash emits neither — the restart
+# that follows still needs the ports.
+#
+# Emitted by whichever component performed the transition, exactly once. The
+# kgsm-watchdog owns the edge for the native instances it supervises — including
+# the boot auto-starts and crash-respawns KGSM never sees — and emits its own;
+# KGSM emits for the bring-ups and teardowns it performs itself, which is what
+# covers a container instance and a host with no supervisor. The C# path (kgsm-api
+# via kgsm-lib) emits the same types with EmitWithProvenance.
+#
+# The `ports` parameter carries the instance's UFW-format spec; the payload renders
+# it as the canonical structured array. Only a confirmed open/close emits — a down
+# authority warns and emits nothing (never a fabricated outcome).
 declare -g -r EVENT_INSTANCE_PORTS_OPENED="instance_ports_opened"
 export EVENT_INSTANCE_PORTS_OPENED
 

@@ -63,6 +63,18 @@ function __logic_instance_start() {
   # that is down must not keep a game server off the air, and the authority's own
   # stderr already says so.
   __logic_ensure_firewall_open "$_instance_config_file"
+  local _firewall_rc=$?
+
+  # Record the edge for the command layer to audit, but only when this bring-up is
+  # KGSM's own. The supervisor opens the same rule as it spawns and emits its own
+  # event, and __logic_start_standalone_instance routes to it on exactly this
+  # condition — so asking here is asking who is about to bring the instance up. The
+  # probe is memoized for the invocation, so it costs nothing the start does not
+  # already pay.
+  if [[ $_firewall_rc -eq $EC_SUCCESS_FIREWALL_PORTS_OPENED ]] &&
+    ! __watchdog_available; then
+    __firewall_edges_record instance-ports-opened
+  fi
 
   # Native instances are the only kind KGSM starts here (the watchdog, or the
   # direct management script when it is absent). Container instances run their own
@@ -132,6 +144,19 @@ function __logic_instance_stop() {
     return $exit_code
   fi
 
+  # Who owns this teardown, asked BEFORE the stop rather than after. The supervisor
+  # forgets an instance the moment it goes down — a stopped instance lives on only in
+  # the boot-autostart set, which is a different axis — so asking afterwards reads
+  # "not supervised" for the very stop the daemon just performed, and KGSM would audit
+  # a close the daemon had already audited. This is the same predicate
+  # __logic_stop_standalone_instance routes on, and the probes are memoized for the
+  # invocation, so asking first costs nothing and settles the question while it still
+  # has a stable answer.
+  local _watchdog_owns_teardown=1
+  if __watchdog_available && __watchdog_tracks "$_instance_name"; then
+    _watchdog_owns_teardown=0
+  fi
+
   # Native instances only (watchdog, or the direct management script when absent).
   __logic_stop_standalone_instance "$_instance_name" "$_instance_config_file"
   local _stop_rc=$?
@@ -142,6 +167,14 @@ function __logic_instance_stop() {
   # is correct — the restart that follows still needs the ports.
   if [[ $_stop_rc -eq $EC_SUCCESS_INSTANCE_STOPPED ]]; then
     __logic_ensure_firewall_closed "$_instance_config_file"
+    local _firewall_rc=$?
+
+    # Record only the teardowns KGSM performed itself — the supervisor emits its own
+    # close for the instances it supervises.
+    if [[ $_firewall_rc -eq $EC_SUCCESS_FIREWALL_PORTS_CLOSED ]] &&
+      [[ $_watchdog_owns_teardown -ne 0 ]]; then
+      __firewall_edges_record instance-ports-closed
+    fi
   fi
 
   return $_stop_rc

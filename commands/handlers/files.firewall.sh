@@ -31,6 +31,36 @@ if [[ -z "${KGSM_LOGIC_FIREWALL_LOADED}" ]]; then
   source "$(__find_command_handler firewall.sh)" || return $EC_FAILED_SOURCE
 fi
 
+# The firewall edges KGSM itself applied during the current invocation, one event
+# name per line, oldest first.
+#
+# It exists because the two layers cannot talk any other way here: a handler never
+# emits (that is the command layer's job), the exit-code channel already carries
+# the lifecycle verb's own event, and one verb can cross both edges — a restart
+# closes the ports and opens them again. So the handlers record what they applied
+# and the command layer drains the record and audits it.
+#
+# Only edges KGSM owns are recorded. When the resident supervisor performs the
+# bring-up it opens the same rule as it spawns and emits its own event, so a
+# recorded edge there would audit one start twice.
+declare -g KGSM_FIREWALL_APPLIED_EDGES=""
+export KGSM_FIREWALL_APPLIED_EDGES
+
+# Starts a fresh record for one command. Call before the lifecycle verb runs.
+function __firewall_edges_reset() {
+  KGSM_FIREWALL_APPLIED_EDGES=""
+}
+
+export -f __firewall_edges_reset
+
+# Appends one applied edge.
+# Args: $1 = event name (instance-ports-opened | instance-ports-closed)
+function __firewall_edges_record() {
+  KGSM_FIREWALL_APPLIED_EDGES+="${1}"$'\n'
+}
+
+export -f __firewall_edges_record
+
 # Enable firewall integration for an instance: mark it as one whose ports KGSM
 # manages. It opens nothing. An instance's ports are open exactly while it is
 # running, so the rule is written on the bring-up that follows and removed on the
@@ -95,7 +125,9 @@ export -f __logic_enable_firewall_integration
 # path is what covers a container instance and a host with no watchdog. Both are
 # idempotent, so the overlap costs one round trip.
 # Args: $1 = instance_config_file
-# Returns: EC_SUCCESS when the ports are open or the instance opts out;
+# Returns: EC_SUCCESS_FIREWALL_PORTS_OPENED when the authority confirmed the rule
+#          (the caller audits this edge); EC_SUCCESS when there was nothing to do
+#          — the instance opts out of firewall management, or declares no ports;
 #          EC_FIREWALL_UNREACHABLE / EC_FIREWALL when the authority could not
 #          confirm them open; EC_INVALID_ARG / EC_FILE_NOT_FOUND /
 #          EC_INVALID_CONFIG on a malformed request.
@@ -134,7 +166,14 @@ function __logic_ensure_firewall_open() {
 
   local -a _token_arr
   read -ra _token_arr <<< "$_tokens"
+
+  # Only a confirmed apply reports the edge. The authority is declarative — asked
+  # for a non-empty port set it writes exactly that set — so success here means the
+  # rule is owned and the ports are open, which is the fact the audit event states.
   __firewall_ensure_open "$_instance_name" "${_token_arr[@]}"
+  local _rc=$?
+  [[ $_rc -eq $EC_SUCCESS ]] && return $EC_SUCCESS_FIREWALL_PORTS_OPENED
+  return $_rc
 }
 
 export -f __logic_ensure_firewall_open
@@ -155,10 +194,11 @@ export -f __logic_ensure_firewall_open
 # it, because a crash is followed by a restart that still needs the ports, and a
 # process dying is not a reason to tear down host state.
 # Args: $1 = instance_config_file
-# Returns: EC_SUCCESS when the ports are closed or the instance opts out;
-#          EC_FIREWALL_UNREACHABLE / EC_FIREWALL when the authority could not
-#          confirm the removal; EC_INVALID_ARG / EC_FILE_NOT_FOUND /
-#          EC_INVALID_CONFIG on a malformed request.
+# Returns: EC_SUCCESS_FIREWALL_PORTS_CLOSED when the authority confirmed the
+#          removal (the caller audits this edge); EC_SUCCESS when the instance opts
+#          out of firewall management; EC_FIREWALL_UNREACHABLE / EC_FIREWALL when
+#          the authority could not confirm the removal; EC_INVALID_ARG /
+#          EC_FILE_NOT_FOUND / EC_INVALID_CONFIG on a malformed request.
 function __logic_ensure_firewall_closed() {
   local instance_config_file="$1"
 
@@ -183,7 +223,13 @@ function __logic_ensure_firewall_closed() {
     return $EC_INVALID_CONFIG
   fi
 
+  # Removal is idempotent, so success covers "removed" and "there was nothing left
+  # to remove" alike. Both leave the instance holding no open port, which is what
+  # the close event records.
   __firewall_remove "$_instance_name"
+  local _rc=$?
+  [[ $_rc -eq $EC_SUCCESS ]] && return $EC_SUCCESS_FIREWALL_PORTS_CLOSED
+  return $_rc
 }
 
 export -f __logic_ensure_firewall_closed

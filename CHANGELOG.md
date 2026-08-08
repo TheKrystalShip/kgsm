@@ -68,6 +68,15 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   idempotent. An instance whose operator turned firewall management off is left alone, and an
   authority that is down is reported but never keeps a game server off the air.
 
+  Both edges are audited, so a port opening is recorded the way a router forward already was.
+  `instance_ports_opened` / `instance_ports_closed` carry the instance's ports as the canonical
+  structured array, and are emitted by whichever component performed the transition, exactly once:
+  the watchdog for the instances it supervises, KGSM for the bring-ups and teardowns it performs
+  itself. Which one owns a teardown is settled BEFORE the stop — the daemon forgets an instance the
+  moment it goes down, so asking afterwards reads "not supervised" for the very stop it just
+  performed, and the close would be recorded twice. Nothing is emitted for an instance that opted
+  out, declares no ports, or whose authority could not confirm the change.
+
 - **Minecraft detects presence and declares its moderation commands.** `player_joined_regex` and
   `player_left_regex` match the connection pair (`logged in with entity id` / `lost connection:`)
   rather than the "joined/left the game" chat broadcasts: those are core server logging a mod does

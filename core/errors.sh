@@ -255,6 +255,18 @@ export EC_SUCCESS_BLUEPRINT_FOUND
 declare -g -r EC_SUCCESS_BLUEPRINT_VALIDATED=226
 export EC_SUCCESS_BLUEPRINT_VALIDATED
 
+# Host-firewall port lifetime. Distinct from EC_SUCCESS_FIREWALL_ENABLED/DISABLED
+# above: those report the per-instance management TOGGLE moving, these report the
+# rule itself being written or removed on a bring-up/teardown. Returned only when
+# the kgsm-firewall authority confirmed the change — an instance that opted out or
+# declares no ports returns EC_SUCCESS, so a caller can tell "nothing to do" from
+# "the ports are now open" and audit only the latter.
+declare -g -r EC_SUCCESS_FIREWALL_PORTS_OPENED=227
+export EC_SUCCESS_FIREWALL_PORTS_OPENED
+
+declare -g -r EC_SUCCESS_FIREWALL_PORTS_CLOSED=228
+export EC_SUCCESS_FIREWALL_PORTS_CLOSED
+
 # Backup events (reserved for future use)
 declare -g -r EC_SUCCESS_BACKUP_CREATED=230
 export EC_SUCCESS_BACKUP_CREATED
