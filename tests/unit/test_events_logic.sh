@@ -155,6 +155,7 @@ function test_validate_event_type_all_40_constants() {
     "instance_ports_closed"
     "instance_upnp_opened"
     "instance_upnp_closed"
+    "instance_upnp_reasserted"
     "instance_player_joined"
     "instance_player_left"
     "instance_config_changed"
@@ -479,6 +480,7 @@ function test_get_param_spec_all_40_events() {
     "instance_ports_closed"
     "instance_upnp_opened"
     "instance_upnp_closed"
+    "instance_upnp_reasserted"
     "instance_player_joined"
     "instance_player_left"
     "instance_config_changed"
@@ -519,16 +521,20 @@ function test_get_param_spec_firewall_ports_events() {
 function test_get_param_spec_upnp_events() {
   log_test_step "Testing __logic_get_event_param_spec for the UPnP port-forwarding events"
 
-  local spec_opened spec_closed
+  local spec_opened spec_closed spec_reasserted
   spec_opened=$(__logic_get_event_param_spec "instance_upnp_opened")
   spec_closed=$(__logic_get_event_param_spec "instance_upnp_closed")
+  spec_reasserted=$(__logic_get_event_param_spec "instance_upnp_reasserted")
 
-  # Same 'instance ports' spec as the firewall events — both carry the structured
-  # Ports payload; the event TYPE (not the param shape) distinguishes router from host.
+  # Same 'instance ports' spec as the firewall events — all carry the structured
+  # Ports payload; the event TYPE (not the param shape) distinguishes router from host,
+  # and a sweep's re-assert from a bring-up open.
   assert_equals "instance ports" "$spec_opened" \
     "instance_upnp_opened should require 'instance ports'"
   assert_equals "instance ports" "$spec_closed" \
     "instance_upnp_closed should require 'instance ports'"
+  assert_equals "instance ports" "$spec_reasserted" \
+    "instance_upnp_reasserted should require 'instance ports'"
 }
 
 # =============================================================================
@@ -1019,12 +1025,12 @@ function test_edge_case_event_count_matches_configs() {
   # A canary, not a rule: the number itself carries no meaning, but a change to it means the event
   # vocabulary grew or shrank, which is worth being deliberate about. Update it in the same commit
   # that adds or removes an event, together with the param spec beside it.
-  log_test_step "Testing EVENT_CONFIGS count matches expected 51 events"
+  log_test_step "Testing EVENT_CONFIGS count matches expected 52 events"
 
   local config_count="${#EVENT_CONFIGS[@]}"
 
-  assert_equals "$config_count" "51" \
-    "EVENT_CONFIGS should contain exactly 51 entries (found: $config_count)"
+  assert_equals "$config_count" "52" \
+    "EVENT_CONFIGS should contain exactly 52 entries (found: $config_count)"
 }
 
 # Conformance guard: every event a call site actually emits must be registered

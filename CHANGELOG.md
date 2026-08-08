@@ -53,6 +53,15 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Added
 
+- **`instance_upnp_reasserted`** — a router forward that went missing while its instance kept
+  running, put back by the watchdog's periodic sweep. Its own event type rather than a second
+  `instance_upnp_opened` because the two answer different questions: an open accompanies a
+  bring-up, whereas this one says the mapping disappeared with nothing on this host asking for it.
+  It is the only evidence a reader gets that a router discards mappings it accepted — a router can
+  report a lease as infinite and drop it anyway — and how often. Carries the same structured
+  `Ports` payload as the rest of the network events, holding the subset that was missing rather
+  than the instance's whole set.
+
 - **An instance's ports are open exactly while it is running.** They open on every bring-up and are
   released on a deliberate stop, so a server that is not running holds nothing open on the host —
   the same lifetime its UPnP mapping already had, and for the same reason. `files firewall enable`

@@ -174,6 +174,18 @@ export EVENT_INSTANCE_UPNP_OPENED
 declare -g -r EVENT_INSTANCE_UPNP_CLOSED="instance_upnp_closed"
 export EVENT_INSTANCE_UPNP_CLOSED
 
+# A forward the router dropped on its own, put back by the watchdog's periodic
+# sweep while the instance kept running. Its own type rather than a second
+# instance_upnp_opened because the two answer different questions: an open
+# accompanies a bring-up, whereas this one says the mapping went missing with
+# nothing on this host asking for it — the only evidence a reader gets that the
+# router discards mappings it accepted, and how often. A router may report a
+# lease as infinite and drop it anyway, so the sweep compares what the IGD
+# actually holds against what the running instances need; `ports` carries the
+# subset that was missing, not the instance's whole set.
+declare -g -r EVENT_INSTANCE_UPNP_REASSERTED="instance_upnp_reasserted"
+export EVENT_INSTANCE_UPNP_REASSERTED
+
 # Player-presence events. Emitted on behalf of a running game server when a
 # player joins or leaves. For our container images these are forwarded by the
 # kgsm-watchdog, which tails the in-container event channel and re-emits via
@@ -311,6 +323,7 @@ declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_PORTS_CLOSED"]="instance ports"
   ["$EVENT_INSTANCE_UPNP_OPENED"]="instance ports"
   ["$EVENT_INSTANCE_UPNP_CLOSED"]="instance ports"
+  ["$EVENT_INSTANCE_UPNP_REASSERTED"]="instance ports"
   # Only `instance` is required — player_id/player_name are nullable and
   # validated/rendered out-of-band (see _build_event_payload).
   ["$EVENT_INSTANCE_PLAYER_JOINED"]="instance"
@@ -541,14 +554,15 @@ function __logic_build_event_payload() {
         Restarts: $restarts
       }'
       ;;
-    "$EVENT_INSTANCE_PORTS_OPENED" | "$EVENT_INSTANCE_PORTS_CLOSED" | "$EVENT_INSTANCE_UPNP_OPENED" | "$EVENT_INSTANCE_UPNP_CLOSED")
+    "$EVENT_INSTANCE_PORTS_OPENED" | "$EVENT_INSTANCE_PORTS_CLOSED" | "$EVENT_INSTANCE_UPNP_OPENED" | "$EVENT_INSTANCE_UPNP_CLOSED" | "$EVENT_INSTANCE_UPNP_REASSERTED")
       # The `ports` param is the UFW-format spec; surface it as the canonical
       # structured array [{start,end,protocol}] — the same shape `instances
       # info --json` emits — never the opaque UFW string. Converted here and
       # passed via --argjson (the one non-string Data field in this builder).
       # Shared by the firewall (instance_ports_*) and UPnP (instance_upnp_*)
-      # events — both carry the same structured Ports payload; the event TYPE
-      # distinguishes router NAT forward from host ufw rule downstream.
+      # events — all carry the same structured Ports payload; the event TYPE
+      # distinguishes router NAT forward from host ufw rule downstream, and a
+      # re-assert from a bring-up open.
       local ports_json
       ports_json="$(__ufw_ports_to_json "${params[1]:-}")" || ports_json="[]"
       jq_args+=(--argjson ports_json "$ports_json")
