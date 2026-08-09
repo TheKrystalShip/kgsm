@@ -465,7 +465,14 @@ function test_symlink_enable_fails_without_management_file() {
 
   _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
 
-  # Do NOT create management file
+  # create_test_instance generates the management script, so remove it here to
+  # establish the condition under test: enabling a shortcut for an instance
+  # whose management file is absent.
+  local instance_config manage_file
+  instance_config=$("$KGSM_ROOT/kgsm.sh" instances find "$instance_name" 2>/dev/null)
+  manage_file=$(grep "^management_file=" "$instance_config" 2>/dev/null | cut -d= -f2 | tr -d '"')
+  assert_not_null "$manage_file" "Instance config should have management_file path"
+  rm -f "$manage_file"
 
   # Override shortcuts directory to writable test path
   local sandbox_config="$KGSM_ROOT/config.ini"
