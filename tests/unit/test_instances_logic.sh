@@ -200,8 +200,12 @@ function test_generate_name_suffix_length() {
   local suffix="${generated_name#${blueprint}-}"
   local suffix_length="${#suffix}"
 
-  # Default suffix length should be 2 (from config_instance_suffix_length)
-  assert_equals 2 "$suffix_length" "Suffix length should be 2 by default"
+  # The suffix is as long as the configured value, whatever the sandbox seeds.
+  # Asserting a literal here couples the test to the fixture instead of to the
+  # behaviour it is checking.
+  local expected_length="${config_instance_suffix_length:-2}"
+  assert_equals "$expected_length" "$suffix_length" \
+    "Suffix length should match config_instance_suffix_length"
 }
 
 # =============================================================================

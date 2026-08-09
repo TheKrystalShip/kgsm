@@ -392,10 +392,9 @@ function __logic_create_instance() {
     return $exit_code
   fi
 
-  # Create base instance configuration
-  if ! __logic_create_base_instance "$instance_config_file" "$_instance_name" "$blueprint_abs_path" "$install_dir" "$override_port"; then
-    return $?
-  fi
+  # Create base instance configuration. The failure code is taken with || so it
+  # survives: inside an `if ! cmd` branch $? is the negated status, always 0.
+  __logic_create_base_instance "$instance_config_file" "$_instance_name" "$blueprint_abs_path" "$install_dir" "$override_port" || return $?
 
   # Success - echo instance name for caller
   echo "$_instance_name"

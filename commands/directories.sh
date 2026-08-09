@@ -293,17 +293,15 @@ function _cmd_remove() {
     return $EC_MISSING_ARG
   fi
 
-  # Validate instance name and get config file
+  # Validate instance name and get config file.
+  # The failure code is taken with || so it survives: inside an `if ! cmd`
+  # branch $? is the negated status, which is always 0.
   local instance_config_file
-  if ! instance_config_file=$(validate_instance_name "$instance_name"); then
-    return $?
-  fi
+  instance_config_file=$(validate_instance_name "$instance_name") || return $?
 
   # Validate working directory configuration
   local instance_working_dir
-  if ! instance_working_dir=$(validate_working_directory "$instance_config_file"); then
-    return $?
-  fi
+  instance_working_dir=$(validate_working_directory "$instance_config_file") || return $?
 
   # Call pure logic function
   __print_info "Removing directories for instance $instance_name"

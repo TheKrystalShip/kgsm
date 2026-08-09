@@ -275,6 +275,14 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   exported variable worked — which ruled out every non-interactive caller, since a systemd unit and
   the watchdog carry no login environment. The error text now names both places the value can go.
 
+- **A validation failure is returned to the caller instead of being reported as success.** Three
+  sites took a failure code with `return $?` from inside an `if ! cmd` branch, where `$?` is the
+  negated status and therefore always `0`. The validation ran and correctly rejected the input; the
+  code that carried the rejection was thrown away one line later. `directories.sh remove` accepted a
+  nonexistent instance and an instance whose working directory does not resolve, and
+  `__logic_create_instance` reported a created instance when the base configuration had not been
+  written. All three take the code with `|| return $?`, which the rest of the tree already uses.
+
 - **`STEAM_PASSWORD` is optional, and a stored refresh token is preferred over it.** SteamCMD keeps
   a refresh token after a login that satisfies Steam Guard, and a username-only login spends that
   token — which is the only way a download runs unattended on an account with Steam Guard enabled.
