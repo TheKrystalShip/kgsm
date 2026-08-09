@@ -275,6 +275,15 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   exported variable worked — which ruled out every non-interactive caller, since a systemd unit and
   the watchdog carry no login environment. The error text now names both places the value can go.
 
+- **`STEAM_PASSWORD` is optional, and a stored refresh token is preferred over it.** SteamCMD keeps
+  a refresh token after a login that satisfies Steam Guard, and a username-only login spends that
+  token — which is the only way a download runs unattended on an account with Steam Guard enabled.
+  Requiring a password forced the password path on every call even when a token was stored, and
+  that path replaces the token, so the engine destroyed the credential that made it work headless:
+  two logins per install, each one spending the account's password rather than the token it had
+  just been given. A host that has logged in once should leave `STEAM_PASSWORD` empty and store no
+  Steam password at all.
+
 - **A download that fetched nothing is reported as a failure.** `_download` confirms game files
   reached the destination instead of trusting SteamCMD's report. SteamCMD claims a success it did
   not achieve — a login left unconfirmed at a Steam Guard prompt, or an account-gated app fetched

@@ -38,14 +38,16 @@ function _download() {
       return $EC_ERROR
     fi
 
-    if [[ -z "$steam_password" ]]; then
-      __print_error "'STEAM_PASSWORD' is expected but it's not set"
-      __print_error "Set it in the environment, or under [steam] in ${KGSM_CONFIG_FILE:-~/.config/kgsm/config.ini}"
-      return $EC_ERROR
+    # The password is optional. SteamCMD stores a refresh token after a login
+    # that satisfies Steam Guard, and a username-only login spends that token,
+    # which is what makes an unattended download possible on an account with
+    # Steam Guard enabled. Supplying a password takes the password path even
+    # when a token is stored, and that path replaces the stored token — so a
+    # host that has been logged in once should leave the password unset.
+    login_args="$steam_username"
+    if [[ -n "$steam_password" ]]; then
+      login_args="$steam_username $steam_password"
     fi
-
-    # Authenticated login: pass username and password as separate arguments
-    login_args="$steam_username $steam_password"
   fi
 
   # shellcheck disable=SC2086

@@ -23,14 +23,13 @@ function _get_latest_version() {
       return $EC_ERROR
     fi
 
-    if [[ -z "$steam_password" ]]; then
-      __print_error "STEAM_PASSWORD is expected but it's not set"
-      __print_error "Set it in the environment, or under [steam] in ${KGSM_CONFIG_FILE:-~/.config/kgsm/config.ini}"
-      return $EC_ERROR
+    # The password is optional; a username-only login spends the refresh token
+    # SteamCMD stored at the last login that satisfied Steam Guard. See
+    # _download for why supplying one costs that token.
+    login_args="$steam_username"
+    if [[ -n "$steam_password" ]]; then
+      login_args="$steam_username $steam_password"
     fi
-
-    # Authenticated login: pass username and password as separate arguments
-    login_args="$steam_username $steam_password"
   fi
 
   local latest_version
