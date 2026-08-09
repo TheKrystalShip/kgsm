@@ -28,28 +28,52 @@ function _download() {
   # Build login arguments based on authentication requirement
   local login_args="anonymous"
   if [[ "$instance_is_steam_account_required" == "true" ]]; then
-    if [[ -z "$STEAM_USERNAME" ]]; then
+    local steam_username steam_password
+    steam_username="$(__get_steam_credential STEAM_USERNAME)"
+    steam_password="$(__get_steam_credential STEAM_PASSWORD)"
+
+    if [[ -z "$steam_username" ]]; then
       __print_error "'STEAM_USERNAME' is expected but it's not set"
+      __print_error "Set it in the environment, or under [steam] in ${KGSM_CONFIG_FILE:-~/.config/kgsm/config.ini}"
       return $EC_ERROR
     fi
 
-    if [[ -z "$STEAM_PASSWORD" ]]; then
+    if [[ -z "$steam_password" ]]; then
       __print_error "'STEAM_PASSWORD' is expected but it's not set"
+      __print_error "Set it in the environment, or under [steam] in ${KGSM_CONFIG_FILE:-~/.config/kgsm/config.ini}"
       return $EC_ERROR
     fi
 
     # Authenticated login: pass username and password as separate arguments
-    login_args="$STEAM_USERNAME $STEAM_PASSWORD"
+    login_args="$steam_username $steam_password"
   fi
 
   # shellcheck disable=SC2086
-  steamcmd \
+  if ! steamcmd \
     +@sSteamCmdForcePlatformType "${instance_platform:-linux}" \
     +force_install_dir "${dest}" \
     +login ${login_args} \
     +app_update "${app_id}" ${instance_steamcmd_arguments:-} \
     validate \
-    +quit
+    +quit; then
+    __print_error "SteamCMD exited non-zero downloading app ${app_id}"
+    return $EC_ERROR
+  fi
+
+  # SteamCMD reports success it did not achieve: a login that never completed,
+  # or an account-gated app fetched anonymously, still exits 0, prints
+  # "Success! App fully installed", and writes a manifest claiming StateFlags 4
+  # with no depots in it. Content arriving on disk is the only signal that
+  # distinguishes a real download, so check for it rather than trust the report.
+  local _downloaded_file
+  _downloaded_file=$(find "${dest}" -mindepth 1 -type f \
+    -not -path "${dest}/steamapps/*" -print -quit 2>/dev/null)
+
+  if [[ -z "$_downloaded_file" ]]; then
+    __print_error "SteamCMD reported success but downloaded no game files"
+    __print_error "Verify the Steam credentials, and that the account owns app ${app_id}"
+    return $EC_ERROR
+  fi
 
   __print_success "Download complete"
   return $EC_SUCCESS

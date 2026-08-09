@@ -268,6 +268,21 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Fixed
 
+- **The `[steam]` config credentials are read.** `STEAM_USERNAME` and `STEAM_PASSWORD` are resolved
+  from the process environment first and from the KGSM config file second, so a Steam-account game
+  installs and updates without a shell environment. The management script is standalone and never
+  loaded the engine's config, so the two keys the config file documents reached nothing and only an
+  exported variable worked — which ruled out every non-interactive caller, since a systemd unit and
+  the watchdog carry no login environment. The error text now names both places the value can go.
+
+- **A download that fetched nothing is reported as a failure.** `_download` confirms game files
+  reached the destination instead of trusting SteamCMD's report. SteamCMD claims a success it did
+  not achieve — a login left unconfirmed at a Steam Guard prompt, or an account-gated app fetched
+  anonymously, exits 0, prints `Success! App fully installed`, and writes a manifest claiming
+  `StateFlags 4` over an empty depot list. `_download` reported success on the strength of that,
+  deploy copied the lone manifest into the instance, and the install failed several steps later
+  complaining about a missing version argument — nowhere near the thing that actually went wrong.
+
 - **Minecraft's blueprint opens the port the game actually listens on.** It declared `25565/udp`,
   but the Java server serves the game over TCP; UDP on that number is only the optional GS4 query
   listener. An instance came up with its game port shut and needed a hand-written ufw rule to be

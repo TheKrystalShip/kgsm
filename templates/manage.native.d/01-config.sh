@@ -102,6 +102,43 @@ function __source_instance_config() {
   done <"$config_file"
 }
 
+# Resolve a Steam credential by name (STEAM_USERNAME / STEAM_PASSWORD).
+# The process environment is authoritative; the [steam] section of the KGSM
+# config file is the fallback, so callers that carry no shell environment
+# (the watchdog, systemd units, cron) can still authenticate. Echoes the
+# value, or nothing when neither source provides one.
+function __get_steam_credential() {
+  local key="$1"
+  local value="${!key}"
+
+  if [[ -n "$value" ]]; then
+    echo "$value"
+    return $EC_SUCCESS
+  fi
+
+  local kgsm_config_file
+  kgsm_config_file="${KGSM_CONFIG_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/kgsm/config.ini}"
+
+  if [[ ! -f "$kgsm_config_file" ]]; then
+    return $EC_SUCCESS
+  fi
+
+  # Anchored to the line start so commented-out keys never match
+  value=$(grep -E "^[[:space:]]*${key}[[:space:]]*=" "$kgsm_config_file" 2>/dev/null |
+    head -n1 | cut -d= -f2-)
+
+  # Trim surrounding whitespace, then strip a single layer of quotes
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  value="${value#\"}"
+  value="${value%\"}"
+  value="${value#\'}"
+  value="${value%\'}"
+
+  echo "$value"
+  return $EC_SUCCESS
+}
+
 # Source the instance configuration file
 INSTANCE_NAME="$(basename "$SCRIPT_DIR")"
 CONFIG_FILE="$SCRIPT_DIR/${INSTANCE_NAME}.config.ini"

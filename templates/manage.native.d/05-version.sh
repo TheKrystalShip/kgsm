@@ -13,18 +13,24 @@ function _get_latest_version() {
   # Build login arguments based on authentication requirement
   local login_args="anonymous"
   if [[ "$instance_is_steam_account_required" == "true" ]]; then
-    if [[ -z "$STEAM_USERNAME" ]]; then
+    local steam_username steam_password
+    steam_username="$(__get_steam_credential STEAM_USERNAME)"
+    steam_password="$(__get_steam_credential STEAM_PASSWORD)"
+
+    if [[ -z "$steam_username" ]]; then
       __print_error "STEAM_USERNAME is expected but it's not set"
+      __print_error "Set it in the environment, or under [steam] in ${KGSM_CONFIG_FILE:-~/.config/kgsm/config.ini}"
       return $EC_ERROR
     fi
 
-    if [[ -z "$STEAM_PASSWORD" ]]; then
+    if [[ -z "$steam_password" ]]; then
       __print_error "STEAM_PASSWORD is expected but it's not set"
+      __print_error "Set it in the environment, or under [steam] in ${KGSM_CONFIG_FILE:-~/.config/kgsm/config.ini}"
       return $EC_ERROR
     fi
 
     # Authenticated login: pass username and password as separate arguments
-    login_args="$STEAM_USERNAME $STEAM_PASSWORD"
+    login_args="$steam_username $steam_password"
   fi
 
   local latest_version
