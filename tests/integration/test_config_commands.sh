@@ -64,8 +64,13 @@ EOF
   # Verify backup created
   assert_file_exists "${CONFIG_FILE}.0"
 
-  # Verify schema version maintained
-  assert_command_succeeds "grep -q '^config_schema_version=1' '$CONFIG_FILE'"
+  # Verify the schema version is brought up to the shipped default. A merge runs
+  # the pending migrations, so pinning a literal here would assert that they did
+  # not run and would need editing on every schema bump.
+  local expected_schema
+  expected_schema=$(grep '^config_schema_version=' "$KGSM_ROOT/config.default.ini" | cut -d= -f2)
+  assert_not_null "$expected_schema" "Default config should declare a schema version"
+  assert_command_succeeds "grep -q '^config_schema_version=${expected_schema}' '$CONFIG_FILE'"
 }
 
 # =============================================================================
