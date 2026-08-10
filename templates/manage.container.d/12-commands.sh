@@ -315,8 +315,20 @@ function _update() {
     (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" down)
   fi
 
-  # Update version information
-  echo "latest" >"$instance_version_file"
+  # Record what was actually pulled — the digest of the images now on this host,
+  # read back from Docker rather than assumed. A tag is not a version: writing
+  # "latest" here made every later comparison meaningless, because the recorded
+  # value never changed no matter what was running.
+  local pulled_version
+  if pulled_version=$(_get_local_version); then
+    _save_version "$pulled_version"
+  else
+    # Nothing readable to record. Leaving the file empty makes the status
+    # surface report this instance as unchecked, which is true, instead of
+    # leaving a stale digest that would read as a completed update.
+    __print_warning "Could not read the digest of the pulled images; recording no version"
+    : >"$instance_version_file"
+  fi
 
   __print_success "Update complete"
   return $EC_SUCCESS

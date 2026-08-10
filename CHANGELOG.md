@@ -66,6 +66,27 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   nothing. Scheduled retention pruning was previously the one backup operation that destroyed data
   without leaving a record.
 
+### Fixed
+
+- **A container instance's version is the digest of its images, not the tag it was pulled by.**
+  `_get_latest_version` returned the literal string `latest` for every container, and the status
+  surface compared that against the recorded version and reported it as a *checked* answer — so
+  every container instance claimed an update was available, permanently, and `update` wrote the same
+  placeholder back. The version is now the image digest the registry serves, read per image from the
+  instance's own compose file; a multi-image instance fingerprints the sorted set, so its version
+  changes when any one image does. An instance with nothing recorded reports `Unknown`, which is
+  what makes the status surface report it as unchecked rather than compare against a placeholder.
+
+- **An update check that could not run is no longer reported as "up to date".** Both status modules
+  decided from `_compare_versions`, which returns the same error for *already current* as for *the
+  remote did not answer* — so a steamcmd failure or an unreachable registry produced
+  `updates_available: false, checked: true`. They now read the latest version directly and report
+  `checked: false` when nothing came back. `_compare_versions` keeps its documented override-API
+  contract and is untouched; nothing that has to tell the two apart calls it any more.
+
+- **An install whose latest version could not be determined fails instead of recording an empty
+  one.** An instance with no recorded version can never be compared against anything afterwards.
+
 ### Changed
 
 - **Backups are compressed by default** (`enable_backup_compression=true`, config schema v8). A

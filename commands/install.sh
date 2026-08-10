@@ -199,10 +199,17 @@ function _cmd_install() {
   # Load instance config to access variables
   __source_instance "$instance"
 
-  # Determine version
+  # Determine version. A remote that cannot be reached ends the install here:
+  # carrying on would record an empty version, and an instance whose recorded
+  # version is empty can never be compared against anything afterwards.
   if [[ "$version" == 0 ]]; then
     # shellcheck disable=SC2154
     version=$("$instance_management_file" version --latest)
+
+    if [[ -z "$version" ]]; then
+      __print_error "Could not determine the latest version to install"
+      return $EC_FAILED_VERSION_SAVE
+    fi
   fi
 
   # Download game files

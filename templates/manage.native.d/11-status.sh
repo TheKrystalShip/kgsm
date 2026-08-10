@@ -63,13 +63,24 @@ function _get_status() {
   else
     # Only a known current version allows a real comparison.
     if [[ "$current_version" != "Unknown" ]]; then
-      updates_checked="true"
-      if _compare_versions >/dev/null 2>&1; then
-        latest_version=$(_get_latest_version 2>/dev/null || echo "Unknown")
-        updates_available="true"
+      # _get_latest_version directly, never _compare_versions: that function
+      # returns the same error for "already current" as for "the remote did not
+      # answer", and reporting the second as the first claims a server is up to
+      # date on the strength of a check that never completed.
+      latest_version=$(_get_latest_version 2>/dev/null)
+
+      if [[ -n "$latest_version" ]]; then
+        updates_checked="true"
+        if [[ "$latest_version" == "$current_version" ]]; then
+          updates_available="false"
+        else
+          updates_available="true"
+        fi
       else
-        latest_version="$current_version"
-        updates_available="false"
+        # The remote could not be reached or gave nothing back. Unchecked.
+        latest_version=""
+        updates_available=""
+        updates_checked="false"
       fi
     else
       # Version unknown -> no real check possible; report 'unchecked'.
