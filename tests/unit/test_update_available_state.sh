@@ -194,17 +194,15 @@ function test_check_update_advertises_emit() {
 }
 
 function test_management_files_advertise_the_state_accessors() {
-  log_test_step "Testing that the management templates expose the state to the command layer"
+  log_test_step "Testing that the management templates document the state flags"
 
   local runtime
   for runtime in native container; do
     local help_module="$KGSM_ROOT/templates/manage.${runtime}.d/02-help.sh"
     assert_file_exists "$help_module" "$runtime help module should exist"
 
-    # The capability sniff in commands/instances.sh greps --help for this token,
-    # so it is the contract between a generated management file and the engine.
     assert_file_contains "$help_module" "stored-latest" \
-      "$runtime: --help must advertise --stored-latest, which is what the capability sniff looks for"
+      "$runtime: --help should document --stored-latest"
   done
 }
 

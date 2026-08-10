@@ -1587,18 +1587,6 @@ function _management_supports_ops() {
 # A file generated before that format still writes the old flat artifacts, which
 # nothing in this version can list or restore — the distinctive `backups [--json]`
 # token in --help marks support.
-# Whether an instance's management file can record what an update check found.
-# The state lives beside the instance and only `check-update --emit` writes it,
-# so a file generated before that existed has nowhere to keep it — and without
-# somewhere to keep it, every sweep would re-announce the same version. The
-# distinctive `--stored-latest` token in --help marks support.
-function _management_supports_update_state() {
-  local management_file="$1"
-  [[ -f "$management_file" && -x "$management_file" ]] || return 1
-  _management_help_load "$management_file"
-  grep -q -- "--stored-latest" <<< "$_management_help_text"
-}
-
 function _management_supports_backup_manifest() {
   local management_file="$1"
   [[ -f "$management_file" && -x "$management_file" ]] || return 1
@@ -1616,20 +1604,6 @@ function _require_backup_manifest_support() {
     __print_error "Its backups would not be listable or restorable by this version of KGSM."
     __print_error "Regenerate it with: kgsm files management create $instance"
     exit $EC_ERROR
-  fi
-}
-
-# Honest gate for recording what an update check found. Returns rather than
-# exits: a scheduled sweep walks every instance, and one old management file must
-# skip that instance rather than end the sweep. $1=instance, $2=management_file.
-function _require_update_state_support() {
-  local instance="$1"
-  local management_file="$2"
-  if ! _management_supports_update_state "$management_file"; then
-    __print_error "Instance '$instance' uses a management file that cannot record update checks."
-    __print_error "Without it, every check would report the same update again."
-    __print_error "Regenerate it with: kgsm files management create $instance"
-    return $EC_ERROR
   fi
 }
 
@@ -2236,8 +2210,6 @@ function _cmd_check_update() {
 function _check_update_and_emit() {
   local instance="$1"
   local management_file="$2"
-
-  _require_update_state_support "$instance" "$management_file" || return $EC_ERROR
 
   # One fetch. Everything below is a comparison against values already on disk.
   local latest
