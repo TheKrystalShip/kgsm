@@ -29,7 +29,13 @@
 #
 #   03-lifecycle.sh    Server start/stop/restart logic
 #   04-io.sh           Input/output helpers (send_input, send_save_command)
-#   05-version.sh      Version retrieval and comparison
+#   05-version.sh      Version retrieval and comparison. Note that the
+#                      update-check STATE accessors (_get_stored_latest_version,
+#                      _get_stored_latest_checked_at, _save_latest_version) are
+#                      NOT here — they live in 01-config.sh, which is structural,
+#                      because reading and writing a file is not game-specific
+#                      and an override would have to reproduce them to keep
+#                      `check-update --emit` working.
 #   06-download.sh     File download from remote sources
 #   07-deploy.sh       File deployment from temp dir to install dir
 #   08-backup.sh       Backup creation, listing, and restoration

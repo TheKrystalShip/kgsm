@@ -34,7 +34,7 @@ ${BOLD}${UNDERLINE}Player Moderation:${END}
   unban <target>              Lift a block
 
 ${BOLD}${UNDERLINE}Version & Update Commands:${END}
-  version [--latest|--compare|--save <ver>]  Version management
+  version [--latest|--compare|--save <ver>|--stored-latest]  Version management
   check-update                Check whether a newer version is available
   download [version]          Download game server files
   deploy                      Deploy files from temp directory
@@ -237,6 +237,9 @@ ${UNDERLINE}Options:${END}
   --latest                    Print the latest available version
   --compare                   Compare installed vs latest version
   --save <version>            Save a version string to file
+  --stored-latest             Print the last upstream version a check recorded
+  --stored-checked-at         Print when that version was fetched
+  --save-latest <version>     Record an upstream version as checked just now
   -h, --help                  Display this help information
 
 ${UNDERLINE}Examples:${END}
@@ -244,6 +247,7 @@ ${UNDERLINE}Examples:${END}
   $self version --latest
   $self version --compare
   $self version --save 1.2.3
+  $self version --stored-latest
 "
 }
 

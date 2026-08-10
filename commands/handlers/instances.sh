@@ -184,6 +184,7 @@ function __logic_create_base_instance() {
   # shellcheck disable=SC2155
   export instance_install_datetime="$(date +"%Y-%m-%dT%H:%M:%S")"
   export instance_version_file="${instance_working_dir}/.${_instance_name}.version"
+  export instance_latest_version_file="${instance_working_dir}/.${_instance_name}.latest"
   export instance_manage_file="${instance_working_dir}/${_instance_name}.manage.sh"
   export instance_auto_update_before_start="${config_instance_auto_update_before_start:-false}"
 

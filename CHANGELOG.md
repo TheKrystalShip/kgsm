@@ -66,6 +66,29 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   nothing. Scheduled retention pruning was previously the one backup operation that destroyed data
   without leaving a record.
 
+- **`instance_update_available`** — a newer build exists upstream and this server is not on it,
+  carrying `CurrentVersion` and `LatestVersion`. The engine emits it, so every consumer gets the
+  fact from the journal; nothing has to poll for it. `instance_version_updated` is what clears it.
+
+- **`instances check-update <instance> --emit`** records what the check found beside the instance
+  and emits the event when the upstream version has not been reported before. The recorded version
+  is what makes a repeated sweep silent: only `--emit` writes it, so a check run by hand never
+  consumes an announcement, and a sweep that finds the same version again says nothing. An instance
+  whose own version cannot be read records the check but reports no update — "newer than unknown"
+  is not a fact.
+
+- **`instances list --status --json --fast` answers the update question from that record**, with a
+  `checked_at` saying when the upstream was really fetched. Fast mode did no update check at all and
+  reported `checked: false`; it now reports a genuine reading and how old it is, with no network on
+  the read path. A `checked_at` is only ever written by a real fetch — never stamped onto a value
+  read back off disk.
+
+- **`version --stored-latest`, `--stored-checked-at` and `--save-latest`** on the generated
+  management script. They live in the structural `01-config.sh` rather than the overridable
+  `05-version.sh`, so the four games that override version handling keep working unchanged.
+  An instance whose config predates `latest_version_file` derives the path, so nothing needs
+  migrating.
+
 ### Fixed
 
 - **A container instance's version is the digest of its images, not the tag it was pulled by.**

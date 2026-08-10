@@ -77,6 +77,14 @@ export EVENT_INSTANCE_UPDATED
 declare -g -r EVENT_INSTANCE_VERSION_UPDATED="instance_version_updated"
 export EVENT_INSTANCE_VERSION_UPDATED
 
+# A newer game build exists upstream and this instance is not on it. Emitted by
+# `instances check-update --emit` on the transition only: the version an event
+# was emitted for is recorded beside the instance, so a sweep that finds the same
+# version again says nothing. The applied side is EVENT_INSTANCE_VERSION_UPDATED,
+# which is what clears it.
+declare -g -r EVENT_INSTANCE_UPDATE_AVAILABLE="instance_update_available"
+export EVENT_INSTANCE_UPDATE_AVAILABLE
+
 declare -g -r EVENT_INSTANCE_INSTALLATION_STARTED="instance_installation_started"
 export EVENT_INSTANCE_INSTALLATION_STARTED
 
@@ -322,6 +330,7 @@ declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_UPDATE_FINISHED"]="instance"
   ["$EVENT_INSTANCE_UPDATED"]="instance"
   ["$EVENT_INSTANCE_VERSION_UPDATED"]="instance old_version new_version"
+  ["$EVENT_INSTANCE_UPDATE_AVAILABLE"]="instance current_version latest_version"
   ["$EVENT_INSTANCE_INSTALLATION_STARTED"]="instance blueprint"
   ["$EVENT_INSTANCE_INSTALLATION_FINISHED"]="instance blueprint"
   ["$EVENT_INSTANCE_INSTALLED"]="instance blueprint"
@@ -530,6 +539,13 @@ function __logic_build_event_payload() {
         InstanceName: $instance,
         OldVersion: $old_version,
         NewVersion: $new_version
+      }'
+      ;;
+    "$EVENT_INSTANCE_UPDATE_AVAILABLE")
+      data_object='{
+        InstanceName: $instance,
+        CurrentVersion: $current_version,
+        LatestVersion: $latest_version
       }'
       ;;
     "$EVENT_INSTANCE_BACKUP_CREATED" | "$EVENT_INSTANCE_BACKUP_RESTORED")

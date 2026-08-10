@@ -83,4 +83,3 @@ function _save_version() {
   __print_success "Version saved"
   return $EC_SUCCESS
 }
-

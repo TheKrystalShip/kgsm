@@ -68,6 +68,12 @@ compose_file="${instance_compose_file}"
 # File that stores the current version of the game server
 version_file="${instance_version_file}"
 
+# File that stores the last upstream version an update check found, and when it
+# was fetched. Written only by 'check-update --emit', so it is also the record of
+# what has already been announced — a version already in here does not announce
+# twice.
+latest_version_file="${instance_latest_version_file}"
+
 # File that stores the PID of the running server process
 pid_file="${instance_pid_file}"
 

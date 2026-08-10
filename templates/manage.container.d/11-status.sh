@@ -99,6 +99,7 @@ function _get_status() {
   local latest_version=""
   local updates_available=""
   local updates_checked="false"
+  local updates_checked_at=""
   local disk_usage=""
   local backup_count=""
   local recent_logs=""
@@ -171,11 +172,26 @@ function _get_status() {
   current_version=$(_get_installed_version 2>/dev/null || echo "Unknown")
 
   if [[ -n "$fast_mode" ]]; then
-    # Fast mode skips the (networked) update check. Do NOT fabricate a result:
-    # report 'unchecked' (updates_checked=false) rather than claiming "up to date".
-    latest_version=""
-    updates_available=""
-    updates_checked="false"
+    # Fast mode does no network at all. It answers from what the last real check
+    # recorded, which is a genuine reading — and it carries updates_checked_at so
+    # a consumer can see how old that reading is instead of assuming it is fresh.
+    # Nothing recorded means nothing to report: unchecked, never "up to date".
+    latest_version="$(_get_stored_latest_version)"
+    updates_checked_at="$(_get_stored_latest_checked_at)"
+
+    if [[ -n "$latest_version" && "$current_version" != "Unknown" ]]; then
+      updates_checked="true"
+      if [[ "$latest_version" == "$current_version" ]]; then
+        updates_available="false"
+      else
+        updates_available="true"
+      fi
+    else
+      latest_version=""
+      updates_available=""
+      updates_checked="false"
+      updates_checked_at=""
+    fi
   else
     # Only a known current version allows a real comparison.
     if [[ "$current_version" != "Unknown" ]]; then
@@ -187,6 +203,8 @@ function _get_status() {
 
       if [[ -n "$latest_version" ]]; then
         updates_checked="true"
+        # The fetch just happened, so this moment is measured, not assumed.
+        updates_checked_at="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
         if [[ "$latest_version" == "$current_version" ]]; then
           updates_available="false"
         else
@@ -259,6 +277,7 @@ function _get_status() {
       --arg latest_version "$latest_version" \
       --arg updates_available "$updates_available" \
       --arg updates_checked "$updates_checked" \
+      --arg updates_checked_at "$updates_checked_at" \
       --arg blueprint "$(basename "$instance_blueprint_file")" \
       --arg runtime "$instance_runtime" \
       --arg directory "$instance_working_dir" \
@@ -278,7 +297,8 @@ function _get_status() {
           current: $current_version,
           latest: (if $latest_version != "" then $latest_version else null end),
           checked: ($updates_checked == "true"),
-          updates_available: (if $updates_checked == "true" then ($updates_available == "true") else null end)
+          updates_available: (if $updates_checked == "true" then ($updates_available == "true") else null end),
+          checked_at: (if $updates_checked_at != "" then $updates_checked_at else null end)
         },
         configuration: {
           blueprint: $blueprint,

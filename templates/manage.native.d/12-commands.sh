@@ -200,6 +200,23 @@ function _cmd_version() {
       _save_version "$1"
       return $?
       ;;
+    --stored-latest)
+      _get_stored_latest_version
+      return $?
+      ;;
+    --stored-checked-at)
+      _get_stored_latest_checked_at
+      return $?
+      ;;
+    --save-latest)
+      shift
+      if [[ -z "${1:-}" ]]; then
+        __print_error "Missing argument: <version>"
+        return $EC_MISSING_ARG
+      fi
+      _save_latest_version "$1"
+      return $?
+      ;;
     -*)
       __print_error "Invalid option: $1"
       return $EC_INVALID_ARG

@@ -150,6 +150,62 @@ fi
 
 __source_instance_config "$CONFIG_FILE"
 
+# Where the last upstream version this instance checked for is recorded. Derived
+# rather than required, so an instance whose config predates the key works with
+# no migration — the path is a function of the instance, not a choice.
+: "${instance_latest_version_file:=${instance_working_dir}/.${INSTANCE_NAME}.latest}"
+export instance_latest_version_file
+
+# =============================================================================
+# UPDATE-CHECK STATE
+#
+# The last upstream version an update check found, and the moment it was
+# fetched. Two lines, because a value read back off disk and the moment it was
+# really fetched are different facts, and a surface that prints the first has to
+# be able to say how old it is.
+#
+# Only 'check-update --emit' writes this, which is what makes it double as the
+# record of what has already been announced: a version already recorded here is
+# one this instance has reported, so it is not reported again.
+#
+# These live in this module — structural, never overridden — rather than beside
+# the version helpers in 05-version.sh, which IS overridable. There is nothing
+# game-specific about reading and writing a file, and an override module must
+# reproduce every function of the default it replaces: putting them there would
+# mean four existing game overrides silently lacked them.
+# =============================================================================
+
+# The recorded upstream version, or nothing when no check has ever run.
+function _get_stored_latest_version() {
+  [[ -s "$instance_latest_version_file" ]] || return $EC_SUCCESS
+  head -n1 "$instance_latest_version_file"
+}
+
+# When that version was fetched (ISO-8601 UTC), or nothing. Never a substitute
+# moment: a recorded version with no recorded time reads as unknown, because
+# stamping "now" onto a value that came off disk would claim a fetch that did
+# not happen.
+function _get_stored_latest_checked_at() {
+  [[ -s "$instance_latest_version_file" ]] || return $EC_SUCCESS
+  sed -n '2p' "$instance_latest_version_file"
+}
+
+# Record an upstream version as of now. The timestamp is the moment of THIS
+# call, so it is only ever written by a path that has just completed a real
+# fetch.
+function _save_latest_version() {
+  local version="$1"
+
+  if [[ -z "$version" ]]; then
+    __print_error "Refusing to record an empty upstream version"
+    return $EC_INVALID_ARG
+  fi
+
+  printf '%s\n%s\n' "$version" "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+    >"$instance_latest_version_file"
+}
+
+
 self=$(basename "$0")
 
 set -o pipefail

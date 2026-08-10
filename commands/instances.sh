@@ -45,7 +45,7 @@ ${UNDERLINE}Commands:${END}
                               Delete the backup with this id
   prune-backups <instance>    Prune old backups, keeping the N most recent
   update <instance>           Update to the latest version (must be stopped)
-  check-update <instance>     Check whether a newer version is available
+  check-update <instance> [--emit]  Check whether a newer version is available
   version <instance> [--installed|--latest]
                               Show the installed or latest version
   help [command]              Show help information
@@ -1532,16 +1532,21 @@ Check whether a newer version is available without applying it. Prints the
 latest version to stdout when an update is available; nothing when current.
 
 ${UNDERLINE}Usage:${END}
-  $self check-update <instance>
+  $self check-update <instance> [--emit]
 
 ${UNDERLINE}Arguments:${END}
   instance                    Instance name
 
 ${UNDERLINE}Options:${END}
+  --emit                      Record what the check found and emit
+                              'instance_update_available' when the version has
+                              not been reported before. Without it the check
+                              records nothing and announces nothing.
   --help                      Display this help information
 
 ${UNDERLINE}Examples:${END}
   $self check-update factorio-01
+  $self check-update factorio-01 --emit
 "
 }
 
@@ -1582,6 +1587,18 @@ function _management_supports_ops() {
 # A file generated before that format still writes the old flat artifacts, which
 # nothing in this version can list or restore — the distinctive `backups [--json]`
 # token in --help marks support.
+# Whether an instance's management file can record what an update check found.
+# The state lives beside the instance and only `check-update --emit` writes it,
+# so a file generated before that existed has nowhere to keep it — and without
+# somewhere to keep it, every sweep would re-announce the same version. The
+# distinctive `--stored-latest` token in --help marks support.
+function _management_supports_update_state() {
+  local management_file="$1"
+  [[ -f "$management_file" && -x "$management_file" ]] || return 1
+  _management_help_load "$management_file"
+  grep -q -- "--stored-latest" <<< "$_management_help_text"
+}
+
 function _management_supports_backup_manifest() {
   local management_file="$1"
   [[ -f "$management_file" && -x "$management_file" ]] || return 1
@@ -1599,6 +1616,20 @@ function _require_backup_manifest_support() {
     __print_error "Its backups would not be listable or restorable by this version of KGSM."
     __print_error "Regenerate it with: kgsm files management create $instance"
     exit $EC_ERROR
+  fi
+}
+
+# Honest gate for recording what an update check found. Returns rather than
+# exits: a scheduled sweep walks every instance, and one old management file must
+# skip that instance rather than end the sweep. $1=instance, $2=management_file.
+function _require_update_state_support() {
+  local instance="$1"
+  local management_file="$2"
+  if ! _management_supports_update_state "$management_file"; then
+    __print_error "Instance '$instance' uses a management file that cannot record update checks."
+    __print_error "Without it, every check would report the same update again."
+    __print_error "Regenerate it with: kgsm files management create $instance"
+    return $EC_ERROR
   fi
 }
 
@@ -2155,12 +2186,16 @@ function _cmd_update() {
 
 function _cmd_check_update() {
   local instance=""
+  local emit=0
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -h | --help | help)
         show_usage_check_update
         return 0
+        ;;
+      --emit)
+        emit=1
         ;;
       -*)
         __print_error "Invalid option for check-update command: $1"
@@ -2183,8 +2218,67 @@ function _cmd_check_update() {
   __source_instance "$instance"
   _require_ops_support "$instance" "$instance_management_file"
 
-  "$instance_management_file" check-update
+  if [[ $emit -eq 0 ]]; then
+    "$instance_management_file" check-update
+    exit $?
+  fi
+
+  _check_update_and_emit "$instance" "$instance_management_file"
   exit $?
+}
+
+# Run a real update check, record what it found, and announce a version that has
+# not been announced before.
+#
+# The recorded version is what makes this idempotent: it is written only here, so
+# a sweep that finds the same upstream version again is silent, and a check run
+# by hand never consumes an announcement because it never writes.
+function _check_update_and_emit() {
+  local instance="$1"
+  local management_file="$2"
+
+  _require_update_state_support "$instance" "$management_file" || return $EC_ERROR
+
+  # One fetch. Everything below is a comparison against values already on disk.
+  local latest
+  if ! latest="$("$management_file" version --latest 2> /dev/null)" \
+    || [[ -z "$latest" ]]; then
+    __print_error "Could not determine the latest version for '$instance'"
+    return $EC_ERROR
+  fi
+
+  local installed stored
+  installed="$("$management_file" version 2> /dev/null)"
+  stored="$("$management_file" version --stored-latest 2> /dev/null)"
+
+  # Recorded before the event, so a failure to record cannot produce an
+  # announcement this instance would then make again on the next sweep.
+  if ! "$management_file" version --save-latest "$latest" > /dev/null 2>&1; then
+    __print_error "Could not record the update check for '$instance'"
+    return $EC_ERROR
+  fi
+
+  # An instance whose own version cannot be read has nothing to compare against,
+  # and "newer than unknown" is not a fact. The fetched version is recorded above
+  # either way — it is true, and it is what the next check compares against.
+  if [[ -z "$installed" ]] || [[ "${installed,,}" == "unknown" ]]; then
+    __print_warning "Instance '$instance' has no known installed version; not reporting an update"
+    return $EC_SUCCESS
+  fi
+
+  if [[ "$latest" == "$installed" ]]; then
+    __print_info "Already up to date (version ${installed})"
+    return $EC_SUCCESS
+  fi
+
+  if [[ "$latest" == "$stored" ]]; then
+    __print_info "Update to ${latest} was already reported for '$instance'"
+    return $EC_SUCCESS
+  fi
+
+  __print_info "Update available for '$instance': ${installed} -> ${latest}"
+  __emit_event instance-update-available "$instance" "$installed" "$latest"
+  echo "$latest"
 }
 
 function show_usage_version() {

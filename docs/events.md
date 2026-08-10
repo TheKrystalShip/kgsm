@@ -68,6 +68,7 @@ Event types use **underscore-separated** names in JSON payloads and **dash-separ
 | `instance_update_finished` | Server update completed | `InstanceName` |
 | `instance_version_updated` | Server version changed | `InstanceName`, `OldVersion`, `NewVersion` |
 | `instance_updated` | Server fully updated | `InstanceName` |
+| `instance_update_available` | A newer build exists upstream and this server is not on it | `InstanceName`, `CurrentVersion`, `LatestVersion` |
 
 ### 🚀 Lifecycle Events
 
