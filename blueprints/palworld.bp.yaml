@@ -20,6 +20,21 @@ metadata:
 # and the two number spaces (17-digit SteamID64, 16-digit XUID) don't collide.
 player_joined_regex: '\[LOG\] (?<name>.+?) joined the server\. \(User id: (?:steam|gdk)_(?<id>\d+)'
 player_left_regex: '\[LOG\] (?<name>.+?) left the server\. \(User id: (?:steam|gdk)_(?<id>\d+)'
+# RCON polling — an optional second source of player presence, for a game whose
+# console does not announce joins and leaves in its log, or announces only one of
+# the two. Empty rcon_port leaves it off, which is what every unset field here
+# means: the capability is available to this game, not yet wired up for it.
+# Nothing below is guessed — fill these in only from a server observed answering
+# them, the same rule the presence patterns follow.
+rcon_port: ""
+rcon_password: ""
+rcon_poll_interval_seconds: 10
+# The command that lists connected players, and how to read one player out of what
+# it answers — matched per line, with optional named groups `id` and `name`. Games
+# word their rosters differently, so carrying the pattern here is what lets one
+# poller read any of them without knowing which game it is talking to.
+rcon_players_command: ""
+rcon_players_regex: ''
 # Player moderation. Palworld addresses a player by account id — the bare number
 # the join line carries and `/ShowPlayers` lists — so every template takes {id},
 # the same token the presence regexes capture.

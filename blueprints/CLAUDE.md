@@ -50,8 +50,15 @@ Required: `native.executable_file`. Common optional under `native:`: `ports`,
 
 Top-level, runtime-agnostic fields (both native and container):
 `player_joined_regex`, `player_left_regex`, `rcon_port`, `rcon_password`,
-`rcon_poll_interval_seconds`, `rcon_players_command`, `kick_command`,
-`ban_command`, `unban_command`.
+`rcon_poll_interval_seconds`, `rcon_players_command`, `rcon_players_regex`,
+`kick_command`, `ban_command`, `unban_command`.
+
+**Every blueprint declares the RCON family, whether or not the game uses it** —
+an empty `rcon_port` leaves it off, and the fields being present is how a reader
+sees the capability exists for that game and is simply not wired up yet. Fill
+them in only from a server observed answering them, the same rule the presence
+patterns follow. RCON presence is polled for **native** instances only; on a
+container blueprint the fields are declared but nothing reads them yet.
 
 - `ports` is **single-quoted, pipe-separated** UFW format:
   `ports: '1111:2222/tcp|3333/udp'`.
@@ -71,6 +78,16 @@ Top-level, runtime-agnostic fields (both native and container):
 - `rcon_players_command` (string) — the RCON command to query connected players
   (default "players"). Game-specific: PZ uses "players", Source engine games
   use "status" or "listplayers".
+- `rcon_players_regex` (string) — how to read one player out of what that command
+  answers, matched **per line**, with optional named groups `id` and `name`. An
+  entry carries whichever the server actually states: Project Zomboid prints a
+  header and one `-Name` line per player and gives no id anywhere, while a
+  columnar roster gives both. Carrying the shape here is what lets a single
+  poller read any game's roster without knowing which game it is talking to, so a
+  new RCON game is a blueprint edit rather than a change to whatever polls it.
+  Empty means the output cannot be read — the poller then skips the instance
+  rather than reporting an empty roster, because "nobody is connected" and "I
+  could not parse the answer" are different facts.
 
 ## Player moderation (`kick_command`, `ban_command`, `unban_command`)
 

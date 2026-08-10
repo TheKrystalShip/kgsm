@@ -53,6 +53,36 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Added
 
+- **`rcon_players_regex`** — a blueprint field naming how to read one player out of
+  `rcon_players_command`'s output, applied per line with optional named groups `id` and `name`.
+  Games word their rosters differently: Project Zomboid prints a header and one `-Name` line per
+  player and states no id anywhere, while a columnar roster gives an id and a name. That difference
+  is data about a game, so it belongs beside the command that produces it — a consumer polling RCON
+  applies the pattern without knowing which game it is talking to, and a new RCON game is a
+  blueprint, not a change to whatever does the polling. Empty means the output cannot be read, which
+  turns RCON presence off for the game rather than inventing a roster out of the server's own prose.
+  Materialized into the instance config and served on `instances info --json` like the other
+  presence fields.
+
+- **Every blueprint declares the RCON family** — `rcon_port`, `rcon_password`,
+  `rcon_poll_interval_seconds`, `rcon_players_command`, `rcon_players_regex` — whether or not the
+  game uses it, with empty values where it does not. A field that only appears on the one game
+  already using it reads as a property of that game; the family being present on all thirty is what
+  shows the capability belongs to every blueprint and is simply unwired for most. Nothing is guessed
+  to fill them: an empty `rcon_port` leaves polling off, and values are authored only from a server
+  observed answering them, the same rule the presence patterns follow. `templates/blueprint.tp`
+  documents the family for new blueprints. Presence polling covers native instances, so a container
+  blueprint declares the fields but nothing reads them yet.
+
+### Changed
+
+- **Project Zomboid's presence comes from RCON alone**; its `player_joined_regex` is now empty. The
+  console announces a join as a Steam id with no name, RCON answers `players` with a name and no id,
+  and nothing correlates the two — so running both produced two sessions for one player, one of
+  which no leave could ever retire, because the console prints no leave line at all. The name is the
+  half worth keeping: moderation addresses players by name, and a roster entry reading as a bare
+  Steam id names nobody.
+
 - **`instances delete-backup <instance> <id>`** — remove one backup by id. Only an id the engine
   itself lists is accepted, so a directory in the backups store carrying no manifest — a foreign
   directory, or a backup still being staged — cannot be deleted by naming it.

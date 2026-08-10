@@ -165,7 +165,15 @@ player_left_regex="${instance_player_left_regex:-}"
 rcon_port="${instance_rcon_port:-}"
 rcon_password="${instance_rcon_password:-}"
 rcon_poll_interval_seconds="${instance_rcon_poll_interval_seconds:-10}"
-rcon_players_command="${instance_rcon_players_command:-players}"
+# Empty when the blueprint names none. Defaulting this to some game's command
+# would have every instance claim a way to list its players, including the ones
+# whose server has no such command.
+rcon_players_command="${instance_rcon_players_command:-}"
+# How to read one player out of that command's output, applied per line, with
+# optional named groups `id` and `name`. Games word their rosters differently,
+# so the shape is data here rather than knowledge held by whatever polls it.
+# Empty = the output cannot be read, so RCON presence is off for this instance.
+rcon_players_regex="${instance_rcon_players_regex:-}"
 
 #=============================================================================
 # GAME SERVER EXECUTABLE CONFIGURATION

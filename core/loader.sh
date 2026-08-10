@@ -332,6 +332,13 @@ function __source_blueprint() {
   blueprint_rcon_poll_interval_seconds=$(__bp_yaml_field "$bp" '.rcon_poll_interval_seconds')
   declare -g blueprint_rcon_players_command
   blueprint_rcon_players_command=$(__bp_yaml_field "$bp" '.rcon_players_command')
+  # How to read one player out of that command's output — a pattern applied per
+  # line, with optional named groups `id` and `name`. Every game words its own
+  # roster differently, so the shape lives here as data rather than in whichever
+  # consumer polls it; empty means the output cannot be read and RCON presence
+  # is off for the game (honest unknown, no roster invented from prose).
+  declare -g blueprint_rcon_players_regex
+  blueprint_rcon_players_regex=$(__bp_yaml_field "$bp" '.rcon_players_regex')
 
   # Player-moderation command templates (top-level, runtime-agnostic). Each
   # carries exactly one placeholder — {ip}, {name} or {id} — naming the identity
@@ -390,6 +397,7 @@ function __source_blueprint() {
     blueprint_player_joined_regex blueprint_player_left_regex \
     blueprint_rcon_port blueprint_rcon_password \
     blueprint_rcon_poll_interval_seconds blueprint_rcon_players_command \
+    blueprint_rcon_players_regex \
     blueprint_kick_command blueprint_ban_command blueprint_unban_command
 }
 

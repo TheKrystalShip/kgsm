@@ -232,7 +232,8 @@ function __logic_create_base_instance() {
   export instance_rcon_port="${blueprint_rcon_port:-}"
   export instance_rcon_password="${blueprint_rcon_password:-}"
   export instance_rcon_poll_interval_seconds="${blueprint_rcon_poll_interval_seconds:-10}"
-  export instance_rcon_players_command="${blueprint_rcon_players_command:-players}"
+  export instance_rcon_players_command="${blueprint_rcon_players_command:-}"
+  export instance_rcon_players_regex="${blueprint_rcon_players_regex:-}"
 
   export instance_startup_success_regex="${blueprint_startup_success_regex:-}"
 

@@ -91,6 +91,38 @@ metadata:
 # player_left_regex: ''
 
 # -----------------------------------------------------------------------------
+# RCON polling (optional, top-level) — the other source of player presence
+# -----------------------------------------------------------------------------
+# For a game whose console does not announce joins and leaves in its log, or
+# announces only one of the two. Instead of reading events as they scroll past,
+# the roster is asked for outright on an interval and the answer diffed against
+# the previous one, so a join is the appearance of a player and a leave is a
+# disappearance.
+#
+# Declare these fields even when the game does not use RCON: an empty rcon_port
+# leaves polling off, and their presence is how a reader sees the capability is
+# available and simply not wired up for this game yet.
+#
+# rcon_players_regex is matched PER LINE against what rcon_players_command
+# answers, with optional named groups (?<id>...) / (?<name>...); an entry carries
+# whichever the server actually states, and one that captures neither is not a
+# player. Games word their rosters differently — a header and one `-Name` line
+# per player here, an id and a name in columns there — so carrying the shape in
+# the blueprint is what lets one poller read any game without knowing which it is
+# talking to. Empty means the answer cannot be read, which is NOT the same as a
+# server reporting nobody connected: the poller skips the instance rather than
+# report an absence it did not measure.
+#
+# Author every value from a server observed answering it, never guessed. Presence
+# polling applies to NATIVE instances; a container blueprint may declare these,
+# but nothing reads them yet.
+# rcon_port: ""
+# rcon_password: ""
+# rcon_poll_interval_seconds: 10
+# rcon_players_command: ""
+# rcon_players_regex: ''
+
+# -----------------------------------------------------------------------------
 # Player moderation (optional, top-level — applies to both runtimes)
 # -----------------------------------------------------------------------------
 # The console commands this game accepts to remove a player, block them, and

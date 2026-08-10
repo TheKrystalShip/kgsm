@@ -10,6 +10,21 @@ metadata:
   min_ram_mb: 8192
   recommended_ram_mb: 16384
   base_disk_mb: 1969
+# RCON polling — an optional second source of player presence, for a game whose
+# console does not announce joins and leaves in its log, or announces only one of
+# the two. Empty rcon_port leaves it off, which is what every unset field here
+# means: the capability is available to this game, not yet wired up for it.
+# Nothing below is guessed — fill these in only from a server observed answering
+# them, the same rule the presence patterns follow.
+rcon_port: ""
+rcon_password: ""
+rcon_poll_interval_seconds: 10
+# The command that lists connected players, and how to read one player out of what
+# it answers — matched per line, with optional named groups `id` and `name`. Games
+# word their rosters differently, so carrying the pattern here is what lets one
+# poller read any of them without knowing which game it is talking to.
+rcon_players_command: ""
+rcon_players_regex: ''
 container:
   compose: |-
     services:

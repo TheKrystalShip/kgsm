@@ -10,21 +10,30 @@ metadata:
   min_ram_mb: 2048
   recommended_ram_mb: 4096
   base_disk_mb: 5120
-# Player-presence detection, authored from real server output. The console log
-# names a player only by Steam id — the name appears in the game's own user log,
-# which is a different file — so `id` is the correlation token here. There is no
-# leave line on the console at all, which is why RCON polling below carries the
-# other half of presence.
-player_joined_regex: 'Steam client (?<id>\d+) is initiating a connection'
+# Player-presence detection. RCON below is the whole of it for this game; the
+# console log is deliberately left unused. The log announces a join as a Steam
+# id with no name, and RCON answers `players` with a name and no id, so the two
+# describe the same player with nothing in common to match on — running both
+# yields two sessions per player, one of which no leave can ever retire (the
+# console prints no leave line at all). The name is the half worth having:
+# moderation addresses players by name, and a roster entry reading as a bare
+# Steam id names nobody.
+player_joined_regex: ''
 player_left_regex: ''
-# RCON polling. `players` answers with one `id name` line per connected player,
-# so this is where a roster entry gets its NAME — and moderation addresses
-# players by name, so it needs RCON. Set rcon_password (and the matching value
-# in the game's own server config) to turn it on; empty leaves RCON off.
+# RCON polling — the presence source for this game, so leaving rcon_password
+# empty leaves it with no presence at all. `players` answers with a header line
+# and one `-Name` line per connected player. Set rcon_password (and the matching
+# value in the game's own server config) to turn it on.
 rcon_port: 27015
 rcon_password: ""
 rcon_poll_interval_seconds: 10
 rcon_players_command: "players"
+# `players` answers with a header line and one dash-prefixed name per player:
+#   Players connected (1):
+#   -Heisen
+# The leading dash is what separates an entry from the header, and no id is
+# stated anywhere, so only `name` is captured.
+rcon_players_regex: '^-\s*(?<name>\S.*?)\s*$'
 # Player moderation. Project Zomboid addresses a player by their in-game user
 # name, so every template takes {name}.
 # Disconnect this player; they may reconnect immediately.
