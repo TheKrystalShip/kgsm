@@ -53,6 +53,16 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Fixed
 
+- **Valheim's blueprint runs the vanilla dedicated server.** It named `start_server_bepinex.sh`, a
+  script only a mod loader installs, so `kgsm install valheim` produced an instance that could not
+  start at all. It now runs `valheim_server.x86_64`, which takes the arguments and needs no
+  `LD_LIBRARY_PATH` — the shipped `start_server.sh` cannot be used because it hardcodes its own
+  name, world and password and forwards nothing, making every instance identical. With that:
+  `-savedir $instance_saves_dir` keeps worlds and the access lists inside the instance instead of a
+  shared directory in `$HOME`, a `-password` is shipped because the server refuses to start without
+  one of at least 5 characters, `ports` drops its TCP half (the server opens no TCP socket), and
+  `stop_command` is empty because Valheim reads no console input.
+
 - **Terraria declares its moderation commands and only the protocol it listens on.** `kick {name}`
   and `ban {name}` come from the command list the server's own `help` prints, so `kgsm instances
   kick|ban` work on a Terraria instance instead of answering "does not support 'kick'".
@@ -70,8 +80,8 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   the public guides open with, and they do not restate ports, app ids or launch arguments, which the
   blueprint owns — a second copy of a value drifts and then outranks the engine in a reader's mind.
   Headings are phrased as the questions people ask, since each is indexed with its heading
-  breadcrumb and retrieved by it. Factorio and Terraria are written; other games follow as each is
-  measured.
+  breadcrumb and retrieved by it. Factorio, Terraria and Valheim are written; other games follow as
+  each is measured.
 
 - **`rcon_players_regex`** — a blueprint field naming how to read one player out of
   `rcon_players_command`'s output, applied per line with optional named groups `id` and `name`.

@@ -32,7 +32,11 @@ rcon_poll_interval_seconds: 10
 rcon_players_command: ""
 rcon_players_regex: ''
 native:
-  ports: 2456:2458/tcp|2456:2458/udp
+  # UDP only. A ready server binds both 2456 and 2457; 2456 appears late, once the world is
+  # generated, so a server checked mid-generation looks like it uses only port+1. The vendor's
+  # launch script asks for 2456-2458 to be forwarded, so the range is kept; the TCP half is
+  # dropped because no TCP socket is ever opened.
+  ports: '2456:2458/udp'
   steam_app_id: 896660
   client_steam_app_id: 892970
   steamcmd_arguments: ""
@@ -40,8 +44,20 @@ native:
   platform: linux
   level_name: default
   executable_subdirectory: ""
-  executable_file: start_server_bepinex.sh
-  executable_arguments: -nographics -batchmode -name $instance_level_name -port 2456 -public 1
-  stop_command: exit
+  # The shipped start_server.sh hardcodes its own -name/-world/-password and passes nothing
+  # through, so every instance launched by it would be the same server. The binary beside it
+  # takes the arguments, and runs without the wrapper's LD_LIBRARY_PATH.
+  executable_file: valheim_server.x86_64
+  # -savedir keeps the world inside the instance; without it Valheim writes to
+  # ~/.config/unity3d/IronGate/Valheim and the instance's backups capture nothing.
+  # The server REFUSES TO START without a password of at least 5 characters, so one is shipped
+  # and is meant to be replaced — see docs/knowledge/games/valheim/setup.md.
+  executable_arguments: -nographics -batchmode -name $instance_level_name -world $instance_level_name -savedir $instance_saves_dir -port 2456 -password CHANGE_ME -public 1
+  # Valheim reads no console commands. Stopping is a signal, which the server handles by
+  # saving the world before it exits, so there is nothing to send it.
+  stop_command: ""
   save_command: ""
+  # Printed once the world is generated and the server is registered in the lobby — on a first
+  # start that is well over a minute after the networking is up, so it is the line that means
+  # "ready for players" rather than "process is alive".
   startup_success_regex: Opened Steam server

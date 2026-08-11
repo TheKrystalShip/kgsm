@@ -18,10 +18,17 @@ the install directory, and sometimes starts a virtual framebuffer (`xvfb`) the e
 game ships such a script, **the script is the executable**, not the binary it wraps. Running the raw
 binary directly skips that setup and it fails to load its own libraries.
 
-Shipped examples: Core Keeper's `_launch.sh`, Valheim's `start_server_bepinex.sh`, Palworld's
-`PalServer.sh`, Necesse's `StartServer-nogui.sh`, Project Zomboid's `start-server.sh`. Each sits
-beside a raw binary (`CoreKeeperServer.x86_64`, `valheim_server.x86_64`, …) that is *not* the right
-`executable_file`.
+Shipped examples: Core Keeper's `_launch.sh`, Palworld's `PalServer.sh`, Necesse's
+`StartServer-nogui.sh`, Project Zomboid's `start-server.sh`. Each sits beside a raw binary
+(`CoreKeeperServer.x86_64`, …) that is *not* the right `executable_file`.
+
+**A wrapper only qualifies if it forwards arguments.** Check the script before choosing it: one that
+hardcodes the server's settings and passes nothing through makes every instance identical, because
+the `executable_arguments` KGSM supplies are discarded. Valheim ships exactly that — its
+`start_server.sh` ends in a fixed `./valheim_server.x86_64 -name "My server" -world "Dedicated"
+-password "secret"` with no `"$@"` — so the blueprint runs `valheim_server.x86_64` directly, which
+needs no `LD_LIBRARY_PATH` of its own. A script whose only job is environment setup is worth using;
+one that also owns the configuration is not.
 
 ### 2. An interpreter, with the server artifact as an argument
 
@@ -100,7 +107,7 @@ not the Docker `host:container` shape. Real forms:
 - A single port and protocol: `34197` (Factorio) — a bare number defaults across protocols; or an
   explicit `27015/udp`.
 - Both protocols on one port: `7777/tcp|7777/udp` (Terraria).
-- A contiguous range: `2456:2458/tcp|2456:2458/udp` (Valheim), `26900:26903/tcp|26900:26903/udp`
+- A contiguous range: `2456:2458/udp` (Valheim), `26900:26903/tcp|26900:26903/udp`
   (7 Days to Die).
 - Several distinct ports: `8211/udp|27015/udp` (Palworld).
 
