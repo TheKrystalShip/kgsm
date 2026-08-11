@@ -35,48 +35,64 @@ KGSM fetches the dedicated server through SteamCMD and registers the instance, i
 its console shortcut. Expect a **large** download: a vanilla install measures **6.9 GB** and takes
 several minutes. You do not install SteamCMD, install a JRE, log into Steam, or edit `start-server.sh`.
 
-## The first start blocks on an admin password
+**This server is memory-hungry — plan for 8 GB and prefer 16 GB.** A vanilla server was killed by a
+6 GiB cgroup cap while still loading assets, holding ~1.1 GB of heap and ~5.1 GB of shared memory;
+mods add to both. On a host that cannot spare that, cap the instance so a shortfall kills this server
+alone rather than the host:
 
-This is the single thing most likely to waste your afternoon, and it does not look like a failure.
-
-On a server with no admin account, Project Zomboid **prompts for one interactively**:
-
-```
-User 'admin' not found, creating it
-Command line admin password: null
-Enter new administrator password:
+```bash
+kgsm instances config-set my-pz 'memory_cap_mb=8192'
 ```
 
-A KGSM instance has no terminal attached, so nothing answers, and the server waits there forever.
-Meanwhile `kgsm start` reports success and `kgsm instances status` reports **Active** — both
-truthfully, because the process really is running. It is simply never going to finish starting.
+The Java heap is separate and lives in `install/ProjectZomboid64.json` (`-Xmx`), and it is the
+smaller half — lowering it does not make the server fit in much less.
 
-**Set the password up front and the prompt never appears.** Two arguments do it:
+## Change the admin password before anyone can reach the server
+
+A server with no admin account **prompts for one on stdin** and waits there indefinitely. A KGSM
+instance has no terminal attached, so nothing answers; `kgsm start` reports success and
+`kgsm instances status` reports **Active**, both truthfully, because the process really is running.
+It is simply never going to finish starting.
+
+The blueprint avoids that by creating the account non-interactively, with
+`-adminusername admin -adminpassword CHANGE_ME_ON_FIRST_START` in the launch arguments. The log
+reads `Administrator account 'admin' created.` and startup continues.
+
+**That password is a placeholder and it is the same on every KGSM install.** A Project Zomboid admin
+can do anything in-game — teleport, spawn, ban, change any setting — so change it before the server
+is reachable by anyone you do not trust:
 
 ```bash
 kgsm instances config-get my-pz executable_arguments      # copy what it prints
 kgsm instances config-set my-pz \
   'executable_arguments=-servername $instance_level_name -cachedir=$instance_saves_dir -adminusername admin -adminpassword yourpassword'
-kgsm start my-pz
+kgsm restart my-pz
 ```
 
-The log then reads `Administrator account 'admin' created.` and startup continues without stopping.
 Keep `-servername $instance_level_name` and `-cachedir=$instance_saves_dir` exactly as they are —
 those variables are what tie the server to this instance's own files.
 
-If you have **already** started an instance and it is sitting on the prompt, answer it through the
-console channel instead. Send the password, wait for `Confirm the password:` to appear in the log,
-then send the same password again:
+Two things worth knowing about how this works:
+
+- **The argument only creates the account; it does not change one that exists.** Once
+  `saves/db/<servername>.db` holds an `admin` row, editing `-adminpassword` does nothing. Change it
+  from the console instead, which works on a running server:
+
+  ```bash
+  kgsm instances input my-pz "setpassword \"admin\" \"yourpassword\""
+  ```
+
+- **The password is visible** in the instance config and in the process list to anyone with an
+  account on this host.
+
+If you have an instance that predates this and is sitting on the prompt, answer it through the
+console channel. Send the password, wait for `Confirm the password:` in the log, then send it again:
 
 ```bash
 kgsm instances input my-pz "yourpassword"
 # wait for "Confirm the password:" in the log
 kgsm instances input my-pz "yourpassword"
 ```
-
-Either way the account is stored, so this is a one-time event per instance. Note that
-`-adminpassword` is visible in the instance config and in the process list to anyone with an account
-on this host.
 
 ## Confirming it actually came up
 

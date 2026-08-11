@@ -78,28 +78,45 @@ What to do, in order:
 3. **Cap the instance** so it is killed alone instead of taking the host down with it:
 
    ```bash
-   kgsm instances config-set my-pz 'memory_cap_mb=6144'
+   kgsm instances config-set my-pz 'memory_cap_mb=8192'
    ```
 
-   The watchdog applies this as the cgroup's `memory.max`, which turns a host-wide OOM into one
-   contained to this instance.
+   The watchdog applies this as the cgroup's `memory.max`. Verified: with a cap set, the kernel
+   records `constraint=CONSTRAINT_MEMCG` against that one instance's cgroup instead of the
+   `global_oom` it records without one — the difference between losing this server and losing
+   whatever else the host happens to be running.
 
-## A crashed server is reported as a clean exit
+   Set it above what the server actually needs. A 6 GiB cap killed a **vanilla** server during asset
+   loading, holding ~1.1 GB `anon-rss` and ~5.1 GB `shmem-rss` at the moment it died, which is why
+   the blueprint advises 8 GiB as a minimum and 16 GiB as comfortable. A modded server wants more
+   again.
 
-The watchdog logs this after an OOM kill:
+## An older instance reports a crash as a clean exit
 
+Project Zomboid's **shipped** `start-server.sh` launches the JVM and then ends with an unconditional
+`exit 0`, so whatever happens to the server, the script succeeds. A killed JVM reaches the watchdog
+as `exited cleanly (exit 0); restart #1`, and an OOM crash loop reads as a run of clean exits — the
+watchdog is not inventing a status, the wrapper is discarding one.
+
+KGSM replaces that script on every install and update with one that `exec`s the server, so the
+process the watchdog supervises **is** the server and its exit code is the server's by construction.
+A killed server now reports `137`.
+
+An instance created before that change keeps the shipped script until its next deploy:
+
+```bash
+kgsm stop my-pz
+kgsm instances update my-pz          # rewrites the launcher
+kgsm start my-pz
 ```
-kb-pz exited cleanly (exit 0); restart #1 in 00:00:01
-```
 
-That is not the watchdog inventing a status. Project Zomboid's shipped `start-server.sh` is a wrapper
-that launches the JVM and then ends with an unconditional `exit 0`, so when the JVM is killed, bash
-carries on and reports success. The wrapper's exit code says nothing about the server's.
+Until then, treat "exited cleanly" on this game as no evidence at all: read the log for a `Killed`
+line or a stack trace. Either way, expect a crash loop to back off between attempts (1s, 2s, 4s, 8s)
+until the watchdog gives up at `crash_max_restarts`.
 
-The practical consequence: **for this game, "exited cleanly" is not evidence that it did.** Read the
-log for a `Killed` line or a stack trace before believing a clean exit, and expect a crash loop —
-each restart hits the same wall and the watchdog backs off between attempts (1s, 2s, 4s, 8s) until it
-gives up at `crash_max_restarts`.
+The launcher is rewritten from the override on every deploy, so editing it in place does not last —
+and it is deliberately identical to the shipped one otherwise, including the `libjsig.so` preload
+that fails and is ignored.
 
 ## Nobody can join
 

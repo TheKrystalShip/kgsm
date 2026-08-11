@@ -53,6 +53,43 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Fixed
 
+- **A Project Zomboid server that dies reports that it died.** The shipped `start-server.sh` launches
+  the JVM and then ends in an unconditional `exit 0`, so whatever happened to the server, the script
+  succeeds: a JVM the kernel's OOM killer removed reaches kgsm-watchdog as *"exited cleanly (exit
+  0)"*, and a crash loop reads as a run of clean exits. That is the one thing a supervisor must not
+  be told, because a clean exit is precisely what distinguishes a server that stopped from a server
+  that died. A new `overrides/projectzomboid/07-deploy.sh` replaces the launcher after every deploy
+  and update with one that `exec`s the server, so the supervised process **is** the server and its
+  exit code is the server's by construction rather than by remembering to propagate it. Measured
+  against a stub: the shipped script reports `0` for a SIGKILLed server, the replacement reports
+  `137`.
+
+  Deliberately identical to the shipped script otherwise, including `jre64/lib/amd64` on
+  `LD_LIBRARY_PATH` — a directory the current payload does not contain, so the `libjsig.so` preload
+  fails and is ignored exactly as before. Correcting that would switch on JVM signal chaining, which
+  changes how the server handles the SIGTERM that stops it; repairing an exit code is not the place
+  for it.
+
+  The launcher is rewritten in place rather than added beside the shipped one because
+  `executable_file` is a protected instance key — an existing instance could not be pointed at a new
+  file. Existing instances pick the fix up on their next `instances update`.
+
+- **A Project Zomboid instance starts unattended.** With no admin account the server prompts for a
+  password on stdin and waits there indefinitely; a KGSM instance has nothing attached to answer it,
+  so it hangs while `kgsm start` reports success and status reports Active — both true, since the
+  process really is running. The blueprint now passes `-adminusername admin -adminpassword
+  CHANGE_ME_ON_FIRST_START`, which creates the account outright and skips the prompt.
+
+  ⚠ **That password is a placeholder, identical on every KGSM install, and a Project Zomboid admin
+  can do anything in-game.** Change it before the server is reachable by anyone untrusted. The
+  argument only ever *creates* the account, so once one exists it is changed from the console with
+  `setpassword`, not by editing the argument.
+
+- **Project Zomboid's advisory memory metadata reflects what it uses.** `min_ram_mb` 2048 → 8192 and
+  `recommended_ram_mb` 4096 → 16384; `base_disk_mb` 5120 → 7168, measured from a vanilla install.
+  At the moment the kernel killed a loading server it held ~1.1 GB `anon-rss` and ~7.0 GB
+  `shmem-rss`, so the old advisory numbers were low enough to invite exactly that.
+
 - **A rotated log is named for when the run ended.** `_rotate_log_file` (both the native and the
   container management-script modules) stamps the filename from the log file's last write — the last
   line the server printed — rather than the clock at the moment of rotation. Rotation happens at the

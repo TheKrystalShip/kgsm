@@ -7,9 +7,9 @@ metadata:
   description: "Open-world zombie survival RPG by The Indie Stone where players must survive in a post-apocalyptic world by scavenging, building, and managing needs while fending off the undead. Supports cooperative multiplayer on dedicated servers."
   rawg_slug: "project-zomboid"
   max_players: 100
-  min_ram_mb: 2048
-  recommended_ram_mb: 4096
-  base_disk_mb: 5120
+  min_ram_mb: 8192
+  recommended_ram_mb: 16384
+  base_disk_mb: 7168
 # Player-presence detection. RCON below is the whole of it for this game; the
 # console log is deliberately left unused. The log announces a join as a Steam
 # id with no name, and RCON answers `players` with a name and no id, so the two
@@ -52,7 +52,13 @@ native:
   level_name: default
   executable_subdirectory: ""
   executable_file: start-server.sh
-  executable_arguments: -servername $instance_level_name -cachedir=$instance_saves_dir
+  # -adminusername/-adminpassword create the admin account non-interactively. Without
+  # them the server prompts for a password on stdin and waits there indefinitely, while
+  # `kgsm start` reports success and status reports Active — both true, the process is
+  # running, it just never finishes starting. CHANGE_ME_ON_FIRST_START is a placeholder,
+  # identical on every KGSM install: an admin account can do anything in-game, so change
+  # it before the server is reachable by anyone you don't trust.
+  executable_arguments: -servername $instance_level_name -cachedir=$instance_saves_dir -adminusername admin -adminpassword CHANGE_ME_ON_FIRST_START
   stop_command: quit
   save_command: save
   startup_success_regex: SERVER STARTED
