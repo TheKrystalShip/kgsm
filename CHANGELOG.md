@@ -96,8 +96,18 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   cover, with the excluded topic given its own heading — similarity cannot tell "this document
   answers the question" from "this document is about the same game", so an uncovered question
   retrieves the guide anyway, and a named section is what turns that into an honest answer instead
-  of unrelated install steps. Factorio, Terraria, Valheim and Minecraft are written; other games
-  follow as each is measured.
+  of unrelated install steps. Factorio, Terraria, Valheim, Minecraft and Project Zomboid are
+  written; other games follow as each is measured.
+
+  Project Zomboid's set leads with the one thing that stops a new server dead: with no admin account
+  the server prompts for a password on stdin, and a KGSM instance has nothing attached to answer it,
+  so it waits forever while `kgsm start` reports success and status reports Active — both truthfully,
+  since the process is running. `-adminusername` and `-adminpassword` in the launch arguments skip
+  the prompt entirely. The guides also record that this game's shipped `start-server.sh` ends in an
+  unconditional `exit 0`, so a JVM killed underneath it is reported to the watchdog as a clean exit
+  — for this game "exited cleanly" is not evidence that it did — and that Workshop mods are a
+  first-class server feature here rather than a separate blueprint, needing an entry in both
+  `WorkshopItems` (download) and `Mods` (enable), which are different identifiers.
 
 - **`rcon_players_regex`** — a blueprint field naming how to read one player out of
   `rcon_players_command`'s output, applied per line with optional named groups `id` and `name`.
