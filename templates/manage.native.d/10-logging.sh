@@ -10,12 +10,21 @@ function _rotate_log_file() {
     return
   fi
 
-  # Create a timestamp for the new log file
+  # Name the run by when it ENDED: the file's last write is the last line the
+  # server printed. The rotation moment is a different quantity, off by however
+  # long the instance stayed stopped. UTC, matching kgsm-watchdog, so both
+  # rotators sort together in one logs directory.
   local timestamp
-  timestamp=$(date +"%Y-%m-%dT%H:%M:%S")
+  timestamp=$(date -u -r "$log_file" +"%Y-%m-%dT%H:%M:%S")
 
   # Construct the new filename
   local rotated_log_file="${instance_logs_dir}/${instance_name}.${timestamp}.log"
+
+  # Two runs can end inside the same second (a crash loop restarts after ~1s).
+  # Fall back to a nanosecond suffix so a prior run is never overwritten.
+  if [[ -e "$rotated_log_file" ]]; then
+    rotated_log_file="${instance_logs_dir}/${instance_name}.${timestamp}.$(date -u +%s%N).log"
+  fi
 
   if mv "$log_file" "$rotated_log_file"; then
     __print_success "Rotated log file $log_file to $rotated_log_file"

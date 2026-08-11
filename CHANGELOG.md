@@ -53,6 +53,18 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Fixed
 
+- **A rotated log is named for when the run ended.** `_rotate_log_file` (both the native and the
+  container management-script modules) stamps the filename from the log file's last write — the last
+  line the server printed — rather than the clock at the moment of rotation. Rotation happens at the
+  next start, so the two quantities differ by however long the instance stayed stopped: an instance
+  stopped on the 1st and started on the 5th named a run that ended on the 1st for the 5th. The
+  timestamp is UTC, matching kgsm-watchdog's rotator, so both sort together in one `logs/` directory.
+  Two runs ending inside the same second (a crash loop restarts after about a second) now fall back
+  to a nanosecond-suffixed name instead of `mv` silently overwriting the earlier run.
+
+  Existing instances carry a generated management script and keep the old naming until it is
+  regenerated: `kgsm files management create <instance>`.
+
 - **Valheim's blueprint runs the vanilla dedicated server.** It named `start_server_bepinex.sh`, a
   script only a mod loader installs, so `kgsm install valheim` produced an instance that could not
   start at all. It now runs `valheim_server.x86_64`, which takes the arguments and needs no
