@@ -39,5 +39,6 @@ complete the set.
 | Game | Documents |
 |---|---|
 | [Factorio](factorio/) | [setup](factorio/setup.md), [configuration](factorio/configuration.md), [troubleshooting](factorio/troubleshooting.md) |
+| [Minecraft](minecraft/) | [setup](minecraft/setup.md), [configuration](minecraft/configuration.md), [troubleshooting](minecraft/troubleshooting.md) |
 | [Terraria](terraria/) | [setup](terraria/setup.md), [configuration](terraria/configuration.md), [troubleshooting](terraria/troubleshooting.md) |
 | [Valheim](valheim/) | [setup](valheim/setup.md), [configuration](valheim/configuration.md), [troubleshooting](valheim/troubleshooting.md) |

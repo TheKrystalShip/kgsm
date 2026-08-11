@@ -80,8 +80,8 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   the public guides open with, and they do not restate ports, app ids or launch arguments, which the
   blueprint owns — a second copy of a value drifts and then outranks the engine in a reader's mind.
   Headings are phrased as the questions people ask, since each is indexed with its heading
-  breadcrumb and retrieved by it. Factorio, Terraria and Valheim are written; other games follow as
-  each is measured.
+  breadcrumb and retrieved by it. Factorio, Terraria, Valheim and Minecraft are written; other games
+  follow as each is measured.
 
 - **`rcon_players_regex`** — a blueprint field naming how to read one player out of
   `rcon_players_command`'s output, applied per line with optional named groups `id` and `name`.
