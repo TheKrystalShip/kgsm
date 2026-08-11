@@ -51,6 +51,16 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Fixed
+
+- **Terraria declares its moderation commands and only the protocol it listens on.** `kick {name}`
+  and `ban {name}` come from the command list the server's own `help` prints, so `kgsm instances
+  kick|ban` work on a Terraria instance instead of answering "does not support 'kick'".
+  `unban_command` stays empty because the server has no such command — a ban is lifted by editing
+  `banlist.txt` — and KGSM refuses the action rather than substituting one that would not lift
+  anything. `ports` is `7777/tcp`: a running server holds a TCP listener and opens no UDP socket, so
+  the previous `7777/tcp|7777/udp` opened a port nothing listens on.
+
 ### Added
 
 - **Per-game operator guides under `docs/knowledge/games/<game>/`** — how to install, configure and

@@ -25,8 +25,18 @@ rcon_poll_interval_seconds: 10
 # poller read any of them without knowing which game it is talking to.
 rcon_players_command: ""
 rcon_players_regex: ''
+# Moderation, from the command list the server's own `help` prints. Terraria addresses
+# players by name and has no un-ban command: a ban is lifted by removing the entry from
+# banlist.txt, so unban_command is empty and KGSM refuses the action rather than
+# substituting one that would not lift anything.
+kick_command: 'kick {name}'
+ban_command: 'ban {name}'
+unban_command: ''
 native:
-  ports: 7777/tcp|7777/udp
+  # The server holds a TCP listener only — observed on a running 1.4.5.6 server, which
+  # opens no UDP socket. The protocol is stated so the firewall does not also open a UDP
+  # port nothing is listening on.
+  ports: '7777/tcp'
   steam_app_id: 0
   client_steam_app_id: 105600
   steamcmd_arguments: ""
