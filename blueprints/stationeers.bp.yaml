@@ -31,7 +31,7 @@ rcon_poll_interval_seconds: 10
 rcon_players_command: ""
 rcon_players_regex: ''
 native:
-  ports: 27015:27015/udp
+  ports: 27015:27016/udp
   steam_app_id: 600760
   client_steam_app_id: 544550
   steamcmd_arguments: ""
@@ -40,7 +40,7 @@ native:
   level_name: Lunar
   executable_subdirectory: ""
   executable_file: rocketstation_DedicatedServer.x86_64
-  executable_arguments: -file start MyLunaLevel ${instance_level_name} -logFile ${instance_log_file} -settings StartLocalHost true ServerVisible true GamePort 27016 UPNPEnabled true ServerName CHANGE_ME ServerPassword CHANGE_ME ServerMaxPlayers 8 AutoSave true SaveInterval 300 ServerAuthSecret ADMIN_PASS UpdatePort 27015 AutoPauseServer trye UseSteamP2P false LocalIpAddress 0.0.0.0
+  executable_arguments: -file start MyLunaLevel ${instance_level_name} -logFile - -settings StartLocalHost true ServerVisible true GamePort 27016 UPNPEnabled true ServerName CHANGE_ME ServerPassword CHANGE_ME ServerMaxPlayers 8 AutoSave true SaveInterval 300 ServerAuthSecret ADMIN_PASS UpdatePort 27015 AutoPauseServer true UseSteamP2P false LocalIpAddress 0.0.0.0
   stop_command: exit
   save_command: exit
   startup_success_regex: started Server
