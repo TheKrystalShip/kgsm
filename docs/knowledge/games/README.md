@@ -39,3 +39,4 @@ complete the set.
 | Game | Documents |
 |---|---|
 | [Factorio](factorio/) | [setup](factorio/setup.md), [configuration](factorio/configuration.md), [troubleshooting](factorio/troubleshooting.md) |
+| [Terraria](terraria/) | [setup](terraria/setup.md), [configuration](terraria/configuration.md), [troubleshooting](terraria/troubleshooting.md) |
