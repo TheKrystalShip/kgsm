@@ -53,6 +53,15 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Added
 
+- **Per-game operator guides under `docs/knowledge/games/<game>/`** — how to install, configure and
+  troubleshoot one game's server once its blueprint exists, as `setup.md`, `configuration.md` and
+  `troubleshooting.md`. This is the operator half of `docs/knowledge/`, whose existing documents
+  cover authoring a blueprint. The guides describe KGSM's workflow rather than the manual install
+  the public guides open with, and they do not restate ports, app ids or launch arguments, which the
+  blueprint owns — a second copy of a value drifts and then outranks the engine in a reader's mind.
+  Headings are phrased as the questions people ask, since each is indexed with its heading
+  breadcrumb and retrieved by it. Factorio is written; other games follow as each is measured.
+
 - **`rcon_players_regex`** — a blueprint field naming how to read one player out of
   `rcon_players_command`'s output, applied per line with optional named groups `id` and `name`.
   Games word their rosters differently: Project Zomboid prints a header and one `-Name` line per

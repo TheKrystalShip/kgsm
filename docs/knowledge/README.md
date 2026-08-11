@@ -1,8 +1,12 @@
 # KGSM knowledge base
 
-Reference knowledge about how native Linux dedicated game servers are set up, and how KGSM
-blueprints express that. It is written for two readers: a person hand-authoring or debugging a
-blueprint, and the assistant's retrieval index (every `.md` here is indexed for RAG).
+Reference knowledge about how native Linux dedicated game servers are set up, how KGSM blueprints
+express that, and how to run each game once its blueprint exists. It is written for two readers: a
+person hand-authoring a blueprint or operating a server, and the assistant's retrieval index (every
+`.md` here is indexed for RAG).
+
+Two axes live here. The documents listed below explain how to **author a blueprint**;
+[`games/`](games/) holds per-game **operator** guides, which assume the blueprint already exists.
 
 The authority for the blueprint *schema and fields* is [`../blueprints.md`](../blueprints.md); the
 authority for a *specific game* is its shipped `blueprints/<game>.bp.yaml`. These documents explain
@@ -14,6 +18,7 @@ next — so a new blueprint can be built correctly the first time.
 | [`native-server-launch.md`](native-server-launch.md) | How a native server is launched: wrapper scripts vs raw binaries, interpreter-run servers, the executable subdirectory, headless arguments, readiness detection, stop commands |
 | [`steam-downloads.md`](steam-downloads.md) | SteamCMD installs: the dedicated-server app id vs the client app id, anonymous vs account-owned downloads |
 | [`game-reference.md`](game-reference.md) | Annotated real examples from the shipped catalog, grouped by the pattern each one illustrates |
+| [`games/`](games/) | Per-game operator guides — installing, configuring and troubleshooting one game's server, once its blueprint exists |
 
 Two facts hold throughout and are not repeated in every section:
 
