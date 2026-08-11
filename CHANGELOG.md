@@ -80,7 +80,11 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   the public guides open with, and they do not restate ports, app ids or launch arguments, which the
   blueprint owns — a second copy of a value drifts and then outranks the engine in a reader's mind.
   Headings are phrased as the questions people ask, since each is indexed with its heading
-  breadcrumb and retrieved by it. Factorio, Terraria, Valheim and Minecraft are written; other games
+  breadcrumb and retrieved by it. Each game's `setup.md` also states what the guides do **not**
+  cover, with the excluded topic given its own heading — similarity cannot tell "this document
+  answers the question" from "this document is about the same game", so an uncovered question
+  retrieves the guide anyway, and a named section is what turns that into an honest answer instead
+  of unrelated install steps. Factorio, Terraria, Valheim and Minecraft are written; other games
   follow as each is measured.
 
 - **`rcon_players_regex`** — a blueprint field naming how to read one player out of

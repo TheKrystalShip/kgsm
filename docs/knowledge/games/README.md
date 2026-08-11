@@ -31,6 +31,12 @@ complete the set.
 - **Headings are the retrieval key.** Each chunk is indexed with its heading breadcrumb, so a
   heading phrased the way a person asks the question ("Nobody outside my network can join") is found
   far more reliably than a structural one ("Network configuration").
+- **Say what the guides do not cover.** Every game's `setup.md` opens with a scope section naming
+  what is out of scope and where the answer actually lies. Similarity alone cannot tell "this
+  document answers the question" from "this document is about the same game", so a question a guide
+  does not cover still retrieves it — and without a scope section the reader is handed a confident
+  answer to something else. Name the excluded topic explicitly, because a sentence that never
+  mentions modpacks is not found by someone asking about modpacks.
 - **Cite the upstream source and its licence** at the top of each document when it is derived from a
   community wiki or vendor documentation.
 

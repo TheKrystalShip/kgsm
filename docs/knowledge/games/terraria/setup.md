@@ -7,6 +7,21 @@ or credentials are involved.
 Derived from the Terraria Wiki, "Server" (CC BY-NC-SA 4.0), rewritten for KGSM and verified against
 Terraria Server 1.4.5.6.
 
+## What these guides cover
+
+Running a **vanilla Terraria** dedicated server on KGSM: installing it, the `serverconfig.txt`
+settings, worlds, moderation, backups, updates, and what to check when it misbehaves.
+
+They do **not** cover:
+
+- **tModLoader and modded servers.** tModLoader is a different server program from a different
+  source, so it is a **separate blueprint** rather than a setting on this one — not something you
+  switch on for an existing instance.
+- **Journey-mode research and power settings** beyond noting that a Journey world is chosen at
+  creation.
+- **World editing** with external tools such as TEdit.
+- **Playing the game** — bosses, progression, building. These guides are about operating the server.
+
 ## Installing a Terraria server
 
 ```bash
@@ -155,6 +170,19 @@ them — the server offers no un-ban command.
 KGSM's own moderation verbs (`kgsm instances kick|ban|unban`) do **not** work here: they require the
 blueprint to declare the game's moderation commands, and Terraria's declares none. Asking for one
 answers *"does not support 'kick'"* rather than doing anything.
+
+## Mods and tModLoader
+
+These guides do not cover modded Terraria, and the shipped blueprint cannot run it. It installs the
+**vanilla** dedicated server from terraria.org.
+
+tModLoader is a different server program, distributed separately, so running it means a **separate
+blueprint** rather than a setting on this one: copy the shipped blueprint into
+`~/.local/share/kgsm/blueprints/`, point it at tModLoader with an override that downloads it, and
+install from that. A user blueprint shadows the system one of the same name.
+
+As with vanilla, every client must run the same version as the server — and with mods, the same mod
+set too.
 
 ## Version and updates
 

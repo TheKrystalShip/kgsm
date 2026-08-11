@@ -6,6 +6,20 @@ downloads anonymously, so no Steam account or credentials are involved.
 Derived from Iron Gate's "A Guide to Dedicated Servers", rewritten for KGSM and verified against
 Valheim dedicated server `l-0.221.12`.
 
+## What these guides cover
+
+Running a **vanilla Valheim** dedicated server on KGSM: installing it, the launch arguments that
+configure it, the access-control lists, worlds, backups, updates, and what to check when it
+misbehaves.
+
+They do **not** cover:
+
+- **Mods.** BepInEx, Valheim Plus and anything built on them replace the launch script, so a modded
+  server is a **separate blueprint** rather than a setting — see [Mods](#mods) below for what that
+  means in practice.
+- **World transfer** from a single-player game, and editing worlds with external tools.
+- **Playing the game** — bosses, biomes, building. These guides are about operating the server.
+
 ## Installing a Valheim server
 
 ```bash

@@ -7,6 +7,27 @@ account involved.
 Derived from the Minecraft Wiki, "Tutorial:Setting up a Java Edition server" (CC BY-NC-SA 3.0),
 rewritten for KGSM and verified against Minecraft server 26.2 on OpenJDK 26.
 
+## What these guides cover
+
+Running a **vanilla Minecraft Java Edition** server on KGSM: installing it, the `server.properties`
+settings, moderation, backups, updates, and what to check when it misbehaves.
+
+They do **not** cover:
+
+- **Modpacks and modded servers** — Forge, NeoForge, Fabric, Quilt. A modded server replaces the
+  server jar and is downloaded from somewhere other than Mojang's manifest, so it is a **separate
+  blueprint**, not a setting on this one. Copy the shipped blueprint into
+  `~/.local/share/kgsm/blueprints/`, point it at the loader's jar with a matching override for the
+  download, and install from that.
+- **Server platforms** — Paper, Spigot, Purpur, Bukkit — and their plugins. Same reasoning: a
+  different jar from a different source, so a different blueprint.
+- **Proxies** — BungeeCord, Velocity, and multi-server networks.
+- **Bedrock Edition.** This is Java Edition only; Bedrock is a different server entirely.
+- **Datapacks, resource packs, and in-game commands** beyond the handful used for administration.
+
+Nothing here is a judgement about those — they are simply outside what the shipped blueprint runs,
+and a guide that guessed at them would be worse than silence.
+
 ## Installing a Minecraft server
 
 ```bash
@@ -132,6 +153,21 @@ is off by default, which is why nothing appears on UDP on a stock server.
 KGSM opens the instance's declared ports when the server starts and closes them when it stops, so
 you never open one by hand. Players outside your network still need the port forwarded on the router
 to this host.
+
+## Modpacks, plugins and modded servers
+
+These guides do not cover installing modpacks, mods or plugins, and the shipped blueprint cannot run
+them. It launches the **vanilla** server jar downloaded from Mojang's version manifest.
+
+Every modded or alternative server — Forge, NeoForge, Fabric, Quilt, and the Paper/Spigot/Purpur
+family — is a different jar obtained from somewhere other than Mojang. Because the jar and where it
+comes from are properties of the blueprint rather than settings on an instance, running one means a
+**separate blueprint**: copy the shipped one into `~/.local/share/kgsm/blueprints/`, give it an
+override that downloads the loader's jar, and install from that. A user blueprint shadows the system
+one of the same name.
+
+The same applies to proxies such as BungeeCord and Velocity, and to Bedrock Edition, which is a
+different server program entirely.
 
 ## Saving, backups and updates
 

@@ -7,6 +7,21 @@ involved.
 Derived from the Factorio Wiki, "Multiplayer" (CC BY-NC-SA 3.0), rewritten for KGSM and verified
 against Factorio headless 2.0.77.
 
+## What these guides cover
+
+Running a **vanilla Factorio headless** server on KGSM: installing it, the `server-settings.json`
+options, admins, saves, backups, updates, and what to check when it misbehaves.
+
+They do **not** cover:
+
+- **Mods.** Factorio mods live in the server's `mods/` directory and must match on every client.
+  Nothing here describes installing, updating or syncing them.
+- **Scenarios and custom maps** beyond the world the server creates for itself, and map-generation
+  settings (`map-gen-settings.json`, `map-settings.json`) beyond noting that they shape a world only
+  at creation.
+- **The Space Age expansion** and other DLC-specific settings.
+- **Playing the game** — building, circuits, ratios. These guides are about operating the server.
+
 ## Installing a Factorio server
 
 ```bash
@@ -125,6 +140,17 @@ kgsm instances create-backup my-factorio
 kgsm instances backups my-factorio
 kgsm start my-factorio
 ```
+
+## Mods
+
+These guides do not cover installing or managing Factorio mods, and KGSM does nothing with them: the
+blueprint installs the vanilla headless server and no more.
+
+What is worth knowing as an operator is the constraint mods impose. Factorio requires **every client
+to run exactly the same version and the same mod set as the server** — there is no partial match, so
+adding, removing or updating a single mod locks out every player until they match it. Mods live in a
+`mods/` directory inside the instance's install directory, and a KGSM update replaces the server
+build without reconciling them.
 
 ## Version and updates
 
