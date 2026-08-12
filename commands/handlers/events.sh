@@ -517,13 +517,20 @@ function __logic_build_event_payload() {
   # emitted as JSON null below, never a fabricated surface.
   local origin="${KGSM_EVENT_ORIGIN:-}"
 
-  # Generate JSON payload
+  # Generate JSON payload.
+  #
+  # The timestamp carries milliseconds. One appender gets ordering for free from
+  # the file it writes, but the journal is read merged with every other
+  # producer's, and second granularity orders arbitrarily inside each second —
+  # which is exactly where causally adjacent events sit (a start and the port
+  # opening that follows it land within one second routinely). `%3N` is GNU date;
+  # KGSM is Linux-only, so that is a dependency it already has.
   local jq_args=("${param_names[@]}"
-    --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
     --arg actor "$actor"
     --arg origin "$origin"
     --arg hostname "$(hostname 2>/dev/null || cat /etc/hostname 2>/dev/null || echo "${HOSTNAME:-localhost}")"
-    --arg kgsm_version "$KGSM_VERSION")
+    --arg producer_version "$KGSM_VERSION")
 
   # Build data object based on event type
   local data_object=""
@@ -716,13 +723,14 @@ function __logic_build_event_payload() {
   # every consumer's cursor is a byte offset into it, so a pretty-printed
   # payload would break the one-event-per-line contract readers depend on.
   if ! payload=$(jq -c -n "${jq_args[@]}" "{
+    V: 1,
     EventType: \"$event_type\",
     Data: $data_object,
     Timestamp: \$timestamp,
     Actor: \$actor,
     Origin: (\$origin | if . == \"\" then null else . end),
     Hostname: \$hostname,
-    KGSMVersion: \$kgsm_version
+    ProducerVersion: \$producer_version
   }"); then
     return $EC_EVENT_JSON_FAILED
   fi

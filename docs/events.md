@@ -152,36 +152,62 @@ Every event is a JSON object with the following top-level fields:
 
 ```json
 {
+    "V": 1,
     "EventType": "<event_name>",
     "Data": {
         "InstanceName": "<instance_name>",
         ...event-specific fields
     },
-    "Timestamp": "2024-01-15T12:34:56Z",
+    "Timestamp": "2026-01-15T12:34:56.789Z",
+    "Actor": "discord:someone",
+    "Origin": "ui",
     "Hostname": "my-server",
-    "KGSMVersion": "1.2.3"
+    "ProducerVersion": "1.2.3"
 }
 ```
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `V` | int | Envelope schema version. A reader treats an absent `V` as version 0 — the spelling used before the field existed, which retention keeps on disk for up to `event_journal_retention_days` |
 | `EventType` | string | Underscore-separated event type name |
 | `Data` | object | Event-specific payload. Instance events key it on `InstanceName`; the blueprint events key it on `BlueprintName` |
-| `Timestamp` | string | ISO 8601 UTC timestamp |
+| `Timestamp` | string | ISO 8601 UTC timestamp, millisecond precision |
+| `Actor` | string | Who triggered it, `provider:name`. From `$KGSM_EVENT_ACTOR`, else the OS user |
+| `Origin` | string\|null | The surface that drove it. From `$KGSM_EVENT_ORIGIN`; `null` when none was declared — never fabricated |
 | `Hostname` | string | System hostname where the event originated |
-| `KGSMVersion` | string | Running KGSM version |
+| `ProducerVersion` | string | The version of the component that emitted the event — here, KGSM's |
+
+**Absent means null.** A field that carries nothing may be omitted rather than written as an
+explicit null, and a reader treats the two identically.
+
+**The timestamp carries milliseconds** because the journal is read alongside every other
+producer's. A single appender gets its ordering free from the file it writes, but events merged
+across journals at second granularity order arbitrarily inside each second — which is exactly
+where causally adjacent events sit, a start and the port opening that follows it landing within one
+second routinely.
+
+**`ProducerVersion` names whoever emitted the event, not KGSM specifically.** Every component that
+writes a journal stamps its own build there, so one field answers "which code produced this line"
+whatever produced it. It is deliberately separate from `V`: one says how to read the line, the
+other says which build wrote it, and a single field serving as both cannot answer either reliably.
+
+Three further envelope fields — `OpId`, `RunId` and `During` — are **reserved** for correlating
+events that belong to one operation. KGSM writes none of them, and a reader sees them absent.
 
 ### Example: Instance Started
 
 ```json
 {
+    "V": 1,
     "EventType": "instance_started",
     "Data": {
         "InstanceName": "minecraft_survival"
     },
-    "Timestamp": "2024-01-15T12:34:56Z",
+    "Timestamp": "2026-01-15T12:34:56.789Z",
+    "Actor": "discord:someone",
+    "Origin": "ui",
     "Hostname": "my-server",
-    "KGSMVersion": "1.2.3"
+    "ProducerVersion": "1.2.3"
 }
 ```
 

@@ -47,6 +47,20 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **The event envelope is v1** — every emitted event carries `V: 1`, a millisecond-precision
+  `Timestamp`, and `ProducerVersion` in place of `KGSMVersion`. The envelope is a cross-producer
+  contract now (authority: `../event-journal-federation-plan.md` §2): each component that writes an
+  event journal writes this same shape, so one reader merges them all.
+  - Milliseconds are load-bearing rather than cosmetic. A single appender takes its ordering from the
+    file it writes, but events read across several journals at second granularity order arbitrarily
+    inside each second — exactly where causally adjacent events sit, a start and the port opening
+    that follows it landing within one second routinely. `%3N` is GNU `date`, which this Linux-only
+    engine already depends on.
+  - `ProducerVersion` names whoever emitted an event rather than KGSM specifically, so one field
+    answers "which build produced this line" whatever produced it. It is separate from `V` because
+    one says how to read the line and the other says which build wrote it.
+  - `OpId`, `RunId` and `During` are reserved in the envelope for correlating events belonging to one
+    operation. KGSM writes none of them.
 - Events system refactoring to command-based architecture
 
 ## [Unreleased] - 3.0.0 (Major Version)

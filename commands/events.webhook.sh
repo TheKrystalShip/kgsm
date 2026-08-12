@@ -482,14 +482,15 @@ function _cmd_test() {
     jq -n \
       --arg event_type "test_event" \
       --arg test_data "Webhook transport test" \
-      --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+      --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" \
       --arg hostname "$(hostname 2>/dev/null || echo 'localhost')" \
       '{
+        V: 1,
         EventType: $event_type,
         Data: { Test: $test_data },
         Timestamp: $timestamp,
         Hostname: $hostname,
-        KGSMVersion: "test"
+        ProducerVersion: "test"
       }'
   )
 

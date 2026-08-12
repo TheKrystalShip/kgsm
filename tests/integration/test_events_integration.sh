@@ -785,14 +785,14 @@ function test_emit_blueprint_updated_payload_is_blueprint_scoped() {
   # reaches the emit through the module directly rather than through kgsm.sh:
   # the version has to resolve the same way for every entrypoint, so a value
   # that only appears on the kgsm.sh path is a broken contract, not a detail.
-  local kgsm_version
-  kgsm_version=$(echo "$payload" | jq -r '.KGSMVersion' 2> /dev/null)
+  local producer_version
+  producer_version=$(echo "$payload" | jq -r '.ProducerVersion' 2> /dev/null)
   # KGSM_VERSION is exported by core/bootstrap.sh, which the runner sources.
   # shellcheck disable=SC2153
-  assert_equals "$KGSM_VERSION" "$kgsm_version" \
-    "KGSMVersion should carry the running version regardless of entrypoint"
-  assert_not_equals "unknown" "$kgsm_version" \
-    "KGSMVersion must never fall back to 'unknown'"
+  assert_equals "$KGSM_VERSION" "$producer_version" \
+    "ProducerVersion should carry the running version regardless of entrypoint"
+  assert_not_equals "unknown" "$producer_version" \
+    "ProducerVersion must never fall back to 'unknown'"
 }
 
 # =============================================================================
@@ -932,4 +932,73 @@ function test_emit_backups_pruned_payload_carries_numeric_counts() {
   has_source=$(echo "$payload" | jq -r '.Data | has("Source")' 2> /dev/null)
   assert_equals "false" "$has_source" \
     "Data must NOT contain a Source field (a prune is a sweep, not one backup)"
+}
+
+# =============================================================================
+# TEST: the emitted envelope is v1 — schema version, millisecond timestamp and
+# the producer's own version.
+#
+# Read back off the journal the emit actually wrote to, so this pins
+# __logic_build_event_payload's output rather than a template. The envelope is a
+# cross-producer contract now: every component that writes a journal writes this
+# shape, and a reader merging several of them depends on all three fields.
+# =============================================================================
+
+function test_emit_payload_is_a_v1_envelope() {
+  log_test_step "Testing: emitted payload carries V, ms timestamp and ProducerVersion"
+
+  "$EVENTS_MODULE" emit instance-started envelope-test-server > /dev/null 2>&1 || true
+
+  local payload
+  payload=$(_last_journal_event)
+  assert_not_null "$payload" "Journaled event payload should not be empty"
+
+  # V must be a JSON number, not a string: a reader compares it numerically to
+  # decide how to read the rest of the line.
+  local schema_version schema_type
+  schema_version=$(echo "$payload" | jq -r '.V' 2> /dev/null)
+  schema_type=$(echo "$payload" | jq -r '.V | type' 2> /dev/null)
+  assert_equals "1" "$schema_version" "Envelope should declare schema version 1"
+  assert_equals "number" "$schema_type" "V must be a JSON number"
+
+  # Milliseconds are load-bearing: the journal is read merged with every other
+  # producer's, and second granularity orders arbitrarily inside each second —
+  # exactly where causally adjacent events sit.
+  local timestamp
+  timestamp=$(echo "$payload" | jq -r '.Timestamp' 2> /dev/null)
+  assert_not_null "$timestamp" "Emitted payload should include a Timestamp"
+  if [[ ! "$timestamp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$ ]]; then
+    fail_test "Timestamp '$timestamp' should be ISO 8601 UTC with milliseconds"
+  fi
+
+  # ProducerVersion names whoever emitted the event. KGSMVersion was its v0
+  # spelling and must be gone, or a reader would see both and have to guess which
+  # one to trust.
+  local producer_version
+  producer_version=$(echo "$payload" | jq -r '.ProducerVersion' 2> /dev/null)
+  assert_not_null "$producer_version" \
+    "Emitted payload should include ProducerVersion"
+  assert_not_equals "null" "$producer_version" \
+    "ProducerVersion should carry the running KGSM version"
+
+  local has_kgsm_version
+  has_kgsm_version=$(echo "$payload" | jq -r 'has("KGSMVersion")' 2> /dev/null)
+  assert_equals "false" "$has_kgsm_version" \
+    "The envelope must NOT carry the v0 KGSMVersion field alongside ProducerVersion"
+
+  # The correlation fields are reserved and KGSM populates none of them. A writer
+  # emitting an empty OpId would set a precedent by accident.
+  local has_op_id has_run_id has_during
+  has_op_id=$(echo "$payload" | jq -r 'has("OpId")' 2> /dev/null)
+  has_run_id=$(echo "$payload" | jq -r 'has("RunId")' 2> /dev/null)
+  has_during=$(echo "$payload" | jq -r 'has("During")' 2> /dev/null)
+  assert_equals "false" "$has_op_id" "OpId is reserved and must be absent"
+  assert_equals "false" "$has_run_id" "RunId is reserved and must be absent"
+  assert_equals "false" "$has_during" "During is reserved and must be absent"
+
+  # Still one whole line: every consumer's cursor is a byte offset into the
+  # journal, so the envelope must never span lines.
+  local line_count
+  line_count=$(echo "$payload" | wc -l)
+  assert_equals "1" "$line_count" "The envelope must be a single line"
 }
