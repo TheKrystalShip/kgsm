@@ -7,8 +7,7 @@ use one unless you create it and point the instance at it — see [`setup.md`](s
 The game ships a fully commented template at `install/data/server-settings.example.json` inside the
 instance. Keys beginning `_comment_` are documentation and are ignored.
 
-Derived from the Factorio Wiki, "Multiplayer" (CC BY-NC-SA 3.0) and the shipped example file,
-verified against Factorio headless 2.0.77.
+Derived from the Factorio Wiki, "Multiplayer" (CC BY-NC-SA 3.0) and the shipped example file.
 
 ## Listing and identity
 

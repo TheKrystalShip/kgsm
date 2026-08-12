@@ -1,0 +1,16 @@
+Factorio operator guides — sources and verified version
+=======================================================
+
+Upstream source
+    Factorio Wiki, "Multiplayer" — CC BY-NC-SA 3.0
+    https://wiki.factorio.com/Multiplayer
+
+Verified against
+    Factorio headless 2.0.77, run under KGSM.
+
+Every claim in these guides was observed on a server that was actually running at
+that build. Re-verify against a newer one before trusting a specific behaviour.
+
+This file is deliberately NOT markdown: the assistant's RAG indexer walks *.md only,
+so a build number recorded here can never be retrieved and offered as the current
+release of the game. See ../README.md, "Record the verified version outside the guides".

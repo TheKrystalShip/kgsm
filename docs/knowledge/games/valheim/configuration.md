@@ -5,7 +5,7 @@ live in the instance's `executable_arguments`. Access control is the one excepti
 alongside the worlds.
 
 Derived from Iron Gate's "A Guide to Dedicated Servers" and the arguments the shipped
-`start_server.sh` documents, verified against Valheim dedicated server `l-0.221.12`.
+`start_server.sh` documents.
 
 ## Changing a setting
 

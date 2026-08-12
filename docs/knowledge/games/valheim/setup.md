@@ -3,8 +3,7 @@
 Valheim runs as a **native** KGSM instance. The dedicated server is a Steam application that
 downloads anonymously, so no Steam account or credentials are involved.
 
-Derived from Iron Gate's "A Guide to Dedicated Servers", rewritten for KGSM and verified against
-Valheim dedicated server `l-0.221.12`.
+Derived from Iron Gate's "A Guide to Dedicated Servers", rewritten for KGSM.
 
 ## What these guides cover
 

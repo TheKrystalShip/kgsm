@@ -9,8 +9,6 @@ the work:
 | `saves/Server/<servername>_SandboxVars.lua` | The world: zombie population, loot, day length, difficulty | At world creation, and on start |
 | The instance's `executable_arguments` | Launch-only arguments KGSM passes | At launch |
 
-Verified against Project Zomboid dedicated server `42.20.2` (Build 42) under KGSM.
-
 `<servername>` is the instance's `level_name`, which KGSM passes as `-servername`. On a default
 instance that is `default`, giving `saves/Server/default.ini`.
 

@@ -1,0 +1,16 @@
+Project Zomboid operator guides — sources and verified version
+==============================================================
+
+Upstream source
+    None. These guides are written entirely from a live server; no wiki or vendor
+    documentation was adapted, so no upstream licence applies.
+
+Verified against
+    Project Zomboid dedicated server 42.20.2 (Build 42), run under KGSM.
+
+Every claim in these guides was observed on a server that was actually running at
+that build. Re-verify against a newer one before trusting a specific behaviour.
+
+This file is deliberately NOT markdown: the assistant's RAG indexer walks *.md only,
+so a build number recorded here can never be retrieved and offered as the current
+release of the game. See ../README.md, "Record the verified version outside the guides".

@@ -4,8 +4,7 @@ Terraria runs as a **native** KGSM instance. KGSM downloads the official dedicat
 directly from terraria.org — Terraria's server is not distributed through Steam, so no Steam account
 or credentials are involved.
 
-Derived from the Terraria Wiki, "Server" (CC BY-NC-SA 4.0), rewritten for KGSM and verified against
-Terraria Server 1.4.5.6.
+Derived from the Terraria Wiki, "Server" (CC BY-NC-SA 4.0), rewritten for KGSM.
 
 ## What these guides cover
 

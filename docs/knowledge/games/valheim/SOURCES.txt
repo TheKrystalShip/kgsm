@@ -1,0 +1,16 @@
+Valheim operator guides — sources and verified version
+======================================================
+
+Upstream source
+    Iron Gate, "A Guide to Dedicated Servers", plus the arguments the shipped
+    start_server.sh documents.
+
+Verified against
+    Valheim dedicated server l-0.221.12, run under KGSM.
+
+Every claim in these guides was observed on a server that was actually running at
+that build. Re-verify against a newer one before trusting a specific behaviour.
+
+This file is deliberately NOT markdown: the assistant's RAG indexer walks *.md only,
+so a build number recorded here can never be retrieved and offered as the current
+release of the game. See ../README.md, "Record the verified version outside the guides".

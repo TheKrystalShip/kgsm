@@ -4,8 +4,7 @@ Factorio runs as a **native** KGSM instance. KGSM downloads the official headles
 from factorio.com — Factorio is not installed through Steam, so no Steam account or credentials are
 involved.
 
-Derived from the Factorio Wiki, "Multiplayer" (CC BY-NC-SA 3.0), rewritten for KGSM and verified
-against Factorio headless 2.0.77.
+Derived from the Factorio Wiki, "Multiplayer" (CC BY-NC-SA 3.0), rewritten for KGSM.
 
 ## What these guides cover
 

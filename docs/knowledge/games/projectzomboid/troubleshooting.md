@@ -2,8 +2,6 @@
 
 Symptoms and what actually causes them on a KGSM-managed Project Zomboid server.
 
-Verified against Project Zomboid dedicated server `42.20.2` (Build 42) under KGSM.
-
 Two sources of evidence, and the second is usually better:
 
 ```bash

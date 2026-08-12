@@ -2,8 +2,8 @@
 
 Symptoms and what actually causes them on a KGSM-managed Valheim server.
 
-Derived from Iron Gate's "A Guide to Dedicated Servers" and behaviour observed on Valheim dedicated
-server `l-0.221.12` under KGSM.
+Derived from Iron Gate's "A Guide to Dedicated Servers" and behaviour observed on a live
+KGSM-managed Valheim dedicated server.
 
 The instance log is the primary evidence for everything below:
 

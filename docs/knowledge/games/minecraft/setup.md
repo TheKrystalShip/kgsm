@@ -5,7 +5,7 @@ needs a JRE; the server itself comes straight from Mojang's version manifest, wi
 account involved.
 
 Derived from the Minecraft Wiki, "Tutorial:Setting up a Java Edition server" (CC BY-NC-SA 3.0),
-rewritten for KGSM and verified against Minecraft server 26.2 on OpenJDK 26.
+rewritten for KGSM.
 
 ## What these guides cover
 

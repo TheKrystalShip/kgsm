@@ -7,7 +7,7 @@ point the instance at it with `-config` — see [`setup.md`](setup.md).
 It is a plain `key=value` file, one setting per line, with `#` starting a comment. Unset keys take
 the game's default.
 
-Derived from the Terraria Wiki, "Server" (CC BY-NC-SA 4.0), verified against Terraria Server 1.4.5.6.
+Derived from the Terraria Wiki, "Server" (CC BY-NC-SA 4.0).
 
 ## World
 

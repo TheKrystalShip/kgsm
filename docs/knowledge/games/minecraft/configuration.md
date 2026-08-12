@@ -4,8 +4,7 @@
 directory, is generated on first start with defaults, and holds around 65 settings. It is a plain
 `key=value` file; lines starting `#` are comments.
 
-Derived from the Minecraft Wiki, "Tutorial:Setting up a Java Edition server" (CC BY-NC-SA 3.0),
-verified against Minecraft server 26.2.
+Derived from the Minecraft Wiki, "Tutorial:Setting up a Java Edition server" (CC BY-NC-SA 3.0).
 
 ## World
 

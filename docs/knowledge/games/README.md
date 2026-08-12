@@ -39,6 +39,13 @@ complete the set.
   mentions modpacks is not found by someone asking about modpacks.
 - **Cite the upstream source and its licence** at the top of each document when it is derived from a
   community wiki or vendor documentation.
+- **Record the verified version outside the guides.** The build a guide was written against goes in
+  the game's `SOURCES.txt`, never in a `.md`. A version number sitting in indexed prose is retrieved
+  by someone asking "what's the latest version of this game?" and answered as though it were the
+  current release — a confident wrong fact, and one that also suppresses the web lookup that would
+  have been right. The indexer walks `*.md` only, so a plain-text sibling keeps the information for
+  a reader and out of the assistant's reach. Attribution stays in the document; only the build
+  number moves.
 
 ## Games covered
 

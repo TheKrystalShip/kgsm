@@ -3,7 +3,7 @@
 Symptoms and what actually causes them on a KGSM-managed Minecraft server.
 
 Derived from the Minecraft Wiki, "Tutorial:Setting up a Java Edition server" (CC BY-NC-SA 3.0) and
-behaviour observed on Minecraft server 26.2 under KGSM.
+behaviour observed on a live KGSM-managed Minecraft server.
 
 The instance log is the primary evidence for everything below:
 

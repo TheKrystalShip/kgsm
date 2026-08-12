@@ -2,8 +2,8 @@
 
 Symptoms and what actually causes them on a KGSM-managed Factorio server.
 
-Derived from the Factorio Wiki, "Multiplayer" (CC BY-NC-SA 3.0) and behaviour observed on Factorio
-headless 2.0.77 under KGSM.
+Derived from the Factorio Wiki, "Multiplayer" (CC BY-NC-SA 3.0) and behaviour observed on a live
+KGSM-managed Factorio headless server.
 
 The instance log is the primary evidence for everything below:
 

@@ -2,8 +2,8 @@
 
 Symptoms and what actually causes them on a KGSM-managed Terraria server.
 
-Derived from the Terraria Wiki, "Server" (CC BY-NC-SA 4.0) and behaviour observed on Terraria Server
-1.4.5.6 under KGSM.
+Derived from the Terraria Wiki, "Server" (CC BY-NC-SA 4.0) and behaviour observed on a live
+KGSM-managed Terraria server.
 
 The instance log is the primary evidence for everything below:
 

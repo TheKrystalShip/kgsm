@@ -133,8 +133,16 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   cover, with the excluded topic given its own heading — similarity cannot tell "this document
   answers the question" from "this document is about the same game", so an uncovered question
   retrieves the guide anyway, and a named section is what turns that into an honest answer instead
-  of unrelated install steps. Factorio, Terraria, Valheim, Minecraft and Project Zomboid are
-  written; other games follow as each is measured.
+  of unrelated install steps. The build each guide was verified against lives in the game's
+  `SOURCES.txt`, never in a `.md`: a version number sitting in indexed prose is retrieved by
+  someone asking what the latest version of a game is and answered as though it were the current
+  release. Measured — "what's the latest version of Terraria?" returned *"the current stable
+  version of Terraria is 1.4.5.6"* on every rep, that being the build the guide was written
+  against, and a local hit of that confidence also suppresses the web lookup that would have been
+  right. The indexer walks `*.md` only, so a plain-text sibling keeps the information for a reader
+  and out of the assistant's reach; attribution and licence stay in the document. Factorio,
+  Terraria, Valheim, Minecraft and Project Zomboid are written; other games follow as each is
+  measured.
 
   Project Zomboid's set leads with the one thing that stops a new server dead: with no admin account
   the server prompts for a password on stdin, and a KGSM instance has nothing attached to answer it,

@@ -4,8 +4,6 @@ Project Zomboid runs as a **native** KGSM instance. The dedicated server is a Ja
 with its own bundled JRE, downloaded anonymously through SteamCMD — no Steam account or credentials
 are involved, and the host does not need its own Java.
 
-Verified against Project Zomboid dedicated server `42.20.2` (Build 42) under KGSM.
-
 ## What these guides cover
 
 Running a Project Zomboid dedicated server on KGSM: installing it, the admin account, the
