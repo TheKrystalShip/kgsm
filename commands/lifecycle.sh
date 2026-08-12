@@ -193,41 +193,6 @@ source "$(__find_command_handler lifecycle.sh)" || {
   exit $EC_FAILED_SOURCE
 }
 
-# Audits the host-firewall edges the lifecycle handlers just applied, so a port
-# opening or closing is recorded the same way a router forward already is.
-#
-# The handlers record an edge only when KGSM performed the bring-up or teardown
-# itself; the resident supervisor emits its own event for the instances it
-# supervises, so draining the record here can never audit one start twice. Both
-# edges of a restart drain together, in the order they happened.
-#
-# The payload is the instance's declared port spec, which the event renders as the
-# canonical structured array. An instance that declares none opened nothing, so
-# there is nothing to report.
-# Args: $1 = instance name
-function __emit_firewall_edges() {
-  local _instance_name="$1"
-
-  [[ -z "$KGSM_FIREWALL_APPLIED_EDGES" ]] && return 0
-
-  local _config_file
-  _config_file=$(__find_instance_config "$_instance_name" 2> /dev/null)
-  if [[ -f "$_config_file" ]]; then
-    local _ports
-    _ports=$(__get_config_value "$_config_file" "ports" 2> /dev/null)
-
-    if [[ -n "$_ports" ]]; then
-      local _event
-      while read -r _event; do
-        [[ -z "$_event" ]] && continue
-        __emit_event "$_event" "$_instance_name" "$_ports"
-      done <<< "$KGSM_FIREWALL_APPLIED_EDGES"
-    fi
-  fi
-
-  __firewall_edges_reset
-}
-
 # Start command implementation
 function _cmd_start() {
   local instance_name=""
@@ -264,10 +229,6 @@ function _cmd_start() {
   __logic_instance_start "$instance_name"
   exit_code=$?
 
-  # Before the start's own event, so the trail reads in the order it happened: the
-  # door opened, then the server came up. Drained on a failed start too — the ports
-  # are open either way, and a rule that exists is a fact the trail must carry.
-  __emit_firewall_edges "$instance_name"
 
   # Handle results based on exit code
   case $exit_code in
@@ -328,10 +289,6 @@ function _cmd_stop() {
   __logic_instance_stop "$instance_name"
   exit_code=$?
 
-  # Before instance-stopped, mirroring the order the supervisor emits its own pair
-  # in: the ports are released as part of the teardown, not after the instance is
-  # already reported down.
-  __emit_firewall_edges "$instance_name"
 
   # Handle results based on exit code
   local result=$EC_SUCCESS
@@ -395,9 +352,6 @@ function _cmd_restart() {
   __logic_instance_restart "$instance_name"
   exit_code=$?
 
-  # A restart crosses both edges, so this drains the close and the re-open together,
-  # in the order they happened.
-  __emit_firewall_edges "$instance_name"
 
   # Handle results based on exit code
   local result=$EC_SUCCESS

@@ -65,6 +65,20 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Changed
+
+- **kgsm no longer records firewall edges.** `__emit_firewall_edges`, the
+  `KGSM_FIREWALL_APPLIED_EDGES` drain and both `__firewall_edges_record` call sites are gone.
+  kgsm-firewall performs the change and records it in its own journal; kgsm shelled that
+  authority's CLI and then wrote the line, which named the wrong author.
+  Two guards went with them, and they existed only to stop one edge being recorded twice: the
+  `__watchdog_available` probe on the start path, and the `_watchdog_owns_teardown` probe on the
+  stop path — the latter asked *before* the stop specifically because the supervisor forgets an
+  instance the moment it goes down. With a single author there is nothing to deduplicate.
+  Provenance still reaches the record: the authority's CLI reads `KGSM_EVENT_ACTOR` /
+  `KGSM_EVENT_ORIGIN`, the same variables kgsm's own emitter reads, so the two paths cannot name
+  different actors for one action.
+
 ### Fixed
 
 - **Installing a server no longer reports a version update.** `install` emitted

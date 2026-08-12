@@ -31,36 +31,6 @@ if [[ -z "${KGSM_LOGIC_FIREWALL_LOADED}" ]]; then
   source "$(__find_command_handler firewall.sh)" || return $EC_FAILED_SOURCE
 fi
 
-# The firewall edges KGSM itself applied during the current invocation, one event
-# name per line, oldest first.
-#
-# It exists because the two layers cannot talk any other way here: a handler never
-# emits (that is the command layer's job), the exit-code channel already carries
-# the lifecycle verb's own event, and one verb can cross both edges — a restart
-# closes the ports and opens them again. So the handlers record what they applied
-# and the command layer drains the record and audits it.
-#
-# Only edges KGSM owns are recorded. When the resident supervisor performs the
-# bring-up it opens the same rule as it spawns and emits its own event, so a
-# recorded edge there would audit one start twice.
-declare -g KGSM_FIREWALL_APPLIED_EDGES=""
-export KGSM_FIREWALL_APPLIED_EDGES
-
-# Starts a fresh record for one command. Call before the lifecycle verb runs.
-function __firewall_edges_reset() {
-  KGSM_FIREWALL_APPLIED_EDGES=""
-}
-
-export -f __firewall_edges_reset
-
-# Appends one applied edge.
-# Args: $1 = event name (instance-ports-opened | instance-ports-closed)
-function __firewall_edges_record() {
-  KGSM_FIREWALL_APPLIED_EDGES+="${1}"$'\n'
-}
-
-export -f __firewall_edges_record
-
 # Enable firewall integration for an instance: mark it as one whose ports KGSM
 # manages. It opens nothing. An instance's ports are open exactly while it is
 # running, so the rule is written on the bring-up that follows and removed on the
