@@ -53,6 +53,20 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ### Fixed
 
+- **Installing a server no longer reports a version update.** `install` emitted
+  `instance-version-updated` with `OldVersion` `0` after saving the version it had just
+  installed, so every install produced an update event beside its install events — and every
+  consumer that treats that event as "this server moved to a new build" acted on it: the API
+  wrote a `server.update` audit row for each `server.install` (16 of each in this host's audit
+  log), the Discord bot announced *"was updated to"* for a server that had just appeared, and
+  the assistant's history carried both. `0` was never a version anything ran; it was a
+  placeholder for "there was nothing here". The install path emits no version event at all now
+  — the version a new instance lands on is part of the instance that
+  `instance_installation_finished` / `instance_installed` announce, and it is read from the
+  instance. `OldVersion` is therefore always a build that actually ran, which is what makes the
+  event comparable. The update path is unchanged and still emits only when the version really
+  moved.
+
 - **A Project Zomboid server that dies reports that it died.** The shipped `start-server.sh` launches
   the JVM and then ends in an unconditional `exit 0`, so whatever happened to the server, the script
   succeeds: a JVM the kernel's OOM killer removed reaches kgsm-watchdog as *"exited cleanly (exit

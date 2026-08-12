@@ -66,9 +66,15 @@ Event types use **underscore-separated** names in JSON payloads and **dash-separ
 |------------|-------------|-------------|
 | `instance_update_started` | Server update initiated | `InstanceName` |
 | `instance_update_finished` | Server update completed | `InstanceName` |
-| `instance_version_updated` | Server version changed | `InstanceName`, `OldVersion`, `NewVersion` |
+| `instance_version_updated` | An installed server moved from one build to another | `InstanceName`, `OldVersion`, `NewVersion` |
 | `instance_updated` | Server fully updated | `InstanceName` |
 | `instance_update_available` | A newer build exists upstream and this server is not on it | `InstanceName`, `CurrentVersion`, `LatestVersion` |
+
+`instance_version_updated` reports a move between two builds, so it needs a
+build to move from: an update that finds the instance already current emits
+nothing, and an install emits nothing either — the version a fresh instance
+lands on is part of the instance the installation events announce. `OldVersion`
+is therefore always a real previous version.
 
 ### 🚀 Lifecycle Events
 

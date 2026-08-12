@@ -232,12 +232,14 @@ function _cmd_install() {
   __emit_event instance-deploy-finished "${instance}"
   __emit_event instance-deployed "${instance}"
 
-  # Save version
+  # Save version. No instance-version-updated here: that event states that an
+  # existing instance moved from one build to another, and a fresh install has
+  # no build to move from. The version an install lands on is part of the
+  # instance the following events announce, readable from the instance itself.
   "$instance_management_file" version --save "$version" || {
     __print_error "Failed to save version information"
     return $EC_FAILED_VERSION_SAVE
   }
-  __emit_event instance-version-updated "${instance}" "0" "${version}"
 
   __emit_event instance-installation-finished "${instance}" "${blueprint}"
 
