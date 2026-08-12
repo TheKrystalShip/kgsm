@@ -223,17 +223,17 @@ function _cmd_disable() {
   local exit_code=$?
 
   # Handle result. Disable is best-effort: a down authority or backend error
-  # warns but does NOT fail (it must never wedge uninstall) — and only a
-  # confirmed removal emits the close event (never fabricate a closed port).
+  # warns but does NOT fail (it must never wedge uninstall).
+  #
+  # No event is emitted here. The kgsm-firewall authority records the edge it
+  # applied, in its own journal — it is what wrote the rule and saw the backend
+  # accept it, and the ports listed here would be this caller's idea of them
+  # rather than the authority's measurement. Emitting one as well puts a single
+  # change in the record twice, under two different authors.
   case $exit_code in
     $EC_SUCCESS_FIREWALL_DISABLED)
       __print_success "Firewall integration disabled successfully"
       __print_info "Ports closed via the kgsm-firewall authority"
-      local _ports
-      _ports=$(__get_config_value "$instance_config_file" "ports" 2> /dev/null)
-      if [[ -n "$_ports" ]]; then
-        __emit_event instance-ports-closed "$instance_name" "$_ports"
-      fi
       return 0
       ;;
     $EC_INVALID_CONFIG)

@@ -47,6 +47,12 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **`files firewall disable` no longer records the close.** The kgsm-firewall authority writes the
+  rule and sees the backend accept it, so it is the one component that can honestly say a port
+  closed, and it records the edge in its own journal. Emitting `instance-ports-closed` here as well
+  put a single change in the record twice under two different authors — and the ports listed came
+  from this caller's config read rather than the authority's measurement. It was the last firewall
+  emit left in the engine after the rest of that machinery was removed.
 - **The event envelope is v1** — every emitted event carries `V: 1`, a millisecond-precision
   `Timestamp`, and `ProducerVersion` in place of `KGSMVersion`. The envelope is a cross-producer
   contract now (authority: `../event-journal-federation-plan.md` §2): each component that writes an
