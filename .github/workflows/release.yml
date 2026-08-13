@@ -22,7 +22,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The tag IS the version. A mismatch is a mistake in one of the two places, and shipping
       # either way would publish a package whose name disagrees with what it contains.
@@ -55,7 +55,7 @@ jobs:
       - name: Provision the container
         run: pacman -Sy --noconfirm --needed git nodejs rsync gnupg github-cli
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # makepkg refuses to run as root, and root-owned sources are unreadable to the build user.
       - name: Create the build user
         run: |
@@ -102,7 +102,7 @@ jobs:
       # A dispatch run proves the package builds without publishing one.
       - name: Keep the package as a run artifact
         if: "!startsWith(github.ref, 'refs/tags/')"
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: packages
           path: packaging/*.pkg.tar.zst*
