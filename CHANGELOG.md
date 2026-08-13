@@ -47,6 +47,21 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **A lifecycle verb reports a state change only when the state changed.** The verbs are idempotent —
+  the supervisor answers a stop for an already-stopped instance, or a start for an already-running
+  one, with success, and it is right to — but the command layer turned that success into an event. So
+  `instance_stopped` was recorded for a server that had been down for hours, most visibly on every
+  uninstall (the Control Panel stops before removing, so uninstalling a stopped instance wrote a stop
+  into the audit trail that never happened), and `instance_started` would have told every surface a
+  healthy server had just begun booting.
+
+  The run-state is now sampled before the verb runs and the fact is emitted on a real transition:
+  `instance_started` only when a run began, `instance_stopped` only when one ended, and a restart's
+  `instance_restart_stopped` only when there was an old run to bring down. The verbs themselves are
+  unchanged and still succeed — an idempotent command is not an error, it just is not news.
+  ⚠ `unknown` counts as a transition: suppressing on ignorance would lose a real one, while emitting
+  on ignorance at worst repeats what the consumer already knows.
+
 - **Every long operation now reports its outcome and its steps.** From an audit of all 56 events, the
   gaps were all the same shape as the restart's: a bracket says a run is happening, and nothing says
   what it did.

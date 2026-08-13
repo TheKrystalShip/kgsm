@@ -193,6 +193,33 @@ source "$(__find_command_handler lifecycle.sh)" || {
   exit $EC_FAILED_SOURCE
 }
 
+# Whether the instance is running RIGHT NOW, sampled before a lifecycle verb runs:
+# "active", "inactive", or "unknown" when the probe itself could not answer.
+#
+# The lifecycle verbs are idempotent by design — the supervisor answers a stop for
+# an already-stopped instance, or a start for an already-running one, with success,
+# and it is right to. But the command layer turns that success into a state-change
+# event, and a stop that stopped nothing is not a fact: it put "server stopped" in
+# the audit trail of an instance that had been down for hours, and a start that
+# started nothing would tell every surface a healthy server had just begun booting.
+#
+# So the event is emitted on a real TRANSITION, sampled here, and never on the verb's
+# exit code alone. `unknown` is deliberately treated as "emit": suppressing on
+# ignorance would lose a real transition, while emitting on ignorance at worst
+# repeats one the consumer already knows about.
+#
+# Args: $1 = instance_name
+function _run_state_before() {
+  local _instance="$1"
+
+  __logic_instance_is_active "$_instance" > /dev/null 2>&1
+  case $? in
+    0) echo "active" ;;
+    1) echo "inactive" ;;
+    *) echo "unknown" ;;
+  esac
+}
+
 # Start command implementation
 function _cmd_start() {
   local instance_name=""
@@ -225,6 +252,10 @@ function _cmd_start() {
 
   # Call pure logic function
   __print_info "Starting instance $instance_name"
+
+  local before
+  before="$(_run_state_before "$instance_name")"
+
   local exit_code
   __logic_instance_start "$instance_name"
   exit_code=$?
@@ -234,7 +265,14 @@ function _cmd_start() {
   case $exit_code in
     $EC_SUCCESS_INSTANCE_STARTED)
       __print_success "Instance $instance_name started successfully"
-      __dispatch_event_from_exit_code "$exit_code" "$instance_name"
+      # Only when a run actually began. The supervisor answers a start for an
+      # already-running instance with success, and an event there would tell every
+      # consumer a healthy server had just begun booting.
+      if [[ "$before" == "active" ]]; then
+        __print_info "Instance $instance_name was already running"
+      else
+        __dispatch_event_from_exit_code "$exit_code" "$instance_name"
+      fi
       return $EC_SUCCESS
       ;;
     *)
@@ -283,6 +321,9 @@ function _cmd_stop() {
   # a consumer can show the instance as stopping while it happens, whichever entrypoint drove it —
   # the same bracket `instances update` carries. Finished is emitted on every outcome: it says the
   # run ENDED, while instance_stopped (emitted below, on success only) says the instance is down.
+  local before
+  before="$(_run_state_before "$instance_name")"
+
   __emit_event instance-stop-started "$instance_name"
 
   local exit_code
@@ -295,7 +336,16 @@ function _cmd_stop() {
   case $exit_code in
     $EC_SUCCESS_INSTANCE_STOPPED)
       __print_success "Instance $instance_name stopped successfully"
-      __dispatch_event_from_exit_code "$exit_code" "$instance_name"
+      # Only when there was a run to end. A stop of an already-stopped instance
+      # succeeds — it is idempotent — but nothing changed, and saying "stopped"
+      # about a server that has been down for hours is a fact about nothing. The
+      # uninstall path made this visible: it stops before removing, so every
+      # uninstall of a stopped instance recorded a stop that never happened.
+      if [[ "$before" == "inactive" ]]; then
+        __print_info "Instance $instance_name was already stopped"
+      else
+        __dispatch_event_from_exit_code "$exit_code" "$instance_name"
+      fi
       ;;
     *)
       __print_error "Failed to stop instance $instance_name"
@@ -314,9 +364,15 @@ function _cmd_stop() {
 # The hook _cmd_restart hands to the restart logic — called once the stop half is down, with the
 # instance name. Exported because the logic function it is passed to is itself exported and may run
 # in a subshell, where an unexported hook name resolves to nothing and the event silently vanishes.
+#
+# Silent when the instance was not running when the restart began: there was no old run to bring
+# down, so the middle of this restart is not a state anything passed through. KGSM_RESTART_WAS_ACTIVE
+# carries that sample from _cmd_restart, because the hook runs in whatever shell the logic function
+# is in and cannot take an argument of its own.
 # Args: $1 = instance_name
 # shellcheck disable=SC2329 # invoked by name, through __logic_instance_restart's hook
 function __emit_restart_stopped() {
+  [[ "${KGSM_RESTART_WAS_ACTIVE:-}" == "active" ]] || return 0
   __emit_event instance-restart-stopped "$1"
 }
 
@@ -363,8 +419,12 @@ function _cmd_restart() {
   # which is a thing consumers show and act on, and the bracket alone cannot say it — a consumer that
   # heard only "a restart is running" has to keep reporting the state from before the restart for the
   # whole shutdown. Emitted from here rather than from the logic layer, which stays pure.
+  #
+  # Restarting an instance that was already down has no such middle — there is no old run to end —
+  # so the sample decides whether the hook says anything at all.
   local exit_code
-  __logic_instance_restart "$instance_name" __emit_restart_stopped
+  KGSM_RESTART_WAS_ACTIVE="$(_run_state_before "$instance_name")" \
+    __logic_instance_restart "$instance_name" __emit_restart_stopped
   exit_code=$?
 
 
