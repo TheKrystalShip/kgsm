@@ -143,6 +143,19 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Added — the host requirements are declared, not described
+
+`deploy/kgsm.requires.json` states every command the engine needs, each with its Arch package name
+and a probe. It supersedes the README's dependency list, which demanded `inotify-tools` the engine
+never uses, marked the optional `steamcmd` as required, and omitted `yq` — which blueprint parsing
+cannot run without.
+
+`yq` is recorded as `go-yq` specifically: Debian's `yq` is an unrelated Python tool with
+incompatible syntax, so a name-only check passes and `.bp.yaml` parsing then fails as though the
+YAML were corrupt.
+
+`deploy/sysusers.d/kgsm.conf` declares the `kgsm` service account.
+
 ### Changed
 
 - **kgsm no longer records firewall edges.** `__emit_firewall_edges`, the

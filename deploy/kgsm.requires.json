@@ -1,0 +1,51 @@
+{
+  "project": "kgsm",
+  "leafId": null,
+  "role": "engine",
+  "runtime": {
+    "kind": "bash",
+    "note": "No compiled runtime. bash 5+ and the coreutils below are the whole dependency."
+  },
+  "commands": [
+    { "name": "bash",      "package": "bash",            "required": true,  "probe": "bash --version",  "why": "the engine is bash; 5.0+ for associative arrays and ${var@Q}" },
+    { "name": "grep",      "package": "grep",            "required": true,  "probe": "grep --version",  "why": "config and blueprint parsing throughout" },
+    { "name": "sed",       "package": "sed",             "required": true,  "probe": "sed --version",   "why": "config rewriting and template substitution" },
+    { "name": "awk",       "package": "gawk",            "required": true,  "probe": "awk --version",   "why": "field extraction in status, port and process paths" },
+    { "name": "find",      "package": "findutils",       "required": true,  "probe": "find --version",  "why": "instance and blueprint discovery" },
+    { "name": "yq",        "package": "go-yq",           "required": true,  "probe": "yq --version",    "why": "unified blueprints are .bp.yaml — this is the parser", "warning": "must be the Go yq. Debian's yq is an unrelated Python tool with incompatible syntax; a name-only check passes and blueprint parsing then fails as if the YAML were corrupt." },
+    { "name": "jq",        "package": "jq",              "required": true,  "probe": "jq --version",    "why": "every JSON-emitting command and the event journal" },
+    { "name": "curl",      "package": "curl",            "required": true,  "probe": "curl --version",  "why": "version checks and downloads against upstream APIs" },
+    { "name": "wget",      "package": "wget",            "required": true,  "probe": "wget --version",  "why": "server-file downloads in the native install path" },
+    { "name": "tar",       "package": "tar",             "required": true,  "probe": "tar --version",   "why": "backup create/restore" },
+    { "name": "unzip",     "package": "unzip",           "required": true,  "probe": "unzip -v",        "why": "unpacking zip-distributed game servers" },
+    { "name": "rsync",     "package": "rsync",           "required": true,  "probe": "rsync --version", "why": "backup capture and instance file sync" },
+    { "name": "sha256sum", "package": "coreutils",       "required": true,  "probe": "sha256sum --version", "why": "backup manifest integrity" },
+    { "name": "ss",        "package": "iproute2",        "required": true,  "probe": "ss -V",           "why": "listening-port checks for instance status" },
+    { "name": "lsof",      "package": "lsof",            "required": true,  "probe": "lsof -v",         "why": "resolving which process holds an instance port" },
+    { "name": "systemctl", "package": "systemd",         "required": true,  "probe": "systemctl --version", "why": "lifecycle for systemd-managed instances" },
+
+    { "name": "steamcmd",       "package": "steamcmd",       "required": false, "probe": "command -v steamcmd", "why": "install and update Steam-distributed game servers", "without": "non-Steam games install normally; Steam blueprints fail at install" },
+    { "name": "docker",         "package": "docker",         "required": false, "probe": "docker --version",   "why": "container-kind instances", "without": "the container templates refuse to load; native instances are unaffected" },
+    { "name": "docker-compose", "package": "docker-compose", "required": false, "probe": "docker compose version", "why": "multi-service container instances", "without": "same as docker" },
+    { "name": "ufw",            "package": "ufw",            "required": false, "probe": "ufw version",        "why": "host firewall rules when enable_firewall_management=true", "without": "ports are never opened or closed by the engine" },
+    { "name": "tput",           "package": "ncurses",        "required": false, "probe": "tput colors",        "why": "coloured terminal output", "without": "output is plain; nothing else changes" },
+    { "name": "nc",             "package": "openbsd-netcat", "required": false, "probe": "nc -h",              "why": "probes whether a port is reachable from outside the host", "without": "the check falls back to telnet, and reports the port as unverified when neither is present" },
+    { "name": "telnet",         "package": "inetutils",      "required": false, "probe": "command -v telnet",  "why": "the fallback for the same external-reachability probe", "without": "nothing, when nc is installed" }
+  ],
+  "services": [],
+  "system": [
+    { "feature": "cgroup-v2", "required": false, "probe": "test -f /sys/fs/cgroup/cgroup.controls", "why": "native instances are supervised in cgroups by kgsm-watchdog", "without": "container and systemd instance kinds still work" }
+  ],
+  "units": {
+    "user": ["kgsm-journal-prune.service", "kgsm-journal-prune.timer"],
+    "system": [],
+    "note": "The retention pair is a USER unit enabled with `systemctl --user`, so it needs no privilege. A package cannot enable it — there is no user for a scriptlet to act for. Packaged, it installs to /usr/lib/systemd/user/ and the node bootstrap enables it for the service account."
+  },
+  "paths": {
+    "prefix": "/opt/kgsm",
+    "binLink": "/usr/local/bin/kgsm",
+    "state": ["/var/lib/kgsm/events"],
+    "config": ["~/.config/kgsm/config.ini"],
+    "data": ["~/.local/share/kgsm"]
+  }
+}
