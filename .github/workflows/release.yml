@@ -1,0 +1,110 @@
+# Canonical release workflow. Vendored into each repo by scripts/ci-template/vendor-ci.sh —
+# edit THIS file and re-run the vendor script; never edit a repo's copy directly.
+#
+# Tagging v<version> builds the project, packages it, signs it and publishes it to this repo's
+# own release. Aggregating those into the fleet's pacman repository is a separate, deliberate
+# step: scripts/publish-repo.sh --from-releases.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: read
+
+env:
+  SIGN_KEY: B7624435FAC1A8280B280CFBA6FBDB3B724DED1B
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # The tag IS the version. A mismatch is a mistake in one of the two places, and shipping
+      # either way would publish a package whose name disagrees with what it contains.
+      - name: Verify the tag matches the declared version
+        if: startsWith(github.ref, 'refs/tags/')
+        run: |
+          declared="$(./deploy/version.sh)"
+          tag="${GITHUB_REF_NAME#v}"
+          if [ "$tag" != "$declared" ]; then
+            echo "::error::tag v${tag} but deploy/version.sh declares ${declared}"
+            exit 1
+          fi
+          echo "version ${declared}"
+
+
+      # Nothing to build: the engine is bash and the package is arch=any. shellcheck is the closest
+      # thing it has to a compiler, so it stands in as the gate.
+      - name: Lint
+        run: |
+          sudo apt-get update @BUILD@@BUILD@ sudo apt-get install -y shellcheck
+          find . -name '*.sh' -not -path './tests/*' -print0 \
+            | xargs -0 -r shellcheck -e SC2086
+
+  package:
+    needs: build
+    runs-on: ubuntu-latest
+    container: archlinux:base-devel
+    steps:
+      # The container has neither git nor node, and every JavaScript action needs node present in
+      # the container it runs in — so this plain shell step has to come before any `uses:`.
+      - name: Provision the container
+        run: pacman -Sy --noconfirm --needed git nodejs rsync gnupg github-cli
+
+      - uses: actions/checkout@v4
+
+      # makepkg refuses to run as root, and root-owned sources are unreadable to the build user.
+      - name: Create the build user
+        run: |
+          useradd -m builder
+          chown -R builder:builder .
+
+      - name: Import the packaging key
+        env:
+          KEY: ${{ secrets.KGSM_PACKAGING_KEY }}
+        run: |
+          printf '%s' "$KEY" | runuser -u builder -- gpg --batch --import
+          # Trust it ultimately in the builder's own keyring: makepkg signs with it, and gpg
+          # refuses to sign with a key it has no trust path to.
+          runuser -u builder -- bash -c \
+            "printf '%s:6:\n' '$SIGN_KEY' | gpg --batch --import-ownertrust"
+
+      # --nodeps because build() only asserts the publish output exists — nothing compiles here, no
+      # PKGBUILD declares makedepends, and the packages depending on `kgsm` could never be built in
+      # a container that has no kgsm installed.
+      - name: Package and sign
+        run: |
+          runuser -u builder -- bash -lc \
+            'cd packaging && makepkg --sign --key '"$SIGN_KEY"' --nodeps -f --noconfirm'
+
+      - name: Verify the signature before publishing anything
+        run: |
+          cd packaging
+          for p in *.pkg.tar.zst; do
+            runuser -u builder -- gpg --verify "${p}.sig" "$p"
+            echo "signed: $p"
+          done
+
+      - name: Publish to this repo's release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
+                 --title "$GITHUB_REF_NAME" --generate-notes
+          gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber \
+            packaging/*.pkg.tar.zst packaging/*.pkg.tar.zst.sig
+
+      # A dispatch run proves the package builds without publishing one.
+      - name: Keep the package as a run artifact
+        if: "!startsWith(github.ref, 'refs/tags/')"
+        uses: actions/upload-artifact@v4
+        with:
+          name: packages
+          path: packaging/*.pkg.tar.zst*
