@@ -42,10 +42,9 @@ jobs:
       # thing it has to a compiler, so it stands in as the gate.
       - name: Lint
         run: |
-          sudo apt-get update @BUILD@@BUILD@ sudo apt-get install -y shellcheck
+          sudo apt-get update && sudo apt-get install -y shellcheck
           find . -name '*.sh' -not -path './tests/*' -print0 \
             | xargs -0 -r shellcheck -e SC2086
-
   package:
     needs: build
     runs-on: ubuntu-latest
@@ -57,7 +56,6 @@ jobs:
         run: pacman -Sy --noconfirm --needed git nodejs rsync gnupg github-cli
 
       - uses: actions/checkout@v4
-
       # makepkg refuses to run as root, and root-owned sources are unreadable to the build user.
       - name: Create the build user
         run: |
