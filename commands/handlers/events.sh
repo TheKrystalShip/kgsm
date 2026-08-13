@@ -14,8 +14,22 @@
 # No user-facing I/O (no __print_* functions).
 # Returns meaningful exit codes for all operations.
 
-# Guard against multiple sourcing
-if [[ -n "${KGSM_LOGIC_EVENTS_LOADED:-}" ]]; then
+# Guard against multiple sourcing.
+#
+# The flag is exported and EVENT_CONFIGS cannot be: bash exports strings, never
+# associative arrays. So a CHILD process inherits "already loaded" without the
+# table that claim refers to, and every event type it tries to emit is rejected
+# as invalid — silently, because the emitters are best-effort. That is one
+# process deep in a chain: the first module to load the handler emits fine and
+# anything it shells out to does not, which is why an event emitted from a
+# delegated module (`files.sh remove`, a management script reporting its own
+# phases) stopped appearing without anything looking broken.
+#
+# The table's presence is therefore the real test of whether this module is
+# loaded; the flag alone only says some process once loaded it. Re-sourcing in a
+# child is safe — the readonly constants arrive there as ordinary inherited
+# variables, since readonly does not survive an exec.
+if [[ -n "${KGSM_LOGIC_EVENTS_LOADED:-}" ]] && [[ "${#EVENT_CONFIGS[@]}" -gt 0 ]]; then
   return 0
 fi
 
@@ -81,6 +95,13 @@ export EVENT_INSTANCE_UPDATE_STARTED
 declare -g -r EVENT_INSTANCE_UPDATE_FINISHED="instance_update_finished"
 export EVENT_INSTANCE_UPDATE_FINISHED
 
+# The outcome an update run has when the version did not move and that is NOT the good news. An
+# update ends without a version change in two ways — it found nothing to do, or it could not do it —
+# and the bracket cannot tell them apart, so a consumer settling the run on it reports a refusal as a
+# completed update. This is the fact that separates them.
+declare -g -r EVENT_INSTANCE_UPDATE_FAILED="instance_update_failed"
+export EVENT_INSTANCE_UPDATE_FAILED
+
 declare -g -r EVENT_INSTANCE_UPDATED="instance_updated"
 export EVENT_INSTANCE_UPDATED
 
@@ -126,6 +147,23 @@ export EVENT_INSTANCE_FAILED
 
 declare -g -r EVENT_INSTANCE_READY="instance_ready"
 export EVENT_INSTANCE_READY
+
+# Both backup verbs run for as long as the archiving takes — minutes on a large world — and a
+# scheduler drives them with nobody watching. These bracket each run so a surface can show the
+# instance as busy while it happens, the same way the lifecycle verbs are bracketed. Finished is
+# emitted on every outcome: it says the run ENDED, while instance-backup-created says an archive
+# exists.
+declare -g -r EVENT_INSTANCE_BACKUP_STARTED="instance_backup_started"
+export EVENT_INSTANCE_BACKUP_STARTED
+
+declare -g -r EVENT_INSTANCE_BACKUP_FINISHED="instance_backup_finished"
+export EVENT_INSTANCE_BACKUP_FINISHED
+
+declare -g -r EVENT_INSTANCE_RESTORE_STARTED="instance_restore_started"
+export EVENT_INSTANCE_RESTORE_STARTED
+
+declare -g -r EVENT_INSTANCE_RESTORE_FINISHED="instance_restore_finished"
+export EVENT_INSTANCE_RESTORE_FINISHED
 
 declare -g -r EVENT_INSTANCE_BACKUP_CREATED="instance_backup_created"
 export EVENT_INSTANCE_BACKUP_CREATED
@@ -339,6 +377,7 @@ declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_STOP_FINISHED"]="instance"
   ["$EVENT_INSTANCE_UPDATE_STARTED"]="instance"
   ["$EVENT_INSTANCE_UPDATE_FINISHED"]="instance"
+  ["$EVENT_INSTANCE_UPDATE_FAILED"]="instance"
   ["$EVENT_INSTANCE_UPDATED"]="instance"
   ["$EVENT_INSTANCE_VERSION_UPDATED"]="instance old_version new_version"
   ["$EVENT_INSTANCE_UPDATE_AVAILABLE"]="instance current_version latest_version"
@@ -351,6 +390,10 @@ declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_CRASHED"]="instance exit_code restarts"
   ["$EVENT_INSTANCE_FAILED"]="instance exit_code restarts"
   ["$EVENT_INSTANCE_READY"]="instance"
+  ["$EVENT_INSTANCE_BACKUP_STARTED"]="instance"
+  ["$EVENT_INSTANCE_BACKUP_FINISHED"]="instance"
+  ["$EVENT_INSTANCE_RESTORE_STARTED"]="instance"
+  ["$EVENT_INSTANCE_RESTORE_FINISHED"]="instance"
   ["$EVENT_INSTANCE_BACKUP_CREATED"]="instance source version"
   ["$EVENT_INSTANCE_BACKUP_RESTORED"]="instance source version"
   # `source` is the backup id, as in the two events above. No version: the

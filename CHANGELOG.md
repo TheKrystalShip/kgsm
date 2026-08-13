@@ -47,6 +47,47 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **Every long operation now reports its outcome and its steps.** From an audit of all 56 events, the
+  gaps were all the same shape as the restart's: a bracket says a run is happening, and nothing says
+  what it did.
+
+  - **`instance_update_failed`.** An update that ends without the version moving had two meanings and
+    one appearance — it found nothing to do, or it could not do it. Since a consumer settles a run on
+    its bracket, an update kgsm REFUSED reported itself everywhere as a completed one.
+  - **An uninstall says it stopped the server.** Deregistering from the watchdog kills a running game;
+    nothing emitted `instance_stopped`, so run-state read Online for the whole file removal and the
+    audit trail never recorded that players had been dropped. Emitted only when the instance was
+    measurably up.
+  - **The backups an update and a restore take are announced.** Both capture the state they are about
+    to overwrite from inside the management script, which cannot emit — so the rollback point for the
+    riskiest operation there is existed with nothing to announce it. The command layer records the
+    backup ids before the run and emits `instance-backup-created` for whatever appeared, each carrying
+    the version from its OWN manifest.
+  - **`instance_backup_started`/`_finished` and `instance_restore_started`/`_finished`** bracket the
+    two long backup verbs, like every other long verb.
+  - **An update reports its download and deploy**, with the same events an install emits for the same
+    work, through an `--emit-cmd` the caller hands the management script. Silent when not given one,
+    so the script still runs standalone. ⚠ Existing instances pick this up on
+    `kgsm files management create <instance>`.
+  - **`*_finished` is emitted after the fact it brackets**, in install, uninstall and update — stop
+    and restart already did, and the reason is theirs: a consumer that re-reads on "the run ended"
+    must find the outcome recorded, not the state from before it.
+  - **A failed step no longer skips the rest of an uninstall's cleanup.** `files.sh remove` returned at
+    the first failure while the uninstall carried on deleting directories, leaving a firewall rule or a
+    symlink behind for a server that no longer exists.
+
+- **Events emitted from a delegated module are recorded again.** `EVENT_CONFIGS` is an associative
+  array and bash cannot export one; the "events module loaded" flag beside it *is* exported. So any
+  child process — every module reached through the delegator (`files.sh remove`, `directories.sh
+  remove`), and anything a management script shells out to — inherited the claim without the table,
+  skipped loading it on that claim, and had every event it emitted rejected as an invalid type. In
+  silence, because `__emit_event` warned only when the journal write failed.
+
+  The table's presence is now what says the module is loaded, in both guards. `instance_files_removed`
+  and `instance_directories_removed` had not been emitted since 2026-07-29; they are emitted again.
+  **`__emit_event` now warns on every failure**, not just a journal write — a reporting path that
+  fails quietly is indistinguishable from one nobody wired up, which is how this lasted.
+
 - **A restart reports its middle.** `restart` runs the stop and the start through the pure logic
   rather than the stop and start commands, so nothing was emitted between
   `instance_restart_started` and `instance_restarted` at the very end. For the whole shutdown —

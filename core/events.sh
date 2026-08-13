@@ -31,7 +31,15 @@ fi
 # Args: $1 = event_name, $2... = event parameters
 # Returns: EC_SUCCESS, EC_FAILED_SOURCE, or the failing stage's code
 function __emit_event() {
-  if [[ -z "${KGSM_LOGIC_EVENTS_LOADED:-}" ]]; then
+  # The event TABLE, not the loaded flag, is what says this process can emit.
+  # The flag is exported and EVENT_CONFIGS cannot be — bash exports strings,
+  # never associative arrays — so a child process inherits "already loaded"
+  # without the table, skips the source on that claim, and then every event type
+  # it emits is rejected as invalid. That is any module reached through the
+  # delegator (`files.sh remove`, `directories.sh remove`) and anything a
+  # management script shells out to: their events stopped being recorded with
+  # nothing anywhere reporting a failure.
+  if [[ -z "${KGSM_LOGIC_EVENTS_LOADED:-}" ]] || [[ "${#EVENT_CONFIGS[@]}" -eq 0 ]]; then
     local _handler
     _handler="$(__find_command_handler events.sh)" || return $EC_FAILED_SOURCE
 
@@ -49,6 +57,14 @@ function __emit_event() {
   # already-completed operation just because recording it did not work.
   if [[ $_result -eq $EC_EVENT_JOURNAL_FAILED ]]; then
     __print_warning "Event '${1:-}' was NOT recorded: the journal at $(__logic_journal_dir) could not be written"
+  fi
+
+  # A rejected event name is a bug in the caller, and it was the quietest failure
+  # here: nothing was written, nothing was said, and the operation carried on
+  # looking recorded. Warn on every non-journal failure for the same reason the
+  # journal one warns.
+  if [[ $_result -ne $EC_SUCCESS ]] && [[ $_result -ne $EC_EVENT_JOURNAL_FAILED ]]; then
+    __print_warning "Event '${1:-}' was NOT recorded (code $_result)"
   fi
 
   return $_result

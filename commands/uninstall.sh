@@ -168,10 +168,29 @@ function _uninstall() {
   # but an explicit refusal is fatal: it means the daemon could not stop the instance, so the
   # game is still running. Deleting a running server's files out from under it corrupts saves
   # and strands the process — abort and let the operator deal with it.
+  # Whether the game is up has to be sampled BEFORE the deregister that kills it:
+  # afterwards there is nothing left to ask, and the answer decides whether the
+  # stop below is a real event or a fabricated one.
+  local was_running=0
+  if __watchdog_available && [[ "$(__watchdog_active_value "$instance")" == "true" ]]; then
+    was_running=1
+  fi
+
   if __watchdog_available; then
     __watchdog_deregister "$instance"
     case $? in
-      0) ;;
+      0)
+        # Deregistering stops the instance, and until now nothing said so: the
+        # process was killed and every consumer went on reporting the server as
+        # running for the whole of the file removal that follows, with no record
+        # that anyone had been dropped from a live game. Unlike a restart this
+        # run is not coming back, so what happened IS a stop and is emitted as
+        # one. Only when it was measurably up — an already-stopped instance
+        # being uninstalled must not produce a stop that never happened.
+        if [[ "$was_running" -eq 1 ]]; then
+          __emit_event instance-stopped "${instance}"
+        fi
+        ;;
       2)
         __print_error "Instance '$instance' is still running; the watchdog could not stop it"
         __print_error "Uninstall aborted — stop it manually, then retry"
@@ -217,11 +236,14 @@ function _uninstall() {
     __print_info "Backups for '$instance' kept in $backups_dir"
   fi
 
-  __emit_event instance-uninstall-finished "${instance}"
-
   __print_success "Instance '${instance}' uninstalled"
 
   __emit_event instance-uninstalled "${instance}"
+
+  # Emitted LAST, after instance-uninstalled: a consumer that reads "the run
+  # ended" and re-reads the roster must find the instance already gone rather
+  # than still listed. Same ordering as every other bracket.
+  __emit_event instance-uninstall-finished "${instance}"
 
   return 0
 }

@@ -262,22 +262,37 @@ function _cmd_remove() {
   # This is necessary to determine if we need to remove the firewall rules or
   # command shortcuts.
 
+  # Every step is attempted, whatever the ones before it did. This runs as part of
+  # an uninstall, which treats a failure here as a warning and goes on to delete
+  # the instance's directories — so returning at the first failed step left the
+  # later integrations behind on a host the instance was about to vanish from: a
+  # firewall rule or a symlink for a server that no longer exists, and nobody
+  # looking for them. The failure is still reported; it just no longer decides
+  # how much cleanup happens.
+  local failed=0
+
   if [[ "$instance_enable_firewall_management" == "true" ]]; then
     __print_info "Disabling firewall integration for instance '$instance_name'..."
-    files.firewall.sh disable "$instance_name" || return $?
+    files.firewall.sh disable "$instance_name" || failed=$?
   fi
 
   if [[ "$instance_enable_command_shortcuts" == "true" ]]; then
     __print_info "Disabling symlink for instance '$instance_name'..."
-    files.symlink.sh disable "$instance_name" || return $?
+    files.symlink.sh disable "$instance_name" || failed=$?
   fi
 
   # Remove management file
-  files.management.sh remove "$instance_name" || return $?
+  files.management.sh remove "$instance_name" || failed=$?
   # We don't remove the instance config file here, because it's still needed
   # for other modules to work during cleanup.
 
-  # Emit event
+  if [[ $failed -ne 0 ]]; then
+    __print_error "Some files or integrations could not be removed"
+    return $failed
+  fi
+
+  # Emitted only when everything really is gone: the event says the instance's
+  # files were removed, and a partial cleanup has not earned that sentence.
   __emit_event instance-files-removed "${instance_name}"
 
   __print_success "All files and integrations removed successfully"

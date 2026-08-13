@@ -1619,6 +1619,52 @@ function _require_ops_support() {
   fi
 }
 
+# The backup ids currently on disk, one per line, sorted — the input to
+# _emit_backups_created_since. Empty (not an error) when the instance has no
+# backups directory yet, which is the normal state before its first backup.
+function _list_backup_ids() {
+  [[ -n "${instance_backups_dir:-}" ]] && [[ -d "${instance_backups_dir}" ]] || return 0
+  find "${instance_backups_dir}" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2> /dev/null | sort
+}
+
+# Announce every backup that appeared during a run that took one of its own.
+#
+# An update captures the state it is about to overwrite and a restore captures
+# the state it is about to replace — both from inside the management script,
+# which has no way to emit an event. So those archives existed on disk with
+# nothing to announce them: no audit row, and no reason for any surface to
+# re-read its backup list. The pre-update archive is the rollback point for the
+# riskiest operation KGSM performs, and it was the one nobody could see.
+#
+# The set of ids before the run is the only input; anything new afterwards is
+# what the run created. Each one's version comes from its OWN manifest, never
+# from the instance's current version file — a pre-update backup captures the
+# version being replaced, and the file already says the new one by the time this
+# runs.
+#
+# Args: $1 = instance name, $2 = the newline-separated ids present before the run
+function _emit_backups_created_since() {
+  local instance="$1"
+  local before="$2"
+
+  local id manifest version
+  while IFS= read -r id; do
+    [[ -n "$id" ]] || continue
+    manifest="${instance_backups_dir}/${id}/manifest.json"
+    version=""
+    [[ -f "$manifest" ]] && version="$(jq -r '.version // ""' "$manifest" 2> /dev/null)"
+    __emit_event instance-backup-created "$instance" "$id" "$version"
+  done < <(comm -13 <(printf '%s\n' "$before" | sed '/^$/d') <(_list_backup_ids))
+}
+
+# The command a management script is handed so it can report its own phases (see
+# the --emit-cmd flag). It is passed in rather than baked into the script so the
+# script stays standalone — given nothing it emits nothing — and so there is one
+# place here that decides how an event is emitted.
+function _event_emitter() {
+  echo "$(__find_command events.sh) emit"
+}
+
 # Instances created before backups moved out of the working directory still
 # carry backups_dir="<working_dir>/backups" in their config, where an uninstall
 # would destroy the store along with the instance. Repoint any such instance at
@@ -1803,6 +1849,13 @@ function _cmd_create_backup() {
   local run_state
   run_state="$(__resolve_run_state "$instance")"
 
+  # Archiving a world is minutes of work on a large one, and a scheduler runs
+  # this with nobody watching — so the run is bracketed like the lifecycle verbs
+  # rather than being announced only once it has finished. Finished is emitted on
+  # every outcome: it says the run ENDED, while instance-backup-created says an
+  # archive exists.
+  __emit_event instance-backup-started "${instance}"
+
   # create-backup prints its progress lines and then the new backup's id as the
   # last line. Take the id from there rather than re-deriving "the newest entry
   # in the backups dir", which races with any concurrent backup.
@@ -1826,6 +1879,10 @@ function _cmd_create_backup() {
       __emit_event instance-backup-created "$instance" "$backup_id" "$version"
     fi
   fi
+
+  # Emitted LAST, after the archive is announced, so a consumer that re-reads on
+  # "the run ended" finds it already listed.
+  __emit_event instance-backup-finished "${instance}"
 
   exit $rc
 }
@@ -1883,6 +1940,18 @@ function _cmd_restore_backup() {
   local run_state
   run_state="$(__resolve_run_state "$instance")"
 
+  # Longer than a backup and rather more consequential — a safety archive, a
+  # checksum verification and then the instance's data replaced — so the run is
+  # bracketed for the same reason a backup's is, and a surface can show the
+  # instance as busy for the whole of it.
+  __emit_event instance-restore-started "${instance}"
+
+  # The safety archive of the current state is taken from inside the management
+  # script, which cannot emit; recording what is on disk beforehand is what lets
+  # it be announced afterwards (see _emit_backups_created_since).
+  local backups_before
+  backups_before="$(_list_backup_ids)"
+
   if [[ -n "$run_state" ]]; then
     "$instance_management_file" restore-backup "$backup" --run-state "$run_state"
   else
@@ -1890,11 +1959,16 @@ function _cmd_restore_backup() {
   fi
   local rc=$?
 
+  _emit_backups_created_since "$instance" "$backups_before"
+
   if [[ $rc -eq 0 ]]; then
     local version
     version="$(cat "$instance_version_file" 2> /dev/null)"
     __emit_event instance-backup-restored "$instance" "$backup" "$version"
   fi
+
+  # Emitted LAST, after the outcome, like every other bracket.
+  __emit_event instance-restore-finished "${instance}"
 
   exit $rc
 }
@@ -2139,21 +2213,47 @@ function _cmd_update() {
   # succeeded — instance-version-updated is what says the version moved.
   __emit_event instance-update-started "${instance}"
 
+  # An update captures the state it is about to overwrite, from inside the
+  # management script, which has no way to emit. That archive is the rollback
+  # point for the riskiest operation there is, and nothing announced it: no
+  # audit row, and every surface's backup count stale until its next scan. The
+  # ids present beforehand are recorded here so whatever appears during the run
+  # can be announced afterwards, measured from disk rather than parsed out of
+  # the script's output.
+  local backups_before
+  backups_before="$(_list_backup_ids)"
+
+  # --emit-cmd lets the management script report its own phases (download,
+  # deploy) with the same events an install emits for the same work. It is
+  # passed rather than baked in so the script stays standalone — given nothing
+  # it says nothing — and a management file generated before this existed
+  # ignores the flag.
   if [[ -n "$run_state" ]]; then
-    "$instance_management_file" update --run-state "$run_state"
+    "$instance_management_file" update --run-state "$run_state" --emit-cmd "$(_event_emitter)"
   else
-    "$instance_management_file" update
+    "$instance_management_file" update --emit-cmd "$(_event_emitter)"
   fi
   local rc=$?
-
-  __emit_event instance-update-finished "${instance}"
 
   if [[ $rc -eq 0 ]]; then
     new_version="$(cat "$instance_version_file" 2> /dev/null)"
     if [[ -n "$new_version" && "$new_version" != "$old_version" ]]; then
       __emit_event instance-version-updated "$instance" "$old_version" "$new_version"
     fi
+  else
+    # The run ended and the version did not move, for a reason. The other way an
+    # update leaves the version alone is finding nothing to do, and the bracket
+    # cannot tell the two apart — so without this a refusal reads as a completed
+    # update everywhere, including as a succeeded job on every surface.
+    __emit_event instance-update-failed "${instance}"
   fi
+
+  _emit_backups_created_since "$instance" "$backups_before"
+
+  # Emitted LAST, after the outcome: a consumer that reads "the run ended" and
+  # re-reads the instance must find the outcome already recorded rather than the
+  # state it was in before. Same ordering as the stop and restart brackets.
+  __emit_event instance-update-finished "${instance}"
 
   exit $rc
 }

@@ -271,6 +271,7 @@ function _cmd_deploy() {
 # measure that itself.
 function _update() {
   local run_state=""
+  local -a emit_cmd=()
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -278,9 +279,32 @@ function _update() {
       run_state="${2:-}"
       shift 2
       ;;
+    --emit-cmd)
+      # The command the caller wants this script's phases reported through, as
+      # words. This script emits nothing on its own — it has no journal and is
+      # meant to run standalone — so a caller that wants the same download and
+      # deploy events an install produces hands one in. Given nothing, silent.
+      read -r -a emit_cmd <<< "${2:-}"
+      shift 2
+      ;;
     *) shift ;;
     esac
   done
+
+  # Report one phase, if the caller asked for phases at all. INSTANCE_NAME is the
+  # script's own identity (derived from its directory); the lowercase instance_*
+  # variables come from the config file, which does not carry the name — passing
+  # one of those emits an event about "" that the emitter rejects, silently.
+  function _emit_phase() {
+    [[ ${#emit_cmd[@]} -gt 0 ]] || return 0
+    local _out
+    if ! _out="$("${emit_cmd[@]}" "$1" "$INSTANCE_NAME" 2>&1)"; then
+      # Never fatal — the update is the job here and a phase nobody could record
+      # must not fail it. But never silent either: a reporting path that fails
+      # quietly is indistinguishable from one that was never wired up.
+      __print_warning "Could not report phase $1: ${_out:-no detail}"
+    fi
+  }
 
   __print_info "Starting update..."
 
@@ -328,17 +352,26 @@ function _update() {
   fi
   __print_success "Backup before update: $backup_id"
 
-  # Download the latest version
+  # Download the latest version. The same events an install emits for the same
+  # work: an update downloads and deploys exactly as an install does, and a
+  # surface showing "Updating…" with no further word for a twenty-minute
+  # download is the reason these are reported.
+  _emit_phase instance-download-started
   if ! _download "$latest_version"; then
+    _emit_phase instance-download-failed
     __print_error "Failed to download latest version $latest_version"
     return $EC_ERROR
   fi
+  _emit_phase instance-download-finished
 
   # Deploy the downloaded files
+  _emit_phase instance-deploy-started
   if ! _deploy; then
+    _emit_phase instance-deploy-failed
     __print_error "Failed to deploy new files"
     return $EC_ERROR
   fi
+  _emit_phase instance-deploy-finished
 
   # Save the new version to file
   if ! _save_version "$latest_version"; then

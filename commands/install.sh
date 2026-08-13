@@ -241,10 +241,13 @@ function _cmd_install() {
     return $EC_FAILED_VERSION_SAVE
   }
 
-  __emit_event instance-installation-finished "${instance}" "${blueprint}"
-
   __print_success "Instance '${instance}', version '${version}', has been created in '${install_dir}'"
   __emit_event instance-installed "${instance}" "${blueprint}"
+
+  # Emitted LAST, after instance-installed: a consumer that reads "the run ended"
+  # and re-reads the roster must find the new instance already there rather than
+  # the roster as it was before it. Same ordering as every other bracket.
+  __emit_event instance-installation-finished "${instance}" "${blueprint}"
 
   # Start immediately after install when --start was passed (one-shot start,
   # not watchdog boot-autostart). A failure to start does not invalidate the

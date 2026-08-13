@@ -288,6 +288,7 @@ function _cmd_deploy() {
 # backup can record what it was taken against.
 function _update() {
   local run_state=""
+  local -a emit_cmd=()
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -295,9 +296,32 @@ function _update() {
       run_state="${2:-}"
       shift 2
       ;;
+    --emit-cmd)
+      # The command the caller wants this script's phases reported through, as
+      # words. This script emits nothing on its own — it has no journal and is
+      # meant to run standalone — so a caller that wants the same download and
+      # deploy events an install produces hands one in. Given nothing, silent.
+      read -r -a emit_cmd <<< "${2:-}"
+      shift 2
+      ;;
     *) shift ;;
     esac
   done
+
+  # Report one phase, if the caller asked for phases at all. INSTANCE_NAME is the
+  # script's own identity (derived from its directory); the lowercase instance_*
+  # variables come from the config file, which does not carry the name — passing
+  # one of those emits an event about "" that the emitter rejects, silently.
+  function _emit_phase() {
+    [[ ${#emit_cmd[@]} -gt 0 ]] || return 0
+    local _out
+    if ! _out="$("${emit_cmd[@]}" "$1" "$INSTANCE_NAME" 2>&1)"; then
+      # Never fatal — the update is the job here and a phase nobody could record
+      # must not fail it. But never silent either: a reporting path that fails
+      # quietly is indistinguishable from one that was never wired up.
+      __print_warning "Could not report phase $1: ${_out:-no detail}"
+    fi
+  }
 
   __print_info "Updating Docker container..."
 
@@ -320,16 +344,32 @@ function _update() {
   # 1. Pull the latest images defined in the docker-compose file
   # 2. Recreate the containers with the latest images
 
-  # Pull the latest images - run in the working directory
-  (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" pull)
+  # Pull the latest images - run in the working directory. Reported with the same
+  # events an install emits for the same work: pulling images IS this runtime's
+  # download, and a surface showing "Updating…" with no further word for the
+  # whole of it is the reason these are here. Reporting only, never a new
+  # decision — the outcome of the pull governs exactly what it did before.
+  _emit_phase instance-download-started
+  if (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" pull); then
+    _emit_phase instance-download-finished
+  else
+    _emit_phase instance-download-failed
+  fi
 
   # If the container is running, stop it and recreate
+  _emit_phase instance-deploy-started
+  local deployed=1
   if _is_active &>/dev/null; then
-    (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" up -d --force-recreate)
+    (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" up -d --force-recreate) || deployed=0
   else
     # Just recreate without starting
-    (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" up -d)
-    (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" down)
+    (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" up -d) || deployed=0
+    (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" down) || deployed=0
+  fi
+  if [[ $deployed -eq 1 ]]; then
+    _emit_phase instance-deploy-finished
+  else
+    _emit_phase instance-deploy-failed
   fi
 
   # Record what was actually pulled — the digest of the images now on this host,

@@ -65,7 +65,8 @@ Event types use **underscore-separated** names in JSON payloads and **dash-separ
 | Event Name | Description | Data Fields |
 |------------|-------------|-------------|
 | `instance_update_started` | Server update initiated | `InstanceName` |
-| `instance_update_finished` | Server update completed | `InstanceName` |
+| `instance_update_finished` | The update run ended, whatever its outcome | `InstanceName` |
+| `instance_update_failed` | An update run ended without the version moving, for a reason — a refusal, a failed download or deploy. What tells that outcome apart from finding nothing to do | `InstanceName` |
 | `instance_version_updated` | An installed server moved from one build to another | `InstanceName`, `OldVersion`, `NewVersion` |
 | `instance_updated` | Server fully updated | `InstanceName` |
 | `instance_update_available` | A newer build exists upstream and this server is not on it | `InstanceName`, `CurrentVersion`, `LatestVersion` |
@@ -89,6 +90,10 @@ is therefore always a real previous version.
 | `instance_restart_finished` | The restart run ended, whatever its outcome | `InstanceName` |
 | `instance_restarted` | Server restarted and is back up | `InstanceName` |
 | `instance_ready` | Server is accepting connections | `InstanceName` |
+| `instance_backup_started` | A backup run has begun — archiving is under way | `InstanceName` |
+| `instance_backup_finished` | The backup run ended, whatever its outcome | `InstanceName` |
+| `instance_restore_started` | A restore run has begun — safety archive, verification, then the data is replaced | `InstanceName` |
+| `instance_restore_finished` | The restore run ended, whatever its outcome | `InstanceName` |
 | `instance_backup_created` | Backup created | `InstanceName`, `Source`, `Version` |
 | `instance_backup_restored` | Backup restored | `InstanceName`, `Source`, `Version` |
 | `instance_backup_deleted` | One named backup removed | `InstanceName`, `Source` |
