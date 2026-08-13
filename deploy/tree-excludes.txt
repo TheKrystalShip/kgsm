@@ -1,0 +1,24 @@
+# Everything that belongs to the checkout and not to the engine.
+#
+# Read by BOTH deploy/deploy.sh (rsync --exclude-from) and packaging/PKGBUILD, so the deployed tree
+# at /opt/kgsm and the packaged one are the same set of files. One list, two consumers.
+#
+# rsync pattern syntax: a leading / anchors to the tree root.
+
+/.git
+/.github
+/.vscode
+/.dev-instances
+/.editorconfig
+/.gitignore
+/.shellcheckrc
+node_modules
+
+# Development-facing docs. README, LICENSE, CHANGELOG and docs/ ship; these describe working ON the
+# engine rather than running it.
+/CLAUDE.md
+/CONTRIBUTING.md
+
+# The test suite and the packaging recipe are build-time, not runtime.
+/tests
+/packaging

@@ -1,0 +1,86 @@
+# Maintainer: Cristian Moraru <info@thekrystalship.com>
+#
+# The KGSM engine. Builds nothing — the engine is bash, so packaging is placing the tree.
+#
+# Build from this directory:  cd packaging && makepkg
+#
+# The install prefix stays /opt/kgsm, the same path deploy.sh uses on a development host, so the
+# systemd units every leaf ships are byte-identical whether they came from a package or a deploy.
+# That is deliberate: a unit rewritten at packaging time is a unit nobody tested.
+
+pkgname=kgsm
+# A placeholder: pkgver() below replaces it with what deploy/version.sh reports, so the number is
+# declared in exactly one place and this file never carries a copy that can fall behind.
+pkgver=3.16.0rc3
+pkgrel=1
+pkgdesc="Krystal Game Server Manager — multi-entrypoint game-server manager for Linux"
+arch=('any')
+url="https://github.com/TheKrystalShip/kgsm"
+license=('GPL-3.0-or-later')
+groups=('kgsm-node')
+# No separate debug package: these are shipped to a private fleet, not a distro archive.
+options=('!debug')
+
+# Read from deploy/kgsm.requires.json — the one place this project declares what a host must
+# satisfy. Keep the two in step; the requires file explains why each of these is here.
+depends=(
+    'bash>=5.0'
+    'grep' 'sed' 'gawk' 'findutils' 'coreutils'
+    'go-yq'          # the .bp.yaml blueprint parser — NOT Debian's unrelated python yq
+    'jq'
+    'curl' 'wget' 'tar' 'unzip' 'rsync'
+    'iproute2'       # ss, for listening-port checks
+    'lsof'
+    'systemd'
+)
+optdepends=(
+    'kgsm-watchdog: supervision, autostart and crash-restart for native instances'
+    'kgsm-firewall: opening and closing instance ports on the host firewall'
+    'steamcmd: install and update Steam-distributed game servers'
+    'docker: container-kind instances'
+    'docker-compose: multi-service container instances'
+    'ufw: firewall rules when enable_firewall_management=true'
+    'openbsd-netcat: probing whether an instance port is reachable from outside'
+    'ncurses: coloured terminal output'
+)
+
+pkgver() {
+    "${startdir}/../deploy/version.sh" --pkgver
+}
+
+package() {
+    local repo="${startdir}/.."
+    local prefix="${pkgdir}/opt/${pkgname}"
+
+    # The engine tree. The exclude list is deploy/tree-excludes.txt, the same file deploy.sh reads,
+    # so a packaged /opt/kgsm and a deployed one hold the same files.
+    install -dm755 "$prefix"
+    rsync -a --exclude-from="${repo}/deploy/tree-excludes.txt" "${repo}/" "$prefix/"
+
+    # The entry point on PATH. /usr/bin, never /usr/local/bin — /usr/local belongs to the local
+    # administrator and no package may write there. Every unit's KgsmPath names this path.
+    install -dm755 "${pkgdir}/usr/bin"
+    ln -s "/opt/${pkgname}/kgsm.sh" "${pkgdir}/usr/bin/${pkgname}"
+
+    # The service account, declared rather than created by a scriptlet.
+    install -Dm644 "${repo}/deploy/sysusers.d/${pkgname}.conf" \
+        "${pkgdir}/usr/lib/sysusers.d/${pkgname}.conf"
+
+    # The engine's event journal and the shared leaf-descriptor directory every leaf writes into.
+    # kgsm owns them because it is the base package: a host with any KGSM on it has this one.
+    install -Dm644 /dev/stdin "${pkgdir}/usr/lib/tmpfiles.d/${pkgname}.conf" <<'TMPFILES'
+d /var/lib/kgsm         0755 kgsm kgsm -
+d /var/lib/kgsm/events  0755 kgsm kgsm -
+d /var/lib/kgsm/leaves  0755 kgsm kgsm -
+TMPFILES
+
+    # Journal retention. These are USER units by design — pruning needs no privilege — so they go
+    # to /usr/lib/systemd/user/ and the node bootstrap enables them for the service account. A
+    # package scriptlet cannot: `systemctl --user enable` has no user to act for.
+    install -Dm644 "${repo}/deploy/kgsm-journal-prune.service" \
+        "${pkgdir}/usr/lib/systemd/user/kgsm-journal-prune.service"
+    install -Dm644 "${repo}/deploy/kgsm-journal-prune.timer" \
+        "${pkgdir}/usr/lib/systemd/user/kgsm-journal-prune.timer"
+
+    install -Dm644 "${repo}/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
+}

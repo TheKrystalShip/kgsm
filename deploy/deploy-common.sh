@@ -31,7 +31,10 @@ PROJECT="kgsm"
 
 # The canonical install: a byte-identical copy of this checkout. The `kgsm` on PATH resolves here.
 PREFIX="/opt/kgsm"
-BIN_LINK="/usr/local/bin/kgsm"
+# /usr/bin, not /usr/local/bin: this is the path every leaf's unit names, and the one the kgsm
+# package installs. /usr/local belongs to the local administrator and no package may write there,
+# so a host provisioned by setup.sh and a host installed from a package agree on where kgsm is.
+BIN_LINK="/usr/bin/kgsm"
 ENTRYPOINT="kgsm.sh"
 
 # Where kgsm appends its event journal. setup.sh creates it owned by the deploying
@@ -42,7 +45,9 @@ JOURNAL_DIR="/var/lib/kgsm/events"
 # Everything that is checkout-only and must never reach the deployed copy. Anything present in
 # PREFIX but not in the checkout (and not excluded here) is pruned on deploy, so the deployed
 # tree always matches the source exactly.
-RSYNC_EXCLUDES=(--exclude='.git' --exclude='node_modules' --exclude='.dev-instances')
+# The list itself lives in deploy/tree-excludes.txt, which packaging/PKGBUILD reads too — so the
+# deployed tree and the packaged one are the same set of files rather than two lists that drift.
+RSYNC_EXCLUDES=(--exclude-from="${REPO_DIR}/deploy/tree-excludes.txt")
 # ── END PROJECT BLOCK ─────────────────────────────────────────────────────────
 
 SUDO="${SUDO:-sudo}"
