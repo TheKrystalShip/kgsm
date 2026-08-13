@@ -59,6 +59,16 @@ export EVENT_INSTANCE_RESTART_STARTED
 declare -g -r EVENT_INSTANCE_RESTART_FINISHED="instance_restart_finished"
 export EVENT_INSTANCE_RESTART_FINISHED
 
+# The restart's own halves. A restart runs the stop and the start through the pure logic rather than
+# the stop and start commands, so neither of those commands' facts is emitted for it: without this,
+# the whole shutdown — and the boot after it — is a silence a consumer can only paper over, and an
+# instance whose process is dead still reads as running. This says the old run has ended; the new one
+# coming up is instance_restarted. A step inside one operation, not a standalone stop, which is why
+# it is its own type: instance_stopped is the fact an operator stopped a server, and a restart is not
+# that.
+declare -g -r EVENT_INSTANCE_RESTART_STOPPED="instance_restart_stopped"
+export EVENT_INSTANCE_RESTART_STOPPED
+
 declare -g -r EVENT_INSTANCE_STOP_STARTED="instance_stop_started"
 export EVENT_INSTANCE_STOP_STARTED
 
@@ -324,6 +334,7 @@ declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_DEPLOYED"]="instance"
   ["$EVENT_INSTANCE_RESTART_STARTED"]="instance"
   ["$EVENT_INSTANCE_RESTART_FINISHED"]="instance"
+  ["$EVENT_INSTANCE_RESTART_STOPPED"]="instance"
   ["$EVENT_INSTANCE_STOP_STARTED"]="instance"
   ["$EVENT_INSTANCE_STOP_FINISHED"]="instance"
   ["$EVENT_INSTANCE_UPDATE_STARTED"]="instance"

@@ -47,6 +47,22 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **A restart reports its middle.** `restart` runs the stop and the start through the pure logic
+  rather than the stop and start commands, so nothing was emitted between
+  `instance_restart_started` and `instance_restarted` at the very end. For the whole shutdown —
+  seconds to a minute, and the full drain of a game that saves its world on the way out — the
+  process did not exist and every consumer still read the instance as running, because the bracket
+  says only that a restart is in progress and the state it can fall back on is the one from before.
+
+  `instance_restart_stopped` is that middle: the old run is down, the new one has not been spawned
+  yet. It is a step inside one operation, deliberately not `instance_stopped` — that one is the fact
+  that somebody stopped a server, and a restart is not that (kgsm-lib classifies the new event
+  `Phase`, so it moves state without adding an audit row or a notification to every restart).
+
+  The sequencing stays in `__logic_instance_restart`, which now takes an optional function to call
+  once the stop half is down; the command layer passes the emitter, so the logic layer keeps emitting
+  nothing itself.
+
 - **`files firewall disable` no longer records the close.** The kgsm-firewall authority writes the
   rule and sees the backend accept it, so it is the one component that can honestly say a port
   closed, and it records the edge in its own journal. Emitting `instance-ports-closed` here as well

@@ -85,6 +85,7 @@ is therefore always a real previous version.
 | `instance_stop_finished` | The shutdown run ended, whatever its outcome | `InstanceName` |
 | `instance_stopped` | Server process stopped | `InstanceName` |
 | `instance_restart_started` | Restart initiated — the instance is going down and coming back | `InstanceName` |
+| `instance_restart_stopped` | The restart's old run is down — the process no longer exists, the new one has not been spawned yet | `InstanceName` |
 | `instance_restart_finished` | The restart run ended, whatever its outcome | `InstanceName` |
 | `instance_restarted` | Server restarted and is back up | `InstanceName` |
 | `instance_ready` | Server is accepting connections | `InstanceName` |

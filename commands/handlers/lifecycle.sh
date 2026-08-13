@@ -187,9 +187,14 @@ function __logic_stop_standalone_instance() {
 export -f __logic_stop_standalone_instance
 # Restarts an instance by stopping then starting it
 # Args: $1 = _instance_name
+#       $2 = _after_stop (optional) - name of a function to call, with the instance name, once the
+#            stop half has succeeded and before the start begins. The two halves are seconds to a
+#            minute apart, so the caller needs a place to say the old run has ended; this layer emits
+#            nothing itself (pure logic), it only calls back what it was handed. Omitted = silent.
 # Returns: 213 on success (triggers instance-restarted event), error codes on failure
 function __logic_instance_restart() {
   local _instance_name="$1"
+  local _after_stop="${2:-}"
 
   # Validate required parameters
   if [[ -z "$_instance_name" ]]; then
@@ -203,6 +208,12 @@ function __logic_instance_restart() {
   # If stop failed, return the error
   if [[ $stop_result -ne $EC_SUCCESS_INSTANCE_STOPPED ]]; then
     return $stop_result
+  fi
+
+  # The process is down. Hand that to the caller before the start begins — a restart is the one verb
+  # whose middle is a real state nobody else reports.
+  if [[ -n "$_after_stop" ]]; then
+    "$_after_stop" "$_instance_name"
   fi
 
   # Start the instance

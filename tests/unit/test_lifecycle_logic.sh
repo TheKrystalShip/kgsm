@@ -152,6 +152,29 @@ function test_restart_nonexistent_instance() {
   assert_equals "$EC_FILE_NOT_FOUND" "$exit_code" "Should return EC_FILE_NOT_FOUND for nonexistent instance"
 }
 
+# The after-stop hook is what the command layer emits instance-restart-stopped from, so it is a
+# claim that the process is down. A restart that never got the instance down must not make it —
+# a consumer acting on it would report an instance stopped that is still running.
+function test_restart_after_stop_hook_not_called_when_the_stop_fails() {
+  log_test_step "Testing __logic_instance_restart does not call its hook when the stop half fails"
+
+  local marker="$KGSM_ROOT/test-installs/after-stop-marker-$$"
+  rm -f "$marker"
+
+  # The hook records that it ran, in a file — it survives whether the logic calls it in this shell
+  # or a subshell, so the assertion cannot pass for the wrong reason.
+  # shellcheck disable=SC2329 # invoked by name, through the hook parameter
+  function __test_after_stop_hook() { echo "$1" > "$marker"; }
+  export -f __test_after_stop_hook
+
+  __logic_instance_restart "nonexistent_instance_xyz_12345" __test_after_stop_hook 2>/dev/null
+
+  assert_file_not_exists "$marker" \
+    "The after-stop hook should not run when the instance never stopped"
+
+  rm -f "$marker"
+}
+
 # =============================================================================
 # __logic_instance_is_active() ERROR HANDLING TESTS
 # =============================================================================

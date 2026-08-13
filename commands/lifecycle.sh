@@ -311,6 +311,17 @@ function _cmd_stop() {
   return $result
 }
 
+# The hook _cmd_restart hands to the restart logic — called once the stop half is down, with the
+# instance name. Exported because the logic function it is passed to is itself exported and may run
+# in a subshell, where an unexported hook name resolves to nothing and the event silently vanishes.
+# Args: $1 = instance_name
+# shellcheck disable=SC2329 # invoked by name, through __logic_instance_restart's hook
+function __emit_restart_stopped() {
+  __emit_event instance-restart-stopped "$1"
+}
+
+export -f __emit_restart_stopped
+
 # Restart command implementation
 function _cmd_restart() {
   local instance_name=""
@@ -342,14 +353,18 @@ function _cmd_restart() {
 
   # A restart is a stop and a start back to back, so it lasts at least as long as the shutdown drain
   # plus the game's boot — the longest of the lifecycle verbs. It runs through the pure logic
-  # functions rather than the stop and start COMMANDS, so none of their events fire along the way and
-  # instance-restarted at the end is the only thing a consumer would otherwise see. These bracket the
-  # whole thing, the same way stop and update are bracketed. Finished is emitted on every outcome: it
-  # says the run ENDED, while instance-restarted says the instance came back.
+  # functions rather than the stop and start COMMANDS, so none of their events fire along the way.
+  # These bracket the whole thing, the same way stop and update are bracketed. Finished is emitted on
+  # every outcome: it says the run ENDED, while instance-restarted says the instance came back.
   __emit_event instance-restart-started "$instance_name"
 
+  # …and the middle is reported as it happens: instance-restart-stopped when the old run is down,
+  # instance-restarted when the new one is up. Between them the process genuinely does not exist,
+  # which is a thing consumers show and act on, and the bracket alone cannot say it — a consumer that
+  # heard only "a restart is running" has to keep reporting the state from before the restart for the
+  # whole shutdown. Emitted from here rather than from the logic layer, which stays pure.
   local exit_code
-  __logic_instance_restart "$instance_name"
+  __logic_instance_restart "$instance_name" __emit_restart_stopped
   exit_code=$?
 
 
