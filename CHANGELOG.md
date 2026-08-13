@@ -143,6 +143,13 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Added — one machine-readable version, read rather than restated
+
+`deploy/version.sh` prints this project's version from the single file that declares it, and
+`--pkgver` prints the form pacman accepts (a `pkgver` may not contain a hyphen; ordering survives it,
+since `vercmp` puts `3.16.0rc3` before `3.16.0`). Packaging asks for a version instead of carrying a
+copy that can fall behind the binary.
+
 ### Added — the host requirements are declared, not described
 
 `deploy/kgsm.requires.json` states every command the engine needs, each with its Arch package name
