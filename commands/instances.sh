@@ -542,6 +542,14 @@ function _print_info_json() {
       value="${value#\"}"
       value="${value%\"}"
 
+      # Undo the escaping the value was written with. Inlined rather than a call
+      # to __unescape_instance_config_value to keep this loop free of the
+      # command substitution that helper's printf would cost on every key of
+      # every instance — the two must stay in step.
+      value="${value//\\\\/\\}"
+      value="${value//\\\"/\"}"
+      value="${value//\\\`/\`}"
+
       printf '%s\t%s\n' "$key" "$value"
     done < "$instance_config_file"
   } | jq -Rs --arg cg "$cgroup_path" --argjson ports "$ports_json" \

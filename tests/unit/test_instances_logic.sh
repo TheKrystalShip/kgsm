@@ -1194,6 +1194,38 @@ function test_set_config_value_with_spaces_equals_backslash() {
     "Complex value (spaces + '=' + backslash) must round-trip verbatim"
 }
 
+function test_set_config_value_with_quotes_stays_sourceable() {
+  log_test_step "Testing __set_instance_config_value keeps a quoted value sourceable"
+
+  local blueprint="factorio"
+  local instance_name="test-set-quoted"
+  create_test_instance "$blueprint" "$instance_name"
+  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
+
+  # A presence regex matching a quoted player name — the shape Necesse's
+  # disconnect line needs. Written unescaped, the embedded quotes close the
+  # assignment early and the rest of the line is parsed as code, which makes the
+  # whole config unsourceable and bricks the instance.
+  local value='Player (?<id>\d+) \("(?<name>[^"]*)"\) disconnected: `x` \\'
+  __set_instance_config_value "$instance_name" "player_left_regex" "$value"
+  assert_equals 0 "$?" "Should succeed"
+
+  local config_file
+  config_file=$(__find_instance_config "$instance_name")
+
+  # The file must still source, and both readers must return what went in:
+  # sourcing is what the management script does, __get_instance_config_value is
+  # what everything else does, and the two agreeing is the actual contract.
+  local sourced
+  sourced=$(bash -c "source '$config_file' && printf '%s' \"\$player_left_regex\"")
+  assert_equals 0 "$?" "Config with a quoted value must still be sourceable"
+  assert_equals "$value" "$sourced" "Sourcing must yield the value verbatim"
+
+  local got
+  got=$(__get_instance_config_value "$instance_name" "player_left_regex")
+  assert_equals "$value" "$got" "Text reader must agree with sourcing"
+}
+
 function test_set_config_adds_absent_key() {
   log_test_step "Testing __set_instance_config_value adds a key that is absent"
 

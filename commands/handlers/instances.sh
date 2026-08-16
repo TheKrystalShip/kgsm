@@ -223,8 +223,17 @@ function __logic_create_base_instance() {
   # .NET-regex analog of the container shim's matching). The container path uses
   # the base64 env form above; this is the native delivery channel. Empty when
   # the blueprint sets none → native detection disabled (honest unknown).
-  export instance_player_joined_regex="${blueprint_player_joined_regex:-}"
-  export instance_player_left_regex="${blueprint_player_left_regex:-}"
+  # Escaped for the key="value" form the template writes and the source that
+  # reads it back: a pattern matching a quoted name (Necesse) would otherwise
+  # close the string early and make the config unsourceable.
+  export instance_player_joined_regex
+  instance_player_joined_regex=$(
+    __escape_instance_config_value "${blueprint_player_joined_regex:-}"
+  )
+  export instance_player_left_regex
+  instance_player_left_regex=$(
+    __escape_instance_config_value "${blueprint_player_left_regex:-}"
+  )
 
   # RCON connection parameters, materialized into the instance config so the
   # kgsm-watchdog can poll the game server for connected players when log-based
@@ -610,7 +619,12 @@ function __set_instance_config_value() {
   tmp_file="$(mktemp "${target_file}.XXXXXX")" || return $EC_FAILED_TOUCH
   chmod --reference="$target_file" "$tmp_file" 2>/dev/null || true
 
-  if ! KGSM_CONFIG_SET_VALUE="$value" awk -v key="$key" '
+  # Escape for the key="value" form this writes and the source that reads it
+  # back, so a value containing a quote cannot brick the config.
+  local escaped_value
+  escaped_value="$(__escape_instance_config_value "$value")"
+
+  if ! KGSM_CONFIG_SET_VALUE="$escaped_value" awk -v key="$key" '
     BEGIN { value = ENVIRON["KGSM_CONFIG_SET_VALUE"]; found = 0 }
     $0 ~ ("^" key "[ \t]*=") {
       print key "=\"" value "\""

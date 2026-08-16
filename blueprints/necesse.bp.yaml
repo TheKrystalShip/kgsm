@@ -10,6 +10,17 @@ metadata:
   min_ram_mb: 2048
   recommended_ram_mb: 4096
   base_disk_mb: 279
+# Player-presence detection, authored from real server output (see
+# player-presence-contract.md). The two sides carry disjoint identity: the connect
+# line has the account id and the endpoint but no character name, and the
+# disconnect line has the account id and the name but no endpoint. The account id
+# is the only field on both, so `key` pins the session key to it — leaving the
+# precedence to fall through would key the join on `addr` and the leave on `id`
+# and the pair would never resolve. `\d+` for the id also rejects the
+# `Client "N/A" connected on slot` form the server logs for a returning player,
+# which carries no identity at all.
+player_joined_regex: 'Client "(?<key>(?<id>\d+))" with address (?<addr>\S+) is connecting with version '
+player_left_regex: 'Player (?<key>(?<id>\d+)) \("(?<name>[^"]*)"\) disconnected with message: (?<reason>.*)'
 # RCON polling — an optional second source of player presence, for a game whose
 # console does not announce joins and leaves in its log, or announces only one of
 # the two. Empty rcon_port leaves it off, which is what every unset field here

@@ -47,6 +47,22 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **An instance config value survives a double quote.** The config is written as `key="value"` and
+  read back two ways — the management script sources it, everything else parses the text — and
+  neither write path escaped the value. A quote inside it closed the assignment early and left the
+  rest of the line to be parsed as code, so the file stopped sourcing at all; `config-set` and the
+  install-time template both did it. Values are now escaped on write (`\`, `"`, and `` ` ``; `$` stays
+  live, because `executable_arguments` carries `$instance_level_name` into the config precisely so it
+  expands on source), and the three text readers — `__get_instance_config_value`,
+  `__source_with_prefix`, and `instances info --json` — undo it, so a parsed value and a sourced one
+  are the same bytes. Without the unescape a regex arrived with every backslash doubled, which
+  compiles and then matches nothing.
+- **Necesse detects player joins and leaves.** Authored from real server output. The two sides carry
+  disjoint identity — the connect line has the SteamID64 and the endpoint, the disconnect line has the
+  SteamID64, the character name and the reason — so `key` pins the session key to the id, the only
+  field on both. This is the first blueprint whose pattern needs a literal double quote, which is what
+  surfaced the escaping bug above.
+
 - **A lifecycle verb reports a state change only when the state changed.** The verbs are idempotent —
   the supervisor answers a stop for an already-stopped instance, or a start for an already-running
   one, with success, and it is right to — but the command layer turned that success into an event. So

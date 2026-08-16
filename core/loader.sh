@@ -439,6 +439,53 @@ function __source_instance() {
 
 export -f __source_instance
 
+# The instance config is written as key="value" and read back two different
+# ways: the management script sources it, and everything here parses the text.
+# The pair below is what keeps those two agreeing.
+#
+# Escape a value for the key="value" form.
+#
+# Sourcing puts a value in bash's double-quote context, where a bare " ends the
+# string early and leaves the rest of the line to be parsed as code — a presence
+# regex matching a quoted player name is enough to make the whole file
+# unsourceable. A backslash pair collapses to one, silently rewriting a regex,
+# and a backtick opens a command substitution. Escape those three, backslash
+# first so the escapes added here are not themselves re-escaped.
+#
+# $ is deliberately left live: executable_arguments carries $instance_level_name
+# into the config precisely so it expands when the management script sources it.
+# The cost is that a value containing a literal $name sequence is not safe here —
+# no regex in any blueprint has one, and escaping $ would break the argument
+# templating every native instance depends on.
+#
+# Usage: __escape_instance_config_value <raw_value>
+function __escape_instance_config_value() {
+  local _value="$1"
+  _value="${_value//\\/\\\\}"
+  _value="${_value//\"/\\\"}"
+  _value="${_value//\`/\\\`}"
+  printf '%s' "$_value"
+}
+
+export -f __escape_instance_config_value
+
+# Reverse it, for the readers that parse the file as text instead of sourcing
+# it. Sourcing does this natively; a text reader that skips it hands back every
+# backslash doubled, and a presence regex whose \d arrived as \\d compiles fine
+# and then matches nothing. Backslash pairs are collapsed first, which is what
+# makes the remaining \" and \` unambiguous.
+#
+# Usage: __unescape_instance_config_value <escaped_value>
+function __unescape_instance_config_value() {
+  local _value="$1"
+  _value="${_value//\\\\/\\}"
+  _value="${_value//\\\"/\"}"
+  _value="${_value//\\\`/\`}"
+  printf '%s' "$_value"
+}
+
+export -f __unescape_instance_config_value
+
 # Get a single value from an instance config file without sourcing all variables
 # Usage: __get_instance_config_value <instance_name> <config_key>
 function __get_instance_config_value() {
@@ -465,16 +512,16 @@ function __get_instance_config_value() {
   local value
   value=$(grep -E "^${config_key}[[:space:]]*=" "$instance_config_file" 2> /dev/null | head -n1 | cut -d'=' -f2-)
 
-  # Trim surrounding whitespace, then strip a single layer of wrapper quotes.
-  # This mirrors how KGSM itself parses .config.ini (see __source_with_prefix
-  # and the management script's __source_instance_config) — only the wrapping
-  # quote is removed, so quotes inside the value are left untouched.
+  # Trim surrounding whitespace, then strip a single layer of wrapper quotes and
+  # undo the escaping the value was written with, so this returns what the
+  # management script would see after sourcing the same file.
   value="${value#"${value%%[![:space:]]*}"}"
   value="${value%"${value##*[![:space:]]}"}"
   value="${value#\"}"
   value="${value%\"}"
   value="${value#\'}"
   value="${value%\'}"
+  value="$(__unescape_instance_config_value "$value")"
 
   echo "$value"
 }
@@ -509,11 +556,14 @@ function __source_with_prefix() {
       value="${value#"${value%%[![:space:]]*}"}"
       value="${value%"${value##*[![:space:]]}"}"
 
-      # Remove quotes from value if present
+      # Remove quotes from value if present, then undo the escaping it was
+      # written with — this parses the text rather than sourcing it, so the
+      # unescape bash would have done has to happen explicitly.
       value="${value#\"}"
       value="${value%\"}"
       value="${value#\'}"
       value="${value%\'}"
+      value="$(__unescape_instance_config_value "$value")"
 
       declare -g "${prefix}${key}=${value}"
       export "${prefix}${key}"
