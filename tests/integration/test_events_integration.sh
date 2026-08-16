@@ -1002,3 +1002,120 @@ function test_emit_payload_is_a_v1_envelope() {
   line_count=$(echo "$payload" | wc -l)
   assert_equals "1" "$line_count" "The envelope must be a single line"
 }
+
+# =============================================================================
+# TEST 31: the envelope spells "not known" the way every other producer does
+#
+# The journal is read merged across five producers, so a reader meets these
+# fields written by four C# writers and by this one. The contract permits a
+# nullable field to be omitted OR written as null and treats the two
+# identically — but it defines no third state, and an empty string is one: a
+# reader checking for null does not find it, and renders a blank where it meant
+# to render nothing.
+# =============================================================================
+
+function test_emit_envelope_never_writes_an_empty_string() {
+  log_test_step "Testing: envelope provenance fields are a value or null, never empty"
+
+  # Neither actor nor origin supplied — the case where an empty value would be
+  # easiest to produce by accident.
+  env -u KGSM_EVENT_ACTOR -u KGSM_EVENT_ORIGIN \
+    "$EVENTS_MODULE" emit instance-started envelope-empty-test > /dev/null 2>&1 || true
+
+  local payload
+  payload=$(_last_journal_event)
+  assert_not_null "$payload" "Journaled event payload should not be empty"
+
+  # Actor has a three-level fallback — the supplied value, then the OS user, then
+  # `id -un` — so it always resolves to something. An empty string here would mean
+  # every fallback produced nothing and the emit wrote the gap anyway.
+  local actor
+  actor=$(echo "$payload" | jq -r '.Actor' 2> /dev/null)
+  assert_not_equals "" "$actor" \
+    "Actor must never be an empty string, a third state the envelope does not define"
+
+  # Origin genuinely has no honest fallback, so null is correct here. What must
+  # never appear is the empty string.
+  local origin_type
+  origin_type=$(echo "$payload" | jq -r '.Origin | type' 2> /dev/null)
+  if [[ "$origin_type" == "string" ]]; then
+    local origin
+    origin=$(echo "$payload" | jq -r '.Origin' 2> /dev/null)
+    assert_not_equals "" "$origin" \
+      "Origin must be null or a surface, never an empty string"
+  else
+    assert_equals "null" "$origin_type" \
+      "Origin must be null when no surface drove the event"
+  fi
+
+  # Hostname lets a journal be read on its own. A reader that knows where it got a
+  # line from trusts that over this field, but it is still always written.
+  local hostname
+  hostname=$(echo "$payload" | jq -r '.Hostname' 2> /dev/null)
+  assert_not_null "$hostname" "Emitted payload should include a Hostname"
+  assert_not_equals "null" "$hostname" "Hostname must not be null"
+  assert_not_equals "" "$hostname" "Hostname must not be an empty string"
+}
+
+# =============================================================================
+# TEST 32: an emit missing a required parameter writes nothing at all
+#
+# This is what keeps an empty payload field unreachable. Validation refuses the
+# emit before the envelope is built, so a missing parameter never reaches the
+# journal as an empty string, which is the third state TEST 31 guards against.
+# =============================================================================
+
+function test_emit_with_a_missing_parameter_writes_nothing() {
+  log_test_step "Testing: an emit missing a required parameter appends no line"
+
+  local journal_dir="${config_event_journal_dir:-$KGSM_TEST_SANDBOX/events}"
+  local before after
+  before=$(cat "$journal_dir"/*.ndjson 2> /dev/null | wc -l)
+
+  # instance-started requires an instance name.
+  "$EVENTS_MODULE" emit instance-started > /dev/null 2>&1 || true
+
+  after=$(cat "$journal_dir"/*.ndjson 2> /dev/null | wc -l)
+  assert_equals "$before" "$after" \
+    "A refused emit must append nothing: a partial event is worse than none"
+}
+
+# =============================================================================
+# TEST 33: retention ages a segment by its NAME, not its mtime
+#
+# The rule every producer's writer applies, so a merged page ages uniformly. A
+# segment named 2026-05-01 holds that day's events whatever a filesystem thinks;
+# an mtime is when the file was last written to, which a restore, a copy or a
+# backup tool moves without any event having moved.
+# =============================================================================
+
+function test_journal_prune_ages_a_segment_by_its_name() {
+  log_test_step "Testing: prune reads the segment name and keeps the boundary day"
+
+  local journal_dir="${config_event_journal_dir:-$KGSM_TEST_SANDBOX/events}"
+  mkdir -p "$journal_dir"
+
+  local cutoff older
+  cutoff=$(date -u -d "90 days ago" +%F)
+  older=$(date -u -d "91 days ago" +%F)
+
+  printf '{"V":1}\n' > "$journal_dir/$older.ndjson"
+  printf '{"V":1}\n' > "$journal_dir/$cutoff.ndjson"
+
+  # Old by name, brand new by mtime: under an mtime rule this survives, which is
+  # exactly the divergence being pinned.
+  touch "$journal_dir/$older.ndjson"
+
+  # Not a segment. The directory belongs to this producer, which is a reason to be
+  # careful with it rather than a licence to delete whatever is in it.
+  printf 'x\n' > "$journal_dir/notes.txt"
+
+  "$KGSM_ROOT/commands/events.journal.sh" prune > /dev/null 2>&1 || true
+
+  assert_file_not_exists "$journal_dir/$older.ndjson" \
+    "A segment named past the window must be pruned despite a fresh mtime"
+  assert_file_exists "$journal_dir/$cutoff.ndjson" \
+    "A segment dated exactly on the boundary must be kept"
+  assert_file_exists "$journal_dir/notes.txt" \
+    "A file that is not a dated segment must be left alone"
+}

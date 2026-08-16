@@ -47,6 +47,17 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **Journal retention ages a segment by its name, not its mtime.** `events journal prune` used
+  `find -mtime`, which measures when a file was last *written to* — a restore, a copy or a backup
+  tool moves that without any event having moved, so a recovered journal was pruned by when it was
+  recovered. The segment's name is its date whatever the filesystem thinks. Every other producer's
+  writer applies this same rule (`TheKrystalShip.KGSM.Journal` 1.4.0), so a merged page now ages
+  uniformly instead of the engine's half of it ageing on a different clock.
+
+  A segment dated exactly on the boundary is **kept** — the window is "this many days of history",
+  and rounding it inward returns one day less than the number an operator configured. A file in the
+  journal directory whose name is not a date is left alone rather than guessed at.
+
 - **An instance config value survives a double quote.** The config is written as `key="value"` and
   read back two ways — the management script sources it, everything else parses the text — and
   neither write path escaped the value. A quote inside it closed the assignment early and left the

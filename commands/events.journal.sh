@@ -103,6 +103,17 @@ function _cmd_status() {
 # Time-based only: KGSM holds no knowledge of who reads the journal, so a
 # segment is never retained on a consumer's behalf. A consumer absent longer
 # than the window detects the gap and cold-starts.
+#
+# Age comes from the segment's NAME, not its mtime. A segment named 2026-05-01
+# holds that day's events whatever a filesystem thinks; an mtime is when the
+# file was last written to, which a restore, a copy or a backup tool changes
+# without any event moving. The two agree on a normally-operating host, and only
+# the name still agrees on one that has been recovered. Every other producer's
+# writer applies this same rule, so a merged page ages uniformly.
+#
+# A file whose name is not a date is left alone rather than guessed at: the
+# directory belongs to this producer, which is a reason to be careful with it
+# rather than a licence to delete whatever is in it.
 function _cmd_prune() {
   local _dir
   _dir="$(__logic_journal_dir)"
@@ -120,9 +131,29 @@ function _cmd_prune() {
     return $EC_SUCCESS
   fi
 
+  # The oldest date still kept. A segment dated exactly on the boundary stays:
+  # the window is "this many days of history", and rounding it inward would
+  # quietly return one day less than the number an operator configured.
+  local _cutoff
+  if ! _cutoff="$(date -u -d "$_days days ago" +%Y-%m-%d 2>/dev/null)"; then
+    __print_error "Could not compute the retention cutoff for $_days days"
+    return $EC_ERROR
+  fi
+
   local _stale=()
-  mapfile -t _stale < <(find "$_dir" -maxdepth 1 -type f \
-    -name '*.ndjson' -mtime +"$_days" 2>/dev/null | sort)
+  local _candidate _stem
+  for _candidate in "$_dir"/*.ndjson; do
+    [[ -f "$_candidate" ]] || continue
+
+    _stem="$(basename "$_candidate" .ndjson)"
+    [[ "$_stem" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || continue
+
+    # Fixed-width ISO dates compare correctly as strings, so this needs no date
+    # parsing per segment.
+    if [[ "$_stem" < "$_cutoff" ]]; then
+      _stale+=("$_candidate")
+    fi
+  done
 
   if [[ ${#_stale[@]} -eq 0 ]]; then
     __print_info "No segments older than $_days days"
