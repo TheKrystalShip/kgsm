@@ -73,6 +73,10 @@ function __logic_execute_port_watch() {
   __print_info_file_only "$watcher_log_file" "Instance: '$instance', PID: $server_pid, Timeout: ${timeout_seconds}s"
 
   # Use timeout to enforce global timeout with port checking loop
+  # The body is single-quoted on purpose: $1..$4 are the inner shell's
+  # positional parameters, passed after the `--`, so this shell must not
+  # expand them.
+  # shellcheck disable=SC2016
   if timeout "${timeout_seconds}s" bash -c '
     instance="$1"
     server_pid="$2"

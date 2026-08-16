@@ -141,7 +141,8 @@ function _get_status() {
     _log_source="$instance_log_file"
   elif [[ -d "$instance_logs_dir" ]]; then
     local latest_log
-    latest_log=$(ls -t "$instance_logs_dir" 2>/dev/null | head -1)
+    latest_log=$(find "$instance_logs_dir" -maxdepth 1 -type f \
+      -printf '%T@ %P\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2-)
     [[ -n "$latest_log" ]] && _log_source="$instance_logs_dir/$latest_log"
   fi
   if [[ -n "$_log_source" ]]; then

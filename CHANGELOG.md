@@ -47,6 +47,15 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **The release build lints the engine and can fail on it.** `shellcheck` is the only gate the
+  bash half of KGSM has, and it now excludes exactly the categories a per-file lint cannot answer
+  here — unquoted exit codes in expansions and in `case` patterns, `config_*`/`instance_*` names
+  parsed out of `.config.ini` at runtime, the sourced-not-executed `manage.*.d/` fragments,
+  dispatcher-reached handlers, and variables a sourcing script consumes. Everything else fails the
+  build, and the findings that were left are fixed: the newest rotated log is found with `find`
+  rather than by parsing `ls`, an event's parameter spec is split with `read -ra` so a name can
+  never glob, and a keypress is read with `-r`.
+
 - **Journal retention ages a segment by its name, not its mtime.** `events journal prune` used
   `find -mtime`, which measures when a file was last *written to* — a restore, a copy or a backup
   tool moves that without any event having moved, so a recovered journal was pruned by when it was

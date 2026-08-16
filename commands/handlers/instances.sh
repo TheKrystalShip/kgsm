@@ -488,7 +488,7 @@ function __logic_get_instances() {
     instance_dir="${instance_dir%/}"
     # Check if it's a symlink (skip regular directories)
     if [[ -L "$instance_dir" ]]; then
-      echo "$(basename "$instance_dir")"
+      basename "$instance_dir"
     fi
   done
 
@@ -518,7 +518,8 @@ function __logic_get_instance_paths() {
     instance_dir="${instance_dir%/}"
     # Check if it's a symlink (skip regular directories)
     if [[ -L "$instance_dir" ]]; then
-      local instance_name="$(basename "$instance_dir")"
+      local instance_name
+      instance_name="$(basename "$instance_dir")"
       local config_file="${instance_dir}/${instance_name}.config.ini"
       # Only output if config file exists
       if [[ -f "$config_file" ]]; then

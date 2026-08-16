@@ -468,8 +468,10 @@ function __logic_validate_event_params() {
     return $EC_EVENT_TYPE_INVALID
   fi
 
-  # Get required parameters
-  local required_params=(${EVENT_CONFIGS[$event_type]})
+  # Get required parameters. The spec is a space-separated list of parameter
+  # names, so it is split on whitespace and never glob-expanded.
+  local required_params=()
+  read -ra required_params <<< "${EVENT_CONFIGS[$event_type]}"
 
   # Validate parameter count
   if [[ ${#params[@]} -lt ${#required_params[@]} ]]; then
@@ -538,8 +540,10 @@ function __logic_build_event_payload() {
   shift
   local params=("$@")
 
-  # Get required parameters specification
-  local required_params=(${EVENT_CONFIGS[$event_type]})
+  # Get required parameters specification. The spec is a space-separated list
+  # of parameter names, so it is split on whitespace and never glob-expanded.
+  local required_params=()
+  read -ra required_params <<< "${EVENT_CONFIGS[$event_type]}"
   local param_names=()
 
   # Build parameter arrays for jq

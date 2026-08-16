@@ -250,7 +250,7 @@ function __ui_wait_for_key() {
 
   # Only wait for input if stdin is a terminal
   if [[ -t 0 ]]; then
-    read -n 1 -s
+    read -r -n 1 -s
   fi
 }
 export -f __ui_wait_for_key

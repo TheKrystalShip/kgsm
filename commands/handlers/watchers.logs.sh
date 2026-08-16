@@ -37,6 +37,10 @@ function __logic_execute_log_watch() {
   __print_info_file_only "$watcher_log_file" "Instance: '$instance', PID: $server_pid, Timeout: ${timeout_seconds}s"
 
   # Use timeout to enforce global timeout and tail to follow the log
+  # The body is single-quoted on purpose: $1/$2/$3 are the inner shell's
+  # positional parameters, passed after the `--`, so this shell must not
+  # expand them.
+  # shellcheck disable=SC2016
   if timeout "${timeout_seconds}s" bash -c '
     tail -n 50 -f --pid="$1" "$2" | grep --line-buffered -q -m 1 -e "$3"
   ' -- "$server_pid" "$log_file" "$ready_pattern"; then
