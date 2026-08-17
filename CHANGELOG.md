@@ -47,6 +47,17 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **`instances config-list` reports every key with whether it can be set.** The settable flag comes
+  from `__is_protected_instance_config_key` — the same function `config-set` itself calls — so what a
+  reader is told it may change is exactly what the setter will accept, and the two cannot drift.
+  `--settable` narrows the listing to those keys; `--json` emits them as an array.
+
+- **`network ports list-used` names the ports it found.** Every row is
+  `<port>/<protocol>`, with the process holding it when the socket can be attributed, and both
+  `ports list-used` and `ports conflicts` take `--json`. The scan's own progress reporting stays on
+  the human path only, so a machine reading the conflict list sees an array of findings and nothing
+  else — an empty one when there are none.
+
 - **The release build lints the engine and can fail on it.** `shellcheck` is the only gate the
   bash half of KGSM has, and it now excludes exactly the categories a per-file lint cannot answer
   here — unquoted exit codes in expansions and in `case` patterns, `config_*`/`instance_*` names

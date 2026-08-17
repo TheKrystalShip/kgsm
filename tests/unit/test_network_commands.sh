@@ -337,6 +337,49 @@ function test_ports_list_used_succeeds() {
     "ports list-used should succeed or report missing dependency, got: $exit_code"
 }
 
+function test_ports_list_used_names_a_port() {
+  log_test_step "Testing ports list-used reports actual port numbers"
+
+  local output
+  output=$("$MODULE" ports list-used 2>/dev/null)
+  local exit_code=$?
+
+  if [[ $exit_code -ne $EC_SUCCESS_NETWORK_PORT_CHECKED ]]; then
+    skip_test "No port listing tools available (ss/netstat)"
+    return 0
+  fi
+
+  # A listing that names no port answers nothing. Every entry carries
+  # "<port>/<protocol>", so at least one such row must be present.
+  local has_port=false
+  if echo "$output" | grep -qE '^  [0-9]+/(tcp|udp)'; then
+    has_port=true
+  fi
+
+  assert_equals "true" "$has_port" \
+    "ports list-used should list at least one <port>/<protocol> entry"
+}
+
+function test_ports_list_used_json_is_valid() {
+  log_test_step "Testing ports list-used --json emits parseable JSON"
+
+  local output
+  output=$("$MODULE" ports list-used --json 2>/dev/null)
+  local exit_code=$?
+
+  assert_equals 0 "$exit_code" "ports list-used --json should succeed"
+
+  echo "$output" | jq -e 'type == "array"' >/dev/null 2>&1
+  assert_equals 0 $? "ports list-used --json should emit a JSON array"
+
+  # Every entry names a numeric port and a protocol; the process may be null
+  # when the socket could not be attributed, but the keys are always present.
+  echo "$output" |
+    jq -e 'all(.[]; (.port | type == "number") and (.protocol | test("^(tcp|udp)$")) and has("process"))' \
+      >/dev/null 2>&1
+  assert_equals 0 $? "each --json entry should carry port, protocol and process"
+}
+
 # =============================================================================
 # PORTS CONFLICTS TESTS
 # =============================================================================
@@ -373,6 +416,22 @@ function test_ports_conflicts_succeeds_no_instances() {
   local output
   output=$("$MODULE" ports conflicts 2>&1 || true)
   assert_contains "$output" "No port conflicts" "Should report no conflicts when no instances"
+}
+
+function test_ports_conflicts_json_is_empty_when_none() {
+  log_test_step "Testing ports conflicts --json emits an empty array when clean"
+
+  local output
+  output=$("$MODULE" ports conflicts --json 2>/dev/null)
+  local exit_code=$?
+
+  assert_equals 0 "$exit_code" "ports conflicts --json should succeed"
+
+  # An empty array is how "no conflicts" is encoded. The shape is identical
+  # either way, so nothing downstream has to recognise a sentinel word — and
+  # the scan's own progress reporting can never be mistaken for a finding.
+  echo "$output" | jq -e 'type == "array" and length == 0' >/dev/null 2>&1
+  assert_equals 0 $? "ports conflicts --json should be an empty array with no instances"
 }
 
 # =============================================================================

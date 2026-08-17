@@ -35,6 +35,7 @@ ${UNDERLINE}Commands:${END}
   ban <instance> <target>     Disconnect a player and block them
   unban <instance> <target>   Lift a block
   config-get <instance> <key> Read a value from the instance config
+  config-list <instance>      List every config key, value and whether it is settable
   config-set <instance> <key>=<value>
                               Set a runtime value in the instance config
   backups <instance>          List available backups
@@ -412,6 +413,112 @@ ${UNDERLINE}Examples:${END}
   $self config-get factorio-01 auto_update
   $self config-get factorio-01 executable_arguments
 "
+}
+
+function show_usage_config_list() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}List Instance Config${END}
+
+List every key in an instance's configuration, with its value and whether it
+can be changed through config-set.
+
+${UNDERLINE}Usage:${END}
+  $self config-list <instance> [--json]
+
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
+
+${UNDERLINE}Options:${END}
+  --json                      Emit the entries as a JSON array
+  --settable                  List only the keys config-set will accept
+  --help                      Display this help information
+
+${UNDERLINE}Description:${END}
+The settable flag comes from the same rule config-set applies, so what this
+reports as changeable is exactly what config-set will accept. Identity keys,
+the paths KGSM manages, and the toggles with dedicated flows are reported as
+not settable.
+
+${UNDERLINE}Examples:${END}
+  $self config-list factorio-01
+  $self config-list factorio-01 --settable --json
+"
+}
+
+function _cmd_config_list() {
+  local instance=""
+  local settable_only=0
+
+  # --json is stripped by the module's global flag extraction before dispatch,
+  # so it arrives as $json_format rather than as an argument.
+  local emit_json="${json_format:-0}"
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_config_list
+        return 0
+        ;;
+      --settable)
+        settable_only=1
+        ;;
+      -*)
+        __print_error "Invalid option for config-list command: $1"
+        __print_error "Use '$self config-list --help' for usage information"
+        return $EC_INVALID_ARG
+        ;;
+      *)
+        [[ -z "$instance" ]] && instance="$1"
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self config-list --help' for usage information"
+    return $EC_MISSING_ARG
+  fi
+
+  local result
+  result=$(__logic_list_instance_config "$instance")
+  local exit_code=$?
+
+  if [[ $exit_code -ne 0 ]]; then
+    __print_error "Could not read the configuration for '$instance'"
+    return $exit_code
+  fi
+
+  local first=true
+  [[ $emit_json -eq 1 ]] && echo "["
+
+  local key settable value
+  while IFS=$'\t' read -r key settable value; do
+    [[ -z "$key" ]] && continue
+    [[ $settable_only -eq 1 && "$settable" != "true" ]] && continue
+
+    if [[ $emit_json -eq 1 ]]; then
+      [[ "$first" == false ]] && echo ","
+      first=false
+      printf '  {"key": "%s", "settable": %s, "value": %s}' \
+        "$key" "$settable" "$(jq -Rn --arg v "$value" '$v')"
+    else
+      if [[ "$settable" == "true" ]]; then
+        printf '%s = %s\n' "$key" "$value"
+      else
+        printf '%s = %s  (managed by KGSM, not settable)\n' "$key" "$value"
+      fi
+    fi
+  done <<<"$result"
+
+  if [[ $emit_json -eq 1 ]]; then
+    [[ "$first" == false ]] && echo ""
+    echo "]"
+  fi
+
+  return 0
 }
 
 function show_usage_config_set() {
@@ -2482,6 +2589,9 @@ function _cmd_help() {
     config-get)
       show_usage_config_get
       ;;
+    config-list)
+      show_usage_config_list
+      ;;
     config-set)
       show_usage_config_set
       ;;
@@ -2591,6 +2701,9 @@ case "$command" in
     ;;
   config-get)
     _cmd_config_get "$@"
+    ;;
+  config-list)
+    _cmd_config_list "$@"
     ;;
   config-set)
     _cmd_config_set "$@"

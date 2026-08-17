@@ -548,6 +548,67 @@ function test_config_get_unknown_instance() {
   assert_not_equals 0 "$?" "config-get on a missing instance should fail"
 }
 
+function test_config_list_marks_settable_keys() {
+  log_test_step "Testing config-list agrees with config-set about what is settable"
+
+  local instance_name="test-cfg-list-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
+
+  local output
+  output=$("$MODULE" config-list "$instance_name" --json 2>/dev/null)
+  assert_equals 0 "$?" "config-list --json should succeed"
+
+  echo "$output" | jq -e 'type == "array" and length > 0' >/dev/null 2>&1
+  assert_equals 0 $? "config-list --json should emit a non-empty array"
+
+  # auto_update is a plain runtime value the setter accepts; name is identity
+  # and is refused. The flag has to match the setter, or a reader is told it can
+  # change something the write path will reject.
+  local settable_auto settable_name
+  settable_auto=$(echo "$output" | jq -r '.[] | select(.key=="auto_update") | .settable')
+  settable_name=$(echo "$output" | jq -r '.[] | select(.key=="name") | .settable')
+
+  assert_equals "true" "$settable_auto" "auto_update should be reported settable"
+  assert_equals "false" "$settable_name" "name should be reported not settable"
+
+  # And the report has to hold: the setter must actually accept the one and
+  # refuse the other.
+  "$MODULE" config-set "$instance_name" "auto_update=true" >/dev/null 2>&1
+  assert_equals 0 "$?" "config-set should accept the key reported settable"
+
+  "$MODULE" config-set "$instance_name" "name=renamed" >/dev/null 2>&1
+  assert_not_equals 0 "$?" "config-set should refuse the key reported not settable"
+}
+
+function test_config_list_settable_filter_excludes_managed_keys() {
+  log_test_step "Testing config-list --settable lists only settable keys"
+
+  local instance_name="test-cfg-listfilter-$$"
+  create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
+  assert_equals 0 "$?" "Instance should be created"
+  _TEARDOWN_INSTANCES+=("factorio:$instance_name")
+
+  local output
+  output=$("$MODULE" config-list "$instance_name" --settable --json 2>/dev/null)
+  assert_equals 0 "$?" "config-list --settable --json should succeed"
+
+  echo "$output" | jq -e 'all(.[]; .settable == true)' >/dev/null 2>&1
+  assert_equals 0 $? "every entry under --settable should be settable"
+
+  local has_name
+  has_name=$(echo "$output" | jq -r 'map(select(.key=="name")) | length')
+  assert_equals "0" "$has_name" "--settable should exclude the identity keys"
+}
+
+function test_config_list_unknown_instance() {
+  log_test_step "Testing config-list on an unknown instance fails"
+
+  "$MODULE" config-list totally_nonexistent_instance_xyz 2>/dev/null
+  assert_not_equals 0 "$?" "config-list on a missing instance should fail"
+}
+
 function test_help_config_subcommands() {
   log_test_step "Testing help output covers config-get and config-set"
 

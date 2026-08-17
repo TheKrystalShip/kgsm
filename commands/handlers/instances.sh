@@ -569,6 +569,68 @@ export -f __logic_get_instance_paths
 
 export -f __is_protected_instance_config_key
 
+# List every key in an instance's config alongside whether it can be changed
+# through `instances config-set`.
+#
+# Emits one "key<TAB>settable<TAB>value" line per key, settable being "true" or
+# "false". The judgement comes from __is_protected_instance_config_key — the
+# same function the setter itself calls — so what a reader is told is settable
+# and what the setter will accept cannot drift apart.
+#
+# Args:
+#   $1 - instance name
+# Returns:
+#   0 on success
+#   EC_INVALID_ARG when no instance was named
+#   EC_FILE_NOT_FOUND when the instance has no config file
+function __logic_list_instance_config() {
+  local _instance_name="$1"
+
+  if [[ -z "$_instance_name" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  local instance_config_file
+  instance_config_file=$(__find_instance_config "$_instance_name")
+
+  if [[ -z "$instance_config_file" || ! -f "$instance_config_file" ]]; then
+    return $EC_FILE_NOT_FOUND
+  fi
+
+  local line key value settable
+  while IFS= read -r line; do
+    # Only key=value lines; comments and blanks carry no setting.
+    [[ "$line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$line" =~ ^[a-zA-Z_][a-zA-Z0-9_]*[[:space:]]*= ]] || continue
+
+    key="${line%%=*}"
+    key="${key%"${key##*[![:space:]]}"}"
+    value="${line#*=}"
+
+    # Same unwrapping the management script's own source would do, so the value
+    # reported is the value the server runs with.
+    value="${value#"${value%%[![:space:]]*}"}"
+    value="${value%"${value##*[![:space:]]}"}"
+    value="${value#\"}"
+    value="${value%\"}"
+    value="${value#\'}"
+    value="${value%\'}"
+    value="$(__unescape_instance_config_value "$value")"
+
+    if __is_protected_instance_config_key "$key"; then
+      settable="false"
+    else
+      settable="true"
+    fi
+
+    printf '%s\t%s\t%s\n' "$key" "$settable" "$value"
+  done <"$instance_config_file"
+
+  return 0
+}
+
+export -f __logic_list_instance_config
+
 # Set a single key=value in an instance's .config.ini.
 # Args: $1 = instance_name, $2 = key, $3 = value (may be the empty string)
 # Returns: 0 on success (no event), EC_* on failure.

@@ -120,16 +120,55 @@ function __logic_check_port() {
 
 export -f __logic_check_port
 
+# Reduce one `ss`/`netstat` listening line to "port<TAB>process".
+#
+# The local address is the field holding "addr:port" — IPv4, IPv6 and a bare
+# "*:port" alike — so the port is what follows its LAST colon. The process name
+# is only present when the listing was read with enough privilege to attribute
+# the socket; an unattributed row keeps an empty second field rather than
+# borrowing a neighbouring column's text.
+#
+# Args:
+#   $1 - Field index holding the local address (4 for ss, 4 for netstat)
+function __parse_listening_ports() {
+  local _addr_field="$1"
+
+  awk -v addr_field="$_addr_field" '
+    {
+      n = split($addr_field, parts, ":")
+      port = parts[n]
+      if (port !~ /^[0-9]+$/) next
+
+      process = ""
+      # ss:      users:(("name",pid=N,fd=N))
+      # netstat: PID/name
+      if (match($0, /users:\(\("[^"]+"/))
+        process = substr($0, RSTART + 9, RLENGTH - 10)
+      else if (match($NF, /^[0-9]+\/.+$/))
+        process = substr($NF, index($NF, "/") + 1)
+
+      print port "\t" process
+    }
+  ' | sort -t$'\t' -k1,1n -u
+}
+
+export -f __parse_listening_ports
+
 # List all ports currently in use on the system
+#
+# Emits two marker-delimited sections, each row "port<TAB>process" with the
+# process empty when the socket could not be attributed.
+#
 # Returns:
 #   EC_SUCCESS_NETWORK_PORT_CHECKED - Port list retrieved (echoes port info)
 #   EC_MISSING_DEPENDENCY - Required tools not available
 function __logic_list_used_ports() {
+  local tcp_ports udp_ports
+
   # Try ss first (modern, preferred)
   if command -v ss >/dev/null 2>&1; then
-    local tcp_ports udp_ports
-    tcp_ports=$(ss -tlnp 2>/dev/null | tail -n +2 | awk '{print $4":"$NF}' | sed 's/.*://g' | sort -u)
-    udp_ports=$(ss -ulnp 2>/dev/null | tail -n +2 | awk '{print $4":"$NF}' | sed 's/.*://g' | sort -u)
+    tcp_ports=$(ss -tlnp 2>/dev/null | tail -n +2 | __parse_listening_ports 4)
+    udp_ports=$(ss -ulnp 2>/dev/null | tail -n +2 | __parse_listening_ports 4)
 
     if [[ -n "$tcp_ports" ]] || [[ -n "$udp_ports" ]]; then
       echo "TCP_PORTS:"
@@ -142,9 +181,8 @@ function __logic_list_used_ports() {
 
   # Fallback to netstat
   if command -v netstat >/dev/null 2>&1; then
-    local tcp_ports udp_ports
-    tcp_ports=$(netstat -tlnp 2>/dev/null | tail -n +3 | awk '{print $4":"$NF}' | sed 's/.*://g' | sort -u)
-    udp_ports=$(netstat -ulnp 2>/dev/null | tail -n +3 | awk '{print $4":"$NF}' | sed 's/.*://g' | sort -u)
+    tcp_ports=$(netstat -tlnp 2>/dev/null | tail -n +3 | __parse_listening_ports 4)
+    udp_ports=$(netstat -ulnp 2>/dev/null | tail -n +3 | __parse_listening_ports 4)
 
     if [[ -n "$tcp_ports" ]] || [[ -n "$udp_ports" ]]; then
       echo "TCP_PORTS:"

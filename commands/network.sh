@@ -266,13 +266,54 @@ function _cmd_ports_check() {
   return $exit_code
 }
 
+# Render the marker-delimited port list as a JSON array of
+# {port, protocol, process} objects. A socket nobody could attribute carries a
+# null process — never a placeholder name.
+function _ports_used_to_json() {
+  local _result="$1"
+
+  local _protocol="" _first=true
+  echo "["
+  while IFS=$'\t' read -r _port _process; do
+    case "$_port" in
+      "TCP_PORTS:") _protocol="tcp"; continue ;;
+      "UDP_PORTS:") _protocol="udp"; continue ;;
+      "") continue ;;
+    esac
+
+    [[ "$_first" == false ]] && echo ","
+    _first=false
+
+    if [[ -n "$_process" ]]; then
+      printf '  {"port": %s, "protocol": "%s", "process": %s}' \
+        "$_port" "$_protocol" "$(jq -Rn --arg v "$_process" '$v')"
+    else
+      printf '  {"port": %s, "protocol": "%s", "process": null}' \
+        "$_port" "$_protocol"
+    fi
+  done <<<"$_result"
+  echo ""
+  echo "]"
+}
+
 function _cmd_ports_list_used() {
+  local json_format=0
+
   # Parse arguments
   while [[ "$#" -gt 0 ]]; do
     case $1 in
+      --json)
+        json_format=1
+        ;;
       --help)
         echo "List all ports currently in use on the system"
-        echo "Usage: $self ports list-used"
+        echo "Usage: $self ports list-used [--json]"
+        echo ""
+        echo "Each entry is a listening port, the protocol it listens on, and"
+        echo "the process holding it when the socket could be attributed."
+        echo ""
+        echo "Options:"
+        echo "  --json                      Emit the entries as a JSON array"
         return 0
         ;;
       *)
@@ -283,7 +324,7 @@ function _cmd_ports_list_used() {
     shift
   done
 
-  __print_info "Scanning for ports in use..."
+  [[ "$json_format" -eq 0 ]] && __print_info "Scanning for ports in use..."
 
   local result
   result=$(__logic_list_used_ports)
@@ -291,21 +332,33 @@ function _cmd_ports_list_used() {
 
   case $exit_code in
     $EC_SUCCESS_NETWORK_PORT_CHECKED)
+      if [[ "$json_format" -eq 1 ]]; then
+        _ports_used_to_json "$result"
+        return 0
+      fi
+
       echo ""
-      echo "$result" | while IFS= read -r line; do
-        if [[ "$line" == "TCP_PORTS:" ]]; then
+      local protocol=""
+      while IFS=$'\t' read -r port process; do
+        if [[ "$port" == "TCP_PORTS:" ]]; then
+          protocol="tcp"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "TCP PORTS:"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        elif [[ "$line" == "UDP_PORTS:" ]]; then
+        elif [[ "$port" == "UDP_PORTS:" ]]; then
+          protocol="udp"
           echo ""
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
           echo "UDP PORTS:"
           echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-        elif [[ -n "$line" ]]; then
-          echo "  $line"
+        elif [[ -n "$port" ]]; then
+          if [[ -n "$process" ]]; then
+            echo "  ${port}/${protocol} — ${process}"
+          else
+            echo "  ${port}/${protocol}"
+          fi
         fi
-      done
+      done <<<"$result"
       echo ""
       ;;
     $EC_MISSING_DEPENDENCY)
@@ -320,17 +373,67 @@ function _cmd_ports_list_used() {
   return $exit_code
 }
 
+# Render the conflict lines as a JSON array. An empty array is the honest
+# encoding of "no conflicts" — the shape is the same either way, so a consumer
+# never has to recognise a sentinel word to learn there were none.
+function _ports_conflicts_to_json() {
+  local _result="$1"
+
+  echo "["
+  if [[ "$_result" != "no_conflicts" ]]; then
+    local _first=true
+    while IFS= read -r _line; do
+      local _kind _port_proto _port _protocol
+      case "$_line" in
+        conflict:*) _kind="instance" ;;
+        external_conflict:*) _kind="external" ;;
+        *) continue ;;
+      esac
+
+      _port_proto=$(echo "$_line" | cut -d: -f2)
+      _port="${_port_proto%%/*}"
+      _protocol="${_port_proto##*/}"
+
+      [[ "$_first" == false ]] && echo ","
+      _first=false
+
+      if [[ "$_kind" == "instance" ]]; then
+        printf '  {"kind": "instance", "port": %s, "protocol": "%s", "instance": %s, "other": %s}' \
+          "$_port" "$_protocol" \
+          "$(jq -Rn --arg v "$(echo "$_line" | cut -d: -f3)" '$v')" \
+          "$(jq -Rn --arg v "$(echo "$_line" | cut -d: -f4)" '$v')"
+      else
+        printf '  {"kind": "external", "port": %s, "protocol": "%s", "instance": %s, "other": %s}' \
+          "$_port" "$_protocol" \
+          "$(jq -Rn --arg v "$(echo "$_line" | cut -d: -f3)" '$v')" \
+          "$(jq -Rn --arg v "$(echo "$_line" | cut -d: -f4-)" '$v')"
+      fi
+    done <<<"$_result"
+    echo ""
+  fi
+  echo "]"
+}
+
 function _cmd_ports_conflicts() {
+  local json_format=0
+
   # Parse arguments
   while [[ "$#" -gt 0 ]]; do
     case $1 in
+      --json)
+        json_format=1
+        ;;
       --help)
         echo "Find port conflicts across KGSM instances"
-        echo "Usage: $self ports conflicts"
+        echo "Usage: $self ports conflicts [--json]"
         echo ""
         echo "Checks all KGSM instances for:"
         echo "  • Duplicate port assignments between instances"
         echo "  • Ports in use by external processes"
+        echo ""
+        echo "Options:"
+        echo "  --json                      Emit the conflicts as a JSON array"
+        echo "                              (empty when there are none)"
         return 0
         ;;
       *)
@@ -341,7 +444,8 @@ function _cmd_ports_conflicts() {
     shift
   done
 
-  __print_info "Scanning KGSM instances for port conflicts..."
+  [[ "$json_format" -eq 0 ]] &&
+    __print_info "Scanning KGSM instances for port conflicts..."
 
   local result
   result=$(__logic_find_port_conflicts)
@@ -349,6 +453,11 @@ function _cmd_ports_conflicts() {
 
   case $exit_code in
     $EC_SUCCESS_NETWORK_PORT_CHECKED)
+      if [[ "$json_format" -eq 1 ]]; then
+        _ports_conflicts_to_json "$result"
+        return 0
+      fi
+
       if [[ "$result" == "no_conflicts" ]]; then
         __print_success "No port conflicts found!"
       else
