@@ -136,6 +136,8 @@ function _get_status() {
   # false "no logs" that consumers (e.g. the assistant health check) must not mistake
   # for "logs are clean". Prefer the live file; fall back to the newest rotated log;
   # only then report an empty array (genuinely nothing to show, never a fabricated ok).
+  # The field is always a JSON array of lines, so its type never depends on
+  # whether the instance has logged anything.
   local _log_source=""
   if [[ -f "$instance_log_file" && -s "$instance_log_file" ]]; then
     _log_source="$instance_log_file"
@@ -146,7 +148,8 @@ function _get_status() {
     [[ -n "$latest_log" ]] && _log_source="$instance_logs_dir/$latest_log"
   fi
   if [[ -n "$_log_source" ]]; then
-    recent_logs=$(tail -3 "$_log_source" 2>/dev/null | jq -R -s . 2>/dev/null || echo '[]')
+    recent_logs=$(tail -3 "$_log_source" 2>/dev/null \
+      | jq -R -s 'rtrimstr("\n") | split("\n")' 2>/dev/null || echo '[]')
   else
     recent_logs='[]'
   fi

@@ -47,6 +47,12 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **`instances status` prints the recent log lines it read.** `recent_logs` is a JSON array of
+  lines in every case — one element per line of the tail, an empty array when the instance has
+  logged nothing — so the field's type does not depend on whether a log exists. The human-readable
+  status renders those lines under *Recent Activity* instead of failing to iterate them, and a JSON
+  consumer reads one shape.
+
 - **A backup records why it was taken and whether rotation may take it.** The manifest is
   `schema_version: 2` and carries two deliberately separate fields: `reason` — a fact fixed at
   capture (`manual`, `scheduled`, `pre-update`, `pre-restore`, `incident`), never edited — and

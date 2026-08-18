@@ -252,6 +252,8 @@ function _get_status() {
   # "no logs" that consumers (e.g. the assistant health check) must not mistake for
   # "logs are clean". Prefer live logs; fall back to the newest rotated log; only then
   # an empty array (genuinely nothing to show, never a fabricated ok).
+  # The field is always a JSON array of lines, so its type never depends on
+  # whether the instance has logged anything.
   local _latest_rotated=""
   if [[ -d "$instance_logs_dir" ]]; then
     local latest_log
@@ -260,9 +262,12 @@ function _get_status() {
     [[ -n "$latest_log" ]] && _latest_rotated="$instance_logs_dir/$latest_log"
   fi
   if _is_active >/dev/null 2>&1; then
-    recent_logs=$(cd "$instance_working_dir" && docker compose -f "$instance_compose_file" logs --tail=3 2>/dev/null | jq -R -s . 2>/dev/null || echo '[]')
+    recent_logs=$(cd "$instance_working_dir" \
+      && docker compose -f "$instance_compose_file" logs --tail=3 2>/dev/null \
+      | jq -R -s 'rtrimstr("\n") | split("\n")' 2>/dev/null || echo '[]')
   elif [[ -n "$_latest_rotated" ]]; then
-    recent_logs=$(tail -3 "$_latest_rotated" 2>/dev/null | jq -R -s . 2>/dev/null || echo '[]')
+    recent_logs=$(tail -3 "$_latest_rotated" 2>/dev/null \
+      | jq -R -s 'rtrimstr("\n") | split("\n")' 2>/dev/null || echo '[]')
   else
     recent_logs='[]'
   fi
