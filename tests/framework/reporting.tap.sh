@@ -114,9 +114,13 @@ export -f __tap_emit_failure_details
 # ------------------------------------------------------------------------------
 # Emit TAP v14 subtest lines from per-function result markers
 # ------------------------------------------------------------------------------
-# Parses KGSM_FUNC_RESULT markers from the test log and emits a TAP v14
-# subtest block (4-space indented) for each function. Includes SKIP/TODO
-# directives with reasons extracted from [SKIP]/[TODO] log markers.
+# Parses KGSM_FUNC_PLAN and KGSM_FUNC_RESULT markers from the test log and emits
+# a TAP v14 subtest block (4-space indented) for each function. Includes
+# SKIP/TODO directives with reasons extracted from [SKIP]/[TODO] log markers.
+#
+# The plan marker is the authority on order and count: every function the test
+# file declares gets a subtest line, and one that reported no result is a
+# failing subtest rather than an absent one.
 #
 # Arguments:
 #   $1 - log_path: Absolute path to the test log file
@@ -132,25 +136,44 @@ function __tap_emit_subtests() {
     return 0
   fi
 
-  # Parse KGSM_FUNC_RESULT markers
+  # Parse KGSM_FUNC_RESULT markers into a name-keyed map, keeping report order
   local -a func_results
-  mapfile -t func_results < <(grep "^KGSM_FUNC_RESULT:" "$log_path" 2>/dev/null || true)
+  mapfile -t func_results < <(__log_function_results "$log_path")
 
   if [[ ${#func_results[@]} -eq 0 ]]; then
     return 0
   fi
 
-  local num_funcs=${#func_results[@]}
+  local -A result_by_name=()
+  local -a reported_order=()
+  local result_line data
+  for result_line in "${func_results[@]}"; do
+    data="${result_line#KGSM_FUNC_RESULT: }"
+    result_by_name["${data%%|*}"]="$data"
+    reported_order+=("${data%%|*}")
+  done
+
+  # Prefer the declared plan for order and count; fall back to report order
+  local -a subtest_names=()
+  local plan
+  plan=$(__log_function_plan "$log_path")
+  if [[ -n "$plan" ]]; then
+    read -r -a subtest_names <<< "$plan"
+  fi
+  if [[ ${#subtest_names[@]} -eq 0 ]]; then
+    subtest_names=("${reported_order[@]}")
+  fi
 
   # Emit subtest plan
-  echo "    1..${num_funcs}"
+  echo "    1..${#subtest_names[@]}"
 
   local subtest_num=0
-  for result_line in "${func_results[@]}"; do
+  local name
+  for name in "${subtest_names[@]}"; do
     ((subtest_num++))
-    local data="${result_line#KGSM_FUNC_RESULT: }"
     local fn_name fn_passed fn_failed fn_total fn_status
-    IFS='|' read -r fn_name fn_passed fn_failed fn_total fn_status <<< "$data"
+    IFS='|' read -r fn_name fn_passed fn_failed fn_total fn_status \
+      <<< "${result_by_name[$name]:-${name}|0|0|0|missing}"
 
     case "$fn_status" in
       pass)
@@ -172,6 +195,12 @@ function __tap_emit_subtests() {
         else
           echo "    ok ${subtest_num} - ${fn_name} # TODO ${todo_reason}"
         fi
+        ;;
+      missing)
+        echo "    not ok ${subtest_num} - ${fn_name} # declared but never executed"
+        ;;
+      *)
+        echo "    not ok ${subtest_num} - ${fn_name} # unrecognized result status '${fn_status}'"
         ;;
     esac
   done

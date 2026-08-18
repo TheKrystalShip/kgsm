@@ -195,6 +195,165 @@ function wait_with_timeout() {
 }
 export -f wait_with_timeout
 
+# ==============================================================================
+# TEST FUNCTION DISCOVERY AND RECONCILIATION
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# List the test functions a test file declares, in file order
+# ------------------------------------------------------------------------------
+# This is the single definition of what "a test function" is. The runner records
+# the list as a plan before execution and reconciles it against the per-function
+# results afterwards, so this grep and the loop that runs the functions can never
+# disagree about the set.
+#
+# Arguments:
+#   $1 - test_file: Absolute path to test file
+# Returns:
+#   Exit code: EC_SUCCESS (0)
+#   Stdout: One function name per line
+# ------------------------------------------------------------------------------
+function __discover_test_functions() {
+  local test_file="$1"
+
+  grep -oP '^function \Ktest_\w+' "$test_file" 2>/dev/null || true
+}
+export -f __discover_test_functions
+
+# ------------------------------------------------------------------------------
+# Write the plan of test functions a run intends to execute
+# ------------------------------------------------------------------------------
+# Written to the test log before the file is sourced, so it survives anything the
+# test does to the process afterwards. __reconcile_executed_functions reads it
+# back.
+#
+# Arguments:
+#   $1 - test_file: Absolute path to test file
+# Returns:
+#   Exit code: EC_SUCCESS (0)
+# ------------------------------------------------------------------------------
+# ------------------------------------------------------------------------------
+# Echo the plan and per-function results belonging to a log's most recent run
+# ------------------------------------------------------------------------------
+# Two test files that share a basename share a log file, and a log is appended to
+# rather than truncated. The plan marker opens a run's records, so everything from
+# the last one onward is this run's and nothing before it is.
+#
+# Arguments:
+#   $1 - test_log: Absolute path to test log file
+# Returns:
+#   Exit code: EC_SUCCESS (0)
+#   Stdout (__log_function_plan): space-separated planned function names, or
+#          nothing when the log carries no plan marker
+#   Stdout (__log_function_results): the run's KGSM_FUNC_RESULT lines, in order
+# ------------------------------------------------------------------------------
+function __log_plan_line_number() {
+  local test_log="$1"
+
+  grep -n "^KGSM_FUNC_PLAN:" "$test_log" 2>/dev/null | tail -1 | cut -d: -f1
+}
+export -f __log_plan_line_number
+
+function __log_function_plan() {
+  local test_log="$1"
+
+  local lineno
+  lineno=$(__log_plan_line_number "$test_log")
+  [[ -z "$lineno" ]] && return 0
+
+  sed -n "${lineno}s/^KGSM_FUNC_PLAN: //p" "$test_log" 2>/dev/null || true
+  return 0
+}
+export -f __log_function_plan
+
+function __log_function_results() {
+  local test_log="$1"
+
+  local lineno
+  lineno=$(__log_plan_line_number "$test_log")
+  if [[ -z "$lineno" ]]; then
+    grep "^KGSM_FUNC_RESULT:" "$test_log" 2>/dev/null || true
+    return 0
+  fi
+
+  tail -n "+$((lineno + 1))" "$test_log" 2>/dev/null |
+    grep "^KGSM_FUNC_RESULT:" || true
+  return 0
+}
+export -f __log_function_results
+
+function __write_function_plan() {
+  local test_file="$1"
+
+  [[ -z "${KGSM_TEST_LOG:-}" ]] && return 0
+
+  local -a planned
+  if [[ -n "${KGSM_TEST_FUNCTION_FILTER:-}" ]]; then
+    planned=("$KGSM_TEST_FUNCTION_FILTER")
+  else
+    mapfile -t planned < <(__discover_test_functions "$test_file")
+  fi
+
+  echo "KGSM_FUNC_PLAN: ${planned[*]}" >> "$KGSM_TEST_LOG"
+  return 0
+}
+export -f __write_function_plan
+
+# ------------------------------------------------------------------------------
+# Fail a test file whose planned functions did not all report a result
+# ------------------------------------------------------------------------------
+# A harness that runs fewer tests than a file declares is the one failure a test
+# harness must never absorb: the suite stays green while coverage disappears. Any
+# planned function without a KGSM_FUNC_RESULT marker is recorded as `missing`,
+# which the TAP reporter renders as a failing subtest.
+#
+# Arguments:
+#   $1 - test_log: Absolute path to test log file
+# Returns:
+#   Exit code: EC_SUCCESS (0) when every planned function reported
+#   Exit code: EC_FAILURE (1) when one or more never ran
+# ------------------------------------------------------------------------------
+function __reconcile_executed_functions() {
+  local test_log="$1"
+
+  [[ -z "$test_log" || ! -f "$test_log" ]] && return $EC_SUCCESS
+
+  local plan
+  plan=$(__log_function_plan "$test_log")
+  [[ -z "$plan" ]] && return $EC_SUCCESS
+
+  local -a planned
+  read -r -a planned <<< "$plan"
+  [[ ${#planned[@]} -eq 0 ]] && return $EC_SUCCESS
+
+  local -A reported=()
+  local name
+  while IFS= read -r name; do
+    [[ -n "$name" ]] && reported["$name"]=1
+  done < <(__log_function_results "$test_log" | sed 's/^KGSM_FUNC_RESULT: //' | cut -d'|' -f1)
+
+  local -a missing=()
+  local fn
+  for fn in "${planned[@]}"; do
+    [[ -z "${reported[$fn]:-}" ]] && missing+=("$fn")
+  done
+
+  [[ ${#missing[@]} -eq 0 ]] && return $EC_SUCCESS
+
+  # The FAIL line carries the source shape the TAP reporter parses, so a shortfall
+  # renders as a failure detail like any other
+  local timestamp source_name
+  timestamp=$(date -Iseconds)
+  source_name="$(basename "${test_log%.log}").sh"
+  for fn in "${missing[@]}"; do
+    echo "[$timestamp] [ERROR] [${source_name}:0 in ${fn}()] FAIL: test function is declared in the file but never executed" >> "$test_log"
+    echo "KGSM_FUNC_RESULT: ${fn}|0|0|0|missing" >> "$test_log"
+  done
+
+  return $EC_FAILURE
+}
+export -f __reconcile_executed_functions
+
 # ------------------------------------------------------------------------------
 # Execute test file with timeout and capture output
 # ------------------------------------------------------------------------------
@@ -213,6 +372,10 @@ function __capture_test_output() {
   local exit_code
 
   (
+    # Record the plan before sourcing, so it survives whatever the test does to
+    # this process afterwards
+    __write_function_plan "$test_file"
+
     # Source the test file — only defines functions (no main "$@" invocation)
     source "$test_file"
 
@@ -222,45 +385,54 @@ function __capture_test_output() {
     fi
 
     if [[ -n "${KGSM_TEST_FUNCTION_FILTER:-}" ]]; then
-      # Run only the specified function (with per-function tracking)
-      if declare -f setup >/dev/null 2>&1; then
-        setup
-      fi
+      # A --function naming something this file does not define is a typo, not
+      # an empty success. Leaving it without a result lets the reconciliation in
+      # execute_test_in_sandbox report it as a function that never ran.
+      if ! declare -f "$KGSM_TEST_FUNCTION_FILTER" >/dev/null 2>&1; then
+        echo "[ERROR] Test function not found in $(basename "$test_file"): ${KGSM_TEST_FUNCTION_FILTER}" >&2
+        echo "Available test functions:" >&2
+        __discover_test_functions "$test_file" >&2
+      else
+        # Run only the specified function (with per-function tracking)
+        if declare -f setup >/dev/null 2>&1; then
+          setup
+        fi
 
-      # Snapshot counters AFTER setup() so setup assertions are not counted
-      local _before_passed=${ASSERT_PASSED:-0}
-      local _before_failed=${ASSERT_FAILED:-0}
-      local _before_count=${ASSERT_COUNT:-0}
-      local _before_skip_len=${#ASSERT_SKIPPED_FUNCTION_NAMES[@]}
-      local _before_todo_len=${#ASSERT_TODO_FUNCTION_NAMES[@]}
+        # Snapshot counters AFTER setup() so setup assertions are not counted
+        local _before_passed=${ASSERT_PASSED:-0}
+        local _before_failed=${ASSERT_FAILED:-0}
+        local _before_count=${ASSERT_COUNT:-0}
+        local _before_skip_len=${#ASSERT_SKIPPED_FUNCTION_NAMES[@]}
+        local _before_todo_len=${#ASSERT_TODO_FUNCTION_NAMES[@]}
 
-      "${KGSM_TEST_FUNCTION_FILTER}"
+        "${KGSM_TEST_FUNCTION_FILTER}"
 
-      local _fn_passed=$(( ${ASSERT_PASSED:-0} - _before_passed ))
-      local _fn_failed=$(( ${ASSERT_FAILED:-0} - _before_failed ))
-      local _fn_total=$(( ${ASSERT_COUNT:-0} - _before_count ))
-      local _fn_status="pass"
+        local _fn_passed=$(( ${ASSERT_PASSED:-0} - _before_passed ))
+        local _fn_failed=$(( ${ASSERT_FAILED:-0} - _before_failed ))
+        local _fn_total=$(( ${ASSERT_COUNT:-0} - _before_count ))
+        local _fn_status="pass"
 
-      if [[ ${#ASSERT_SKIPPED_FUNCTION_NAMES[@]} -gt $_before_skip_len ]]; then
-        _fn_status="skip"
-      elif [[ ${#ASSERT_TODO_FUNCTION_NAMES[@]} -gt $_before_todo_len ]]; then
-        _fn_status="todo"
-      elif [[ $_fn_failed -gt 0 ]]; then
-        _fn_status="fail"
-      fi
+        if [[ ${#ASSERT_SKIPPED_FUNCTION_NAMES[@]} -gt $_before_skip_len ]]; then
+          _fn_status="skip"
+        elif [[ ${#ASSERT_TODO_FUNCTION_NAMES[@]} -gt $_before_todo_len ]]; then
+          _fn_status="todo"
+        elif [[ $_fn_failed -gt 0 ]]; then
+          _fn_status="fail"
+        fi
 
-      if [[ -n "${KGSM_TEST_LOG:-}" ]]; then
-        echo "KGSM_FUNC_RESULT: ${KGSM_TEST_FUNCTION_FILTER}|${_fn_passed}|${_fn_failed}|${_fn_total}|${_fn_status}" >> "$KGSM_TEST_LOG"
-      fi
+        if [[ -n "${KGSM_TEST_LOG:-}" ]]; then
+          echo "KGSM_FUNC_RESULT: ${KGSM_TEST_FUNCTION_FILTER}|${_fn_passed}|${_fn_failed}|${_fn_total}|${_fn_status}" >> "$KGSM_TEST_LOG"
+        fi
 
-      # Cleanup after single function run
-      if declare -f teardown >/dev/null 2>&1; then
-        teardown || true
+        # Cleanup after single function run
+        if declare -f teardown >/dev/null 2>&1; then
+          teardown || true
+        fi
       fi
     else
       # Auto-discover and run all test_* functions in file order
       local -a _test_functions
-      mapfile -t _test_functions < <(grep -oP '^function \Ktest_\w+' "$test_file")
+      mapfile -t _test_functions < <(__discover_test_functions "$test_file")
       for _fn in "${_test_functions[@]}"; do
         if declare -f "$_fn" >/dev/null 2>&1; then
           # Per-test setup (runs before each test function)
@@ -357,6 +529,7 @@ export -f __capture_test_output
 # ------------------------------------------------------------------------------
 function __execute_test_inline() {
   local test_file="$1"
+  local _inline_shortfall=0
 
   # Source the test file — defines functions
   # shellcheck disable=SC1090
@@ -380,23 +553,31 @@ function __execute_test_inline() {
     else
       echo "ERROR: Function not found: $KGSM_TEST_FUNCTION_FILTER" >&2
       echo "Available test functions in $(basename "$test_file"):" >&2
-      grep -oP '^function \Ktest_\w+' "$test_file" >&2
+      __discover_test_functions "$test_file" >&2
       return 1
     fi
   else
     local -a _test_functions
-    mapfile -t _test_functions < <(grep -oP '^function \Ktest_\w+' "$test_file")
+    mapfile -t _test_functions < <(__discover_test_functions "$test_file")
+    local _executed=0
     for _fn in "${_test_functions[@]}"; do
       if declare -f "$_fn" >/dev/null 2>&1; then
         if declare -f setup >/dev/null 2>&1; then
           setup
         fi
         "$_fn"
+        ((_executed++)) || true
         if declare -f teardown >/dev/null 2>&1; then
           teardown || true
         fi
       fi
     done
+
+    # Same shortfall guard the sandboxed path applies, reported to the terminal
+    if [[ $_executed -lt ${#_test_functions[@]} ]]; then
+      echo "[ERROR] Only ${_executed} of ${#_test_functions[@]} declared test functions ran" >&2
+      _inline_shortfall=1
+    fi
   fi
 
   # Print assertion summary
@@ -408,6 +589,10 @@ function __execute_test_inline() {
   # Run teardown_file if defined (must not affect test result)
   if declare -f teardown_file >/dev/null 2>&1; then
     teardown_file
+  fi
+
+  if [[ $_inline_shortfall -ne 0 ]]; then
+    _test_exit=$EC_FAILURE
   fi
 
   return $_test_exit
@@ -459,10 +644,13 @@ function __parse_assertion_stats() {
   # Fallback method: Count PASS: and FAIL: markers
   local passed failed total skipped todo
   # Look for PASS: anywhere in the line (not just at beginning) to handle bash tracing output
-  passed=$(grep -c "PASS:" "$test_log" 2>/dev/null || echo "0")
-  failed=$(grep -c "FAIL:" "$test_log" 2>/dev/null || echo "0")
-  skipped=$(grep -c "^\[SKIP\]" "$test_log" 2>/dev/null || echo "0")
-  todo=$(grep -c "^\[TODO\]" "$test_log" 2>/dev/null || echo "0")
+  # `grep -c` prints its count and still exits 1 on no match, so the fallback is
+  # `|| true` — an `|| echo 0` would append a second line and make the value
+  # unusable in arithmetic
+  passed=$(grep -c "PASS:" "$test_log" 2>/dev/null || true)
+  failed=$(grep -c "FAIL:" "$test_log" 2>/dev/null || true)
+  skipped=$(grep -c "^\[SKIP\]" "$test_log" 2>/dev/null || true)
+  todo=$(grep -c "^\[TODO\]" "$test_log" 2>/dev/null || true)
 
   # Ensure we have clean numeric values (strip whitespace)
   passed=$(echo "$passed" | tr -d '[:space:]')
@@ -704,6 +892,18 @@ function execute_test_in_sandbox() {
   # Write captured output to log
   if [[ -n "$captured_output" ]]; then
     echo "$captured_output" >> "$test_log"
+  fi
+
+  # Reconcile what the file declared against what actually reported. A harness
+  # that quietly runs a subset of a file is a green suite over missing coverage,
+  # so a shortfall fails the file. Bail out is the one deliberate early stop and
+  # keeps its own exit code and reporting path.
+  if [[ "$test_exit_code" -ne "${EC_BAIL_OUT:-99}" ]]; then
+    if ! __reconcile_executed_functions "$test_log"; then
+      if [[ "$test_exit_code" -eq 0 ]]; then
+        test_exit_code=$EC_FAILURE
+      fi
+    fi
   fi
 
   # Record end time (in milliseconds)

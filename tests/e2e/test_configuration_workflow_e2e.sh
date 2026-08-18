@@ -111,7 +111,7 @@ function test_backup_is_valid_ini() {
 
   # A valid INI file should contain at least one key=value pair
   local kv_count
-  kv_count=$(grep -c '^[a-zA-Z_].*=' "${CONFIG_FILE}.0" 2>/dev/null || echo 0)
+  kv_count=$(grep -c '^[a-zA-Z_].*=' "${CONFIG_FILE}.0" 2>/dev/null || true)
   assert_greater_than "$kv_count" 0 \
     "Backup file should contain key=value pairs"
 
@@ -341,7 +341,7 @@ function test_config_file_integrity_after_operations() {
 
   # Should contain key=value pairs (valid INI format)
   local kv_count
-  kv_count=$(grep -c '^[a-zA-Z_].*=' "$CONFIG_FILE" 2>/dev/null || echo 0)
+  kv_count=$(grep -c '^[a-zA-Z_].*=' "$CONFIG_FILE" 2>/dev/null || true)
   assert_greater_than "$kv_count" 5 \
     "config.ini should contain multiple key=value pairs"
 

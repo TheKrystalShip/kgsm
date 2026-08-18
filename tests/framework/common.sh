@@ -117,23 +117,39 @@ __load_module "kgsm.wrapper.sh" "KGSM Wrapper Module" || return 1
 # Instead, each test wrapper script loads KGSM bootstrap AFTER setting up
 # the sandbox environment, ensuring modules are loaded with correct paths.
 
-# Mark test as passed
+# Record an explicit pass for the current test function
+# NOTE: This function does NOT exit the test file - it records one assertion
+# result and returns, exactly like the assert_* library. The runner enumerates
+# every test_* function in a file and runs them in one process, so a lifecycle
+# helper that exits takes every later function in that file with it.
 function pass_test() {
   local message="${1:-Test passed}"
-  log_test_step "PASS: $message"
-  # Use literal 0 to avoid KGSM core overwriting EC_SUCCESS
-  exit $EC_TEST_SUCCESS
+  local caller_info
+  caller_info="$(get_caller_info)"
+
+  print_assert_result "PASS" "$message" "$caller_info"
+
+  return $EC_TEST_SUCCESS
 }
 
 export -f pass_test
 
-# Mark test as failed
+# Record an explicit failure for the current test function
+# NOTE: This function does NOT exit the test file - see pass_test.
 function fail_test() {
   local message="${1:-Test failed}"
-  log_test_step "FAIL: $message"
-  printf "${RED}[FAIL]${NC} %s\n" "$message" >&2
-  # Use literal 1 to avoid KGSM core overwriting EC_FAILURE (KGSM uses 33)
-  exit $EC_TEST_FAILURE
+  local caller_info
+  caller_info="$(get_caller_info)"
+
+  print_assert_result "FAIL" "$message" "$caller_info"
+
+  # Print failure message to stderr (only if not being captured by test
+  # framework - see skip_test for why this is gated)
+  if [[ "${KGSM_LOG_CONSOLE_ENABLED:-true}" == "true" ]]; then
+    printf "${RED}[FAIL]${NC} %s\n" "$message" >&2
+  fi
+
+  return $EC_TEST_FAILURE
 }
 
 export -f fail_test

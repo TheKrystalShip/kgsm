@@ -57,9 +57,7 @@ function _emit_tap_result() {
 
   # Emit subtests before parent line (TAP v14)
   if [[ -n "$log_path" && -f "$log_path" ]]; then
-    local has_subtests
-    has_subtests=$(grep -c "^KGSM_FUNC_RESULT:" "$log_path" 2>/dev/null || echo "0")
-    if [[ "$has_subtests" -gt 0 ]]; then
+    if [[ -n "$(__log_function_results "$log_path")" ]]; then
       echo "# Subtest: ${test_name}"
       __tap_emit_subtests "$log_path"
     fi
@@ -68,9 +66,10 @@ function _emit_tap_result() {
   # Determine if failures are TODO-only (not real test failures)
   local is_todo_only=0
   if [[ "$exit_code" -ne 0 && "$todo" -gt 0 && -n "$log_path" && -f "$log_path" ]]; then
+    # A function that never executed is a real failure, not a TODO
     local real_fail_count
-    real_fail_count=$(grep -c "^KGSM_FUNC_RESULT:.*|fail$" "$log_path" 2>/dev/null || echo "0")
-    [[ "$real_fail_count" == "0" ]] && is_todo_only=1
+    real_fail_count=$(__log_function_results "$log_path" | grep -cE "\|(fail|missing)$" || true)
+    [[ "${real_fail_count:-0}" -eq 0 ]] && is_todo_only=1
   fi
 
   if [[ "$exit_code" -eq 0 ]] || [[ "$is_todo_only" -eq 1 ]]; then

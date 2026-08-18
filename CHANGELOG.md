@@ -47,6 +47,16 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **The test runner accounts for every test function a file declares.** Discovery writes the list
+  of `test_*` functions to the test log as a plan before the file is sourced, each function records
+  its own result, and the runner reconciles the two afterwards: a declared function with no result
+  is a failing subtest named in the TAP failure details, and it fails the file. A test harness that
+  runs a subset of the tests it found is the one failure it must never absorb — the suite stays
+  green while coverage disappears — so a shortfall is now loud. `pass_test` and `fail_test` record
+  one assertion result against the running function and return, like every `assert_*`; `bail_out` is
+  the one call that ends a run early. A `--function` naming something the file does not define is a
+  typo rather than an empty success, and reports as a function that never ran.
+
 - **`instances status` prints the recent log lines it read.** `recent_logs` is a JSON array of
   lines in every case — one element per line of the tail, an empty array when the instance has
   logged nothing — so the field's type does not depend on whether a log exists. The human-readable
