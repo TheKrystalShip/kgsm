@@ -1125,3 +1125,61 @@ function test_journal_prune_ages_a_segment_by_its_name() {
   assert_file_exists "$journal_dir/notes.txt" \
     "A file that is not a dated segment must be left alone"
 }
+
+function test_emit_envelope_carries_a_uuid7_id() {
+  log_test_step "Testing: emitted envelope carries its own UUIDv7 id"
+
+  "$EVENTS_MODULE" emit instance-started id-test-server > /dev/null 2>&1 || true
+
+  local payload id
+  payload=$(_last_journal_event)
+  id=$(echo "$payload" | jq -r '.Id' 2> /dev/null)
+
+  assert_not_null "$id" "Envelope should carry an Id"
+  assert_not_equals "null" "$id" "Id should be minted, not null, on a bash that has the builtins"
+
+  # The version nibble and the variant bits, not merely "looks like a uuid": a v4
+  # satisfies the loose check and loses the time ordering the format was chosen for.
+  if [[ ! "$id" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$ ]]; then
+    fail_test "Id '$id' is not a UUIDv7"
+  else
+    pass_test "Id is a well-formed UUIDv7"
+  fi
+}
+
+function test_emit_gives_two_identical_events_different_ids() {
+  log_test_step "Testing: two identical events get different ids"
+
+  # The reason the id is minted and never derived from the line. Two identical
+  # events in the same second are two events; a digest folds them into one, which
+  # is the defect the engine's own index has.
+  "$EVENTS_MODULE" emit instance-started dupe-id-server > /dev/null 2>&1 || true
+  local first
+  first=$(_last_journal_event | jq -r '.Id' 2> /dev/null)
+
+  "$EVENTS_MODULE" emit instance-started dupe-id-server > /dev/null 2>&1 || true
+  local second
+  second=$(_last_journal_event | jq -r '.Id' 2> /dev/null)
+
+  assert_not_null "$first" "First event should carry an Id"
+  assert_not_equals "$first" "$second" "Two identical events must not share an id"
+}
+
+function test_emit_ids_sort_the_way_the_journal_does() {
+  log_test_step "Testing: ids are time-ordered, so lexical order matches write order"
+
+  "$EVENTS_MODULE" emit instance-started order-a > /dev/null 2>&1 || true
+  local first
+  first=$(_last_journal_event | jq -r '.Id' 2> /dev/null)
+
+  "$EVENTS_MODULE" emit instance-started order-b > /dev/null 2>&1 || true
+  local second
+  second=$(_last_journal_event | jq -r '.Id' 2> /dev/null)
+
+  # The whole reason for v7 over v4. A reader merging producers can range-scan.
+  if [[ "$first" < "$second" ]]; then
+    pass_test "The later id sorts after the earlier one"
+  else
+    fail_test "Ids are not time-ordered: '$first' should sort before '$second'"
+  fi
+}
