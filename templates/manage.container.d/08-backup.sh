@@ -27,6 +27,48 @@
 # The instance subtrees a backup captures, in archive order.
 readonly BACKUP_SOURCE_LABELS=(install saves)
 
+# WHY a backup exists. A fact about how the archive was produced, fixed at the
+# moment of capture and never edited afterwards.
+#
+#   manual       an explicit create-backup request that stated nothing else
+#   scheduled    an automated cadence
+#   pre-update   captured by an update, just before the install was overwritten
+#   pre-restore  captured by a restore, just before the data was replaced
+#   incident     captured over a failing instance, to preserve the broken state
+#
+# A manifest carrying no reason records none. Which archive a backup was cannot
+# be recovered after the fact, so the reason reads back as unknown rather than
+# as the likeliest answer — a backup taken over a broken instance and a routine
+# one are not interchangeable, and guessing between them is what makes "restore
+# the latest" dangerous.
+readonly BACKUP_REASONS=(manual scheduled pre-update pre-restore incident)
+readonly BACKUP_REASON_DEFAULT="manual"
+
+# WHETHER rotation may take it. A policy, and the one part of a backup an
+# operator revises: an ordinary archive is pinned ahead of a risky change, and
+# an incident archive is released once its triage is done.
+#
+#   prunable  prune-backups may delete it once it falls outside --keep=N
+#   pinned    prune-backups skips it, and it does not count toward --keep=N
+#
+# A manifest carrying no retention is prunable — the behaviour every backup
+# written before the field had, so nothing changes for one that already exists.
+readonly BACKUP_RETENTIONS=(prunable pinned)
+readonly BACKUP_RETENTION_DEFAULT="prunable"
+
+# Whether $1 is one of the remaining arguments.
+function __backup_is_one_of() {
+  local needle="$1"
+  shift
+
+  local candidate
+  for candidate in "$@"; do
+    [[ "$candidate" == "$needle" ]] && return 0
+  done
+
+  return 1
+}
+
 # Emit the labels this instance actually has content for, one per line.
 # A subtree that is missing or empty is not captured (and so is absent from
 # manifest.sources); a subtree that exists somewhere other than
@@ -90,6 +132,8 @@ function __backup_manifest_path() {
 # --run-state; a container is probed here, where docker is the authority.
 function _create_backup() {
   local run_state=""
+  local reason="$BACKUP_REASON_DEFAULT"
+  local retention="$BACKUP_RETENTION_DEFAULT"
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -97,9 +141,31 @@ function _create_backup() {
       run_state="${2:-}"
       shift 2
       ;;
+    --reason)
+      reason="${2:-}"
+      shift 2
+      ;;
+    --retention)
+      retention="${2:-}"
+      shift 2
+      ;;
     *) shift ;;
     esac
   done
+
+  # Both vocabularies are closed sets, and they are checked here rather than only
+  # at the CLI because this script also runs standalone. A value outside them is
+  # refused before any archiving happens: a manifest is the only record of what a
+  # backup is, and a word no consumer recognises in it is worse than no word.
+  if ! __backup_is_one_of "$reason" "${BACKUP_REASONS[@]}"; then
+    __print_error "Unknown backup reason: ${reason} (one of: ${BACKUP_REASONS[*]})"
+    return $EC_INVALID_ARG
+  fi
+
+  if ! __backup_is_one_of "$retention" "${BACKUP_RETENTIONS[@]}"; then
+    __print_error "Unknown backup retention: ${retention} (one of: ${BACKUP_RETENTIONS[*]})"
+    return $EC_INVALID_ARG
+  fi
 
   __print_info "Creating backup..."
 
@@ -239,18 +305,22 @@ function _create_backup() {
     --arg blueprint "$blueprint_name" \
     --arg version "${installed_version:-}" \
     --arg created_at "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
+    --arg reason "$reason" \
+    --arg retention "$retention" \
     --argjson compressed "$compressed" \
     --argjson consistency "$consistency" \
     --argjson sha256 "$sha256" \
     --argjson size_bytes "${size_bytes:-0}" \
     --argjson file_count "$file_count" \
     '{
-      schema_version: 1,
+      schema_version: 2,
       id: $id,
       instance: $instance,
       blueprint: (if $blueprint == "" then null else $blueprint end),
       version: (if $version == "" then null else $version end),
       created_at: $created_at,
+      reason: $reason,
+      retention: $retention,
       compressed: $compressed,
       consistency: $consistency,
       sources: $ARGS.positional,
@@ -356,7 +426,10 @@ function _restore_backup() {
   if [[ "$has_content" == "true" ]]; then
     __print_warning "Current instance data is not empty, creating a backup first..."
 
-    local -a safety_args=()
+    # Tagged for what it is: the state a restore was about to replace. Without
+    # it this archive is indistinguishable from a routine one, and it is the one
+    # somebody reaches for when the restore turns out to have been a mistake.
+    local -a safety_args=(--reason pre-restore)
     [[ -n "$run_state" ]] && safety_args+=(--run-state "$run_state")
 
     local safety_id
@@ -432,6 +505,70 @@ function _backup_manifest_json() {
 
   # Order by the recorded creation time, not by mtime: mtime changes whenever
   # anything touches the directory, which would silently reorder the history.
-  jq -s 'map(select(type == "object")) | sort_by(.created_at) | reverse' \
+  #
+  # Both policy fields are present on every entry, so a consumer reads one shape
+  # whatever wrote the manifest. They fill in differently on purpose: an absent
+  # retention IS prunable — that is what the field's absence means, and it is the
+  # behaviour the backup already had — while an absent reason stays null, because
+  # nothing can recover why an archive was taken and a filled-in guess would be
+  # read as a measurement.
+  jq -s 'map(select(type == "object"))
+         | map(.reason = (.reason // null)
+               | .retention = (.retention // "prunable"))
+         | sort_by(.created_at) | reverse' \
     "${manifests[@]}" 2>/dev/null || echo "[]"
+}
+
+# Set a backup's retention policy in place. The reason is deliberately not
+# settable: it is a fact about how the archive was produced, and a fact that can
+# be rewritten is not one.
+#
+# Rewriting the manifest is safe — sha256 covers the payload, never the manifest
+# — and the new document is staged beside it and renamed, so a failure leaves the
+# backup exactly as it was rather than half-written.
+#
+# A manifest written before these fields existed is upgraded as it is written: it
+# gains the retention being set and an explicit null reason, which records that
+# this backup does not say why it was taken rather than inventing an answer.
+#
+# Args: $1 = backup id, $2 = prunable|pinned
+function _set_backup_retention() {
+  local backup_id="$1"
+  local retention="$2"
+
+  if [[ -z "$backup_id" ]]; then
+    __print_error "Missing backup id"
+    return $EC_MISSING_ARG
+  fi
+
+  if ! __backup_is_one_of "$retention" "${BACKUP_RETENTIONS[@]}"; then
+    __print_error "Unknown backup retention: ${retention} (one of: ${BACKUP_RETENTIONS[*]})"
+    return $EC_INVALID_ARG
+  fi
+
+  local dir="${instance_backups_dir}/${backup_id}"
+  local manifest
+  manifest="$(__backup_manifest_path "$dir")"
+  if [[ -z "$manifest" ]]; then
+    __print_error "Not a backup: ${dir} (no manifest.json)"
+    return $EC_FILE_NOT_FOUND
+  fi
+
+  local staged="${manifest}.staged"
+  if ! jq --arg retention "$retention" \
+    '. + {schema_version: 2, reason: (.reason // null), retention: $retention}' \
+    "$manifest" >"$staged" 2>/dev/null; then
+    __print_error "Failed to rewrite the manifest for ${backup_id}"
+    rm -f "${staged:?}"
+    return $EC_ERROR
+  fi
+
+  if ! mv "$staged" "$manifest"; then
+    __print_error "Failed to publish the manifest for ${backup_id}"
+    rm -f "${staged:?}"
+    return $EC_ERROR
+  fi
+
+  __print_success "${backup_id}: retention ${retention}"
+  return $EC_SUCCESS
 }

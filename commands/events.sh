@@ -173,11 +173,14 @@ ${UNDERLINE}Instance Backups:${END}
   instance-backup-created <instance> <source> <version>
   instance-backup-restored <instance> <source> <version>
   instance-backup-deleted <instance> <source>
-  instance-backups-pruned <instance> <deleted> <kept>
+  instance-backup-pinned <instance> <source>
+  instance-backup-unpinned <instance> <source>
+  instance-backups-pruned <instance> <deleted> <kept> <pinned>
 
-  <source> is the backup id. A delete names one backup; a prune reports the
-  whole sweep as counts — <deleted> is what was removed, <kept> the retention
-  window it ran with.
+  <source> is the backup id. A delete, a pin and an unpin each name one backup;
+  a prune reports the whole sweep as counts — <deleted> is what was removed,
+  <kept> the retention window it ran with, <pinned> how many it skipped because
+  they were pinned.
 
 ${UNDERLINE}Player Presence:${END}
   instance-player-joined <instance> [player_id] [player_name]
@@ -216,7 +219,8 @@ ${UNDERLINE}Examples:${END}
   ${self} emit instance-version-updated myserver 1.0.0 1.1.1
   ${self} emit instance-backup-created myserver auto 1.2.3
   ${self} emit instance-backup-deleted myserver myserver-20260731T142233Z-a3f9c1
-  ${self} emit instance-backups-pruned myserver 3 5
+  ${self} emit instance-backups-pruned myserver 3 5 1
+  ${self} emit instance-backup-pinned myserver myserver-20260731T142233Z-a3f9c1
   ${self} emit instance-stopped myserver manual
   ${self} emit instance-ports-opened myserver '34197/udp|27015:27020/tcp'
   ${self} emit instance-ports-closed myserver '34197/udp|27015:27020/tcp'

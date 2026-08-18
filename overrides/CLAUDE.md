@@ -56,7 +56,7 @@ overridden.
 | `05-version.sh` | `_get_latest_version`, `_get_installed_version`, `_compare_versions`, `_save_version` |
 | `06-download.sh` | `_download` |
 | `07-deploy.sh` | `_deploy`, `_update` |
-| `08-backup.sh` | `_create_backup`, `_list_backups`, `_restore_backup`, `_clean_old_backups` |
+| `08-backup.sh` | `_create_backup`, `_list_backups`, `_restore_backup`, `_set_backup_retention`, `_clean_old_backups` |
 | `10-logging.sh` | `_print_logs`, `_rotate_logs` |
 | `11-status.sh` | status reporting |
 

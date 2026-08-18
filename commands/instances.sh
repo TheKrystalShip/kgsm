@@ -44,6 +44,9 @@ ${UNDERLINE}Commands:${END}
                               Restore the backup with this id
   delete-backup <instance> <id>
                               Delete the backup with this id
+  pin-backup <instance> <id>  Keep a backup out of prune-backups' reach
+  unpin-backup <instance> <id>
+                              Let prune-backups take it again
   prune-backups <instance>    Prune old backups, keeping the N most recent
   update <instance>           Update to the latest version (must be stopped)
   check-update <instance> [--emit]  Check whether a newer version is available
@@ -78,6 +81,7 @@ ${UNDERLINE}Examples:${END}
   $self create-backup factorio-01
   $self restore-backup factorio-01 factorio-01-20260731T142233Z-a3f9c1
   $self delete-backup factorio-01 factorio-01-20260731T142233Z-a3f9c1
+  $self pin-backup factorio-01 factorio-01-20260731T142233Z-a3f9c1
   $self update factorio-01
   $self check-update factorio-01
   $self version factorio-01 --latest
@@ -1487,8 +1491,13 @@ function show_usage_backups() {
 List an instance's backups, newest first — one opaque backup id per line.
 
 Each backup carries a manifest recording what it is: when it was taken, the
-version it captured, its size, and which directories it holds. --json emits
-those manifests instead of the bare ids.
+version it captured, its size, which directories it holds, why it was taken and
+whether rotation may delete it. --json emits those manifests instead of the bare
+ids.
+
+A backup taken before the manifest recorded a reason reports 'reason': null —
+unknown, because nothing can recover it after the fact. Such a backup is
+prunable, which is exactly how it has always behaved.
 
 ${UNDERLINE}Usage:${END}
   $self backups <instance> [--json]
@@ -1518,17 +1527,40 @@ must be stopped first. Prints the new backup's id.
 Backups are stored outside the instance's working directory, so uninstalling
 the instance leaves them intact.
 
+The backup records why it was taken. That is a fact fixed at capture and never
+edited afterwards, and it is what tells a routine archive apart from one taken
+over a broken server — 'restore the latest' is only a safe instruction while
+those two are distinguishable.
+
 ${UNDERLINE}Usage:${END}
-  $self create-backup <instance>
+  $self create-backup <instance> [--reason <reason>] [--retention <policy>]
 
 ${UNDERLINE}Arguments:${END}
   instance                    Instance name
 
 ${UNDERLINE}Options:${END}
+  --reason <reason>           Why this backup is being taken. An instance whose
+                              management file predates the field is backed up
+                              without one, with a warning — the manifest then
+                              records no reason, which reads back as unknown.
+                              Regenerate it with 'kgsm files management create'
+                              to record one. Values:
+                                manual       an ad-hoc request (default)
+                                scheduled    an automated cadence
+                                pre-update   before an update overwrites the install
+                                pre-restore  before a restore replaces the data
+                                incident     over a failing server, to preserve it
+  --retention <policy>        prunable (default) or pinned. A pinned backup is
+                              skipped by prune-backups and does not count toward
+                              its --keep window. Refused, rather than dropped, on
+                              an instance whose management file predates it: a
+                              caller told an archive is protected must not get a
+                              prunable one.
   --help                      Display this help information
 
 ${UNDERLINE}Examples:${END}
   $self create-backup factorio-01
+  $self create-backup factorio-01 --reason incident --retention pinned
 "
 }
 
@@ -1570,6 +1602,9 @@ Only an id the engine lists as a backup is accepted. A directory in the backups
 store that carries no manifest is not a backup and is never deleted, which is
 what keeps a half-built or foreign directory out of reach.
 
+A pinned backup is deleted like any other. Pinned means prune-backups will not
+take it, never that an operator naming it cannot.
+
 ${UNDERLINE}Usage:${END}
   $self delete-backup <instance> <id>
 
@@ -1597,6 +1632,11 @@ are deleted. Directories in the backups store that are not backups (no
 manifest) are left alone.
 Safe to call on an empty or missing backups directory (exits 0 with no action).
 
+Pinned backups are skipped, and they do not count toward N: the window keeps N
+prunable backups however many are pinned. Counting them would let three pins
+starve a --keep=5 rotation down to two live backups, which is the opposite of
+what pinning one is for.
+
 ${UNDERLINE}Usage:${END}
   $self prune-backups <instance> [--keep=N]
 
@@ -1611,6 +1651,61 @@ ${UNDERLINE}Options:${END}
 ${UNDERLINE}Examples:${END}
   $self prune-backups factorio-01 --keep=5
   $self prune-backups factorio-01 --keep=10
+"
+}
+
+function show_usage_pin_backup() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Pin Instance Backup${END}
+
+Pin one of an instance's backups so prune-backups leaves it alone. A pinned
+backup is skipped by the rotation and does not count toward its --keep window.
+
+Pinning is a policy, and it is reversible — 'unpin-backup' hands the backup back
+to the rotation, which is what an incident archive wants once its triage is
+done. It is not a delete guard: 'delete-backup' removes a pinned backup like any
+other.
+
+Why the backup was taken is a separate fact and is never edited by either verb.
+
+${UNDERLINE}Usage:${END}
+  $self pin-backup <instance> <id>
+
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
+  id                          Backup id (see '$self backups <instance>')
+
+${UNDERLINE}Options:${END}
+  --help                      Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self pin-backup factorio-01 factorio-01-20260731T142233Z-a3f9c1
+"
+}
+
+function show_usage_unpin_backup() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Unpin Instance Backup${END}
+
+Hand a pinned backup back to the rotation: prune-backups may delete it again
+once it falls outside the --keep window.
+
+${UNDERLINE}Usage:${END}
+  $self unpin-backup <instance> <id>
+
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
+  id                          Backup id (see '$self backups <instance>')
+
+${UNDERLINE}Options:${END}
+  --help                      Display this help information
+
+${UNDERLINE}Examples:${END}
+  $self unpin-backup factorio-01 factorio-01-20260731T142233Z-a3f9c1
 "
 }
 
@@ -1707,6 +1802,51 @@ function _management_supports_backup_manifest() {
   [[ -f "$management_file" && -x "$management_file" ]] || return 1
   _management_help_load "$management_file"
   grep -q 'backups \[--json\]' <<< "$_management_help_text"
+}
+
+# The closed vocabularies the manifest records, mirrored from
+# templates/manage.*.d/08-backup.sh so a bad value is refused here — before an
+# instance is sourced and before minutes of archiving happen — rather than at the
+# end of the run. The management file checks them again, because it also runs
+# standalone.
+readonly BACKUP_REASONS=(manual scheduled pre-update pre-restore incident)
+readonly BACKUP_RETENTIONS=(prunable pinned)
+
+# Whether $1 is one of the remaining arguments.
+function _backup_is_one_of() {
+  local needle="$1"
+  shift
+
+  local candidate
+  for candidate in "$@"; do
+    [[ "$candidate" == "$needle" ]] && return 0
+  done
+
+  return 1
+}
+
+# Whether an instance's management file records why a backup was taken and
+# whether it may be pruned. A file generated before those fields writes neither,
+# and silently drops the --reason it is handed — the distinctive `pin-backup`
+# token in --help marks support.
+function _management_supports_backup_retention() {
+  local management_file="$1"
+  [[ -f "$management_file" && -x "$management_file" ]] || return 1
+  _management_help_load "$management_file"
+  grep -q 'pin-backup' <<< "$_management_help_text"
+}
+
+# Honest gate for a verb that cannot work at all without the fields — the pin and
+# unpin verbs, which an older management file does not have. $1=instance,
+# $2=management_file.
+function _require_backup_retention_support() {
+  local instance="$1"
+  local management_file="$2"
+  if ! _management_supports_backup_retention "$management_file"; then
+    __print_error "Instance '$instance' uses a management file that does not record a backup's reason or retention."
+    __print_error "Regenerate it with: kgsm files management create $instance"
+    exit $EC_ERROR
+  fi
 }
 
 # Honest gate for the backup commands: refuse rather than let an old management
@@ -1931,12 +2071,31 @@ function _cmd_backups() {
 
 function _cmd_create_backup() {
   local instance=""
+  # Empty means "the caller stated nothing", which is not the same as stating
+  # the default: only a stated value gates on retention support, so an instance
+  # whose management file is too old still takes ordinary backups.
+  local reason=""
+  local retention=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -h | --help | help)
         show_usage_create_backup
         return 0
+        ;;
+      --reason=*)
+        reason="${1#*=}"
+        ;;
+      --reason)
+        reason="${2:-}"
+        shift
+        ;;
+      --retention=*)
+        retention="${1#*=}"
+        ;;
+      --retention)
+        retention="${2:-}"
+        shift
         ;;
       -*)
         __print_error "Invalid option for create-backup command: $1"
@@ -1956,9 +2115,41 @@ function _cmd_create_backup() {
     exit $EC_MISSING_ARG
   fi
 
+  if [[ -n "$reason" ]] && ! _backup_is_one_of "$reason" "${BACKUP_REASONS[@]}"; then
+    __print_error "Unknown backup reason: $reason (one of: ${BACKUP_REASONS[*]})"
+    exit $EC_INVALID_ARG
+  fi
+
+  if [[ -n "$retention" ]] && ! _backup_is_one_of "$retention" "${BACKUP_RETENTIONS[@]}"; then
+    __print_error "Unknown backup retention: $retention (one of: ${BACKUP_RETENTIONS[*]})"
+    exit $EC_INVALID_ARG
+  fi
+
   __source_instance "$instance"
   _require_ops_support "$instance" "$instance_management_file"
   _require_backup_manifest_support "$instance" "$instance_management_file"
+
+  # A management file generated before the manifest recorded these cannot write
+  # either one, and the two flags are handled differently because they fail
+  # differently.
+  #
+  # A retention is refused: the caller is told the archive is protected from
+  # rotation, and producing a prunable one instead sets up the loss that pinning
+  # exists to prevent. A reason is only a label, so the backup is taken without
+  # it and the omission is said out loud — the manifest then records no reason,
+  # which reads back as unknown, never as something else. Losing a label is worth
+  # far less than losing the backup, which is what refusing here would cost a
+  # cadence running unattended against instances nobody has regenerated yet.
+  if [[ -n "$retention" ]]; then
+    _require_backup_retention_support "$instance" "$instance_management_file"
+  elif [[ -n "$reason" ]] &&
+    ! _management_supports_backup_retention "$instance_management_file"; then
+    # stderr only: stdout is the new backup's id, which callers parse.
+    __print_warning "Instance '$instance' uses a management file that cannot record why a backup was taken; backing up without a reason" >&2
+    __print_warning "Regenerate it with: kgsm files management create $instance" >&2
+    reason=""
+  fi
+
   _repoint_backups_dir "$instance"
 
   local run_state
@@ -1974,12 +2165,13 @@ function _cmd_create_backup() {
   # create-backup prints its progress lines and then the new backup's id as the
   # last line. Take the id from there rather than re-deriving "the newest entry
   # in the backups dir", which races with any concurrent backup.
+  local -a create_args=()
+  [[ -n "$run_state" ]] && create_args+=(--run-state "$run_state")
+  [[ -n "$reason" ]] && create_args+=(--reason "$reason")
+  [[ -n "$retention" ]] && create_args+=(--retention "$retention")
+
   local output rc
-  if [[ -n "$run_state" ]]; then
-    output="$("$instance_management_file" create-backup --run-state "$run_state")"
-  else
-    output="$("$instance_management_file" create-backup)"
-  fi
+  output="$("$instance_management_file" create-backup "${create_args[@]}")"
   rc=$?
   [[ -n "$output" ]] && printf '%s\n' "$output"
 
@@ -2228,14 +2420,39 @@ function _cmd_prune_backups() {
   fi
 
   # Order by the engine's own listing (newest first, by each backup's recorded
-  # creation time), skip the first $keep, delete the rest. Anything in the store
-  # that the engine does not report is not a backup and is never deleted.
+  # creation time), skip the first $keep PRUNABLE ones, delete the rest.
+  # Anything in the store that the engine does not report is not a backup and is
+  # never deleted.
+  #
+  # Pinned backups are removed from the sequence before the window is applied, so
+  # they neither get deleted nor consume a slot. Letting them consume one would
+  # mean three pins starve a --keep=5 rotation down to two live backups — the
+  # rotation would erode exactly as the operator protected more of it.
+  #
+  # The manifests are read rather than the id listing because the retention lives
+  # in them; `backups --json` fills a missing retention in as prunable, and the
+  # fallback here repeats that so an older management file's raw manifest reads
+  # the same way.
+  local backups_json
+  backups_json="$("$instance_management_file" backups --json 2> /dev/null)"
+  [[ -n "$backups_json" ]] || backups_json="[]"
+
   local -a to_delete
-  mapfile -t to_delete < <("$instance_management_file" backups 2> /dev/null |
-    tr -s ' \t\n' '\n' | grep -v '^[[:space:]]*$' | tail -n +"$((keep + 1))")
+  mapfile -t to_delete < <(printf '%s' "$backups_json" |
+    jq -r --argjson keep "$keep" \
+      '[.[] | select((.retention // "prunable") != "pinned")][$keep:][].id' 2> /dev/null)
+
+  local pinned
+  pinned="$(printf '%s' "$backups_json" |
+    jq -r '[.[] | select((.retention // "prunable") == "pinned")] | length' 2> /dev/null)"
+  [[ "$pinned" =~ ^[0-9]+$ ]] || pinned=0
 
   if [[ ${#to_delete[@]} -eq 0 ]]; then
-    __print_info "Nothing to prune for '$instance' (≤$keep backups present)"
+    if [[ "$pinned" -gt 0 ]]; then
+      __print_info "Nothing to prune for '$instance' (≤$keep prunable backups present, $pinned pinned)"
+    else
+      __print_info "Nothing to prune for '$instance' (≤$keep backups present)"
+    fi
     exit 0
   fi
 
@@ -2266,12 +2483,105 @@ function _cmd_prune_backups() {
   # sweep still emits — those backups are genuinely gone — and then exits with
   # the error, so the record and the exit code describe the same run.
   if [[ $deleted -gt 0 ]]; then
-    __emit_event instance-backups-pruned "$instance" "$deleted" "$keep"
+    __emit_event instance-backups-pruned "$instance" "$deleted" "$keep" "$pinned"
   fi
 
-  __print_info "Pruned $deleted backup(s) for '$instance' (kept: $keep)"
+  __print_info "Pruned $deleted backup(s) for '$instance' (kept: $keep, pinned: $pinned)"
   [[ $failed -gt 0 ]] && exit $EC_ERROR
   exit 0
+}
+
+# Pin / unpin. Both change one backup's retention policy and nothing else — the
+# reason a backup was taken is a fact and neither verb touches it.
+#
+# Args: $1 = "pin"|"unpin", then the command's own arguments.
+function _cmd_backup_retention() {
+  local verb="$1"
+  shift
+
+  local instance=""
+  local backup=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        if [[ "$verb" == "pin" ]]; then show_usage_pin_backup; else show_usage_unpin_backup; fi
+        return 0
+        ;;
+      -*)
+        __print_error "Invalid option for ${verb}-backup command: $1"
+        __print_error "Use '$self ${verb}-backup --help' for usage information"
+        return $EC_INVALID_ARG
+        ;;
+      *)
+        if [[ -z "$instance" ]]; then
+          instance="$1"
+        else
+          backup="$1"
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self ${verb}-backup --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  if [[ -z "$backup" ]]; then
+    __print_error "Missing required argument: <id>"
+    __print_error "Use '$self ${verb}-backup --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  __source_instance "$instance"
+  _require_ops_support "$instance" "$instance_management_file"
+  _require_backup_manifest_support "$instance" "$instance_management_file"
+  _require_backup_retention_support "$instance" "$instance_management_file"
+  _repoint_backups_dir "$instance"
+
+  # The engine's own listing is the only authority on what is a backup, exactly
+  # as delete-backup treats it: an id it does not report is refused rather than
+  # resolved to a path and written to.
+  local -a known
+  mapfile -t known < <("$instance_management_file" backups 2> /dev/null |
+    tr -s ' \t\n' '\n' | grep -v '^[[:space:]]*$')
+
+  local found="false"
+  local name
+  for name in "${known[@]}"; do
+    if [[ "$name" == "$backup" ]]; then
+      found="true"
+      break
+    fi
+  done
+
+  if [[ "$found" != "true" ]]; then
+    __print_error "No such backup for '$instance': $backup"
+    __print_error "See '$self backups $instance' for this instance's backups"
+    exit $EC_FILE_NOT_FOUND
+  fi
+
+  "$instance_management_file" "${verb}-backup" "$backup"
+  local rc=$?
+
+  # Emitted from the command layer on a confirmed change only, matching the
+  # create/restore/delete convention.
+  if [[ $rc -eq 0 ]]; then
+    __emit_event "instance-backup-${verb}ned" "$instance" "$backup"
+  fi
+
+  exit $rc
+}
+
+function _cmd_pin_backup() {
+  _cmd_backup_retention pin "$@"
+}
+
+function _cmd_unpin_backup() {
+  _cmd_backup_retention unpin "$@"
 }
 
 function _cmd_update() {
@@ -2607,6 +2917,12 @@ function _cmd_help() {
     delete-backup)
       show_usage_delete_backup
       ;;
+    pin-backup)
+      show_usage_pin_backup
+      ;;
+    unpin-backup)
+      show_usage_unpin_backup
+      ;;
     prune-backups)
       show_usage_prune_backups
       ;;
@@ -2719,6 +3035,12 @@ case "$command" in
     ;;
   delete-backup)
     _cmd_delete_backup "$@"
+    ;;
+  pin-backup)
+    _cmd_pin_backup "$@"
+    ;;
+  unpin-backup)
+    _cmd_unpin_backup "$@"
     ;;
   prune-backups)
     _cmd_prune_backups "$@"

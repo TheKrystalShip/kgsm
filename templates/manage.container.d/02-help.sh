@@ -42,8 +42,10 @@ ${BOLD}${UNDERLINE}Version & Update Commands:${END}
 
 ${BOLD}${UNDERLINE}Backup Commands:${END}
   backups [--json]            List available backups
-  create-backup               Create a backup
+  create-backup [--reason R]  Create a backup
   restore-backup <id>         Restore the backup with this id
+  pin-backup <id>             Keep a backup out of prune-backups' reach
+  unpin-backup <id>           Let prune-backups take it again
 
 ${BOLD}${UNDERLINE}Other:${END}
   help [command]              Display help information
@@ -263,21 +265,39 @@ A backup captures the instance's install and saves directories. Each one is
 identified by an opaque id; its details (size, creation time, captured version)
 live in the backup's manifest and are reported by 'backups --json'.
 
+A manifest also records WHY the backup was taken and WHETHER rotation may take
+it. The reason is a fact fixed at capture (manual, scheduled, pre-update,
+pre-restore, incident) and is never edited; the retention is a policy, and
+pin-backup/unpin-backup are how it changes. A pinned backup is skipped by
+prune-backups and does not count toward its --keep window; deleting one by name
+still works.
+
 ${UNDERLINE}Usage:${END}
   $self backups [--json]
-  $self create-backup
+  $self create-backup [--reason <reason>] [--retention <policy>]
   $self restore-backup <id>
+  $self pin-backup <id>
+  $self unpin-backup <id>
 
 ${UNDERLINE}Commands:${END}
   backups [--json]            List backup ids, newest first (--json: full manifests)
   create-backup               Create a backup of the current server files
   restore-backup <id>         Restore from the backup with this id
+  pin-backup <id>             Keep a backup out of prune-backups' reach
+  unpin-backup <id>           Let prune-backups take it again
+
+${UNDERLINE}Options:${END}
+  --reason <reason>           manual | scheduled | pre-update | pre-restore | incident
+                              (default: manual)
+  --retention <policy>        prunable | pinned (default: prunable)
 
 ${UNDERLINE}Examples:${END}
   $self create-backup
+  $self create-backup --reason incident --retention pinned
   $self backups
   $self backups --json
   $self restore-backup factorio-01-20260731T142233Z-a3f9c1
+  $self pin-backup factorio-01-20260731T142233Z-a3f9c1
 "
 }
 
@@ -363,7 +383,7 @@ function _cmd_help() {
   version)
     show_usage_version
     ;;
-  backup | backups | create-backup | restore-backup)
+  backup | backups | create-backup | restore-backup | pin-backup | unpin-backup)
     show_usage_backup
     ;;
   check-update)

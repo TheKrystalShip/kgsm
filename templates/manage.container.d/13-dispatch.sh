@@ -109,6 +109,14 @@ restore-backup)
   _cmd_restore_backup "$@"
   exit $?
   ;;
+pin-backup)
+  _cmd_pin_backup "$@"
+  exit $?
+  ;;
+unpin-backup)
+  _cmd_unpin_backup "$@"
+  exit $?
+  ;;
 check-update)
   _cmd_check_update "$@"
   exit $?

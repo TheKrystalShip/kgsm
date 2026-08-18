@@ -329,7 +329,11 @@ function _update() {
   # cannot lose data and takes no backup; only an update does. A capture that
   # fails abandons the update, because laying a new image over an unprotected
   # world is precisely what this guards against.
-  local -a backup_args=()
+  # Tagged for what it is: the rollback point for the riskiest operation this
+  # script performs. The reason is the only thing on disk that identifies it —
+  # the id is opaque and recency alone cannot tell a pre-update archive from the
+  # broken state somebody captured after the update went wrong.
+  local -a backup_args=(--reason pre-update)
   [[ -n "$run_state" ]] && backup_args+=(--run-state "$run_state")
 
   local backup_id
@@ -455,6 +459,25 @@ function _cmd_restore_backup() {
   local backup="$1"
   shift
   _restore_backup "$backup" "$@"
+}
+
+# Pinning is a policy change, not a destructive one: it says only that rotation
+# must leave this archive alone. delete-backup still removes a pinned backup, so
+# pinned never means "you cannot delete this" — it means "prune will not".
+function _cmd_pin_backup() {
+  if [[ -z "${1:-}" ]]; then
+    __print_error "Missing argument: <id>"
+    return $EC_MISSING_ARG
+  fi
+  _set_backup_retention "$1" pinned
+}
+
+function _cmd_unpin_backup() {
+  if [[ -z "${1:-}" ]]; then
+    __print_error "Missing argument: <id>"
+    return $EC_MISSING_ARG
+  fi
+  _set_backup_retention "$1" prunable
 }
 
 function _cmd_check_update() {

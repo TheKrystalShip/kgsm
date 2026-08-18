@@ -47,6 +47,21 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **A backup records why it was taken and whether rotation may take it.** The manifest is
+  `schema_version: 2` and carries two deliberately separate fields: `reason` — a fact fixed at
+  capture (`manual`, `scheduled`, `pre-update`, `pre-restore`, `incident`), never edited — and
+  `retention` (`prunable` | `pinned`) — a policy, and the one part an operator revises. Every
+  creation site states its own reason, so the pre-update archive an update takes and the safety
+  archive a restore takes are identifiable on disk instead of being inferred from recency.
+  `instances create-backup` takes `--reason` and `--retention`; `instances pin-backup` /
+  `unpin-backup` change the policy afterwards, emitting `instance_backup_pinned` /
+  `instance_backup_unpinned`. `instances prune-backups` skips pinned backups and does not count them
+  toward `--keep=N`, so pins cannot erode the rotation; `instance_backups_pruned` gained `Pinned`
+  alongside `Deleted` and `Kept`, so a sweep that protected everything is distinguishable from one
+  that found nothing to do. A manifest written without the fields reads back as `retention: prunable`
+  — its existing behaviour — and `reason: null`, which is unknown and never guessed. `delete-backup`
+  removes a pinned backup like any other: pinned means prune will not take it, never that you cannot.
+
 - **`instances config-list` reports every key with whether it can be set.** The settable flag comes
   from `__is_protected_instance_config_key` — the same function `config-set` itself calls — so what a
   reader is told it may change is exactly what the setter will accept, and the two cannot drift.

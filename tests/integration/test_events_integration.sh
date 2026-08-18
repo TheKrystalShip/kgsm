@@ -897,20 +897,21 @@ function test_emit_backup_deleted_payload_carries_the_backup_id() {
 }
 
 function test_emit_backups_pruned_payload_carries_numeric_counts() {
-  log_test_step "Testing: instance_backups_pruned payload carries Deleted/Kept as JSON numbers"
+  log_test_step "Testing: instance_backups_pruned payload carries Deleted/Kept/Pinned as JSON numbers"
 
-  "$EVENTS_MODULE" emit instance-backups-pruned backup-test-server 3 5 \
+  "$EVENTS_MODULE" emit instance-backups-pruned backup-test-server 3 5 2 \
     > /dev/null 2>&1 || true
 
   local payload
   payload=$(_last_journal_event)
   assert_not_null "$payload" "Journaled event payload should not be empty"
 
-  local event_type instance deleted kept
+  local event_type instance deleted kept pinned
   event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)
   instance=$(echo "$payload" | jq -r '.Data.InstanceName' 2> /dev/null)
   deleted=$(echo "$payload" | jq -r '.Data.Deleted' 2> /dev/null)
   kept=$(echo "$payload" | jq -r '.Data.Kept' 2> /dev/null)
+  pinned=$(echo "$payload" | jq -r '.Data.Pinned' 2> /dev/null)
 
   assert_equals "instance_backups_pruned" "$event_type" \
     "EventType should be instance_backups_pruned"
@@ -918,14 +919,19 @@ function test_emit_backups_pruned_payload_carries_numeric_counts() {
     "Data.InstanceName should carry the instance"
   assert_equals "3" "$deleted" "Data.Deleted should carry what was removed"
   assert_equals "5" "$kept" "Data.Kept should carry the retention window"
+  # What the sweep protected. Without it, a sweep that removed nothing because
+  # every backup was pinned reads exactly like one that found nothing to remove.
+  assert_equals "2" "$pinned" "Data.Pinned should carry what the sweep skipped"
 
   # Counts must be JSON numbers, not strings: a consumer sums them without
   # re-parsing, and kgsm-lib deserializes them into int fields.
-  local deleted_type kept_type
+  local deleted_type kept_type pinned_type
   deleted_type=$(echo "$payload" | jq -r '.Data.Deleted | type' 2> /dev/null)
   kept_type=$(echo "$payload" | jq -r '.Data.Kept | type' 2> /dev/null)
+  pinned_type=$(echo "$payload" | jq -r '.Data.Pinned | type' 2> /dev/null)
   assert_equals "number" "$deleted_type" "Data.Deleted must be a JSON number"
   assert_equals "number" "$kept_type" "Data.Kept must be a JSON number"
+  assert_equals "number" "$pinned_type" "Data.Pinned must be a JSON number"
 
   # A prune reports the sweep, not the ids — one event covers all of them.
   local has_source

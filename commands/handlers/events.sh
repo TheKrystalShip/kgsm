@@ -192,6 +192,16 @@ export EVENT_INSTANCE_BACKUP_DELETED
 declare -g -r EVENT_INSTANCE_BACKUPS_PRUNED="instance_backups_pruned"
 export EVENT_INSTANCE_BACKUPS_PRUNED
 
+# Retention is a policy an operator revises, so both directions are recorded.
+# Pinning takes a backup out of the rotation's reach and unpinning hands it back
+# — the second is the one that can lose data later, and a store that keeps
+# growing is answered by knowing who released what.
+declare -g -r EVENT_INSTANCE_BACKUP_PINNED="instance_backup_pinned"
+export EVENT_INSTANCE_BACKUP_PINNED
+
+declare -g -r EVENT_INSTANCE_BACKUP_UNPINNED="instance_backup_unpinned"
+export EVENT_INSTANCE_BACKUP_UNPINNED
+
 declare -g -r EVENT_INSTANCE_FILES_REMOVED="instance_files_removed"
 export EVENT_INSTANCE_FILES_REMOVED
 
@@ -400,7 +410,14 @@ declare -g -A EVENT_CONFIGS=(
   # deleted backup's manifest is gone with it, and re-reading the instance's
   # current version would record a fact about the instance, not the backup.
   ["$EVENT_INSTANCE_BACKUP_DELETED"]="instance source"
-  ["$EVENT_INSTANCE_BACKUPS_PRUNED"]="instance deleted kept"
+  # `pinned` is how many the sweep skipped because they were pinned. Reported
+  # alongside what it deleted so the pair states what the policy actually did:
+  # without it, a sweep that removed nothing because everything was protected is
+  # indistinguishable from one that found nothing to remove.
+  ["$EVENT_INSTANCE_BACKUPS_PRUNED"]="instance deleted kept pinned"
+  # `source` is the backup id, as in every other single-backup event.
+  ["$EVENT_INSTANCE_BACKUP_PINNED"]="instance source"
+  ["$EVENT_INSTANCE_BACKUP_UNPINNED"]="instance source"
   ["$EVENT_INSTANCE_FILES_REMOVED"]="instance"
   ["$EVENT_INSTANCE_DIRECTORIES_REMOVED"]="instance"
   ["$EVENT_INSTANCE_REMOVED"]="instance"
@@ -620,7 +637,7 @@ function __logic_build_event_payload() {
         Version: $version
       }'
       ;;
-    "$EVENT_INSTANCE_BACKUP_DELETED")
+    "$EVENT_INSTANCE_BACKUP_DELETED" | "$EVENT_INSTANCE_BACKUP_PINNED" | "$EVENT_INSTANCE_BACKUP_UNPINNED")
       # `$source` binds because `source` is the 2nd EVENT_CONFIGS param name.
       data_object='{
         InstanceName: $instance,
@@ -634,11 +651,13 @@ function __logic_build_event_payload() {
       # (a prune that removed nothing emits nothing at all), so neither is
       # null-coalesced.
       jq_args+=(--argjson deleted_n "${params[1]:-0}"
-        --argjson kept_n "${params[2]:-0}")
+        --argjson kept_n "${params[2]:-0}"
+        --argjson pinned_n "${params[3]:-0}")
       data_object='{
         InstanceName: $instance,
         Deleted: $deleted_n,
-        Kept: $kept_n
+        Kept: $kept_n,
+        Pinned: $pinned_n
       }'
       ;;
     "$EVENT_INSTANCE_STARTED" | "$EVENT_INSTANCE_STOPPED" | "$EVENT_INSTANCE_RESTARTED")

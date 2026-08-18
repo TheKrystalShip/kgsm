@@ -210,6 +210,37 @@ function test_pre_update_backup_records_the_state_it_was_given() {
     "the pre-update backup records the run state it was given"
 }
 
+function test_pre_update_backup_is_identifiable_as_one() {
+  log_test_step "Testing the pre-update archive records that an update took it"
+
+  local instance_name="test-pu-reason-$$"
+  _new_instance "$instance_name"
+  assert_equals 0 "$?" "Instance should be created"
+
+  local root="$TEST_INSTALL_DIR/${instance_name}-root"
+  _provision_instance "$instance_name" "$root" yes yes
+
+  local marker="$root/update-steps"
+  _stub_update_path "$instance_name" "2.0.0" "$marker"
+
+  local mgmt
+  mgmt=$(_management_file_of "$instance_name")
+  "$mgmt" update --run-state inactive > /dev/null 2>&1
+  assert_equals 0 "$?" "the update should succeed"
+
+  local manifest
+  manifest=$(_only_manifest "$root")
+  assert_not_null "$manifest" "a backup should have been created"
+  # This is the rollback point for the riskiest thing the engine does, and the
+  # reason is the only thing on disk that identifies it: the id is opaque, and
+  # recency cannot tell it from a capture of the state the update went on to
+  # break.
+  assert_equals "pre-update" "$(printf '%s' "$manifest" | jq -r '.reason')" \
+    "the pre-update archive says an update took it"
+  assert_equals "prunable" "$(printf '%s' "$manifest" | jq -r '.retention')" \
+    "a pre-update archive is prunable; keeping one is the operator's call"
+}
+
 function test_update_refuses_a_running_instance() {
   log_test_step "Testing an update refuses an instance the caller reports running"
 

@@ -97,12 +97,15 @@ is therefore always a real previous version.
 | `instance_backup_created` | Backup created | `InstanceName`, `Source`, `Version` |
 | `instance_backup_restored` | Backup restored | `InstanceName`, `Source`, `Version` |
 | `instance_backup_deleted` | One named backup removed | `InstanceName`, `Source` |
-| `instance_backups_pruned` | Retention swept old backups | `InstanceName`, `Deleted`, `Kept` |
+| `instance_backup_pinned` | A backup put out of retention's reach | `InstanceName`, `Source` |
+| `instance_backup_unpinned` | A backup handed back to retention | `InstanceName`, `Source` |
+| `instance_backups_pruned` | Retention swept old backups | `InstanceName`, `Deleted`, `Kept`, `Pinned` |
 
-`Source` is the backup id on all three of the single-backup events. A delete
-names one backup; a prune reports the whole sweep, so it carries counts instead:
-`Deleted` is how many were actually removed and `Kept` the retention window it
-ran with. Both are JSON numbers. A prune that removed nothing emits nothing.
+`Source` is the backup id on every single-backup event. A delete, a pin and an
+unpin each name one backup; a prune reports the whole sweep, so it carries counts
+instead: `Deleted` is how many were actually removed, `Kept` the retention window
+it ran with, and `Pinned` how many it skipped because they were pinned. All three
+are JSON numbers. A prune that removed nothing emits nothing.
 
 ### 🗑️ Removal Events
 
