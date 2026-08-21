@@ -47,6 +47,19 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **A start is refused when the node has no room for it.** Before a native instance is spawned, the
+  memory gate compares what the instance is expected to need against what the node reports available,
+  and refuses when going ahead would leave less than `memory_gate_headroom_mb` free (default 1024).
+  The requirement is the instance's own `memory_cap_mb` when set — the cgroup ceiling the watchdog
+  enforces, so it bounds what the node can actually lose — otherwise the blueprint's advisory
+  `metadata.min_ram_mb`. With neither declared the gate cannot answer and the start proceeds; no
+  figure is invented to fill the gap. The reading is `MemAvailable`, not `MemFree`, because the
+  latter excludes reclaimable page cache and would refuse starts that are perfectly safe.
+  The refusal names all three figures and exits `EC_INSUFFICIENT_MEMORY` (51), distinct from a
+  failed start so a caller can tell "would not fit" from "tried and failed". `--force` on `start`
+  and `restart` skips the check, for the operator who knows a declared figure overstates what a game
+  actually uses. New `[resources]` section, config schema v9 with its migration.
+
 - **The test runner accounts for every test function a file declares.** Discovery writes the list
   of `test_*` functions to the test log as a plan before the file is sourced, each function records
   its own result, and the runner reconciles the two afterwards: a declared function with no result

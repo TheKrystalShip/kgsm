@@ -55,6 +55,11 @@ __load_core_module "validation.sh"
 # cgroup v2 process supervision primitives
 __load_core_module "cgroup.sh"
 
+# Node resource admission (the memory gate). After config.sh, which is what
+# flattens the config_* values it reads, and after parser.sh, whose
+# __get_config_value it uses to read an instance's own cap.
+__load_core_module "resources.sh"
+
 # Cleanup
 unset -f __load_core_module
 

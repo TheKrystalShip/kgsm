@@ -161,6 +161,14 @@ export EC_FIREWALL_UNREACHABLE
 declare -g -r EC_EVENT_JOURNAL_FAILED=50
 export EC_EVENT_JOURNAL_FAILED
 
+# Starting this instance would leave the node with less free memory than the
+# configured floor. A refusal to protect the HOST, not a fault of the instance:
+# nothing is wrong with it, there is simply no room right now. Distinct from
+# EC_ERROR so a caller can tell "would not fit" from "tried and failed" — the
+# watchdog defers a restart on this rather than counting it as a crash.
+declare -g -r EC_INSUFFICIENT_MEMORY=51
+export EC_INSUFFICIENT_MEMORY
+
 # =============================================================================
 # EVENT SUCCESS CODES (200-255 range)
 # =============================================================================
@@ -373,6 +381,7 @@ declare -A EXIT_CODES=(
    [$EC_CGROUP]="Error with cgroup operation"
    [$EC_CGROUP_UNSUPPORTED]="cgroup v2 not available, not delegated, or kernel too old"
    [$EC_FIREWALL_UNREACHABLE]="kgsm-firewall authority not reachable"
+   [$EC_INSUFFICIENT_MEMORY]="Not enough free memory to start this instance"
 )
 
 declare -g KGSM_ERRORS_LOADED=1

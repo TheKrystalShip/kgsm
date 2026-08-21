@@ -63,14 +63,27 @@ function show_usage_start() {
 Launch a game server instance and make it available to players.
 
 ${UNDERLINE}Usage:${END}
-  ${self} start <instance>
+  ${self} start <instance> [--force]
 
 ${UNDERLINE}Options:${END}
+  --force                         Start even if the node does not have room for it
   --help                          Display this help information
+
+${UNDERLINE}Description:${END}
+  A start is refused when it would leave the node with less free memory than
+  memory_gate_headroom_mb. What the instance needs is its own memory_cap_mb when
+  set, otherwise its blueprint's advisory metadata.min_ram_mb; with neither
+  declared the check cannot run and the start proceeds.
+
+  --force skips that check. It exists because the blueprint figure is an estimate
+  that can overstate what a game actually uses. It does not make more memory
+  available: forcing a start the node genuinely cannot fit invites the OOM killer,
+  which may take down a different server, or the watchdog supervising them all.
 
 ${UNDERLINE}Examples:${END}
   ${self} start valheim-03
   ${self} start minecraft-survival
+  ${self} start projectzomboid --force
 "
 }
 
@@ -105,10 +118,16 @@ function show_usage_restart() {
 Perform a complete stop and start sequence. Useful after configuration changes.
 
 ${UNDERLINE}Usage:${END}
-  ${self} restart <instance>
+  ${self} restart <instance> [--force]
 
 ${UNDERLINE}Options:${END}
+  --force                         Start even if the node does not have room for it
   --help                          Display this help information
+
+${UNDERLINE}Description:${END}
+  The start half is subject to the same node capacity check as '${self} start',
+  measured after the stop — so this instance's own memory has already been
+  returned to the node by the time the check runs.
 
 ${UNDERLINE}Examples:${END}
   ${self} restart valheim-03
@@ -223,12 +242,16 @@ function _run_state_before() {
 # Start command implementation
 function _cmd_start() {
   local instance_name=""
+  local force=false
 
   while [[ "$#" -gt 0 ]]; do
     case $1 in
       -h | --help | help)
         show_usage_start
         return 0
+        ;;
+      --force)
+        force=true
         ;;
       -*)
         __print_error "Invalid option for start command: $1"
@@ -237,6 +260,15 @@ function _cmd_start() {
       *)
         instance_name="$1"
         shift
+        # --force is accepted on either side of the instance name, so the flag can
+        # be appended to a command already typed out.
+        while [[ "$#" -gt 0 ]]; do
+          case $1 in
+            --force) force=true ;;
+            *) break ;;
+          esac
+          shift
+        done
         break
         ;;
     esac
@@ -257,7 +289,7 @@ function _cmd_start() {
   before="$(_run_state_before "$instance_name")"
 
   local exit_code
-  __logic_instance_start "$instance_name"
+  __logic_instance_start "$instance_name" "$force"
   exit_code=$?
 
 
@@ -274,6 +306,12 @@ function _cmd_start() {
         __dispatch_event_from_exit_code "$exit_code" "$instance_name"
       fi
       return $EC_SUCCESS
+      ;;
+    $EC_INSUFFICIENT_MEMORY)
+      # The gate has already said what it needs, what the node has, and what to do
+      # about it. "Failed to start" on top of that adds nothing and reads like a
+      # fault in the instance, which this is not.
+      return $exit_code
       ;;
     *)
       __print_error "Failed to start instance $instance_name"
@@ -381,6 +419,7 @@ export -f __emit_restart_stopped
 # Restart command implementation
 function _cmd_restart() {
   local instance_name=""
+  local force=false
 
   while [[ "$#" -gt 0 ]]; do
     case $1 in
@@ -388,9 +427,20 @@ function _cmd_restart() {
         show_usage_restart
         return 0
         ;;
+      --force)
+        force=true
+        ;;
       *)
         instance_name="$1"
         shift
+        # --force is accepted on either side of the instance name (see _cmd_start).
+        while [[ "$#" -gt 0 ]]; do
+          case $1 in
+            --force) force=true ;;
+            *) break ;;
+          esac
+          shift
+        done
         break
         ;;
     esac
@@ -424,7 +474,7 @@ function _cmd_restart() {
   # so the sample decides whether the hook says anything at all.
   local exit_code
   KGSM_RESTART_WAS_ACTIVE="$(_run_state_before "$instance_name")" \
-    __logic_instance_restart "$instance_name" __emit_restart_stopped
+    __logic_instance_restart "$instance_name" __emit_restart_stopped "$force"
   exit_code=$?
 
 
@@ -434,6 +484,13 @@ function _cmd_restart() {
     $EC_SUCCESS_INSTANCE_RESTARTED)
       __print_success "Instance $instance_name restarted successfully"
       __dispatch_event_from_exit_code "$exit_code" "$instance_name"
+      ;;
+    $EC_INSUFFICIENT_MEMORY)
+      # The stop half succeeded and the start half was refused, which leaves the
+      # instance DOWN. Say so plainly: an operator reading only the gate's message
+      # could reasonably assume the restart was refused before anything happened.
+      __print_error "Instance $instance_name was stopped but could not be started again, and is now down."
+      result=$exit_code
       ;;
     *)
       __print_error "Failed to restart instance $instance_name"

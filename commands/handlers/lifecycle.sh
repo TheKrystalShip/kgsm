@@ -43,6 +43,7 @@ fi
 # Returns: 211 on success (triggers instance-started event), error codes on failure
 function __logic_instance_start() {
   local _instance_name="$1"
+  local _force="${2:-false}"
 
   # Validate required parameters
   if [[ -z "$_instance_name" ]]; then
@@ -55,6 +56,26 @@ function __logic_instance_start() {
   local exit_code=$?
   if [[ $exit_code -ne 0 ]]; then
     return $exit_code
+  fi
+
+  # Refuse a start the node has no room for, BEFORE anything is opened or spawned.
+  # Ahead of the firewall call on purpose: a refused start must leave the host
+  # exactly as it found it, and a port opened for a run that never begins is a
+  # port left open with nothing behind it.
+  #
+  # --force is the operator's override and exists because the fallback requirement
+  # figure is an advisory blueprint value that can be wrong. It is available only
+  # to someone at a terminal — which is the person able to judge that a declared
+  # figure overstates what the game actually uses. The watchdog has no equivalent
+  # and never overrides itself.
+  if [[ "$_force" != "true" ]]; then
+    __memory_gate_check "$_instance_name" "$_instance_config_file"
+    exit_code=$?
+    if [[ $exit_code -ne 0 ]]; then
+      return $exit_code
+    fi
+  else
+    __print_warning "Starting $_instance_name with --force: the node capacity check was skipped"
   fi
 
   # Open the host firewall for the run that is starting — an instance's ports are
@@ -191,10 +212,14 @@ export -f __logic_stop_standalone_instance
 #            stop half has succeeded and before the start begins. The two halves are seconds to a
 #            minute apart, so the caller needs a place to say the old run has ended; this layer emits
 #            nothing itself (pure logic), it only calls back what it was handed. Omitted = silent.
+#       $3 = _force (optional) - skip the node capacity check on the start half. The gate runs AFTER
+#            the stop, so a restart is measured against a node that has already had this instance's
+#            memory returned to it; an instance that was running a moment ago normally still fits.
 # Returns: 213 on success (triggers instance-restarted event), error codes on failure
 function __logic_instance_restart() {
   local _instance_name="$1"
   local _after_stop="${2:-}"
+  local _force="${3:-false}"
 
   # Validate required parameters
   if [[ -z "$_instance_name" ]]; then
@@ -217,7 +242,7 @@ function __logic_instance_restart() {
   fi
 
   # Start the instance
-  __logic_instance_start "$_instance_name"
+  __logic_instance_start "$_instance_name" "$_force"
   local start_result=$?
 
   # If start failed, return the error
