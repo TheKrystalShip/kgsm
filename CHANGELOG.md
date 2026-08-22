@@ -47,6 +47,26 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **An instance records what it has been measured to need.** Four keys join the instance config:
+  `observed_ram_mb` — the memory an instance has been agreed to need, from what the host measured it
+  using — alongside `observed_ram_peak_mb` (the working-set peak it was drawn from),
+  `observed_window_days` (how much measurement backs it) and `observed_updated_at`. They ride the
+  generic config path end to end: `config-set` accepts them, `config-list` reports them settable, and
+  `instances info --json` emits them like any other key, so nothing in the engine special-cases them.
+
+  ⚠ **A record, not a limit, and nothing enforces it.** `memory_cap_mb` is the limit — the watchdog
+  writes it to the instance's cgroup at spawn, and the capacity gate reads it. These four change no
+  behaviour anywhere; they exist so the host stops discarding what it measures, and so a reader can
+  see the measurement and the blueprint's declared requirement disagree. They are not the blueprint's
+  `min_ram_mb` either: that describes a *game*, curated from vendor documentation, while these
+  describe *this* world with its own mods and its own players.
+
+  Empty until an operator agrees with a proposal, and empty is the honest state — an instance measured
+  to need nothing does not exist, so these are never `0` to mean "not known yet". A new instance
+  declares all four so an operator reading the config learns they exist; an instance installed before
+  they did carries none, and there is no instance-config migration because none is needed: the setter
+  appends an absent key, so the first agreed figure lands on an older instance the same way.
+
 - **`--force` on a start reaches the watchdog, so it overrides both checks.** `--force` skipped this
   CLI's capacity gate and stopped there, which overrode nothing for a native instance: the daemon
   runs its own check with the memory promised to instances already starting subtracted as well, so it

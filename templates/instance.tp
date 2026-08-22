@@ -106,6 +106,34 @@ cpu_priority="${instance_cpu_priority:-normal}"
 # Applied by the watchdog at spawn via cgroup memory.max.
 memory_cap_mb="${instance_memory_cap_mb:-0}"
 
+# What this instance has been agreed to need, in MiB, from what the host measured
+# it using. A RECORD, not a limit: nothing enforces it and nothing behaves
+# differently for it. The limit is memory_cap_mb above; this is the observation.
+#
+# Written when an operator agrees with a proposal comparing kgsm-monitor's
+# measurements against what the instance declares. Empty until then, and empty
+# is the honest state — an instance measured to need nothing does not exist, so
+# this is never 0 to mean "unknown".
+#
+# Not the blueprint's min_ram_mb either. That describes a GAME, curated from
+# vendor documentation; this describes THIS world, with its mods and its players.
+observed_ram_mb="${instance_observed_ram_mb:-}"
+
+# The largest working set this instance was measured holding, in MiB, as of the
+# agreement above. Carried separately so the two can differ visibly: an operator
+# may agree a figure above the measured peak to leave room for a world still
+# growing, and that judgement should not look like a measurement.
+observed_ram_peak_mb="${instance_observed_ram_peak_mb:-}"
+
+# How many days of measurement the agreed figure was drawn from. Part of the
+# answer rather than a note about it — twenty minutes of observation says nothing
+# about an instance however confident the megabytes beside it look.
+observed_window_days="${instance_observed_window_days:-}"
+
+# When the agreed figure was last written (ISO-8601, UTC). A figure is a snapshot
+# of a world that keeps changing, so its age decides how much of it still holds.
+observed_updated_at="${instance_observed_updated_at:-}"
+
 # Scheduled restart cadence (off | daily | weekly | 6h). Enforced by the
 # kgsm-scheduler leaf; inert on hosts without the scheduler deployed.
 scheduled_restart="${instance_scheduled_restart:-off}"
