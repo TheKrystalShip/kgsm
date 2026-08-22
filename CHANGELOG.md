@@ -47,6 +47,40 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **Instances are placed in named libraries.** A library is a root registered with
+  `kgsm libraries add <path>`: it carries an id and a name in a `.kgsm-library` marker written into
+  it, and the set of them lives in `$XDG_DATA_HOME/kgsm/libraries.ini`. `kgsm libraries list` reports
+  each one's state, free and total bytes, instance count and root — so where a host can put a game
+  server, and how much room is left there, is an enumerable fact rather than a path typed into a
+  config key. `remove` deregisters without touching a file and refuses while instances resolve to
+  the library, naming them; `--force` deregisters anyway and leaves everything on disk. `rename`
+  costs nothing because an instance records its library's path, never its name.
+
+  The marker is load-bearing rather than cosmetic. An unmounted disk leaves an empty directory at
+  its mount point, and a check that only looked for the directory would install onto the root
+  filesystem through it — so a library is **online** only when its root exists *and* carries a
+  marker whose id is the registered one, measured on every invocation and cached nowhere. Offline
+  is a state that is reported, never an error: an offline library lists as `offline` with `null`
+  capacity figures rather than stale ones, because nothing measured them. A root that already
+  carries a marker is **adopted** rather than made into a new library, which is what lets a disk
+  move between hosts and stay the library it already is.
+
+  Two new events, `library_added` and `library_removed`, each carrying `LibraryName` and `Path`.
+  Like the blueprint events their subject is not an instance. No capacity figure rides along —
+  that is only true at the moment it is measured, and `libraries list` is where it is measured.
+
+- **`default_install_directory` is replaced by `default_library`, config schema v10.** The old key
+  named one implicit root and gave placement no identity: nothing could enumerate where instances
+  live, report free space, or behave sanely when one of those roots was an unplugged disk. The
+  migration registers a configured path as the library `default` and names it in the new key,
+  writing the marker when the root is reachable and recording the library either way — an
+  unmounted disk is still a library this host knows about. A host with the key empty gets an empty
+  `default_library` and no library; nothing is invented to fill the gap.
+
+  ⚠ `kgsm install` and `kgsm instances create` take their root from `--install-dir` only. With the
+  config key gone there is no default to fall back on, so an invocation that omits the flag is
+  refused the way it already was on a host that left the key empty.
+
 - **`--force` on a start reaches the watchdog, so it overrides both checks.** `--force` skipped this
   CLI's capacity gate and stopped there, which overrode nothing for a native instance: the daemon
   runs its own check with the memory promised to instances already starting subtracted as well, so it

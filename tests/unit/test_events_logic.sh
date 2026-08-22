@@ -163,6 +163,8 @@ function test_validate_event_type_all_40_constants() {
     "blueprint_created"
     "blueprint_updated"
     "blueprint_removed"
+    "library_added"
+    "library_removed"
   )
 
   local failed_events=()
@@ -488,6 +490,8 @@ function test_get_param_spec_all_40_events() {
     "blueprint_created"
     "blueprint_updated"
     "blueprint_removed"
+    "library_added"
+    "library_removed"
   )
 
   local failed_events=()
@@ -682,6 +686,79 @@ function test_event_name_to_type_config_changed() {
 
   assert_equals "$result" "instance_config_changed" \
     "Should convert 'instance-config-changed' to 'instance_config_changed'"
+}
+
+# =============================================================================
+# TESTS: library_* events (library-scoped, not instance-scoped)
+# =============================================================================
+# Their subject is a placement root — a named disk instances live on — so their
+# Data is keyed on LibraryName and Path rather than InstanceName.
+
+function test_validate_event_type_library_events() {
+  log_test_step "Testing __logic_validate_event_type for the two library events"
+
+  local failed=()
+  local event_type
+  for event_type in library_added library_removed; do
+    __logic_validate_event_type "$event_type"
+    [[ $? -ne $EC_SUCCESS ]] && failed+=("$event_type")
+  done
+
+  assert_equals "${#failed[@]}" "0" \
+    "All library event types should be valid. Failed: ${failed[*]}"
+}
+
+function test_get_param_spec_library_events() {
+  log_test_step "Testing library_added/removed require 'name path'"
+
+  local added removed
+  added=$(__logic_get_event_param_spec "library_added")
+  removed=$(__logic_get_event_param_spec "library_removed")
+
+  # The path rides along because the name alone is not enough to act on: a
+  # removal takes the name out of the registry, and a reader that only learns
+  # the name cannot say which disk left.
+  assert_equals "name path" "$added" "library_added should require 'name path'"
+  assert_equals "name path" "$removed" "library_removed should require 'name path'"
+}
+
+function test_validate_params_library_added_requires_both() {
+  log_test_step "Testing library_added rejects a name with no path"
+
+  __logic_validate_event_params "library_added" "ssd" "/mnt/ssd"
+  assert_equals "$?" "$EC_SUCCESS" "Both params should validate"
+
+  __logic_validate_event_params "library_added" "ssd"
+  assert_equals "$?" "$EC_EVENT_PARAMS_INVALID" "A missing path should be rejected"
+
+  __logic_validate_event_params "library_added" "ssd" ""
+  assert_equals "$?" "$EC_EVENT_PARAMS_INVALID" "An empty path should be rejected"
+}
+
+function test_event_name_to_type_library_events() {
+  log_test_step "Testing dash-to-underscore conversion for the library events"
+
+  assert_equals "$(__logic_event_name_to_type "library-added")" "library_added" \
+    "library-added should convert to library_added"
+  assert_equals "$(__logic_event_name_to_type "library-removed")" "library_removed" \
+    "library-removed should convert to library_removed"
+}
+
+function test_build_payload_library_added_is_library_scoped() {
+  log_test_step "Testing the library_added payload keys Data on LibraryName"
+
+  local payload
+  payload=$(__logic_build_event_payload "library_added" "ssd" "/mnt/ssd")
+  assert_equals "$?" "$EC_SUCCESS" "Payload should build"
+
+  assert_equals "$(echo "$payload" | jq -r '.EventType')" "library_added" \
+    "EventType should be library_added"
+  assert_equals "$(echo "$payload" | jq -r '.Data.LibraryName')" "ssd" \
+    "Data should carry LibraryName"
+  assert_equals "$(echo "$payload" | jq -r '.Data.Path')" "/mnt/ssd" \
+    "Data should carry Path"
+  assert_command_succeeds "echo '$payload' | jq -e '.Data.InstanceName == null'" \
+    "A library event names no instance"
 }
 
 # =============================================================================
@@ -1025,12 +1102,12 @@ function test_edge_case_event_count_matches_configs() {
   # A canary, not a rule: the number itself carries no meaning, but a change to it means the event
   # vocabulary grew or shrank, which is worth being deliberate about. Update it in the same commit
   # that adds or removes an event, together with the param spec beside it.
-  log_test_step "Testing EVENT_CONFIGS count matches expected 63 events"
+  log_test_step "Testing EVENT_CONFIGS count matches expected 65 events"
 
   local config_count="${#EVENT_CONFIGS[@]}"
 
-  assert_equals "$config_count" "63" \
-    "EVENT_CONFIGS should contain exactly 63 entries (found: $config_count)"
+  assert_equals "$config_count" "65" \
+    "EVENT_CONFIGS should contain exactly 65 entries (found: $config_count)"
 }
 
 # Conformance guard: every event a call site actually emits must be registered

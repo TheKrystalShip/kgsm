@@ -190,8 +190,9 @@ enable_port_forwarding=false
 enable_command_shortcuts=false
 
 [instance_defaults]
-# Set test-specific paths (relative to sandbox)
-default_install_directory=
+# No default library: a test that places an instance names the root it wants,
+# so nothing inherits a placement decision from the config.
+default_library=
 instance_suffix_length=3
 instance_auto_update_before_start=false
 

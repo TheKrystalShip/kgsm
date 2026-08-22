@@ -599,7 +599,7 @@ function __validate_config_value() {
     ;;
   string)
     # For strings, check if it's not empty (unless explicitly allowed)
-    if [[ -z "$value" && "$key" != "default_install_directory" && "$key" != "STEAM_USERNAME" && "$key" != "STEAM_PASSWORD" && "$key" != "webhook_urls" && "$key" != "webhook_secret" ]]; then
+    if [[ -z "$value" && "$key" != "default_library" && "$key" != "STEAM_USERNAME" && "$key" != "STEAM_PASSWORD" && "$key" != "webhook_urls" && "$key" != "webhook_secret" ]]; then
       __print_error "Value for '$key' cannot be empty"
       return $EC_INVALID_ARG
     fi

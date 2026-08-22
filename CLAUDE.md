@@ -79,7 +79,7 @@ Native instances are supervised by the resident **kgsm-watchdog** daemon (cgroup
 ## Key references
 
 - `templates/overrides.tp` — complete override API
-- `docs/` — `execution_flows.md`, `blueprints.md`, `overrides.md`, `instances.md`, `configuration_management.md`
+- `docs/` — `execution_flows.md`, `blueprints.md`, `overrides.md`, `instances.md`, `libraries.md`, `configuration_management.md`
 - `docs/specs/testing-framework/testing_specification.md` — required before touching tests
 - Examples: `blueprints/factorio.bp.yaml` (native), `blueprints/vrising.bp.yaml` (container), `overrides/factorio/`, `migrations/config/001_v0_to_v1_flat_to_sectioned.sh`
 

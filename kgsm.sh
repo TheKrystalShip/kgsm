@@ -51,6 +51,7 @@ ${BOLD}${UNDERLINE}Module Commands:${END}
   events <command>            Manage event system
   files <command>             Manage instance files
   instances <command>         Manage server instances
+  libraries <command>         Manage instance placement libraries
   lifecycle <command>         Control server lifecycle
   autostart <command>         Control boot auto-start (enable, disable, status, list)
   network <command>           Manage network and ports
@@ -81,6 +82,11 @@ ${BOLD}${UNDERLINE}Examples:${END}
   ${self} status factorio-01
   ${self} logs factorio-01 --follow
   ${self} is-active factorio-01
+
+  ${BOLD}Libraries:${END}
+  ${self} libraries add /mnt/ssd/kgsm --name ssd
+  ${self} libraries list
+  ${self} libraries remove ssd
 
   ${BOLD}Blueprints:${END}
   ${self} blueprints list
@@ -251,6 +257,10 @@ case "$command" in
     ;;
   instances)
     instances.sh "$@"
+    exit $?
+    ;;
+  libraries)
+    libraries.sh "$@"
     exit $?
     ;;
   lifecycle)

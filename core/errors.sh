@@ -169,6 +169,22 @@ export EC_EVENT_JOURNAL_FAILED
 declare -g -r EC_INSUFFICIENT_MEMORY=51
 export EC_INSUFFICIENT_MEMORY
 
+# The named library is not in the registry.
+declare -g -r EC_LIBRARY_NOT_FOUND=52
+export EC_LIBRARY_NOT_FOUND
+
+# Registering this library would duplicate one that is already registered —
+# same path, same marker id, or same name. Which of the three is reported by
+# the verb, since the remedy differs (nothing to do, versus pick another name).
+declare -g -r EC_LIBRARY_EXISTS=53
+export EC_LIBRARY_EXISTS
+
+# Instances are placed in this library, so deregistering it would leave them
+# pointing at a root KGSM no longer knows about. Distinct from EC_ERROR: the
+# operation is refused, nothing was attempted and nothing is broken.
+declare -g -r EC_LIBRARY_IN_USE=54
+export EC_LIBRARY_IN_USE
+
 # =============================================================================
 # EVENT SUCCESS CODES (200-255 range)
 # =============================================================================
@@ -274,6 +290,15 @@ export EC_SUCCESS_FIREWALL_PORTS_OPENED
 
 declare -g -r EC_SUCCESS_FIREWALL_PORTS_CLOSED=228
 export EC_SUCCESS_FIREWALL_PORTS_CLOSED
+
+# Library registry events. The subject is a placement root, not an instance, so
+# the command layer emits these directly rather than through
+# __dispatch_event_from_exit_code (which is keyed on an instance name).
+declare -g -r EC_SUCCESS_LIBRARY_ADDED=232
+export EC_SUCCESS_LIBRARY_ADDED
+
+declare -g -r EC_SUCCESS_LIBRARY_REMOVED=233
+export EC_SUCCESS_LIBRARY_REMOVED
 
 # Backup events (reserved for future use)
 declare -g -r EC_SUCCESS_BACKUP_CREATED=230
@@ -382,6 +407,9 @@ declare -A EXIT_CODES=(
    [$EC_CGROUP_UNSUPPORTED]="cgroup v2 not available, not delegated, or kernel too old"
    [$EC_FIREWALL_UNREACHABLE]="kgsm-firewall authority not reachable"
    [$EC_INSUFFICIENT_MEMORY]="Not enough free memory to start this instance"
+   [$EC_LIBRARY_NOT_FOUND]="Library not found"
+   [$EC_LIBRARY_EXISTS]="Library already registered"
+   [$EC_LIBRARY_IN_USE]="Library holds instances"
 )
 
 declare -g KGSM_ERRORS_LOADED=1

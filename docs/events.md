@@ -155,6 +155,22 @@ These are the only events whose subject is **not an instance**. They fire when a
 
 The file **contents are never carried**. A blueprint can hold credentials (SteamCMD arguments, passwords inside an embedded compose) and an event payload fans out to every enabled transport, so the record is "blueprint X changed" and nothing more. A consumer that needs the content reads the file.
 
+### 💽 Library Events
+
+The other events whose subject is **not an instance**. A library is a named root that instances are placed in, and these fire when one is registered or deregistered — so a surface can keep its picture of where this host can place instances without polling the registry.
+
+| Event Name | Description | Data Fields |
+|------------|-------------|-------------|
+| `library_added` | A library was registered | `LibraryName`, `Path` |
+| `library_removed` | A library was deregistered | `LibraryName`, `Path` |
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `LibraryName` | string | The library's name — the subject, in place of `InstanceName` |
+| `Path` | string | The canonical root that was registered |
+
+The path rides along because the name alone is not enough to act on: a removal takes the name out of the registry, and a reader that only learns the name cannot say which disk left. No capacity or online figure is carried — both are measurements that are only true at the moment they are taken, and `kgsm libraries list` is where they are taken.
+
 ## 🔄 Event Payload Structure
 
 Every event is a JSON object with the following top-level fields:
@@ -318,6 +334,8 @@ events.sh emit <event-type> [parameters...]
 | `blueprint-created` | `<blueprint>` `<tier>` `<overrides_system>` `[runtime]` |
 | `blueprint-updated` | `<blueprint>` `<tier>` `<overrides_system>` `[runtime]` |
 | `blueprint-removed` | `<blueprint>` `<tier>` `<reverted_to_system>` |
+| `library-added` | `<name>` `<path>` |
+| `library-removed` | `<name>` `<path>` |
 
 **Examples:**
 
@@ -329,6 +347,7 @@ events.sh emit instance-backup-created myserver auto 1.2.3
 events.sh emit instance-stopped myserver
 events.sh emit blueprint-updated terraria user true native
 events.sh emit blueprint-removed terraria user true
+events.sh emit library-added ssd /mnt/ssd/kgsm
 ```
 
 ## ⚙️ Configuration

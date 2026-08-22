@@ -39,7 +39,7 @@ watcher_global_timeout_seconds=600
 watcher_ports_check_interval_seconds=5
 
 [instance_defaults]
-default_install_directory=
+default_library=
 instance_suffix_length=2
 enable_backup_compression=false
 instance_save_command_timeout_seconds=5

@@ -28,7 +28,8 @@ Related commands cluster by prefix — keep new files in the existing family:
 - `watcher.sh`, `watcher.logs.sh`, `watcher.ports.sh`
 - lifecycle: `install.sh`, `uninstall.sh`, `lifecycle.sh`, `instances.sh`,
   `autostart.sh` (boot auto-start enable/disable via the watchdog)
-- `config.sh`, `system.sh`, `network.sh`, `directories.sh`, `interactive.sh`
+- `config.sh`, `system.sh`, `network.sh`, `directories.sh`, `libraries.sh`
+  (instance placement roots), `interactive.sh`
 
 Handlers without a 1:1 command pair exist for shared logic
 (`handlers/files.common.sh`, `handlers/menus.sh`, `handlers/wizards.sh`,

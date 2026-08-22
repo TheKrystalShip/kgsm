@@ -367,6 +367,27 @@ export EVENT_BLUEPRINT_UPDATED
 declare -g -r EVENT_BLUEPRINT_REMOVED="blueprint_removed"
 export EVENT_BLUEPRINT_REMOVED
 
+# Library registry events. Their subject is a placement root — a named disk
+# instances live on — so their Data carries `LibraryName` and `Path`, the way
+# the blueprint events carry `BlueprintName`, and no instance is involved.
+#
+# They exist so a surface can keep its picture of where this host can place
+# instances without polling the registry: an added library is somewhere new to
+# install, and a removed one is a choice that has to disappear from an install
+# form before someone picks it.
+#
+# `path` is the canonical root that was registered. It is carried because the
+# name alone is not enough to act on — a removal takes the name out of the
+# registry, and a reader that only learns the name cannot say which disk left.
+# No capacity or online figure rides along: both are measurements that are only
+# true at the moment they are taken, and `libraries list` is where they are
+# taken.
+declare -g -r EVENT_LIBRARY_ADDED="library_added"
+export EVENT_LIBRARY_ADDED
+
+declare -g -r EVENT_LIBRARY_REMOVED="library_removed"
+export EVENT_LIBRARY_REMOVED
+
 # Event parameter specifications
 declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_CREATED"]="instance blueprint"
@@ -450,6 +471,10 @@ declare -g -A EVENT_CONFIGS=(
   ["$EVENT_BLUEPRINT_CREATED"]="blueprint tier overrides_system"
   ["$EVENT_BLUEPRINT_UPDATED"]="blueprint tier overrides_system"
   ["$EVENT_BLUEPRINT_REMOVED"]="blueprint tier reverted_to_system"
+  # Library-scoped, not instance-scoped: the first param is a library name and
+  # renders as Data.LibraryName.
+  ["$EVENT_LIBRARY_ADDED"]="name path"
+  ["$EVENT_LIBRARY_REMOVED"]="name path"
 )
 
 # Validates that an event type is supported
@@ -823,6 +848,16 @@ function __logic_build_event_payload() {
         BlueprintName: $blueprint,
         Tier: $tier,
         RevertedToSystem: ($reverted_to_system | if . == "true" then true elif . == "false" then false else null end)
+      }'
+      ;;
+    "$EVENT_LIBRARY_ADDED" | "$EVENT_LIBRARY_REMOVED")
+      # Keyed on a library rather than an instance: the subject is a placement
+      # root. `$name`/`$path` bind from the EVENT_CONFIGS spec. Both are always
+      # known to the emitter — a library has no identity without them — so
+      # neither is null-coalesced.
+      data_object='{
+        LibraryName: $name,
+        Path: $path
       }'
       ;;
     *)

@@ -216,9 +216,8 @@ graph TD
     A["kgsm.sh install BLUEPRINT [options]"] --> AA["Bootstrap environment"]
     AA --> B["Parse arguments<br/>(blueprint, install-dir, version, name)"]
     B --> C{"install-dir<br/>provided?"}
-    C -->|"No"| C1["Use config_default_install_directory"]
+    C -->|"No"| C1["Refuse: no installation directory"]
     C -->|"Yes"| D
-    C1 --> D
 
     D["directories.sh ensure-created install_dir"] --> E["instances.sh generate-id BLUEPRINT [--name NAME]<br/>→ unique instance identifier"]
     E --> F["directories.sh ensure-created working_dir<br/>(install_dir/BLUEPRINT/INSTANCE)"]

@@ -34,6 +34,8 @@ function setup_file() {
   assert_file_executable "$MIGRATION_DIR/004_v3_to_v4_cgroup_base_delegated.sh" "Migration 004 should be executable"
   assert_file_exists "$MIGRATION_DIR/005_v4_to_v5_backups_directory.sh" "Migration 005 should exist"
   assert_file_executable "$MIGRATION_DIR/005_v4_to_v5_backups_directory.sh" "Migration 005 should be executable"
+  assert_file_exists "$MIGRATION_DIR/010_v9_to_v10_default_library.sh" "Migration 010 should exist"
+  assert_file_executable "$MIGRATION_DIR/010_v9_to_v10_default_library.sh" "Migration 010 should be executable"
 
   log_test_step "Config migration test environment validated"
 }
@@ -971,4 +973,186 @@ INI
   # delivers it, already carrying the new default.
   assert_command_fails "grep -q 'enable_backup_compression' '$test_config'"
   assert_command_succeeds "grep -q '^instance_backup_retention=5$' '$test_config'"
+}
+
+# =============================================================================
+# TEST: Migration 010 - a configured install directory becomes a library
+# =============================================================================
+
+function test_migration_010_converts_a_set_install_directory() {
+  log_test_step "Testing migration 010 registers the configured install directory"
+
+  local registry="${XDG_DATA_HOME}/kgsm/libraries.ini"
+  rm -f "$registry"
+
+  local library_root="${KGSM_TEST_SANDBOX}/migration_010_root"
+  mkdir -p "$library_root"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v9_set_install_dir.ini"
+  cat > "$test_config" << INI
+config_schema_version=9
+
+[instance_defaults]
+# DEFAULT INSTALLATION DIRECTORY
+# Where should new game server instances be installed by default?
+#
+# Default: Empty (specify per instance)
+default_install_directory=${library_root}
+instance_suffix_length=2
+
+[accessibility]
+enable_command_shortcuts=false
+INI
+
+  bash "$MIGRATION_DIR/010_v9_to_v10_default_library.sh" "$test_config"
+  assert_equals "$?" "0" "Migration 010 should succeed"
+
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "10" "Schema version should be 10"
+
+  # The path this host installs into is now a library, named as the default.
+  assert_command_succeeds "grep -q '^default_library=default\$' '$test_config'"
+  assert_file_exists "$registry"
+  assert_file_contains "$registry" "[default]" "Registry should carry the default library"
+  assert_file_contains "$registry" "path=${library_root}" "Registry should carry the root"
+  assert_file_exists "${library_root}/.kgsm-library" "The root should carry a marker"
+
+  # The registry and the marker must agree, or the library reads offline.
+  local registry_id marker_id
+  registry_id=$(grep -m 1 '^id=' "$registry" | cut -d= -f2)
+  marker_id=$(grep -m 1 '^id=' "${library_root}/.kgsm-library" | cut -d= -f2)
+  assert_equals "$marker_id" "$registry_id" "Marker and registry should agree on the id"
+
+  # The key it replaces is REMOVED, not commented out: a path left in the file
+  # invites an operator to set it and expect instances to go there.
+  assert_command_fails "grep -q '^default_install_directory=' '$test_config'"
+  assert_command_fails "grep -q 'DEFAULT INSTALLATION DIRECTORY' '$test_config'"
+
+  # …inside [instance_defaults], not appended past the following section
+  local key_line next_section_line
+  key_line=$(grep -n '^default_library=' "$test_config" | cut -d: -f1)
+  next_section_line=$(grep -n '^\[accessibility\]' "$test_config" | cut -d: -f1)
+  assert_command_succeeds "[[ $key_line -lt $next_section_line ]]"
+
+  # Existing keys preserved
+  assert_command_succeeds "grep -q '^instance_suffix_length=2\$' '$test_config'"
+  assert_command_succeeds "grep -q '^enable_command_shortcuts=false\$' '$test_config'"
+
+  assert_file_exists "${test_config}.pre-migration-v10.bak"
+
+  rm -f "$registry"
+  rm -rf "$library_root"
+}
+
+# =============================================================================
+# TEST: Migration 010 - an empty install directory registers nothing
+# =============================================================================
+
+function test_migration_010_leaves_an_empty_install_directory_alone() {
+  log_test_step "Testing migration 010 with no configured install directory"
+
+  local registry="${XDG_DATA_HOME}/kgsm/libraries.ini"
+  rm -f "$registry"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v9_empty_install_dir.ini"
+  cat > "$test_config" << 'INI'
+config_schema_version=9
+
+[instance_defaults]
+default_install_directory=
+instance_suffix_length=2
+
+[accessibility]
+enable_command_shortcuts=false
+INI
+
+  bash "$MIGRATION_DIR/010_v9_to_v10_default_library.sh" "$test_config"
+  assert_equals "$?" "0" "Migration 010 should succeed"
+
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "10" "Schema version should be 10"
+
+  # No path was configured, so there is no library to register and nothing is
+  # invented to fill the gap.
+  assert_command_succeeds "grep -q '^default_library=\$' '$test_config'"
+  assert_file_not_exists "$registry" "No library should be registered"
+
+  assert_command_fails "grep -q '^default_install_directory=' '$test_config'"
+  assert_command_succeeds "grep -q '^instance_suffix_length=2\$' '$test_config'"
+}
+
+# =============================================================================
+# TEST: Migration 010 - an unreachable install directory is still recorded
+# =============================================================================
+
+function test_migration_010_records_an_unreachable_install_directory() {
+  log_test_step "Testing migration 010 with a path that is not there"
+
+  local registry="${XDG_DATA_HOME}/kgsm/libraries.ini"
+  rm -f "$registry"
+
+  local absent_root="${KGSM_TEST_SANDBOX}/migration_010_absent"
+  rm -rf "$absent_root"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v9_absent_install_dir.ini"
+  cat > "$test_config" << INI
+config_schema_version=9
+
+[instance_defaults]
+default_install_directory=${absent_root}
+INI
+
+  bash "$MIGRATION_DIR/010_v9_to_v10_default_library.sh" "$test_config" > /dev/null 2>&1
+  assert_equals "$?" "0" "Migration 010 should succeed"
+
+  # An unmounted disk is still a library this host knows about, so the registry
+  # records it. The marker cannot be written into a root that is not there, so
+  # the library reports offline rather than being invented into existence.
+  assert_command_succeeds "grep -q '^default_library=default\$' '$test_config'"
+  assert_file_contains "$registry" "path=${absent_root}" "Registry should carry the root"
+  assert_dir_not_exists "$absent_root" "The migration should not create the root"
+
+  rm -f "$registry"
+}
+
+# =============================================================================
+# TEST: Migration 010 - Idempotency (default_library already present)
+# =============================================================================
+
+function test_migration_010_idempotent() {
+  log_test_step "Testing migration 010 idempotency"
+
+  local registry="${XDG_DATA_HOME}/kgsm/libraries.ini"
+  rm -f "$registry"
+
+  local library_root="${KGSM_TEST_SANDBOX}/migration_010_idempotent_root"
+  mkdir -p "$library_root"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v9_library_idempotent.ini"
+  cat > "$test_config" << INI
+config_schema_version=9
+
+[instance_defaults]
+default_install_directory=${library_root}
+INI
+
+  bash "$MIGRATION_DIR/010_v9_to_v10_default_library.sh" "$test_config"
+  assert_equals "$?" "0" "First run should succeed"
+
+  bash "$MIGRATION_DIR/010_v9_to_v10_default_library.sh" "$test_config"
+  assert_equals "$?" "0" "Second run should succeed (idempotent)"
+
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "10" "Schema version should be 10"
+
+  assert_equals "1" "$(grep -c '^default_library=' "$test_config")" \
+    "default_library should appear exactly once"
+  assert_equals "1" "$(grep -c '^\[default\]$' "$registry")" \
+    "The library should be registered exactly once"
+
+  rm -f "$registry"
+  rm -rf "$library_root"
 }
