@@ -82,7 +82,7 @@ For a container blueprint (`runtime: container`), the body is instead a `contain
 | Section | Fields |
 |---|---|
 | Basic Instance Information | `name`, `blueprint_file`, `install_datetime` |
-| Directory and File Paths | `working_dir`, `backups_dir`, `install_dir`, `saves_dir`, `temp_dir`, `logs_dir`, `launch_dir`, `executable_subdirectory`, `executable_file`, `management_file`, `compose_file` |
+| Directory and File Paths | `library_dir`, `working_dir`, `backups_dir`, `install_dir`, `saves_dir`, `temp_dir`, `logs_dir`, `launch_dir`, `executable_subdirectory`, `executable_file`, `management_file`, `compose_file` |
 | Process Management Files | `version_file`, `pid_file`, `socket_file`, `log_file` |
 | Runtime Configuration | `runtime`, `platform`, `auto_update`, `startup_success_regex` |
 | Game Server Executable Configuration | `level_name`, `executable_arguments` |
@@ -170,6 +170,7 @@ The following `$instance_*` variables are available in templates that are expand
 | Variable | Description |
 |---|---|
 | `$instance_working_dir` | Root working directory for all instance files |
+| `$instance_library_dir` | Root of the library the instance is placed in |
 | `$instance_install_dir` | Directory where server binaries are installed |
 | `$instance_backups_dir` | Directory holding this instance's backups (outside `working_dir`) |
 | `$instance_saves_dir` | Directory for save files |

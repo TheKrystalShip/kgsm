@@ -33,7 +33,7 @@
 # 2. Set `runtime` and fill the matching block (native: OR container:)
 # 3. Fill the metadata you know; leave anything unknown as null (NEVER 0).
 # 4. Test:  ./kgsm.sh blueprints info <your_game>
-#           ./kgsm.sh create <your_game> --install-dir /path/to/install
+#           ./kgsm.sh create <your_game> --library <library-name>
 #
 # Required fields:
 #   - schema_version (currently 1)

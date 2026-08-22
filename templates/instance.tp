@@ -22,6 +22,12 @@ install_datetime="${instance_install_datetime}"
 # All file system paths used by this instance
 #=============================================================================
 
+# Root of the library this instance is placed in. The working directory below
+# sits at <library_dir>/instances/<blueprint>/<name>. Recorded as a path rather
+# than a library name: every other path here is absolute, the registry is the
+# only place names live, and renaming a library then costs nothing.
+library_dir="${instance_library_dir}"
+
 # Directory where the instance files are stored
 working_dir="${instance_working_dir}"
 

@@ -60,7 +60,7 @@ ${UNDERLINE}Options:${END}
   -h, --help                  Show help and exit
 
 ${UNDERLINE}Examples:${END}
-  $self create factorio --install-dir /opt --name factorio-01
+  $self create factorio --library ssd --name factorio-01
   $self list
   $self list factorio
   $self list --json
@@ -110,7 +110,9 @@ ${UNDERLINE}Arguments:${END}
   blueprint                   Blueprint name (with or without the .bp.yaml extension)
 
 ${UNDERLINE}Options:${END}
-  --install-dir <path>        Installation directory (required)
+  --library <name>            Library to place the instance in (default: the
+                              configured default_library, or the sole
+                              registered library)
   --name <name>               Custom instance name (optional, auto-generated if not provided)
   --port <port>               Override the blueprint's primary game port (optional)
   --help                      Display this help information
@@ -118,13 +120,14 @@ ${UNDERLINE}Options:${END}
 ${UNDERLINE}Description:${END}
 Creates a new instance configuration file and sets up the instance structure.
 If --name is not provided, a unique name will be auto-generated based on the
-blueprint name. The installation directory must be specified and will contain
-all instance data, saves and logs. Backups are kept outside it.
+blueprint name. The instance is placed at
+<library>/instances/<blueprint>/<instance> and holds all its data, saves and
+logs. Backups are kept outside it.
 
 ${UNDERLINE}Examples:${END}
-  $self create factorio --install-dir /opt/gameservers
-  $self create terraria --install-dir /home/user/servers --name terraria-main
-  $self create minecraft.bp.yaml --install-dir /var/games
+  $self create factorio --library ssd
+  $self create terraria --library ssd --name terraria-main
+  $self create minecraft.bp.yaml --library archive
 "
 }
 
@@ -600,6 +603,74 @@ source "$watchdog_handler" || {
   exit $EC_FAILED_SOURCE
 }
 
+# Echoes the name of the library to place a new instance in, or explains why
+# there is no answer. Only errors are printed, because the caller reads this
+# function's stdout. The library logic is loaded with the instances handler,
+# which places into a library root.
+#
+# Args: $1 = the name passed to --library (may be empty)
+function _resolve_placement_library() {
+  local requested="$1"
+
+  # Called without a command substitution: the handler reports which of the
+  # three sources answered through globals, and a subshell would lose them.
+  local resolved exit_code
+  __logic_library_resolve_placement "$requested" > /dev/null
+  exit_code=$?
+  resolved="$__library_resolve_name_out"
+
+  case $exit_code in
+    $EC_SUCCESS)
+      echo "$resolved"
+      ;;
+    $EC_LIBRARY_NOT_FOUND)
+      if [[ "$__library_resolve_source_out" == "default" ]]; then
+        __print_error "The configured default library '$resolved' is not registered"
+        __print_error "Register it, or pick another with --library <name>"
+      else
+        __print_error "No library named '$resolved' is registered"
+        __print_error "Run 'kgsm libraries list' to see the registered ones"
+      fi
+      return $exit_code
+      ;;
+    $EC_NOT_FOUND)
+      __print_error "No libraries registered; run 'kgsm libraries add <path>'"
+      return $EC_LIBRARY_NOT_FOUND
+      ;;
+    $EC_MISSING_ARG)
+      __print_error "Several libraries are registered and none was chosen"
+      __print_error "Pass --library <name>, or set default_library in the KGSM config"
+      return $exit_code
+      ;;
+    *)
+      __print_error "Could not determine which library to create the instance in"
+      return $exit_code
+      ;;
+  esac
+
+  if ! __logic_library_is_online "$resolved"; then
+    __print_error "Library '$resolved' is not reachable at $(__logic_library_path "$resolved")"
+    __print_error "Mount it, or create the instance in another library with --library <name>"
+    return $EC_LIBRARY_OFFLINE
+  fi
+
+  return $EC_SUCCESS
+}
+
+# Records the library root of an instance created before instances recorded one.
+# Called from the commands that touch a single instance, so the key lands on
+# first use rather than needing a migration pass over every instance on the host.
+function _stamp_library_dir() {
+  local instance="$1"
+
+  local instance_config_file
+  instance_config_file="$(__find_instance_config "$instance" 2> /dev/null)"
+  [[ -n "$instance_config_file" ]] || return 0
+
+  __logic_stamp_instance_library_dir "$instance_config_file" || return 0
+  return 0
+}
+
 function _print_info() {
   local instance=$1
   local instance_config_file
@@ -622,6 +693,24 @@ function _print_info_json() {
   local _cg_mount="${config_cgroup_mount_point:-/sys/fs/cgroup}"
   local _cg_base="${config_cgroup_base_name:-kgsm.slice/kgsm-watchdog.service}"
   local cgroup_path="${_cg_mount}/${_cg_base}/${instance%.ini}"
+
+  # The library an instance resolves to is derived from the registry on every
+  # read rather than recorded: a library can be renamed, and the instance holds
+  # the root's path. An instance under no registered root reports
+  # "unregistered", which is a measurement, not a placement.
+  local _working_dir="" _key _value
+  while IFS='=' read -r _key _value || [[ -n "$_key" ]]; do
+    if [[ "$_key" == "working_dir" ]]; then
+      _working_dir="${_value#\"}"
+      _working_dir="${_working_dir%\"}"
+      break
+    fi
+  done < "$instance_config_file"
+
+  local library="unregistered"
+  if [[ -n "$_working_dir" ]]; then
+    library="$(__logic_library_for_working_dir "$_working_dir")" || library="unregistered"
+  fi
 
   # Read ports directly from the already-found config file, avoiding a second
   # __find_instance_config call through __get_instance_config_value.
@@ -663,10 +752,12 @@ function _print_info_json() {
 
       printf '%s\t%s\n' "$key" "$value"
     done < "$instance_config_file"
-  } | jq -Rs --arg cg "$cgroup_path" --argjson ports "$ports_json" \
+  } | jq -Rs --arg cg "$cgroup_path" --argjson ports "$ports_json" --arg library "$library" \
     '[split("\n")[] | select(length > 0) | split("\t") | {(.[0]): .[1]}]
      | add // {}
-     | . + {cgroup_path: (if .runtime == "native" then $cg else "" end), ports: $ports}'
+     | . + {cgroup_path: (if .runtime == "native" then $cg else "" end),
+            ports: $ports,
+            library: $library}'
 }
 
 function _list_instances() {
@@ -793,7 +884,7 @@ function _get_instance_status_json() {
 function _cmd_create() {
   local instance_name=""
   local blueprint=""
-  local install_dir="$config_default_install_directory"
+  local library=""
   local port=""
 
   while [[ $# -gt 0 ]]; do
@@ -802,10 +893,10 @@ function _cmd_create() {
         show_usage_create
         return 0
         ;;
-      --install-dir)
+      --library)
         shift
-        [[ -z "$1" ]] && __print_error "Missing argument for --install-dir" && return $EC_MISSING_ARG
-        install_dir="$1"
+        [[ -z "$1" ]] && __print_error "Missing argument for --library" && return $EC_MISSING_ARG
+        library="$1"
         ;;
       --name)
         shift
@@ -840,9 +931,15 @@ function _cmd_create() {
     exit $EC_MISSING_ARG
   fi
 
+  local resolved_library
+  resolved_library="$(_resolve_placement_library "$library")" || return $?
+
+  local library_dir
+  library_dir="$(__logic_library_path "$resolved_library")"
+
   # Create instance
   local created_instance
-  created_instance=$(__logic_create_instance "$blueprint" "$install_dir" "$instance_name" "$port")
+  created_instance=$(__logic_create_instance "$blueprint" "$library_dir" "$instance_name" "$port")
   local exit_code=$?
 
   case $exit_code in
@@ -995,6 +1092,8 @@ function _cmd_info() {
     __print_error "Instance config file for '$instance' not found."
     exit $EC_FILE_NOT_FOUND
   fi
+
+  _stamp_library_dir "$instance"
 
   if [[ -z "$json_format" ]]; then
     _print_info "$instance"

@@ -71,7 +71,7 @@ source "$instances_logic" || {
 #
 # Args:
 #   $1 - blueprint_name
-#   $2 - install_directory
+#   $2 - library (name of a registered library)
 #   $3 - version (optional, empty for latest)
 #   $4 - _instance_name (optional, empty for default)
 #
@@ -80,10 +80,10 @@ source "$instances_logic" || {
 #   Error codes on failure
 #
 # Example:
-#   __logic_wizard_install "factorio" "/opt/servers" "1.1.87" "production"
+#   __logic_wizard_install "factorio" "ssd" "1.1.87" "production"
 function __logic_wizard_install() {
   local blueprint_name="$1"
-  local install_dir="$2"
+  local library="$2"
   local version="$3"
   local _instance_name="$4"
 
@@ -92,7 +92,7 @@ function __logic_wizard_install() {
     return $EC_MISSING_ARG
   fi
 
-  if [[ -z "$install_dir" ]]; then
+  if [[ -z "$library" ]]; then
     return $EC_MISSING_ARG
   fi
 
@@ -101,7 +101,7 @@ function __logic_wizard_install() {
   install_logic=$(__find_command install.sh) || return $EC_FAILED_SOURCE
 
   # Build command arguments
-  local install_args=("$install_logic" "$blueprint_name" --install-dir "$install_dir")
+  local install_args=("$install_logic" "$blueprint_name" --library "$library")
   [[ -n "$version" ]] && install_args+=(--version "$version")
   [[ -n "$_instance_name" ]] && install_args+=(--name "$_instance_name")
 

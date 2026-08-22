@@ -18,6 +18,14 @@ if [[ -n "${KGSM_LOGIC_INSTANCES_LOADED}" ]]; then
   return 0
 fi
 
+# Load library logic. Placement is expressed in libraries: an instance is
+# created inside a library root, and the layout below it is that module's to
+# state rather than a path this one spells out for itself.
+if [[ -z "${KGSM_LOGIC_LIBRARIES_LOADED:-}" ]]; then
+  # shellcheck source=libraries.sh
+  source "$(__find_command_handler libraries.sh)" || return $EC_FAILED_SOURCE
+fi
+
 # Generate a unique instance name for a blueprint
 # Args: $1 = blueprint_name
 # Returns: Echoes unique instance name, returns 0 on success
@@ -159,10 +167,10 @@ function __logic_create_base_instance() {
   local instance_config_file="$1"
   local _instance_name="$2"
   local blueprint_abs_path="$3"
-  local install_dir="$4"
+  local library_dir="$4"
   local override_port="${5:-}"
 
-  if [[ -z "$instance_config_file" || -z "$_instance_name" || -z "$blueprint_abs_path" || -z "$install_dir" ]]; then
+  if [[ -z "$instance_config_file" || -z "$_instance_name" || -z "$blueprint_abs_path" || -z "$library_dir" ]]; then
     return $EC_INVALID_ARG
   fi
 
@@ -179,7 +187,16 @@ function __logic_create_base_instance() {
 
   local instance_blueprint_name
   instance_blueprint_name="$(__extract_blueprint_name "$blueprint_abs_path")"
-  export instance_working_dir="${install_dir}/${instance_blueprint_name}/${_instance_name}"
+
+  # The library root is recorded so that nothing downstream has to recover it by
+  # stripping components off a path. Instances placed before libraries existed
+  # sit flat directly under their root; both layouts live in one library at no
+  # cost, because every path an instance uses is stored absolute.
+  export instance_library_dir="${library_dir%/}"
+
+  local instance_namespace_dir
+  instance_namespace_dir="$(__library_instances_subdir "$instance_library_dir")" || return $EC_INVALID_ARG
+  export instance_working_dir="${instance_namespace_dir}/${instance_blueprint_name}/${_instance_name}"
 
   # shellcheck disable=SC2155
   export instance_install_datetime="$(date +"%Y-%m-%dT%H:%M:%S")"
@@ -348,12 +365,13 @@ EOF
 export -f __logic_create_base_instance
 
 # Create a complete instance
-# Args: $1 = blueprint, $2 = install_dir, $3 = identifier (optional),
+# Args: $1 = blueprint, $2 = library_dir (absolute library root),
+#       $3 = identifier (optional),
 #       $4 = override_port (optional — overrides the blueprint's primary port)
 # Returns: Echoes _instance_name on success (EC_SUCCESS_INSTANCE_CREATED), error code on failure
 function __logic_create_instance() {
   local blueprint=$1
-  local install_dir=$2
+  local library_dir=${2%/}
   local identifier=${3:-}
   local override_port=${4:-}
 
@@ -362,14 +380,26 @@ function __logic_create_instance() {
     return $EC_BLUEPRINT_NOT_FOUND
   fi
 
-  # Validate install directory
-  if [[ -n "$install_dir" ]]; then
-    if ! validate_directory_exists "$install_dir" "install directory" >/dev/null 2>&1; then
-      return $EC_DIRECTORY_NOT_FOUND
-    fi
-    if ! validate_directory_writable "$install_dir" "install directory" >/dev/null 2>&1; then
-      return $EC_PERMISSION
-    fi
+  # Validate the library root
+  if [[ -z "$library_dir" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  if ! validate_directory_exists "$library_dir" "library directory" >/dev/null 2>&1; then
+    return $EC_DIRECTORY_NOT_FOUND
+  fi
+
+  if ! validate_directory_writable "$library_dir" "library directory" >/dev/null 2>&1; then
+    return $EC_PERMISSION
+  fi
+
+  # The namespace directory instances are placed under. Created on first
+  # placement so a freshly registered library holds only its marker until
+  # something is actually put in it.
+  local instances_dir
+  instances_dir="$(__library_instances_subdir "$library_dir")" || return $EC_INVALID_ARG
+  if ! __create_dir "$instances_dir" >/dev/null 2>&1; then
+    return $EC_FAILED_MKDIR
   fi
 
   # Get blueprint path
@@ -396,7 +426,7 @@ function __logic_create_instance() {
 
   # Create instance config file
   local instance_config_file
-  instance_config_file="$(__logic_create_instance_config_file "$_instance_name" "$blueprint_name" "$install_dir")"
+  instance_config_file="$(__logic_create_instance_config_file "$_instance_name" "$blueprint_name")"
   exit_code=$?
 
   if [[ $exit_code -ne 0 || -z "$instance_config_file" ]]; then
@@ -405,7 +435,7 @@ function __logic_create_instance() {
 
   # Create base instance configuration. The failure code is taken with || so it
   # survives: inside an `if ! cmd` branch $? is the negated status, always 0.
-  __logic_create_base_instance "$instance_config_file" "$_instance_name" "$blueprint_abs_path" "$install_dir" "$override_port" || return $?
+  __logic_create_base_instance "$instance_config_file" "$_instance_name" "$blueprint_abs_path" "$library_dir" "$override_port" || return $?
 
   # Success - echo instance name for caller
   echo "$_instance_name"

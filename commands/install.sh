@@ -15,6 +15,14 @@ source "$(dirname "$(readlink -f "$0")")/../core/bootstrap.sh"
 
 self="$(basename "$0")"
 
+# Placement is expressed in libraries: which one an instance lands in, whether
+# that library is reachable, and whether it has room for the game.
+# shellcheck source=handlers/libraries.sh
+source "$(__find_command_handler libraries.sh)" || {
+  __print_error "Failed to load libraries logic library"
+  exit $EC_FAILED_SOURCE
+}
+
 # =============================================================================
 # HELP / USAGE FUNCTIONS
 # =============================================================================
@@ -34,21 +42,145 @@ ${UNDERLINE}Arguments:${END}
   <blueprint>                 Blueprint name to install from
 
 ${UNDERLINE}Options:${END}
-  --install-dir <path>        Installation directory (default: from config)
+  --library <name>            Library to place the instance in (default: the
+                              configured default_library, or the sole
+                              registered library)
   --version <version>         Specific version to install (default: latest)
   --name <name>               Custom instance name (default: auto-generated)
   --port <port>               Override the blueprint's primary game port (1-65535)
+  --skip-space-check          Install even when the library has less free space
+                              than the blueprint declares the game needs
   --start                     Start the server immediately after install
   -h, --help                  Display this help information
 
+${UNDERLINE}Description:${END}
+Instances are placed at <library>/instances/<blueprint>/<instance>. Register a
+library with 'kgsm libraries add <path>' and list them with
+'kgsm libraries list'.
+
 ${UNDERLINE}Examples:${END}
   ${self} factorio
-  ${self} factorio --install-dir /opt/servers
-  ${self} factorio --install-dir /opt/servers --name factorio-prod
-  ${self} factorio --install-dir /opt/servers --version 1.1.87
+  ${self} factorio --library ssd
+  ${self} factorio --library ssd --name factorio-prod
+  ${self} factorio --library ssd --version 1.1.87
   ${self} factorio --port 34200
   ${self} factorio --start
 "
+}
+
+# =============================================================================
+# PLACEMENT
+# =============================================================================
+
+# Echoes the name of the library to place a new instance in, or explains why
+# there is no answer. Only errors are printed, because the caller reads this
+# function's stdout.
+#
+# Args: $1 = the name passed to --library (may be empty)
+function _resolve_placement_library() {
+  local requested="$1"
+
+  # Called without a command substitution: the handler reports which of the
+  # three sources answered through globals, and a subshell would lose them.
+  local resolved exit_code
+  __logic_library_resolve_placement "$requested" > /dev/null
+  exit_code=$?
+  resolved="$__library_resolve_name_out"
+
+  case $exit_code in
+    $EC_SUCCESS)
+      echo "$resolved"
+      ;;
+    $EC_LIBRARY_NOT_FOUND)
+      if [[ "$__library_resolve_source_out" == "default" ]]; then
+        __print_error "The configured default library '$__library_resolve_name_out' is not registered"
+        __print_error "Register it, or pick another with --library <name>"
+      else
+        __print_error "No library named '$__library_resolve_name_out' is registered"
+        __print_error "Run 'kgsm libraries list' to see the registered ones"
+      fi
+      return $exit_code
+      ;;
+    $EC_NOT_FOUND)
+      __print_error "No libraries registered; run 'kgsm libraries add <path>'"
+      return $EC_LIBRARY_NOT_FOUND
+      ;;
+    $EC_MISSING_ARG)
+      __print_error "Several libraries are registered and none was chosen"
+      __print_error "Pass --library <name>, or set default_library in the KGSM config"
+      return $exit_code
+      ;;
+    *)
+      __print_error "Could not determine which library to install into"
+      return $exit_code
+      ;;
+  esac
+
+  if ! __logic_library_is_online "$resolved"; then
+    __print_error "Library '$resolved' is not reachable at $(__logic_library_path "$resolved")"
+    __print_error "Mount it, or install into another library with --library <name>"
+    return $EC_LIBRARY_OFFLINE
+  fi
+
+  return $EC_SUCCESS
+}
+
+# Refuses an install a library has no room for, before anything is created.
+#
+# The figure compared against is the blueprint's advisory base_disk_mb plus the
+# configured margin. A blueprint that declares none leaves nothing to compare,
+# and the install proceeds with that said out loud rather than on a number
+# nobody measured.
+#
+# Args: $1 = blueprint, $2 = library name, $3 = library root, $4 = skip flag
+function _space_gate() {
+  local blueprint="$1"
+  local library="$2"
+  local library_dir="$3"
+  local skip="$4"
+
+  local blueprint_abs_path base_disk_mb=""
+  if blueprint_abs_path="$(__find_blueprint "$blueprint")" &&
+    command -v yq > /dev/null 2>&1; then
+    base_disk_mb="$(yq -r '.metadata.base_disk_mb // ""' "$blueprint_abs_path" 2> /dev/null)"
+  fi
+
+  # shellcheck disable=SC2154
+  local margin_mb="${config_install_free_space_margin_mb:-1024}"
+  [[ "$margin_mb" =~ ^[0-9]+$ ]] || margin_mb=1024
+
+  local exit_code
+  __logic_library_space_check "$library_dir" "$base_disk_mb" "$margin_mb"
+  exit_code=$?
+
+  case $exit_code in
+    $EC_SUCCESS)
+      return 0
+      ;;
+    $EC_NOT_FOUND)
+      __print_warning "Blueprint '$blueprint' declares no base_disk_mb; free space was not checked"
+      return 0
+      ;;
+    $EC_INSUFFICIENT_DISK)
+      local free_mb=$((__library_space_free_out / 1024 / 1024))
+      local required_mb=$((__library_space_required_out / 1024 / 1024))
+      local message="Library '$library' has ${free_mb}MB free at ${library_dir}; $blueprint needs ${base_disk_mb}MB plus a ${margin_mb}MB margin (${required_mb}MB)"
+
+      if [[ "$skip" == true ]]; then
+        __print_warning "$message"
+        __print_warning "Installing anyway (--skip-space-check)"
+        return 0
+      fi
+
+      __print_error "$message"
+      __print_error "Free space in that library, install into another with --library <name>, or pass --skip-space-check"
+      return $EC_INSUFFICIENT_DISK
+      ;;
+    *)
+      __print_warning "Could not measure free space in library '$library'; free space was not checked"
+      return 0
+      ;;
+  esac
 }
 
 # =============================================================================
@@ -65,12 +197,12 @@ function _cmd_install() {
     return $EC_MISSING_ARG
   fi
 
-  # shellcheck disable=SC2154
-  local install_dir=$config_default_install_directory
+  local library=""
   local version=0 # 0 means get latest
   local identifier
   local port=""
   local start_after=false
+  local skip_space_check=false
 
   # Parse optional arguments
   while [[ $# -ne 0 ]]; do
@@ -91,13 +223,16 @@ function _cmd_install() {
         fi
         port="$1"
         ;;
-      --install-dir)
+      --library)
         shift
         if [[ -z "$1" ]]; then
-          __print_error "Missing argument for --install-dir"
+          __print_error "Missing argument for --library"
           return $EC_MISSING_ARG
         fi
-        install_dir="$1"
+        library="$1"
+        ;;
+      --skip-space-check)
+        skip_space_check=true
         ;;
       --version)
         shift
@@ -126,22 +261,14 @@ function _cmd_install() {
     shift
   done
 
-  if [[ -z "$install_dir" ]]; then
-    __print_error "Installation directory not specified and no default configured"
-    return $EC_MISSING_ARG
-  fi
+  library="$(_resolve_placement_library "$library")" || return $?
 
-  # Check if install_dir is relative or absolute path
-  if [[ "$install_dir" != /* ]]; then
-    install_dir="${KGSM_ROOT}/$install_dir"
-  fi
+  local library_dir
+  library_dir="$(__logic_library_path "$library")"
 
-  __print_info "Creating a new instance of $blueprint in $install_dir..."
+  _space_gate "$blueprint" "$library" "$library_dir" "$skip_space_check" || return $?
 
-  directories.sh ensure-created "$install_dir" || {
-    __print_error "Failed to ensure installation directory exists and is writable: $install_dir"
-    return $?
-  }
+  __print_info "Creating a new instance of $blueprint in library '$library' ($library_dir)..."
 
   # Generate instance name early (before any config/file creation)
   local instance
@@ -151,8 +278,9 @@ function _cmd_install() {
     return $exit_code
   }
 
-  # Calculate working directory path
-  local working_dir="${install_dir}/${blueprint}/${instance}"
+  # Calculate working directory path inside the library
+  local working_dir
+  working_dir="$(__library_instances_subdir "$library_dir")/${blueprint}/${instance}"
 
   # Create the working directory first (symlink target must exist)
   directories.sh ensure-created "$working_dir" || {
@@ -171,7 +299,7 @@ function _cmd_install() {
   # Create instance configuration (name is now pre-determined)
   # Config will be created at $KGSM_INSTANCES_DIR/$blueprint/$instance/$instance.config.ini
   # which resolves through the symlink to $working_dir/$instance.config.ini
-  instance="$(instances.sh create "$blueprint" --install-dir "$install_dir" --name "$instance" ${port:+--port "$port"})" || {
+  instance="$(instances.sh create "$blueprint" --library "$library" --name "$instance" ${port:+--port "$port"})" || {
     exit_code=$?
     __print_error "Failed to create instance configuration"
     # Clean up on failure
@@ -241,7 +369,7 @@ function _cmd_install() {
     return $EC_FAILED_VERSION_SAVE
   }
 
-  __print_success "Instance '${instance}', version '${version}', has been created in '${install_dir}'"
+  __print_success "Instance '${instance}', version '${version}', has been created in '${working_dir}'"
   __emit_event instance-installed "${instance}" "${blueprint}"
 
   # Emitted LAST, after instance-installed: a consumer that reads "the run ended"

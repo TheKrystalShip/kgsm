@@ -47,6 +47,47 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **⚠ BREAKING: `--install-dir` is gone. An instance is placed with `--library <name>`.**
+  `kgsm install` and `kgsm instances create` take the library to place a new instance in from
+  `--library`, else the `default_library` config key, else the sole registered library when the
+  host has exactly one. A host with several libraries and no default is asked rather than guessed
+  at — which disk a server lands on is a decision, not a detail — and a host with none is told to
+  run `kgsm libraries add <path>`. Passing `--install-dir` now fails as an unknown argument like
+  any other typo: there is no alias and no grace period, so after this every instance lives in a
+  library with no ad-hoc escape. Anything still passing a raw path breaks loudly and corrupts
+  nothing.
+
+  New instances are placed at `<library-root>/instances/<blueprint>/<instance>`, one namespace
+  directory below the root, so a disk used for other things stays legible and a library's top
+  level holds only its marker and that directory. Instances created before libraries existed sit
+  flat directly under their root and stay exactly where they are: every per-instance path is
+  stored absolute, so the two layouts cost nothing to keep side by side, and nothing reconstructs
+  a path by convention.
+
+  An instance records `library_dir`, the absolute root it was placed in — the path, not the
+  library's name, because every other per-instance key is a path, the registry is the only place
+  names live, and a rename then costs nothing. It joins the other `*_dir` keys, so
+  `instances config-set` refuses it like the rest. An instance that predates the key has its root
+  derived from its working directory minus two components and stamped on the first `instances
+  info` or lifecycle verb that touches it, one instance at a time, rather than by a migration pass
+  over the whole host. `instances info --json` reports both that root and the library it resolves
+  to, `unregistered` when no registered library contains it — stated, never guessed.
+
+  An install into a library that is not reachable is refused (`EC_LIBRARY_OFFLINE`): the root
+  exists as an empty mount point when the disk is not there, and writing through it would put a
+  game server on the root filesystem.
+
+- **An install is refused when the library has no room for it.** Before anything is downloaded —
+  and before any directory is created, so a refusal leaves the library exactly as it found it —
+  the free space measured on the library root is compared against the blueprint's advisory
+  `metadata.base_disk_mb` plus `[instance_defaults] install_free_space_margin_mb` (default 1024).
+  The margin covers what the declared figure does not: the download staged in the instance's temp
+  directory before it is deployed, and the room the server needs to write saves and logs once it
+  runs. Not enough is `EC_INSUFFICIENT_DISK`, naming the free space, the requirement and the
+  margin. A blueprint declaring no size leaves nothing to compare, and the install proceeds with
+  that said out loud rather than on a number nobody measured. `--skip-space-check` installs
+  anyway and prints the shortfall either way — the escape hatch reports what it skipped.
+
 - **Instances are placed in named libraries.** A library is a root registered with
   `kgsm libraries add <path>`: it carries an id and a name in a `.kgsm-library` marker written into
   it, and the set of them lives in `$XDG_DATA_HOME/kgsm/libraries.ini`. `kgsm libraries list` reports

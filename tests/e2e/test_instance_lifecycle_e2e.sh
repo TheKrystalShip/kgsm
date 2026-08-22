@@ -30,6 +30,7 @@ readonly FILES_MANAGEMENT_MODULE="$KGSM_ROOT/commands/files.management.sh"
 readonly LIFECYCLE_MODULE="$KGSM_ROOT/commands/lifecycle.sh"
 
 TEST_INSTALL_DIR=""
+TEST_LIBRARY=""
 
 # Per-test cleanup tracking (used by teardown hook)
 _TEARDOWN_INSTANCES=()
@@ -42,7 +43,7 @@ function setup_file() {
   log_test_step "Setting up instance lifecycle E2E tests"
 
   TEST_INSTALL_DIR="$KGSM_ROOT/test-installs-e2e"
-  mkdir -p "$TEST_INSTALL_DIR"
+  TEST_LIBRARY="$(__ensure_test_library "$TEST_INSTALL_DIR")"
 
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
   assert_dir_exists "$KGSM_ROOT" "KGSM root directory should exist"
@@ -453,7 +454,7 @@ function test_duplicate_instance_creation_fails() {
 
   # Attempt to create second instance with same name (prereqs already exist)
   "$INSTANCES_MODULE" create factorio \
-    --install-dir "$TEST_INSTALL_DIR" \
+    --library "$TEST_LIBRARY" \
     --name "$instance_name" 2>/dev/null
   local dup_exit=$?
 
@@ -474,7 +475,7 @@ function test_invalid_blueprint_fails() {
 
   # Attempt instance creation with invalid blueprint
   "$INSTANCES_MODULE" create "$fake_blueprint" \
-    --install-dir "$TEST_INSTALL_DIR" 2>/dev/null
+    --library "$TEST_LIBRARY" 2>/dev/null
   local exit_code=$?
 
   assert_not_equals 0 "$exit_code" \

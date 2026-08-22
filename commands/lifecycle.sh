@@ -212,6 +212,28 @@ source "$(__find_command_handler lifecycle.sh)" || {
   exit $EC_FAILED_SOURCE
 }
 
+# Library logic, for the placement key an instance created before libraries
+# existed does not carry.
+# shellcheck source=handlers/libraries.sh
+source "$(__find_command_handler libraries.sh)" || {
+  __print_error "Failed to load libraries logic library"
+  exit $EC_FAILED_SOURCE
+}
+
+# Records the library root of an instance created before instances recorded one.
+# Placed on the lifecycle verbs so the key lands on first use rather than needing
+# a migration pass over every instance on the host.
+function _stamp_library_dir() {
+  local instance="$1"
+
+  local instance_config_file
+  instance_config_file="$(__find_instance_config "$instance" 2> /dev/null)"
+  [[ -n "$instance_config_file" ]] || return 0
+
+  __logic_stamp_instance_library_dir "$instance_config_file" || return 0
+  return 0
+}
+
 # Whether the instance is running RIGHT NOW, sampled before a lifecycle verb runs:
 # "active", "inactive", or "unknown" when the probe itself could not answer.
 #
@@ -283,6 +305,8 @@ function _cmd_start() {
   fi
 
   # Call pure logic function
+  _stamp_library_dir "$instance_name"
+
   __print_info "Starting instance $instance_name"
 
   local before
@@ -351,6 +375,8 @@ function _cmd_stop() {
   fi
 
   # Call pure logic function
+  _stamp_library_dir "$instance_name"
+
   __print_info "Stopping instance $instance_name"
 
   # A stop is not instant: the supervisor sends the game its stop command and then waits for the
@@ -455,6 +481,8 @@ function _cmd_restart() {
   fi
 
   # Call pure logic function
+  _stamp_library_dir "$instance_name"
+
   __print_info "Restarting instance $instance_name"
 
   # A restart is a stop and a start back to back, so it lasts at least as long as the shutdown drain

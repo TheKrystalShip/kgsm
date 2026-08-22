@@ -27,6 +27,7 @@ readonly DIRECTORIES_MODULE="$KGSM_ROOT/commands/directories.sh"
 readonly FILES_MODULE="$KGSM_ROOT/commands/files.sh"
 
 TEST_INSTALL_DIR=""
+TEST_LIBRARY=""
 
 # =============================================================================
 # TEST FUNCTIONS
@@ -36,7 +37,7 @@ function setup_file() {
   log_test_step "Setting up install+uninstall integration tests"
 
   TEST_INSTALL_DIR="$KGSM_ROOT/test-installs"
-  mkdir -p "$TEST_INSTALL_DIR"
+  TEST_LIBRARY="$(__ensure_test_library "$TEST_INSTALL_DIR")"
 
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
   assert_dir_exists "$KGSM_ROOT" "KGSM root directory should exist"
@@ -60,7 +61,7 @@ function test_install_fails_with_nonexistent_blueprint() {
   log_test_step "Testing: install.sh fails when blueprint does not exist"
 
   "$INSTALL_MODULE" nonexistent_blueprint_xyz_abc \
-    --install-dir "$TEST_INSTALL_DIR" 2>/dev/null
+    --library "$TEST_LIBRARY" 2>/dev/null
   local exit_code=$?
 
   assert_not_equals 0 "$exit_code" \
@@ -82,15 +83,26 @@ function test_install_fails_with_missing_blueprint() {
     "install.sh with no arguments should fail"
 }
 
-# TEST 3: install.sh fails when --install-dir value is missing
-function test_install_fails_with_missing_install_dir_value() {
-  log_test_step "Testing: install.sh fails when --install-dir has no value"
+# TEST 3: install.sh fails when --library value is missing
+function test_install_fails_with_missing_library_value() {
+  log_test_step "Testing: install.sh fails when --library has no value"
 
-  "$INSTALL_MODULE" factorio --install-dir 2>/dev/null
+  "$INSTALL_MODULE" factorio --library 2>/dev/null
   local exit_code=$?
 
   assert_not_equals 0 "$exit_code" \
-    "install.sh with --install-dir and no value should fail"
+    "install.sh with --library and no value should fail"
+}
+
+# TEST 3b: the retired --install-dir flag is refused
+function test_install_refuses_install_dir_flag() {
+  log_test_step "Testing: install.sh refuses --install-dir as an unknown argument"
+
+  "$INSTALL_MODULE" factorio --install-dir "$TEST_INSTALL_DIR" 2>/dev/null
+  local exit_code=$?
+
+  assert_not_equals 0 "$exit_code" \
+    "install.sh with --install-dir should fail"
 }
 
 # TEST 4: install.sh creates instance config before reaching the download step
@@ -105,7 +117,7 @@ function test_install_creates_instance_config_before_download() {
   # Run install.sh - it will create structures and then fail at the download/version step
   # We use --name to know the exact instance name created
   "$INSTALL_MODULE" factorio \
-    --install-dir "$TEST_INSTALL_DIR" \
+    --library "$TEST_LIBRARY" \
     --name "$instance_name" 2>/dev/null
   local install_exit=$?
 
@@ -143,11 +155,11 @@ function test_install_with_name_creates_named_instance_dir() {
   log_test_step "Testing: install.sh --name creates working directory with specified name"
 
   local instance_name="test-named-inst-$$"
-  local expected_working_dir="$TEST_INSTALL_DIR/factorio/$instance_name"
+  local expected_working_dir="$TEST_INSTALL_DIR/instances/factorio/$instance_name"
 
   # Run install.sh (will fail at download but may create working dir first)
   "$INSTALL_MODULE" factorio \
-    --install-dir "$TEST_INSTALL_DIR" \
+    --library "$TEST_LIBRARY" \
     --name "$instance_name" 2>/dev/null
   local install_exit=$?
 
@@ -173,7 +185,7 @@ function test_install_creates_directory_structure() {
   local instance_name="test-dirs-$$"
 
   "$INSTALL_MODULE" factorio \
-    --install-dir "$TEST_INSTALL_DIR" \
+    --library "$TEST_LIBRARY" \
     --name "$instance_name" 2>/dev/null
 
   local instance_config
@@ -215,7 +227,7 @@ function test_uninstall_fails_with_nonexistent_instance() {
     "uninstall.sh should report instance not found for nonexistent instance"
 
   # The working directory for this fake instance should not have been created
-  assert_dir_not_exists "$TEST_INSTALL_DIR/factorio/nonexistent_instance_xyz_12345" \
+  assert_dir_not_exists "$TEST_INSTALL_DIR/instances/factorio/nonexistent_instance_xyz_12345" \
     "No working directory should be created for nonexistent instance"
 }
 
@@ -332,7 +344,7 @@ function test_uninstall_removes_working_directory() {
   create_test_instance "factorio" "$instance_name" "$TEST_INSTALL_DIR" >/dev/null 2>&1
   assert_equals 0 "$?" "Instance creation should succeed"
 
-  local working_dir="$TEST_INSTALL_DIR/factorio/$instance_name"
+  local working_dir="$TEST_INSTALL_DIR/instances/factorio/$instance_name"
   assert_dir_exists "$working_dir" \
     "Working directory should exist before uninstall"
 
@@ -405,7 +417,7 @@ function test_full_cycle_create_files_uninstall() {
   assert_equals 0 "$?" "Instance should be findable after full setup"
   assert_file_exists "$instance_config" "Instance config should exist"
 
-  local working_dir="$TEST_INSTALL_DIR/factorio/$instance_name"
+  local working_dir="$TEST_INSTALL_DIR/instances/factorio/$instance_name"
   assert_dir_exists "$working_dir" "Working directory should exist"
 
   # Step 4: Uninstall with "y" confirmation

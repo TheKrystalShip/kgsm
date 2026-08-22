@@ -44,7 +44,7 @@ function test_help_flag() {
 
   assert_equals 0 "$exit_code" "--help should exit 0"
   assert_contains "$output" "blueprint" "Help should mention blueprint argument"
-  assert_contains "$output" "--install-dir" "Help should mention --install-dir option"
+  assert_contains "$output" "--library" "Help should mention --library option"
   assert_contains "$output" "--version" "Help should mention --version option"
   assert_contains "$output" "--name" "Help should mention --name option"
 }
@@ -87,16 +87,28 @@ function test_missing_blueprint_arg() {
     "Should show missing argument error when no blueprint provided"
 }
 
-function test_install_dir_missing_value() {
-  log_test_step "Testing --install-dir flag with no value returns error"
+function test_library_missing_value() {
+  log_test_step "Testing --library flag with no value returns error"
 
-  assert_command_fails "$MODULE factorio --install-dir" \
-    "--install-dir without value should fail"
+  assert_command_fails "$MODULE factorio --library" \
+    "--library without value should fail"
 
   local output
-  output=$("$MODULE" factorio --install-dir 2>&1 || true)
+  output=$("$MODULE" factorio --library 2>&1 || true)
   assert_contains "$output" "Missing argument" \
-    "Should show missing argument error for --install-dir"
+    "Should show missing argument error for --library"
+}
+
+function test_install_dir_is_refused() {
+  log_test_step "Testing the retired --install-dir flag is refused"
+
+  assert_command_fails "$MODULE factorio --install-dir /tmp" \
+    "--install-dir should fail as an unknown argument"
+
+  local output
+  output=$("$MODULE" factorio --install-dir /tmp 2>&1 || true)
+  assert_contains "$output" "Invalid argument" \
+    "Should refuse --install-dir as an unknown argument"
 }
 
 function test_version_missing_value() {
@@ -160,7 +172,8 @@ function test_module_has_expected_options_in_help() {
   local output
   output=$("$MODULE" --help 2>&1)
 
-  assert_contains "$output" "--install-dir" "Help should document --install-dir"
+  assert_contains "$output" "--library" "Help should document --library"
+  assert_contains "$output" "--skip-space-check" "Help should document --skip-space-check"
   assert_contains "$output" "--version" "Help should document --version"
   assert_contains "$output" "--name" "Help should document --name"
   assert_contains "$output" "-h" "Help should document -h short flag"

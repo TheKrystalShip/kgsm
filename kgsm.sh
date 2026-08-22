@@ -38,10 +38,11 @@ ${BOLD}${UNDERLINE}Built-in Commands:${END}
 ${BOLD}${UNDERLINE}Module Commands:${END}
   create <blueprint>          Alias for install
   install <blueprint>         Install a new game server instance
-    [--install-dir <path>]    Installation directory
+    [--library <name>]        Library to place the instance in
     [--version <version>]     Specific version to install
     [--name <name>]           Custom instance name
     [--port <port>]           Override the blueprint's primary game port
+    [--skip-space-check]      Install without the library free-space check
   remove <instance>           Alias for uninstall
   uninstall <instance>        Remove a game server instance
   interactive                 Launch interactive menu mode
@@ -72,7 +73,7 @@ ${UNDERLINE}For detailed help on any module:${END}
 
 ${BOLD}${UNDERLINE}Examples:${END}
   ${BOLD}Installation:${END}
-  ${self} install factorio --install-dir /opt/servers --name factorio-01
+  ${self} install factorio --library ssd --name factorio-01
   ${self} uninstall factorio-01
 
   ${BOLD}Lifecycle Management:${END}

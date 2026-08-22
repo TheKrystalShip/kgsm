@@ -105,6 +105,12 @@ metadata:
 ```
 
 > [!NOTE]
+> `base_disk_mb` is what the install-time free-space gate compares a library
+> against, plus the `install_free_space_margin_mb` config value. `null` means
+> unknown: the gate is skipped with a warning rather than run against a made-up
+> figure. See [Libraries](libraries.md).
+
+> [!NOTE]
 > `rawg_slug` is the game's slug on [RAWG.io](https://rawg.io), the external
 > catalog the control panel uses to fetch cover art, descriptions, and tags. It
 > is a *lookup hint* only — KGSM never calls RAWG; the consumer (kgsm-api) does,
@@ -304,7 +310,7 @@ To adjust a system blueprint without modifying the original:
 Once you have a blueprint, create a new game server instance with:
 
 ```sh
-./kgsm.sh install <blueprint> [--install-dir <path>] [--name <instance-name>]
+./kgsm.sh install <blueprint> [--library <name>] [--name <instance-name>]
 ```
 
 `create` is an accepted alias for `install`.
@@ -314,13 +320,13 @@ KGSM reads the blueprint's `runtime` field to decide whether to install it as a 
 ### Native Server Example
 
 ```sh
-./kgsm.sh install minecraft --install-dir /opt/servers --name survival-server
+./kgsm.sh install minecraft --library ssd --name survival-server
 ```
 
 ### Container Server Example
 
 ```sh
-./kgsm.sh install enshrouded --install-dir /opt/servers --name enshrouded-server
+./kgsm.sh install enshrouded --library ssd --name enshrouded-server
 ```
 
 > [!NOTE]

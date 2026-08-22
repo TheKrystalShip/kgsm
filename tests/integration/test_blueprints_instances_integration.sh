@@ -23,6 +23,7 @@ readonly BLUEPRINTS_MODULE="$KGSM_ROOT/commands/blueprints.sh"
 readonly INSTANCES_MODULE="$KGSM_ROOT/commands/instances.sh"
 
 TEST_INSTALL_DIR=""
+TEST_LIBRARY=""
 
 # Per-test cleanup tracking (used by teardown hook)
 _TEARDOWN_INSTANCES=()
@@ -35,7 +36,7 @@ function setup_file() {
   log_test_step "Setting up blueprints+instances integration tests"
 
   TEST_INSTALL_DIR="$KGSM_ROOT/test-installs"
-  mkdir -p "$TEST_INSTALL_DIR"
+  TEST_LIBRARY="$(__ensure_test_library "$TEST_INSTALL_DIR")"
 
   assert_not_null "$KGSM_ROOT" "KGSM_ROOT should be set"
   assert_dir_exists "$KGSM_ROOT" "KGSM root directory should exist"
@@ -69,7 +70,7 @@ function test_invalid_blueprint_blocks_instance_creation() {
   log_test_step "Testing: invalid blueprint prevents instance creation"
 
   "$INSTANCES_MODULE" create nonexistent_blueprint_xyz_abc \
-    --install-dir "$TEST_INSTALL_DIR" 2>/dev/null
+    --library "$TEST_LIBRARY" 2>/dev/null
   local exit_code=$?
 
   assert_not_equals 0 "$exit_code" \
@@ -375,7 +376,7 @@ function test_duplicate_instance_name_rejected() {
   local alt_name="${instance_name}-alt"
   setup_instance_prereqs "factorio" "$alt_name" "$TEST_INSTALL_DIR" 2>/dev/null || true
   "$INSTANCES_MODULE" create factorio \
-    --install-dir "$TEST_INSTALL_DIR" \
+    --library "$TEST_LIBRARY" \
     --name "$instance_name" 2>/dev/null
   local dup_exit=$?
 

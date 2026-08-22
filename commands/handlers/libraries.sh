@@ -637,6 +637,223 @@ function __logic_library_instances() {
 export -f __logic_library_instances
 
 # =============================================================================
+# PLACEMENT
+# =============================================================================
+
+# The directory a library holds its instances under. The library's top level
+# carries the marker and this namespace and nothing else, so a disk that is also
+# used for other things stays legible.
+function __library_instances_subdir() {
+  local _path="${1%/}"
+
+  if [[ -z "$_path" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  echo "${_path}/instances"
+  return $EC_SUCCESS
+}
+
+export -f __library_instances_subdir
+
+# Echoes the library a new instance is placed in.
+#
+# Three sources, in order: the name the caller asked for, the configured
+# default, and — only when the host has exactly one — the sole registered
+# library. A host with several libraries and no default is asked rather than
+# guessed at: which disk a server lands on is a decision, not a detail.
+#
+# Args: $1 = requested name (optional)
+# Outputs (globals, always assigned):
+#   __library_resolve_name_out    the name that was asked for or configured,
+#                                 echoed back so a refusal can name it
+#   __library_resolve_source_out  flag|default|sole
+# Returns: EC_SUCCESS (name echoed), EC_LIBRARY_NOT_FOUND (the named library is
+#          not registered), EC_NOT_FOUND (no libraries registered at all), or
+#          EC_MISSING_ARG (several registered and none chosen)
+function __logic_library_resolve_placement() {
+  local _requested="${1:-}"
+
+  __library_resolve_name_out=""
+  __library_resolve_source_out=""
+
+  if [[ -n "$_requested" ]]; then
+    __library_resolve_name_out="$_requested"
+    __library_resolve_source_out="flag"
+    if ! __logic_library_exists "$_requested"; then
+      return $EC_LIBRARY_NOT_FOUND
+    fi
+    echo "$_requested"
+    return $EC_SUCCESS
+  fi
+
+  # shellcheck disable=SC2154
+  local _default="${config_default_library:-}"
+  if [[ -n "$_default" ]]; then
+    __library_resolve_name_out="$_default"
+    __library_resolve_source_out="default"
+    if ! __logic_library_exists "$_default"; then
+      return $EC_LIBRARY_NOT_FOUND
+    fi
+    echo "$_default"
+    return $EC_SUCCESS
+  fi
+
+  local -a _names=()
+  mapfile -t _names < <(__library_registry_names)
+
+  # mapfile keeps a trailing empty line as an element; drop anything blank so a
+  # single library is counted as one.
+  local -a _registered=()
+  local _name
+  for _name in "${_names[@]}"; do
+    [[ -n "$_name" ]] && _registered+=("$_name")
+  done
+
+  if [[ ${#_registered[@]} -eq 0 ]]; then
+    return $EC_NOT_FOUND
+  fi
+
+  if [[ ${#_registered[@]} -gt 1 ]]; then
+    return $EC_MISSING_ARG
+  fi
+
+  __library_resolve_name_out="${_registered[0]}"
+  __library_resolve_source_out="sole"
+  echo "${_registered[0]}"
+  return $EC_SUCCESS
+}
+
+export -f __logic_library_resolve_placement
+
+# Reports whether a library has room for a game that declares what it needs.
+#
+# The requirement is the blueprint's advisory base_disk_mb plus a margin, and
+# the margin is what keeps the check honest: a download lands in a temp
+# directory inside the same library before it is deployed, and a disk filled to
+# the last byte fails a game server in ways that look like corruption.
+#
+# A blueprint declaring no figure leaves this unable to answer. It says so
+# rather than inventing a requirement, and the caller carries on — a fabricated
+# number would refuse installs that would have worked.
+#
+# Args: $1 = library root, $2 = required MB (empty/null = undeclared),
+#       $3 = margin MB
+# Outputs (globals, always assigned):
+#   __library_space_free_out      free bytes measured on the root
+#   __library_space_required_out  bytes the check wanted to see free
+# Returns: EC_SUCCESS (room), EC_INSUFFICIENT_DISK (not enough),
+#          EC_NOT_FOUND (nothing declared, nothing checked), or the capacity
+#          error when the root could not be measured
+function __logic_library_space_check() {
+  local _path="$1"
+  local _required_mb="$2"
+  local _margin_mb="${3:-0}"
+
+  __library_space_free_out=""
+  __library_space_required_out=""
+
+  if [[ -z "$_path" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  if [[ ! "$_required_mb" =~ ^[0-9]+$ ]] || [[ "$_required_mb" -le 0 ]]; then
+    return $EC_NOT_FOUND
+  fi
+
+  [[ "$_margin_mb" =~ ^[0-9]+$ ]] || _margin_mb=0
+
+  local _free _total
+  read -r _free _total < <(__logic_library_capacity "$_path") || return $EC_ERROR
+
+  if [[ ! "$_free" =~ ^[0-9]+$ ]]; then
+    return $EC_ERROR
+  fi
+
+  local _required=$(((_required_mb + _margin_mb) * 1024 * 1024))
+
+  __library_space_free_out="$_free"
+  __library_space_required_out="$_required"
+
+  if [[ "$_free" -lt "$_required" ]]; then
+    return $EC_INSUFFICIENT_DISK
+  fi
+
+  return $EC_SUCCESS
+}
+
+export -f __logic_library_space_check
+
+# Records the library root of an instance created before instances recorded one.
+#
+# Every instance that predates the key sits flat at <root>/<blueprint>/<name>,
+# so the root is the working directory minus two components. New instances are
+# stamped when they are created, which is what keeps that rule from ever having
+# to guess about the nested layout below a library.
+#
+# Idempotent: an instance already carrying the key is left alone.
+#
+# Args: $1 = instance config file
+# Returns: EC_SUCCESS (present or stamped), EC_INVALID_ARG,
+#          EC_FILE_NOT_FOUND, EC_FAILED_UPDATE_CONFIG
+function __logic_stamp_instance_library_dir() {
+  local _config_file="$1"
+
+  if [[ -z "$_config_file" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  if [[ ! -f "$_config_file" ]]; then
+    return $EC_FILE_NOT_FOUND
+  fi
+
+  # Read forkless: this runs on every lifecycle command, and the answer for an
+  # instance that already carries the key is on one of the first lines.
+  local _key _value _library_dir="" _working_dir=""
+  while IFS='=' read -r _key _value || [[ -n "$_key" ]]; do
+    case "$_key" in
+      library_dir)
+        _library_dir="$_value"
+        ;;
+      working_dir)
+        _working_dir="$_value"
+        ;;
+      *)
+        continue
+        ;;
+    esac
+  done < "$_config_file"
+
+  _library_dir="${_library_dir#\"}"
+  _library_dir="${_library_dir%\"}"
+  _working_dir="${_working_dir#\"}"
+  _working_dir="${_working_dir%\"}"
+
+  if [[ -n "$_library_dir" ]]; then
+    return $EC_SUCCESS
+  fi
+
+  if [[ -z "$_working_dir" ]] || [[ "$_working_dir" != /* ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  local _root="${_working_dir%/*}"
+  _root="${_root%/*}"
+
+  if [[ -z "$_root" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  if ! __add_or_update_config "$_config_file" "library_dir" "\"$_root\"" > /dev/null 2>&1; then
+    return $EC_FAILED_UPDATE_CONFIG
+  fi
+
+  return $EC_SUCCESS
+}
+
+export -f __logic_stamp_instance_library_dir
+
+# =============================================================================
 # VERBS
 # =============================================================================
 

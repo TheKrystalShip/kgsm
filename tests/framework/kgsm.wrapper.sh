@@ -24,6 +24,74 @@ fi
 # =============================================================================
 
 #
+# __test_library_name()
+#
+# The library name a root is registered under in this sandbox. Derived from the
+# root's own path so that two roots never collide on one name, and so the same
+# root always resolves to the same library across calls.
+#
+# Arguments:
+#   $1 - root (string, required): The library root
+#
+# Output:
+#   Echoes the library name
+#
+function __test_library_name() {
+  local root="${1%/}"
+
+  local base="${root##*/}"
+  base="${base,,}"
+  base="${base//[^a-z0-9]/-}"
+  [[ "$base" =~ ^[a-z0-9] ]] || base="lib-${base}"
+
+  local hash
+  hash="$(printf '%s' "$root" | cksum | cut -d' ' -f1)"
+
+  echo "${base}-${hash}"
+}
+
+#
+# __ensure_test_library()
+#
+# Register a root as a KGSM library, once. Placement goes through libraries, so
+# a test that wants instances in a directory of its own registers it first.
+#
+# Arguments:
+#   $1 - root (string, required): The library root
+#
+# Output:
+#   Echoes the library name the root is registered under
+#
+# Return Codes:
+#   0 - Success
+#   1 - Failure (registration failed)
+#
+function __ensure_test_library() {
+  local root="${1%/}"
+
+  mkdir -p "$root" || return 1
+
+  local name
+  name="$(__test_library_name "$root")"
+
+  # Already registered under that name: nothing to do. The marker in the root is
+  # what makes a re-registration an adoption rather than a second library, and
+  # the registry refuses a duplicate path outright.
+  if [[ -f "${root}/.kgsm-library" ]]; then
+    echo "$name"
+    return 0
+  fi
+
+  "$KGSM_ROOT/kgsm.sh" libraries add "$root" --name "$name" > /dev/null 2>&1 || return 1
+
+  echo "$name"
+  return 0
+}
+
+export -f __test_library_name
+export -f __ensure_test_library
+
+#
 # __setup_instance_prereqs()
 #
 # Setup instance prerequisites (working directory + symlink) before instance creation.
@@ -32,7 +100,7 @@ fi
 # Arguments:
 #   $1 - blueprint (string, required): The blueprint name
 #   $2 - instance_name (string, required): The instance name
-#   $3 - install_dir (string, required): The installation directory
+#   $3 - install_dir (string, required): The library root
 #
 # Output:
 #   None
@@ -46,7 +114,9 @@ function __setup_instance_prereqs() {
   local instance_name="$2"
   local install_dir="$3"
 
-  local working_dir="$install_dir/$blueprint/$instance_name"
+  __ensure_test_library "$install_dir" > /dev/null || return 1
+
+  local working_dir="$install_dir/instances/$blueprint/$instance_name"
 
   # Create working directory
   mkdir -p "$working_dir" || return 1
@@ -68,7 +138,7 @@ function __setup_instance_prereqs() {
 # Arguments:
 #   $1 - blueprint (string, required): The blueprint name
 #   $2 - instance_name (string, required): The instance name
-#   $3 - install_dir (string, required): The installation directory
+#   $3 - install_dir (string, required): The library root
 #
 # Output:
 #   None
@@ -88,10 +158,10 @@ function __cleanup_instance() {
   rmdir "${KGSM_INSTANCES_DIR:?}/${blueprint:?}" 2>/dev/null || true
 
   # Remove working directory
-  rm -rf "${install_dir:?}/${blueprint:?}/$instance_name" 2>/dev/null || true
+  rm -rf "${install_dir:?}/instances/${blueprint:?}/$instance_name" 2>/dev/null || true
 
   # Remove blueprint install dir if empty
-  rmdir "${install_dir:?}/${blueprint:?}" 2>/dev/null || true
+  rmdir "${install_dir:?}/instances/${blueprint:?}" 2>/dev/null || true
 
   return 0
 }
@@ -113,7 +183,7 @@ function __cleanup_instance() {
 # Arguments:
 #   $1 - blueprint (string, required): The blueprint to use for the instance
 #   $2 - instance_name (string, optional): Name for the instance; auto-generated if omitted
-#   $3 - install_dir (string, optional): Installation directory; defaults to TEST_INSTALL_DIR or TEST_SANDBOX_INSTANCES_INSTALL_DIR
+#   $3 - install_dir (string, optional): Library root; defaults to TEST_INSTALL_DIR or TEST_SANDBOX_INSTANCES_INSTALL_DIR
 #
 # Output:
 #   Echoes the instance name (either provided or generated) to stdout
@@ -132,13 +202,16 @@ function create_test_instance() {
     instance_name=$("$KGSM_MAIN_SCRIPT" instances generate-id "$blueprint") || return 1
   fi
 
-  # Setup prerequisites (working dir + symlink)
+  # Setup prerequisites (library registration + working dir + symlink)
   __setup_instance_prereqs "$blueprint" "$instance_name" "$install_dir" || return 1
+
+  local library
+  library="$(__test_library_name "$install_dir")"
 
   local generated_instance_name
 
   # Create instance config
-  generated_instance_name=$("$KGSM_ROOT/kgsm.sh" instances create "$blueprint" --name "$instance_name" --install-dir "$install_dir" 2>/dev/null) || return 1
+  generated_instance_name=$("$KGSM_ROOT/kgsm.sh" instances create "$blueprint" --name "$instance_name" --library "$library" 2>/dev/null) || return 1
 
   # Create instance management script
   "$KGSM_ROOT/kgsm.sh" files management create "$instance_name" 1>/dev/null 2>&1 || return 1
@@ -161,7 +234,7 @@ export -f create_test_instance
 # Arguments:
 #   $1 - blueprint (string, required): The blueprint name
 #   $2 - instance_name (string, required): Name of the instance to remove
-#   $3 - install_dir (string, optional): Installation directory; defaults to TEST_INSTALL_DIR or TEST_SANDBOX_INSTANCES_INSTALL_DIR
+#   $3 - install_dir (string, optional): Library root; defaults to TEST_INSTALL_DIR or TEST_SANDBOX_INSTANCES_INSTALL_DIR
 #
 # Output:
 #   None
@@ -195,7 +268,7 @@ export -f remove_test_instance
 # Arguments:
 #   $1 - blueprint (string, required): The blueprint name
 #   $2 - instance_name (string, required): The instance name
-#   $3 - install_dir (string, optional): Installation directory; defaults to TEST_INSTALL_DIR or TEST_SANDBOX_INSTANCES_INSTALL_DIR
+#   $3 - install_dir (string, optional): Library root; defaults to TEST_INSTALL_DIR or TEST_SANDBOX_INSTANCES_INSTALL_DIR
 #
 # Output:
 #   None

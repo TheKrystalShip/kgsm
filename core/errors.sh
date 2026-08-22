@@ -185,6 +185,19 @@ export EC_LIBRARY_EXISTS
 declare -g -r EC_LIBRARY_IN_USE=54
 export EC_LIBRARY_IN_USE
 
+# The library is registered but its root is not reachable: the directory is
+# absent, or it carries no marker matching the registry. Placing an instance
+# there would write onto whatever sits at the mount point instead of onto the
+# disk the library names.
+declare -g -r EC_LIBRARY_OFFLINE=55
+export EC_LIBRARY_OFFLINE
+
+# The library has less free space than the blueprint declares the game needs
+# plus the configured margin. Measured before anything is created, so the
+# refusal leaves the library exactly as it found it.
+declare -g -r EC_INSUFFICIENT_DISK=56
+export EC_INSUFFICIENT_DISK
+
 # =============================================================================
 # EVENT SUCCESS CODES (200-255 range)
 # =============================================================================
@@ -410,6 +423,8 @@ declare -A EXIT_CODES=(
    [$EC_LIBRARY_NOT_FOUND]="Library not found"
    [$EC_LIBRARY_EXISTS]="Library already registered"
    [$EC_LIBRARY_IN_USE]="Library holds instances"
+   [$EC_LIBRARY_OFFLINE]="Library root is not reachable"
+   [$EC_INSUFFICIENT_DISK]="Not enough free space in the library"
 )
 
 declare -g KGSM_ERRORS_LOADED=1

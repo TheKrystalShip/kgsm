@@ -207,22 +207,26 @@ This means any script that has sourced bootstrap can call `instances.sh generate
 
 ## 1. Instance Creation Flow
 
-**Command:** `kgsm.sh install BLUEPRINT [--install-dir DIR] [--version VER] [--name NAME]`  
+**Command:** `kgsm.sh install BLUEPRINT [--library NAME] [--version VER] [--name NAME]`  
 **Aliases:** `kgsm.sh create BLUEPRINT …`  
 **Handled by:** `commands/install.sh`
 
 ```mermaid
 graph TD
     A["kgsm.sh install BLUEPRINT [options]"] --> AA["Bootstrap environment"]
-    AA --> B["Parse arguments<br/>(blueprint, install-dir, version, name)"]
-    B --> C{"install-dir<br/>provided?"}
-    C -->|"No"| C1["Refuse: no installation directory"]
-    C -->|"Yes"| D
+    AA --> B["Parse arguments<br/>(blueprint, library, version, name)"]
+    B --> C{"Resolve library:<br/>--library → default_library<br/>→ sole registered"}
+    C -->|"None"| C1["❌ EC_LIBRARY_NOT_FOUND<br/>or EC_MISSING_ARG (several, none chosen)"]
+    C -->|"Offline"| C2["❌ EC_LIBRARY_OFFLINE"]
+    C -->|"Online"| SG
 
-    D["directories.sh ensure-created install_dir"] --> E["instances.sh generate-id BLUEPRINT [--name NAME]<br/>→ unique instance identifier"]
-    E --> F["directories.sh ensure-created working_dir<br/>(install_dir/BLUEPRINT/INSTANCE)"]
+    SG{"Free space ≥<br/>base_disk_mb + margin?"} -->|"No"| SG1["❌ EC_INSUFFICIENT_DISK<br/>(nothing created)"]
+    SG -->|"Undeclared"| D
+    SG -->|"Yes"| D
+
+    D["instances.sh generate-id BLUEPRINT [--name NAME]<br/>→ unique instance identifier"] --> F["directories.sh ensure-created working_dir<br/>(library/instances/BLUEPRINT/INSTANCE)"]
     F --> G["directories.sh link-instance BLUEPRINT INSTANCE working_dir<br/>(symlink in KGSM_INSTANCES_DIR)"]
-    G --> H["instances.sh create BLUEPRINT --install-dir --name<br/>→ writes INSTANCE.config.ini"]
+    G --> H["instances.sh create BLUEPRINT --library --name<br/>→ writes INSTANCE.config.ini"]
     H --> EVT1["events.sh emit instance-installation-started"]
 
     EVT1 --> I["directories.sh create INSTANCE<br/>(install, saves, backups, temp, logs)"]
@@ -251,17 +255,21 @@ graph TD
     style U fill:#e8f5e8
     style Z1 fill:#ffebee
     style Z2 fill:#ffebee
+    style C1 fill:#ffebee
+    style C2 fill:#ffebee
+    style SG1 fill:#ffebee
 ```
 
 ### What Happens:
-1. **Directory bootstrap**: The target `install_dir` is created or validated, then a per-instance subdirectory (`install_dir/BLUEPRINT/INSTANCE`) is created and symlinked into `KGSM_INSTANCES_DIR`.
-2. **Instance config**: `instances.sh create` writes `INSTANCE.config.ini` through the symlink into the working directory.
-3. **Directory structure**: `directories.sh create` creates the full runtime directory set (install, saves, backups, temp, logs).
-4. **Management script assembly**: `files.sh create` assembles the management script by concatenating numbered modules from `templates/manage.{runtime}.d/`, substituting per-game override modules from `overrides/{blueprint_name}/` for modules 03–11 where they exist. The assembled script, plus optional UFW rules, are written to the instance directory.
-5. **Download**: The generated management script is called with `--download` to fetch game files via the override's `_download()` function.
-6. **Deploy**: `--deploy` moves files from the temp directory to the install directory via `_deploy()`.
-7. **Version record**: The resolved version string is persisted to the instance config.
-8. **Events**: Named events are emitted at each stage (`instance-installation-started`, `instance-downloaded`, `instance-installed`, etc.), appended to the event journal for any consumer tailing it.
+1. **Placement**: The library is resolved from `--library`, else the `default_library` config key, else the sole registered library. An unreachable library is refused, and so is a library with less free space than the blueprint's `metadata.base_disk_mb` plus `install_free_space_margin_mb` — measured before anything is created, so a refusal leaves the library as it found it. `--skip-space-check` installs anyway, and prints the shortfall either way.
+2. **Directory bootstrap**: The per-instance working directory (`library/instances/BLUEPRINT/INSTANCE`) is created and symlinked into `KGSM_INSTANCES_DIR`. The library root is recorded in the instance config as `library_dir`.
+3. **Instance config**: `instances.sh create` writes `INSTANCE.config.ini` through the symlink into the working directory.
+4. **Directory structure**: `directories.sh create` creates the full runtime directory set (install, saves, backups, temp, logs).
+5. **Management script assembly**: `files.sh create` assembles the management script by concatenating numbered modules from `templates/manage.{runtime}.d/`, substituting per-game override modules from `overrides/{blueprint_name}/` for modules 03–11 where they exist. The assembled script, plus optional UFW rules, are written to the instance directory.
+6. **Download**: The generated management script is called with `--download` to fetch game files via the override's `_download()` function.
+7. **Deploy**: `--deploy` moves files from the temp directory to the install directory via `_deploy()`.
+8. **Version record**: The resolved version string is persisted to the instance config.
+9. **Events**: Named events are emitted at each stage (`instance-installation-started`, `instance-downloaded`, `instance-installed`, etc.), appended to the event journal for any consumer tailing it.
 
 ---
 

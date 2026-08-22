@@ -170,8 +170,11 @@ function test_create_instance() {
   setup_instance_prereqs "factorio" "$instance_name" "$TEST_INSTALL_DIR"
 
   local output
+  local library
+  library="$(__test_library_name "$TEST_INSTALL_DIR")"
+
   output=$("$MODULE" create factorio \
-    --install-dir "$TEST_INSTALL_DIR" \
+    --library "$library" \
     --name "$instance_name" 2>&1)
   local exit_code=$?
 
@@ -184,14 +187,14 @@ function test_create_instance() {
 function test_create_missing_blueprint() {
   log_test_step "Testing 'create' without blueprint argument fails"
 
-  "$MODULE" create --install-dir "$TEST_INSTALL_DIR" 2>/dev/null
+  "$MODULE" create --library "$(__test_library_name "$TEST_INSTALL_DIR")" 2>/dev/null
   assert_not_equals 0 "$?" "create without blueprint should fail"
 }
 
 function test_create_invalid_blueprint() {
   log_test_step "Testing 'create' with invalid blueprint fails"
 
-  "$MODULE" create nonexistent_xyz_blueprint --install-dir "$TEST_INSTALL_DIR" 2>/dev/null
+  "$MODULE" create nonexistent_xyz_blueprint --library "$(__test_library_name "$TEST_INSTALL_DIR")" 2>/dev/null
   assert_not_equals 0 "$?" "create with invalid blueprint should fail"
 }
 

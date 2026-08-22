@@ -140,8 +140,12 @@ the refusals that protect them.
 `[instance_defaults] default_library` names this host's default library. Empty is legal; with
 exactly one library registered, that one is the default regardless.
 
-`kgsm install` and `kgsm instances create` take the root an instance is placed in from
-`--install-dir`. See
+`[instance_defaults] install_free_space_margin_mb` (default 1024) is the room an install
+requires beyond the blueprint's declared `metadata.base_disk_mb` before it proceeds.
+
+`kgsm install` and `kgsm instances create` take the library an instance is placed in from
+`--library <name>`, falling back to `default_library` and then to the sole registered library.
+Instances are placed at `<library-root>/instances/<blueprint>/<instance>`. See
 [Creating a new game server instance](create_new_game_server_instance.md).
 
 ## Events

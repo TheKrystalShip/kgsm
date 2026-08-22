@@ -8,7 +8,7 @@ An instance is a complete, functional installation of a game server created from
 
 - Has its own files, configuration, and world data
 - Can be started, stopped, updated, and managed independently
-- Exists in its own installation directory
+- Exists in its own directory inside a library
 - Is tracked and managed by KGSM
 
 You can create multiple instances from a single blueprint (for example, several different Minecraft servers with different mods, worlds or purposes), each with its own unique configuration, world data, and player communities.
@@ -17,7 +17,7 @@ You can create multiple instances from a single blueprint (for example, several 
 
 Each instance consists of two main components:
 
-1. **Working Directory**: Located under the installation directory you specify during creation, at `<install-dir>/<blueprint-name>/<instance-name>/`. This contains the game server executables, configuration, world data, and all runtime files.
+1. **Working Directory**: Located inside the library the instance was placed in, at `<library-root>/instances/<blueprint-name>/<instance-name>/`. This contains the game server executables, configuration, world data, and all runtime files. The library root is recorded in the instance config as `library_dir`; see [Libraries](libraries.md).
 
 2. **Instance Reference**: A symbolic link stored inside the `instances/` directory of your KGSM installation, at `instances/<blueprint-name>/<instance-name>/`. This symlink points to the working directory, allowing KGSM to track and access your instances without requiring them to live inside the KGSM directory tree.
 
@@ -81,14 +81,14 @@ Creating an instance registers the instance configuration with KGSM and sets up 
 
 ```sh
 # Full install (create + download + deploy) via the top-level command
-kgsm.sh install <blueprint> --install-dir <directory>
+kgsm.sh install <blueprint> [--library <name>]
 
 # Provide a custom instance name (auto-generated if omitted)
-kgsm.sh install minecraft --install-dir /opt/servers --name survival-server
+kgsm.sh install minecraft --library ssd --name survival-server
 
 # Create only the instance configuration (no download)
-kgsm.sh instances create <blueprint> --install-dir <directory>
-kgsm.sh instances create factorio --install-dir /opt/gameservers --name factorio-01
+kgsm.sh instances create <blueprint> [--library <name>]
+kgsm.sh instances create factorio --library ssd --name factorio-01
 
 # Interactive wizard
 kgsm.sh   # Then select "Install" from the menu

@@ -496,7 +496,8 @@ function __show_detailed_help() {
 function __wizard_install_server() {
   local blueprints
   local selected_blueprint
-  local install_dir
+  local libraries
+  local selected_library
   local version
   local instance_name
 
@@ -516,17 +517,24 @@ function __wizard_install_server() {
     2) return 2 ;; # Quit
   esac
 
-  # Get installation directory
-  install_dir=${config_default_install_directory:-}
-  if [[ -z "$install_dir" ]]; then
-    install_dir=$(__ui_prompt_user "Installation directory:")
-    if [[ -z "$install_dir" ]]; then
-      echo -e "${UI_COLOR_ERROR}Installation directory is required.${UI_COLOR_RESET}" >&2
-      __ui_wait_for_key
-      return 1
-    fi
+  # Select the library to place the instance in. Registered libraries are the
+  # only placements offered: a typed path would name a root nothing knows about.
+  mapfile -t libraries < <(__logic_library_list 2>/dev/null)
+
+  if [[ ${#libraries[@]} -eq 0 ]]; then
+    echo -e "${UI_COLOR_ERROR}No libraries registered. Run: kgsm libraries add <path>${UI_COLOR_RESET}" >&2
+    __ui_wait_for_key
+    return 1
+  fi
+
+  if [[ ${#libraries[@]} -eq 1 ]]; then
+    selected_library="${libraries[0]}"
   else
-    install_dir=$(__ui_prompt_user "Installation directory:" "$install_dir")
+    selected_library=$(__ui_select_from_list "Select Library" libraries)
+    case $? in
+      1) return 0 ;; # Back
+      2) return 2 ;; # Quit
+    esac
   fi
 
   # Get version (optional)
@@ -539,7 +547,7 @@ function __wizard_install_server() {
   __ui_clear_screen
   __ui_draw_box "Installation Summary"
   __ui_print_box_line "Blueprint: $selected_blueprint"
-  __ui_print_box_line "Directory: $install_dir"
+  __ui_print_box_line "Library: $selected_library ($(__logic_library_path "$selected_library"))"
   __ui_print_box_line "Version: ${version:-latest}"
   __ui_print_box_line "Name: ${instance_name:-default}"
   __ui_close_box
@@ -554,7 +562,7 @@ function __wizard_install_server() {
   echo -e "${UI_COLOR_INFO}Installing server instance...${UI_COLOR_RESET}" >&2
 
   local exit_code
-  __logic_wizard_install "$selected_blueprint" "$install_dir" "$version" "$instance_name"
+  __logic_wizard_install "$selected_blueprint" "$selected_library" "$version" "$instance_name"
   exit_code=$?
 
   if [[ $exit_code -eq 0 ]]; then
