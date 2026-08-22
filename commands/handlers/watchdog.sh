@@ -113,6 +113,13 @@ export -f __watchdog_available
 #   200 -> success event code (started/stopped). The daemon returns 200 for a
 #     genuine idempotent no-op too (ok:true "already running" / "not running"), so
 #     200 alone is the honest success signal — no separate already-in-state case.
+#   507 -> EC_INSUFFICIENT_MEMORY. The daemon has its own node-capacity check, and it
+#     answers a question this CLI's gate cannot: the daemon knows what the instances
+#     that are already starting have been promised, which /proc/meminfo does not yet
+#     reflect. So a start the CLI gate passed can still be refused here, and it is the
+#     SAME refusal — one exit code, so a caller needs one rule rather than two. A
+#     refusal is not a failure: nothing was attempted, nothing is wrong with the
+#     instance, and a retry gets the identical answer until the node has room.
 #   any other status (incl. 409) -> EC_ERROR. The daemon uses 409 (ok:false) for a
 #     REAL failure — e.g. "unknown instance (kgsm-lib returned no info)" or a failed
 #     spawn — NOT "already in the desired state". Mapping 409 to success made kgsm
@@ -122,7 +129,8 @@ export -f __watchdog_available
 #     already confirmed by the caller, so any non-200 here is a real error: do NOT
 #     silently re-spawn via the direct path (that risks a double start).
 # Args: $1 = verb (start|stop), $2 = instance name
-# Returns: EC_SUCCESS_INSTANCE_STARTED / EC_SUCCESS_INSTANCE_STOPPED, or an error code
+# Returns: EC_SUCCESS_INSTANCE_STARTED / EC_SUCCESS_INSTANCE_STOPPED,
+#          EC_INSUFFICIENT_MEMORY, or an error code
 function __watchdog_dispatch_lifecycle() {
   local _verb="$1"
   local _name="${2%.ini}"
@@ -157,6 +165,7 @@ function __watchdog_dispatch_lifecycle() {
 
   case "$_code" in
     200) return $_success_ec ;;
+    507) return $EC_INSUFFICIENT_MEMORY ;;
     *) return $EC_ERROR ;;
   esac
 }

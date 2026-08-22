@@ -113,7 +113,24 @@ function __logic_start_standalone_instance() {
   # its stop half (above) tears the orphan down first before this start runs.
   if __watchdog_available; then
     __watchdog_dispatch_lifecycle start "$_instance_name"
-    return $?
+    local _dispatch_rc=$?
+
+    # The daemon refuses a start the node has no room for, on a reading this CLI cannot
+    # take: it knows what the instances already starting have been promised, which
+    # /proc/meminfo does not yet reflect. Said out loud here because the transport keeps
+    # the daemon's status code and discards its body, so the exit code would otherwise
+    # arrive on its own — and the caller above prints nothing for this code, on the
+    # (here untrue) assumption that __memory_gate_check already explained itself.
+    #
+    # --force is deliberately NOT offered as a remedy: it skips THIS CLI's gate, and the
+    # daemon has no override to skip. Suggesting it would send an operator round a loop
+    # that ends in the same refusal.
+    if [[ $_dispatch_rc -eq $EC_INSUFFICIENT_MEMORY ]]; then
+      __print_error "Not enough memory to start $_instance_name: the watchdog refused it. The node cannot cover what this instance needs plus the required headroom, counting the instances that are still starting."
+      __print_error "Stop another instance to free memory, or lower this instance's memory_cap_mb. The daemon's log names the figures: journalctl -u kgsm-watchdog."
+    fi
+
+    return $_dispatch_rc
   fi
 
   # Get management file from config

@@ -47,6 +47,7 @@ function setup_file() {
 
   assert_equals 211 "$EC_SUCCESS_INSTANCE_STARTED" "EC_SUCCESS_INSTANCE_STARTED should be 211"
   assert_equals 212 "$EC_SUCCESS_INSTANCE_STOPPED" "EC_SUCCESS_INSTANCE_STOPPED should be 212"
+  assert_equals 51 "$EC_INSUFFICIENT_MEMORY" "EC_INSUFFICIENT_MEMORY should be 51"
 
   log_test_step "Test environment validated"
 }
@@ -161,6 +162,21 @@ function test_dispatch_start_409_is_ec_error() {
   __watchdog_dispatch_lifecycle start "myinst"
   assert_equals "$EC_ERROR" "$?" \
     "409 is a real daemon failure and must map to EC_ERROR, never success"
+}
+
+function test_dispatch_start_507_is_insufficient_memory() {
+  log_test_step "POST /start 507 -> EC_INSUFFICIENT_MEMORY"
+
+  # The daemon refuses a start the node has no room for with 507, and that must reach
+  # the caller as the SAME code this CLI's own gate returns — one rule for both, rather
+  # than a capacity refusal arriving as a generic error. A refusal is not a failure:
+  # nothing was attempted and nothing is wrong with the instance, so EC_ERROR would
+  # invite a retry that gets the identical answer and read as a fault in the server.
+  function __watchdog_curl() { echo "507"; return 0; }
+
+  __watchdog_dispatch_lifecycle start "myinst" 2> /dev/null
+  assert_equals "$EC_INSUFFICIENT_MEMORY" "$?" \
+    "507 should map to the insufficient-memory code, not to a generic error"
 }
 
 function test_dispatch_stop_200_is_stopped() {

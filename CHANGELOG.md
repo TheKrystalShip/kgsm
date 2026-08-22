@@ -47,6 +47,20 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **A capacity refusal from the watchdog exits `EC_INSUFFICIENT_MEMORY`, like the CLI's own.** The
+  daemon runs its own node-capacity check and answers a question this CLI cannot: it knows what the
+  instances already starting have been promised, which `MemAvailable` does not yet reflect. So a
+  start this CLI's gate passes can still be refused there, and it is the same refusal — the watchdog
+  says so with `507` on the control socket and `__watchdog_dispatch_lifecycle` maps it to `51`, so a
+  caller needs one rule rather than two. A refusal is not a failure: nothing was attempted and
+  nothing is wrong with the instance, so `EC_ERROR` would invite a retry that gets the identical
+  answer and read as a fault in the server. `restart` needs no mapping of its own — it is a stop
+  followed by a start, and the start half already returns this code, which the command layer reports
+  as *stopped but could not be started again, and is now down*. The refusal is said out loud where
+  it is dispatched: the transport keeps the daemon's status code and discards its body, and the
+  figures behind it are in the daemon's own log. `--force` is deliberately not offered as a remedy —
+  it skips **this** CLI's gate, and the daemon has no override to skip.
+
 - **A start is refused when the node has no room for it.** Before a native instance is spawned, the
   memory gate compares what the instance is expected to need against what the node reports available,
   and refuses when going ahead would leave less than `memory_gate_headroom_mb` free (default 1024).
