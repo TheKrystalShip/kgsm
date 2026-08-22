@@ -47,6 +47,16 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **`--force` on a start reaches the watchdog, so it overrides both checks.** `--force` skipped this
+  CLI's capacity gate and stopped there, which overrode nothing for a native instance: the daemon
+  runs its own check with the memory promised to instances already starting subtracted as well, so it
+  refuses everything this gate would and more. The flag now rides the dispatch as
+  `POST /start/<name>?force=true` — the URL is all this transport has, since it sends no body and
+  reads back a status code — and `restart --force` gets it too, because a restart's start half is an
+  ordinary start. The daemon still never overrides itself: its autostart and crash-restart take the
+  verdict as final, and only an explicit start carries the flag. The refusal message offers `--force`
+  as a remedy now that it is one.
+
 - **A capacity refusal from the watchdog exits `EC_INSUFFICIENT_MEMORY`, like the CLI's own.** The
   daemon runs its own node-capacity check and answers a question this CLI cannot: it knows what the
   instances already starting have been promised, which `MemAvailable` does not yet reflect. So a

@@ -65,9 +65,15 @@ function __logic_instance_start() {
   #
   # --force is the operator's override and exists because the fallback requirement
   # figure is an advisory blueprint value that can be wrong. It is available only
-  # to someone at a terminal — which is the person able to judge that a declared
-  # figure overstates what the game actually uses. The watchdog has no equivalent
-  # and never overrides itself.
+  # to someone at a terminal — the person able to judge that a declared figure
+  # overstates what the game actually uses.
+  #
+  # It skips this check AND is carried to the watchdog, which runs its own. Only
+  # skipping this one would override nothing for a native instance: the daemon
+  # subtracts what the instances already starting have been promised on top of the
+  # same arithmetic, so it refuses everything this check would and more. The daemon
+  # still never overrides ITSELF — the autostart and the crash-restart take its
+  # verdict as final, because there is nobody there to make the judgement.
   if [[ "$_force" != "true" ]]; then
     __memory_gate_check "$_instance_name" "$_instance_config_file"
     exit_code=$?
@@ -75,7 +81,7 @@ function __logic_instance_start() {
       return $exit_code
     fi
   else
-    __print_warning "Starting $_instance_name with --force: the node capacity check was skipped"
+    __print_warning "Starting $_instance_name with --force: the node capacity check is overridden"
   fi
 
   # Open the host firewall for the run that is starting — an instance's ports are
@@ -88,18 +94,19 @@ function __logic_instance_start() {
   # Native instances are the only kind KGSM starts here (the watchdog, or the
   # direct management script when it is absent). Container instances run their own
   # path; systemd is no longer a lifecycle manager.
-  __logic_start_standalone_instance "$_instance_name" "$_instance_config_file"
+  __logic_start_standalone_instance "$_instance_name" "$_instance_config_file" "$_force"
   return $?
 }
 
 export -f __logic_instance_start
 
 # Helper function to start standalone instance
-# Args: $1 = _instance_name, $2 = _instance_config_file
+# Args: $1 = _instance_name, $2 = _instance_config_file, $3 = _force (true|false)
 # Returns: 211 on success, error codes on failure
 function __logic_start_standalone_instance() {
   local _instance_name="$1"
   local _instance_config_file="$2"
+  local _force="${3:-false}"
 
   # Route to the resident watchdog when present + ready; it owns the cgroup
   # spawn and crash-restart. Falls back to the direct management-script path
@@ -112,7 +119,7 @@ function __logic_start_standalone_instance() {
   # through the daemon from creation — is unaffected, and `restart` is safe because
   # its stop half (above) tears the orphan down first before this start runs.
   if __watchdog_available; then
-    __watchdog_dispatch_lifecycle start "$_instance_name"
+    __watchdog_dispatch_lifecycle start "$_instance_name" "$_force"
     local _dispatch_rc=$?
 
     # The daemon refuses a start the node has no room for, on a reading this CLI cannot
@@ -121,13 +128,9 @@ function __logic_start_standalone_instance() {
     # the daemon's status code and discards its body, so the exit code would otherwise
     # arrive on its own — and the caller above prints nothing for this code, on the
     # (here untrue) assumption that __memory_gate_check already explained itself.
-    #
-    # --force is deliberately NOT offered as a remedy: it skips THIS CLI's gate, and the
-    # daemon has no override to skip. Suggesting it would send an operator round a loop
-    # that ends in the same refusal.
     if [[ $_dispatch_rc -eq $EC_INSUFFICIENT_MEMORY ]]; then
       __print_error "Not enough memory to start $_instance_name: the watchdog refused it. The node cannot cover what this instance needs plus the required headroom, counting the instances that are still starting."
-      __print_error "Stop another instance to free memory, or lower this instance's memory_cap_mb. The daemon's log names the figures: journalctl -u kgsm-watchdog."
+      __print_error "Stop another instance to free memory, lower this instance's memory_cap_mb, or start it anyway with --force. The daemon's log names the figures: journalctl -u kgsm-watchdog."
     fi
 
     return $_dispatch_rc
@@ -229,9 +232,10 @@ export -f __logic_stop_standalone_instance
 #            stop half has succeeded and before the start begins. The two halves are seconds to a
 #            minute apart, so the caller needs a place to say the old run has ended; this layer emits
 #            nothing itself (pure logic), it only calls back what it was handed. Omitted = silent.
-#       $3 = _force (optional) - skip the node capacity check on the start half. The gate runs AFTER
-#            the stop, so a restart is measured against a node that has already had this instance's
-#            memory returned to it; an instance that was running a moment ago normally still fits.
+#       $3 = _force (optional) - override the node capacity check on the start half, both this CLI's
+#            and the watchdog's. The check runs AFTER the stop, so a restart is measured against a
+#            node that has already had this instance's memory returned to it; an instance that was
+#            running a moment ago normally still fits without it.
 # Returns: 213 on success (triggers instance-restarted event), error codes on failure
 function __logic_instance_restart() {
   local _instance_name="$1"

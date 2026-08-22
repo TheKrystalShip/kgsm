@@ -128,12 +128,21 @@ export -f __watchdog_available
 #     instance). Claim success only when the daemon confirms it. Availability was
 #     already confirmed by the caller, so any non-200 here is a real error: do NOT
 #     silently re-spawn via the direct path (that risks a double start).
-# Args: $1 = verb (start|stop), $2 = instance name
+#
+# $3 carries the operator's --force to the daemon as a query flag, which is what makes
+# the override real for a native instance: the daemon runs the same check with the
+# instances already starting subtracted as well, so skipping only this CLI's gate would
+# leave the deciding one untouched. It rides the URL because that is all this transport
+# has — it sends no body and reads back a status code. Only an explicit start carries it;
+# the daemon's own autostart and crash-restart never do.
+#
+# Args: $1 = verb (start|stop), $2 = instance name, $3 = force (true|false, start only)
 # Returns: EC_SUCCESS_INSTANCE_STARTED / EC_SUCCESS_INSTANCE_STOPPED,
 #          EC_INSUFFICIENT_MEMORY, or an error code
 function __watchdog_dispatch_lifecycle() {
   local _verb="$1"
   local _name="${2%.ini}"
+  local _force="${3:-false}"
 
   local _path
   local _success_ec
@@ -141,6 +150,7 @@ function __watchdog_dispatch_lifecycle() {
   case "$_verb" in
     start)
       _path="start/$_name"
+      [[ "$_force" == "true" ]] && _path="${_path}?force=true"
       _success_ec=$EC_SUCCESS_INSTANCE_STARTED
       _timeout=60
       ;;

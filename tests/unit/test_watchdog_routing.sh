@@ -179,6 +179,57 @@ function test_dispatch_start_507_is_insufficient_memory() {
     "507 should map to the insufficient-memory code, not to a generic error"
 }
 
+# The path the last dispatched request asked for. Recorded through a FILE, not a variable:
+# __watchdog_curl is called inside a command substitution, so anything the stub assigns dies
+# with that subshell.
+function __recorded_request_path() { cat "${_REQUEST_PATH_FILE:-/dev/null}" 2> /dev/null; }
+
+# A curl seam that answers 200 and records the path it was asked for. The status is a literal
+# because the stub body is evaluated when it RUNS, long after this function's locals are gone.
+function __record_requests() {
+  [[ -n "${_REQUEST_PATH_FILE:-}" ]] && rm -f "$_REQUEST_PATH_FILE"
+  _REQUEST_PATH_FILE="$(mktemp)"
+  function __watchdog_curl() { printf '%s' "$2" > "$_REQUEST_PATH_FILE"; echo "200"; return 0; }
+}
+
+function test_dispatch_start_force_is_carried_to_the_daemon() {
+  log_test_step "start --force -> POST /start/<name>?force=true"
+
+  # The override has to reach the daemon or it overrides nothing for a native instance:
+  # the daemon runs the same arithmetic with the instances already starting subtracted as
+  # well, so it refuses everything this CLI's own gate would and more. The URL is the only
+  # channel this transport has — no body goes out, only a status comes back.
+  __record_requests
+
+  __watchdog_dispatch_lifecycle start "myinst" "true"
+  assert_equals "$EC_SUCCESS_INSTANCE_STARTED" "$?" "A forced start still maps 200 to the started code"
+  assert_equals "start/myinst?force=true" "$(__recorded_request_path)" \
+    "The force flag should ride the request path"
+}
+
+function test_dispatch_start_without_force_asks_for_no_override() {
+  log_test_step "start (no force) -> POST /start/<name>, no query"
+
+  # The protection is what a caller gets by not asking for it, so anything other than an
+  # explicit "true" must leave the path bare.
+  __record_requests
+
+  __watchdog_dispatch_lifecycle start "myinst"
+  assert_equals "start/myinst" "$(__recorded_request_path)" "An unforced start should carry no query flag"
+
+  __watchdog_dispatch_lifecycle start "myinst" "false"
+  assert_equals "start/myinst" "$(__recorded_request_path)" "force=false should carry no query flag"
+}
+
+function test_dispatch_stop_never_carries_force() {
+  log_test_step "stop ignores force — there is no capacity check on a stop"
+
+  __record_requests
+
+  __watchdog_dispatch_lifecycle stop "myinst" "true"
+  assert_equals "stop/myinst" "$(__recorded_request_path)" "A stop has nothing to override"
+}
+
 function test_dispatch_stop_200_is_stopped() {
   log_test_step "POST /stop 200 -> EC_SUCCESS_INSTANCE_STOPPED"
 
