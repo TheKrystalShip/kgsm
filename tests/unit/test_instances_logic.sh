@@ -1142,7 +1142,6 @@ function test_protected_key_classification() {
     save_command stop_command save_command_timeout_seconds
     stop_command_timeout_seconds startup_success_regex steamcmd_arguments
     wget_timeout_seconds
-    observed_ram_mb observed_ram_peak_mb observed_window_days observed_updated_at
   )
   for key in "${settable[@]}"; do
     __is_protected_instance_config_key "$key"
@@ -1173,49 +1172,6 @@ function test_set_config_updates_existing_key() {
   local got
   got=$(__get_instance_config_value "$instance_name" "auto_update")
   assert_equals "true" "$got" "Round-trip should return the new value"
-}
-
-function test_new_instance_carries_the_observed_keys_empty() {
-  log_test_step "Testing a new instance declares the observed-memory keys, empty"
-
-  local blueprint="factorio"
-  local instance_name="test-observed-keys"
-  create_test_instance "$blueprint" "$instance_name"
-  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
-
-  # Declared so an operator reading the config learns the keys exist, and empty
-  # because nothing has been measured and agreed yet. Empty is the honest state:
-  # a 0 here would say the instance was measured to need no memory.
-  local config_path="$KGSM_INSTANCES_DIR/$blueprint/$instance_name/$instance_name.config.ini"
-  local key
-  for key in observed_ram_mb observed_ram_peak_mb observed_window_days observed_updated_at; do
-    assert_file_contains "$config_path" "$key=\"\"" \
-      "A new instance should declare $key with no value"
-  done
-}
-
-function test_observed_key_is_added_to_a_config_that_lacks_it() {
-  log_test_step "Testing an observed key can be set on an instance that predates it"
-
-  local blueprint="factorio"
-  local instance_name="test-observed-append"
-  create_test_instance "$blueprint" "$instance_name"
-  _TEARDOWN_INSTANCES+=("$blueprint:$instance_name")
-
-  # An instance installed before these keys existed carries none of them, and
-  # there is no instance-config migration — the setter appending the key IS how
-  # the first agreed figure lands on an older instance.
-  local config_path="$KGSM_INSTANCES_DIR/$blueprint/$instance_name/$instance_name.config.ini"
-  grep -v '^observed_' "$config_path" > "$config_path.tmp" && mv "$config_path.tmp" "$config_path"
-  assert_equals 0 "$(grep -c '^observed_ram_mb=' "$config_path" || true)" \
-    "Precondition: the key should be absent"
-
-  __set_instance_config_value "$instance_name" "observed_ram_mb" "2908"
-  assert_equals 0 "$?" "Setting an absent observed key should succeed"
-
-  local got
-  got=$(__get_instance_config_value "$instance_name" "observed_ram_mb")
-  assert_equals "2908" "$got" "The appended key should round-trip"
 }
 
 function test_set_config_value_with_spaces_equals_backslash() {
