@@ -405,3 +405,32 @@ function test_status_json_on_stopped_instance() {
   remove_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR"
 }
 
+function test_status_json_carries_the_library_state() {
+  log_test_step "Testing status --json carries library_state whichever verb asked"
+
+  local blueprint="factorio"
+  local instance_name
+  instance_name=$(create_test_instance "$blueprint" 2>/dev/null)
+
+  if [[ -z "$instance_name" ]]; then
+    skip_test "Instance creation failed - skipping test"
+    return
+  fi
+
+  # A consumer joins on this field without knowing which verb produced the
+  # object, so an entrypoint that omits it hands back an absence that reads as
+  # the unknown it is not.
+  local shorthand detailed
+  shorthand=$("$MODULE" status --json "$instance_name" 2>&1)
+  detailed=$("$KGSM_ROOT/commands/instances.sh" --json status "$instance_name" 2>&1)
+
+  assert_equals "online" "$(echo "$shorthand" | jq -r '.library_state')" \
+    "status --json should report the library the instance is placed in"
+  assert_equals \
+    "$(echo "$detailed" | jq -r '.library_state')" \
+    "$(echo "$shorthand" | jq -r '.library_state')" \
+    "Both status verbs should report the same library state"
+
+  remove_test_instance "$blueprint" "$instance_name" "$TEST_INSTALL_DIR"
+}
+

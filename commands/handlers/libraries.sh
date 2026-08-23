@@ -765,6 +765,37 @@ function __logic_instance_library_state() {
 
 export -f __logic_instance_library_state
 
+# Adds the library measurement to a status object.
+#
+# The field has to read the same on an instance whose disk is there as on one
+# whose disk is not: a key present in only one of the two cases is a key a
+# consumer cannot join on, and its absence would look like the unknown it is not.
+# It also has to read the same whichever verb was asked, so this is the one
+# definition both `instances status` and the `status` shorthand overlay with.
+# The human form is the management script's own and is left as it wrote it.
+#
+# Args: $1 = json flag, $2 = the measured state, $3 = the status output
+function __overlay_library_state() {
+  local json_flag="$1"
+  local state="$2"
+  local raw="$3"
+
+  if [[ -z "$json_flag" ]] || [[ -z "$state" ]]; then
+    printf '%s' "$raw"
+    return 0
+  fi
+
+  local out
+  if out=$(printf '%s' "$raw" | jq --arg s "$state" '. + {library_state: $s}' 2> /dev/null) \
+    && [[ -n "$out" ]]; then
+    printf '%s' "$out"
+  else
+    printf '%s' "$raw"
+  fi
+}
+
+export -f __overlay_library_state
+
 # =============================================================================
 # PLACEMENT
 # =============================================================================

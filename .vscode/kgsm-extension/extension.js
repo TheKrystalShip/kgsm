@@ -151,16 +151,33 @@ function activate(context) {
       });
       if (!blueprint) return;
 
-      // 2. Pick install directory
-      const folderUri = await vscode.window.showOpenDialog({
-        canSelectFiles: false,
-        canSelectFolders: true,
-        canSelectMany: false,
-        openLabel: "Select Install Directory",
-        title: "Choose where to install the instance",
-      });
-      if (!folderUri || folderUri.length === 0) return;
-      const installDir = folderUri[0].fsPath;
+      // 2. Pick the library to place it in. An offline one is shown with its
+      // state rather than hidden, and is not selectable: placing into a root
+      // that is not mounted would write the instance onto whatever filesystem
+      // the mount point sits on.
+      const libraries = await client.getLibraries();
+      if (libraries.length === 0) {
+        vscode.window.showErrorMessage(
+          "No libraries registered. Run 'kgsm libraries add <path>' first."
+        );
+        return;
+      }
+
+      const pick = await vscode.window.showQuickPick(
+        libraries.map((l) => ({
+          label: l.name,
+          description: l.state,
+          detail: l.path,
+          library: l.state === "online" ? l.name : null,
+        })),
+        { placeHolder: "Select a library to place the instance in", title: "Create New Instance" }
+      );
+      if (!pick) return;
+      if (!pick.library) {
+        vscode.window.showErrorMessage(`Library '${pick.label}' is not mounted at ${pick.detail}`);
+        return;
+      }
+      const library = pick.library;
 
       // 3. Optional custom name
       const name = await vscode.window.showInputBox({
@@ -179,7 +196,7 @@ function activate(context) {
       await vscode.window.withProgress(
         { location: vscode.ProgressLocation.Notification, title: `Installing ${blueprint}...`, cancellable: false },
         async () => {
-          const result = await client.createInstance(blueprint, installDir, name || undefined);
+          const result = await client.createInstance(blueprint, library, name || undefined);
           if (result.exitCode !== 0) {
             vscode.window.showErrorMessage(`Failed to create instance: ${result.stderr || result.stdout}`);
           } else {

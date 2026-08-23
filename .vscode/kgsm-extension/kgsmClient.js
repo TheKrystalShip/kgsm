@@ -120,6 +120,23 @@ class KgsmClient {
   }
 
   /**
+   * List the registered libraries — the roots instances are placed in — each
+   * with its state (`online`/`offline`), free/total bytes and instance count.
+   * An offline library reports null bytes, because nothing measured them.
+   * @returns {Promise<object[]>}
+   */
+  async getLibraries() {
+    const { stdout, exitCode } = await this.exec(["libraries", "list", "--json"]);
+    if (exitCode !== 0 || !stdout.trim()) return [];
+
+    try {
+      return JSON.parse(stdout);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
    * Get instance status (JSON, fast mode).
    * @param {string} name
    * @returns {Promise<object|null>}
@@ -196,13 +213,18 @@ class KgsmClient {
 
   /**
    * Create a new instance from a blueprint.
+   *
+   * The library is the name of a registered placement root, not a path. Omit it
+   * to let the engine resolve one: the configured default_library, else the
+   * sole registered library.
    * @param {string} blueprint
-   * @param {string} installDir
+   * @param {string} [library]
    * @param {string} [name]
    * @returns {Promise<{stdout: string, stderr: string, exitCode: number}>}
    */
-  createInstance(blueprint, installDir, name) {
-    const args = ["install", blueprint, "--install-dir", installDir];
+  createInstance(blueprint, library, name) {
+    const args = ["install", blueprint];
+    if (library) args.push("--library", library);
     if (name) args.push("--name", name);
     return this.exec(args);
   }

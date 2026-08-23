@@ -1010,33 +1010,6 @@ function _get_instance_status_offline() {
   echo "Nothing else can be read while the library is away."
 }
 
-# Adds the library measurement to a status object.
-#
-# The field has to read the same on an instance whose disk is there as on one
-# whose disk is not: a key present in only one of the two cases is a key a
-# consumer cannot join on, and its absence would look like the unknown it is not.
-# The human form is the management script's own and is left as it wrote it.
-#
-# Args: $1 = json flag, $2 = the measured state, $3 = the status output
-function _overlay_library_state() {
-  local json_flag="$1"
-  local state="$2"
-  local raw="$3"
-
-  if [[ -z "$json_flag" ]] || [[ -z "$state" ]]; then
-    printf '%s' "$raw"
-    return 0
-  fi
-
-  local out
-  if out=$(printf '%s' "$raw" | jq --arg s "$state" '. + {library_state: $s}' 2> /dev/null) \
-    && [[ -n "$out" ]]; then
-    printf '%s' "$out"
-  else
-    printf '%s' "$raw"
-  fi
-}
-
 function _get_instance_status() {
   local instance=$1
 
@@ -1069,7 +1042,7 @@ function _get_instance_status() {
   _pid=$(__watchdog_pid_value "$instance")
   _raw=$(__overlay_status_active "$json_format" "$_active" "$_raw")
   _raw=$(__overlay_process_pid "$json_format" "$_pid" "$_raw")
-  _overlay_library_state "$json_format" "$__instance_library_state_out" "$_raw"
+  __overlay_library_state "$json_format" "$__instance_library_state_out" "$_raw"
 }
 
 function _get_instance_status_json() {
@@ -1094,7 +1067,7 @@ function _get_instance_status_json() {
   _pid=$(__watchdog_pid_value "$instance")
   _raw=$(__overlay_status_active "1" "$_active" "$_raw")
   _raw=$(__overlay_process_pid "1" "$_pid" "$_raw")
-  _overlay_library_state "1" "$__instance_library_state_out" "$_raw"
+  __overlay_library_state "1" "$__instance_library_state_out" "$_raw"
 }
 
 # Command handler functions

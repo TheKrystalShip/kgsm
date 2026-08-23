@@ -121,7 +121,7 @@ The core method. Calls `execFile(this.kgsmPath, args, { cwd: this.cwd })` and re
 | `startInstance(name)`                          | `kgsm.sh start <name>`                                            | `{ stdout, stderr, exitCode }`                                                 |
 | `stopInstance(name)`                           | `kgsm.sh stop <name>`                                             | `{ stdout, stderr, exitCode }`                                                 |
 | `restartInstance(name)`                        | `kgsm.sh restart <name>`                                          | `{ stdout, stderr, exitCode }`                                                 |
-| `createInstance(blueprint, installDir, name?)` | `kgsm.sh install <blueprint> --install-dir <dir> [--name <name>]` | `{ stdout, stderr, exitCode }`                                                 |
+| `createInstance(blueprint, library?, name?)`   | `kgsm.sh install <blueprint> [--library <name>] [--name <name>]`  | `{ stdout, stderr, exitCode }`                                                 |
 
 ### Runtime is a per-blueprint field, not a file family
 

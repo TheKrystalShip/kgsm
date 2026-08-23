@@ -47,6 +47,11 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **Both status verbs answer the library question.** `kgsm status <instance> --json` carries the
+  `library_state` field that `kgsm instances status <instance> --json` carries, so a consumer joins
+  on it without knowing which entrypoint produced the object. The measurement and the overlay have
+  one definition, `__overlay_library_state`, which both verbs go through.
+
 - **An instance moves between libraries, and a disk empties before it is unplugged.**
   `kgsm instances move <instance> --library <name>` relocates a stopped instance's files into
   another library, and `kgsm libraries remove <name> --drain <target>` does that for every instance

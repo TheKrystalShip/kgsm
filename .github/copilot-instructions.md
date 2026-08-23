@@ -250,7 +250,7 @@ Example: ID generation should either ALWAYS validate blueprints or NEVER validat
 
 1. **Create blueprint**: Copy `templates/blueprint.tp` to `blueprints/custom/native/yourgame.bp`
 2. **Fill required fields**: Set `name`, `ports`, `steam_app_id` (if applicable), `executable_file`, `level_name`
-3. **Test basic creation**: `./kgsm.sh --create yourgame --name test --install-dir /tmp/test-server`
+3. **Test basic creation**: `./kgsm.sh create yourgame --name test --library <name>`
 4. **Create override** (if needed): Copy `templates/overrides.tp` to `overrides/yourgame.overrides.sh`
 5. **Implement custom functions**: Override `_get_latest_version()`, `_download()`, `_deploy()` as needed
 6. **Add tests**: Create `tests/integration/test_yourgame_integration.sh`

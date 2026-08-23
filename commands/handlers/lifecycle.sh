@@ -35,6 +35,13 @@ if [[ -z "${KGSM_LOGIC_FILES_FIREWALL_LOADED}" ]]; then
   source "$(__find_command_handler files.firewall.sh)" || return $EC_FAILED_SOURCE
 fi
 
+# Load library logic (__logic_instance_library_state, __overlay_library_state):
+# where an instance's files stand is part of the status this module reports.
+if [[ -z "${KGSM_LOGIC_LIBRARIES_LOADED}" ]]; then
+  # shellcheck source=libraries.sh
+  source "$(__find_command_handler libraries.sh)" || return $EC_FAILED_SOURCE
+fi
+
 # Success event exit codes are now centralized in core/errors.sh
 # They are automatically available through the bootstrap process
 
@@ -389,7 +396,15 @@ function __logic_instance_status() {
   _active=$(__watchdog_active_value "$_instance_name")
   _pid=$(__watchdog_pid_value "$_instance_name")
   _raw=$(__overlay_status_active "$json_format" "$_active" "$_raw")
-  __overlay_process_pid "$json_format" "$_pid" "$_raw"
+  _raw=$(__overlay_process_pid "$json_format" "$_pid" "$_raw")
+
+  # Where the instance's files stand is part of its status, and it is the same
+  # part whichever verb asked: a consumer reading `status` joins on the field a
+  # consumer reading `instances status` joins on, so both overlay it here.
+  # Called without a command substitution, which would keep the measurement's
+  # globals to itself.
+  __logic_instance_library_state "$_instance_name" > /dev/null
+  __overlay_library_state "$json_format" "$__instance_library_state_out" "$_raw"
 
   return $_rc
 }
