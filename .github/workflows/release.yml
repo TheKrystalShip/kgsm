@@ -2,8 +2,7 @@
 # edit THIS file and re-run the vendor script; never edit a repo's copy directly.
 #
 # Tagging v<version> builds the project, packages it, signs it and publishes it to this repo's
-# own release. Aggregating those into the fleet's pacman repository is a separate, deliberate
-# step: scripts/publish-repo.sh --from-releases.
+# own release, then asks kgsm-meta to fold it into the fleet's pacman repository.
 name: release
 
 on:
@@ -115,6 +114,26 @@ jobs:
                  --title "$GITHUB_REF_NAME" --generate-notes
           gh release upload "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --clobber \
             packaging/*.pkg.tar.zst packaging/*.pkg.tar.zst.sig
+
+      # The fleet's repository is one aggregation point, and this tells it there is something new to
+      # collect. Best-effort on purpose: a cross-repo dispatch cannot use this workflow's own
+      # GITHUB_TOKEN, so it needs an organisation secret, and where that is absent kgsm-meta's
+      # schedule picks the release up within fifteen minutes instead. A secret cannot be tested in
+      # an `if:`, so the check is in the script and a missing token is a message, not a failure.
+      - name: Ask kgsm-meta to aggregate
+        if: startsWith(github.ref, 'refs/tags/')
+        continue-on-error: true
+        env:
+          DISPATCH_TOKEN: ${{ secrets.KGSM_META_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$DISPATCH_TOKEN" ]; then
+            echo "no KGSM_META_DISPATCH_TOKEN — the fleet repository aggregates on its own schedule"
+            exit 0
+          fi
+          printf '{"event_type":"package-released","client_payload":{"repo":"%s","tag":"%s"}}' \
+            "$GITHUB_REPOSITORY" "$GITHUB_REF_NAME" \
+            | GH_TOKEN="$DISPATCH_TOKEN" gh api --method POST \
+                /repos/TheKrystalShip/kgsm-meta/dispatches --input -
 
       # A dispatch run proves the package builds without publishing one.
       - name: Keep the package as a run artifact
