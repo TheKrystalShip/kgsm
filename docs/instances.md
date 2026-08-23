@@ -178,6 +178,48 @@ kgsm.sh instances input factorio-01 "/say Hello players!"
 
 These commands write to the instance's named pipe (`.sock` file) so they reach the server's standard input in real time.
 
+## Moving an instance between libraries
+
+```sh
+kgsm.sh instances move <instance-name> --library <library-name> [--skip-space-check]
+```
+
+Moves an instance's files into another library — the verb that makes emptying a disk before
+removing it a single command per instance, and the one `kgsm libraries remove --drain` runs for
+every resident of a library at once.
+
+Two things are required before anything happens: the instance must be **stopped**, and both its
+current library and the target must be **reachable**. A running server writes to the files the
+move copies, so a copy taken under it would be of a world nobody saved; the move refuses rather
+than stopping the server, because there are players on the other end of that decision.
+
+The sequence:
+
+1. **A backup** is taken, before a single file is copied. It lands in the shared backups root like
+   every other backup, outside the instance, so it survives whichever way the move goes.
+2. **The target is gated on free space** — measured from what the instance currently occupies
+   (`du`), not from what its blueprint says a fresh install needs, plus the same
+   `install_free_space_margin_mb` an install uses. `--skip-space-check` moves anyway and still
+   prints the shortfall.
+3. **The tree is copied** to `<library-root>/instances/<blueprint>/<instance>`.
+4. **Every path the instance holds is rewritten.** The keys are enumerated from the config rather
+   than listed, because they all derive from the working directory — and the ones that deliberately
+   live outside it (`backups_dir`, `blueprint_file`, `command_shortcut_file`) are left exactly as
+   they were. `library_dir` is set to the new root.
+5. **The management file is regenerated**, and for a container instance so is its
+   `docker-compose.yml`: bind mounts bake the working directory in, and a mount pointing at the tree
+   the move removed would never start.
+6. **The registry entry is re-pointed** at the new working directory. This is the commit.
+7. **The instance is started once and stopped again**, to confirm it runs from where it now lives.
+   An instance that has never been started is not started here either — nothing about it says it
+   ever ran, so a failure would say nothing about the move — and the move says so.
+8. **The old tree is removed.**
+
+A failure at any point up to step 6 leaves the original authoritative: the instance is still
+registered where it was, its config is untouched, and re-running the move picks up from the partial
+copy at the target. A failure at step 7 puts the registry back the same way. `instance_moved` is
+emitted once the move is done, carrying the library it came from and the one it is in.
+
 ## Managing instances
 
 Once you've created instances, you'll need to manage them throughout their lifecycle. KGSM provides comprehensive tools for this purpose.

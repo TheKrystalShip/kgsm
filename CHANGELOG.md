@@ -47,6 +47,54 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **An instance moves between libraries, and a disk empties before it is unplugged.**
+  `kgsm instances move <instance> --library <name>` relocates a stopped instance's files into
+  another library, and `kgsm libraries remove <name> --drain <target>` does that for every instance
+  in a library and then deregisters it. Both refuse a running instance by name rather than stopping
+  a server on their caller's behalf, and the drain checks every resident before it moves any of
+  them.
+
+  A move backs the instance up first, gates the target on what the instance has actually grown to
+  (`du`, not the blueprint's install figure) plus the same margin an install uses, copies the tree
+  to `<library>/instances/<blueprint>/<instance>`, rewrites every path the instance holds,
+  regenerates the management file and — for a container — the `docker-compose.yml` whose bind
+  mounts bake the working directory in, re-points the registry entry, starts the instance once to
+  confirm it runs from its new home, and only then removes the old tree. The config keys are
+  enumerated rather than listed, because they all derive from the working directory; the ones that
+  deliberately live outside it — `backups_dir`, `blueprint_file`, `command_shortcut_file` — are
+  left exactly as they were, and backups stay where they are.
+
+  Every failure before the registry is re-pointed leaves the original authoritative, and re-running
+  the move converges on the partial copy at the target instead of duplicating work. An instance
+  that has never been started is not started by the verify either: nothing about it says it ever
+  ran, so a failure there would say nothing about the move, and the move reports that it was not
+  verified rather than claiming it was.
+
+- **An install records which disk it landed on.** `instance_installed` carries `Library`, the name
+  of the library the placement resolved to, alongside the instance and blueprint it already had. A
+  move is recorded as `instance_moved`, carrying `FromLibrary` and `ToLibrary` — a reader that
+  learns only the destination cannot say which disk just got its space back.
+
+- **A refused library removal names the way out of it.** `kgsm libraries remove` on a library that
+  holds instances now points at `--drain <target>` first and `--force` second, because draining is
+  what the refusal is asking for and `--force` only deregisters. Passing both is refused: they ask
+  for opposite things.
+
+- **A child kgsm process keeps the watchdog as its authority.** The watchdog module's load guard
+  was exported, so a process spawned by one that had already sourced it skipped loading the module
+  and kept only the inherited function definitions — and bash exports neither the readonly control
+  socket constant nor the two memoization arrays those functions read. Every watchdog query in that
+  child then ran against an empty socket path, failed to connect, and fell back to the management
+  script's PID check, which reports every cgroup-spawned instance stopped. The guard is no longer
+  exported: each process loads the module itself, which is what the per-invocation memoization
+  already assumed.
+
+- **A registry search no longer writes to a closed pipe.** Looking a library up by name, path or id
+  read the registry through a process substitution and returned on the first match, leaving the
+  writer to print `echo: write error: Broken pipe` onto the caller's stderr — intermittently, ahead
+  of the message the caller was actually being given. The names are collected before they are
+  searched, which removes the early exit that caused it.
+
 - **An unplugged disk is a measured absence, never an uninstall.** An instance in a library that is
   not mounted keeps its registry entry — the symlink dangles rather than disappearing — and the
   engine now reads that as what it is. It still enumerates in `instances list`, and `--detailed`,

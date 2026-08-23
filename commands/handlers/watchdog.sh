@@ -544,6 +544,12 @@ function __watchdog_is_enabled() {
 
 export -f __watchdog_is_enabled
 
-# Mark module as loaded
+# Mark module as loaded. Deliberately NOT exported, unlike the other handlers'
+# guards: this module's state is a readonly socket constant and two associative
+# arrays, and bash exports neither. A child kgsm process that inherited the flag
+# would skip loading the module, keep the exported function definitions, and run
+# them against an empty socket path — so every watchdog query in that process
+# fails to connect and the caller falls back to the management script's PID
+# check, which reports every cgroup-spawned instance stopped. Each process loads
+# this itself; the file is small and the memoization is per-invocation by design.
 declare -g KGSM_LOGIC_WATCHDOG_LOADED=1
-export KGSM_LOGIC_WATCHDOG_LOADED

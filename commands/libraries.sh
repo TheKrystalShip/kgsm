@@ -24,7 +24,8 @@ ${UNDERLINE}Usage:${END}
 
 ${UNDERLINE}Commands:${END}
   add <path> [--name <name>]  Register a library at a path.
-  remove <name> [--force]     Deregister a library. Files are never touched.
+  remove <name> [--drain <target> | --force]
+                              Deregister a library.
   list [--json]               List libraries with state, capacity and use.
   rename <old> <new>          Rename a library.
   help [command]              Display help information.
@@ -36,6 +37,7 @@ ${UNDERLINE}Examples:${END}
   ${self} add /mnt/ssd/kgsm --name ssd
   ${self} list --json
   ${self} rename ssd fast
+  ${self} remove ssd --drain archive
   ${self} remove ssd
 "
 }
@@ -80,21 +82,35 @@ function show_usage_remove() {
 Deregisters a library and removes its marker when the root is reachable.
 
 ${UNDERLINE}Usage:${END}
-  ${self} remove <name> [--force]
+  ${self} remove <name> [--drain <target>] [--force]
 
 ${UNDERLINE}Arguments:${END}
   <name>                      Library name (required)
 
 ${UNDERLINE}Options:${END}
-  --force                     Deregister a library that holds instances
+  --drain <target>            Move every instance in this library into the
+                              target library first, then deregister it
+  --force                     Deregister a library that holds instances,
+                              leaving their files where they are
   -h | --help                 Display this help information
 
 ${UNDERLINE}Description:${END}
 No file inside the library is removed, including the instances placed there.
-A library holding instances is refused unless --force is passed.
+A library holding instances is refused: an entry that goes while its instances
+stay would leave them in a root this host no longer knows about.
+
+--drain is the way a disk is emptied before it is taken out. Every instance is
+moved into the target library, one at a time, and the library is deregistered
+once the last one has landed. Every instance has to be stopped first: the drain
+lists the ones that are running and does nothing rather than stopping servers on
+its caller's behalf.
+
+--force deregisters the library and moves nothing. The instances stay on the
+disk, and this host stops knowing where they are.
 
 ${UNDERLINE}Examples:${END}
   ${self} remove ssd
+  ${self} remove ssd --drain archive
   ${self} remove archive --force
 "
 }
@@ -284,15 +300,102 @@ function _cmd_add() {
   esac
 }
 
+# Moves every instance in a library into another one.
+#
+# The instances are checked before any of them is moved: a drain that stopped
+# halfway would leave a disk holding some of what it started with, which is the
+# state the verb exists to get out of. A running instance is the one condition
+# that can be seen in advance, so it is the one this refuses on.
+#
+# Args: $1 = source library, $2 = target library
+# Returns: EC_SUCCESS when the library is empty afterwards, an error code
+#          otherwise
+function _drain_library() {
+  local source="$1"
+  local target="$2"
+
+  if ! __logic_library_exists "$target"; then
+    __print_error "No library named '$target' is registered"
+    __print_error "Run '${self} list' to see the registered ones"
+    return $EC_LIBRARY_NOT_FOUND
+  fi
+
+  if [[ "$source" == "$target" ]]; then
+    __print_error "Cannot drain library '$source' into itself"
+    return $EC_INVALID_ARG
+  fi
+
+  if ! __logic_library_is_online "$source"; then
+    __print_error "Library '$source' is not reachable at $(__logic_library_path "$source")"
+    __print_error "Mount it: draining copies the instances' files off it"
+    return $EC_LIBRARY_OFFLINE
+  fi
+
+  if ! __logic_library_is_online "$target"; then
+    __print_error "Library '$target' is not reachable at $(__logic_library_path "$target")"
+    __print_error "Mount it, or drain into another library"
+    return $EC_LIBRARY_OFFLINE
+  fi
+
+  local -a instances=()
+  mapfile -t instances < <(__logic_library_instances "$source")
+
+  local -a residents=()
+  local instance
+  for instance in "${instances[@]}"; do
+    [[ -n "$instance" ]] && residents+=("$instance")
+  done
+
+  if [[ ${#residents[@]} -eq 0 ]]; then
+    return $EC_SUCCESS
+  fi
+
+  local -a running=()
+  for instance in "${residents[@]}"; do
+    if lifecycle.sh is-active "$instance" > /dev/null 2>&1; then
+      running+=("$instance")
+    fi
+  done
+
+  if [[ ${#running[@]} -gt 0 ]]; then
+    __print_error "Library '$source' holds instances that are running:"
+    for instance in "${running[@]}"; do
+      __print_error "  $instance"
+    done
+    __print_error "Stop them and run the drain again; nothing has been moved"
+    return $EC_INSTANCE_RUNNING
+  fi
+
+  __print_info "Draining ${#residents[@]} instance(s) from '$source' into '$target'..."
+
+  for instance in "${residents[@]}"; do
+    if ! instances.sh move "$instance" --library "$target"; then
+      __print_error "Draining stopped at '$instance'; library '$source' is still registered"
+      return $EC_ERROR
+    fi
+  done
+
+  return $EC_SUCCESS
+}
+
 function _cmd_remove() {
   local name=""
   local force=false
+  local drain_target=""
 
   while [[ "$#" -gt 0 ]]; do
     case $1 in
       -h | --help | help)
         show_usage_remove
         return 0
+        ;;
+      --drain)
+        shift
+        if [[ -z "${1:-}" ]]; then
+          __print_error "Missing argument for --drain"
+          return $EC_MISSING_ARG
+        fi
+        drain_target="$1"
         ;;
       --force)
         force=true
@@ -320,7 +423,25 @@ function _cmd_remove() {
     return $EC_MISSING_ARG
   fi
 
+  if [[ -n "$drain_target" ]] && [[ "$force" == true ]]; then
+    __print_error "--drain and --force ask for opposite things"
+    __print_error "--drain moves the instances out; --force leaves them behind"
+    return $EC_INVALID_ARG
+  fi
+
   local exit_code
+
+  # Checked here so that draining a library that is not registered says so
+  # rather than reporting an empty library it then fails to remove.
+  if [[ -n "$drain_target" ]]; then
+    if ! __logic_library_exists "$name"; then
+      __print_error "Library '$name' is not registered"
+      return $EC_LIBRARY_NOT_FOUND
+    fi
+
+    _drain_library "$name" "$drain_target" || return $?
+  fi
+
   __logic_library_remove "$name" "$force"
   exit_code=$?
 
@@ -349,7 +470,8 @@ function _cmd_remove() {
         [[ -z "$_instance" ]] && continue
         __print_error "  $_instance"
       done <<< "$__library_remove_instances_out"
-      __print_error "Pass --force to deregister it and leave those instances where they are"
+      __print_error "Pass --drain <target> to move them into another library first"
+      __print_error "Pass --force to deregister the library and leave them where they are"
       return $exit_code
       ;;
     *)

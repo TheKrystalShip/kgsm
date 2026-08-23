@@ -136,6 +136,7 @@ function test_validate_event_type_all_40_constants() {
     "instance_installation_started"
     "instance_installation_finished"
     "instance_installed"
+    "instance_moved"
     "instance_started"
     "instance_stopped"
     "instance_restarted"
@@ -463,6 +464,7 @@ function test_get_param_spec_all_40_events() {
     "instance_installation_started"
     "instance_installation_finished"
     "instance_installed"
+    "instance_moved"
     "instance_started"
     "instance_stopped"
     "instance_restarted"
@@ -973,6 +975,7 @@ function test_event_name_to_type_all_29_events() {
     "instance-installation-started:instance_installation_started"
     "instance-installation-finished:instance_installation_finished"
     "instance-installed:instance_installed"
+    "instance-moved:instance_moved"
     "instance-started:instance_started"
     "instance-stopped:instance_stopped"
     "instance-crashed:instance_crashed"
@@ -1102,12 +1105,12 @@ function test_edge_case_event_count_matches_configs() {
   # A canary, not a rule: the number itself carries no meaning, but a change to it means the event
   # vocabulary grew or shrank, which is worth being deliberate about. Update it in the same commit
   # that adds or removes an event, together with the param spec beside it.
-  log_test_step "Testing EVENT_CONFIGS count matches expected 65 events"
+  log_test_step "Testing EVENT_CONFIGS count matches expected 66 events"
 
   local config_count="${#EVENT_CONFIGS[@]}"
 
-  assert_equals "$config_count" "65" \
-    "EVENT_CONFIGS should contain exactly 65 entries (found: $config_count)"
+  assert_equals "$config_count" "66" \
+    "EVENT_CONFIGS should contain exactly 66 entries (found: $config_count)"
 }
 
 # Conformance guard: every event a call site actually emits must be registered

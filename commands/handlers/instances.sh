@@ -767,6 +767,251 @@ function __set_instance_config_value() {
 
 export -f __set_instance_config_value
 
+# =============================================================================
+# MOVING AN INSTANCE BETWEEN LIBRARIES
+# =============================================================================
+
+# Echoes the working directory an instance would occupy in a library.
+#
+# The layout below a library root is that module's to state, and the blueprint
+# comes from the registry rather than from the instance's config: the registry
+# directory an instance's symlink sits in IS its blueprint, and the move keeps
+# the entry where it already is.
+#
+# Args: $1 = library root, $2 = blueprint name, $3 = instance name
+# Returns: EC_SUCCESS or EC_INVALID_ARG
+function __logic_instance_target_working_dir() {
+  local _library_dir="${1%/}"
+  local _blueprint="$2"
+  local _instance="$3"
+
+  if [[ -z "$_library_dir" ]] || [[ -z "$_blueprint" ]] || [[ -z "$_instance" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  local _instances_dir
+  _instances_dir="$(__library_instances_subdir "$_library_dir")" || return $EC_INVALID_ARG
+
+  echo "${_instances_dir}/${_blueprint}/${_instance}"
+  return $EC_SUCCESS
+}
+
+export -f __logic_instance_target_working_dir
+
+# Echoes every path key in an instance config whose value sits inside a
+# directory, one `key<TAB>value` pair per line.
+#
+# The keys are enumerated rather than listed: every path an instance holds is
+# derived from its working directory at creation, so a move has to rewrite
+# whatever is actually there — including a key added after this function was
+# written. The containment test is what keeps the enumeration honest in the
+# other direction: backups_dir deliberately lives outside the working directory,
+# blueprint_file points into the KGSM installation, and command_shortcut_file
+# points at a directory on the user's PATH. None of those move with the
+# instance, and none of them match.
+#
+# Args: $1 = instance config file, $2 = the directory to test against
+# Returns: EC_SUCCESS, EC_INVALID_ARG, or EC_FILE_NOT_FOUND
+function __logic_instance_path_keys_under() {
+  local _config_file="$1"
+  local _prefix="${2%/}"
+
+  if [[ -z "$_config_file" ]] || [[ -z "$_prefix" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  if [[ ! -f "$_config_file" ]]; then
+    return $EC_FILE_NOT_FOUND
+  fi
+
+  local _line _key _value
+  while IFS= read -r _line || [[ -n "$_line" ]]; do
+    [[ "$_line" =~ ^[[:space:]]*# ]] && continue
+    [[ "$_line" =~ ^([a-zA-Z_][a-zA-Z0-9_]*)= ]] || continue
+
+    _key="${BASH_REMATCH[1]}"
+    case "$_key" in
+      *_dir | *_file) ;;
+      *) continue ;;
+    esac
+
+    _value="${_line#*=}"
+    _value="${_value#\"}"
+    _value="${_value%\"}"
+
+    [[ -z "$_value" ]] && continue
+
+    if [[ "$_value" == "$_prefix" ]] || [[ "$_value" == "$_prefix"/* ]]; then
+      printf '%s\t%s\n' "$_key" "$_value"
+    fi
+  done < "$_config_file"
+
+  return $EC_SUCCESS
+}
+
+export -f __logic_instance_path_keys_under
+
+# Rewrites an instance config so every path it holds inside one working
+# directory points at another, and records the library the new one sits in.
+#
+# The config that is rewritten is the one at the new location, named by its full
+# path rather than by instance name: the registry still points at the old copy
+# while this runs, and resolving the instance by name would edit the tree the
+# move has not committed to yet.
+#
+# Args: $1 = instance config file at the new location, $2 = old working
+#       directory, $3 = new working directory, $4 = new library root
+# Returns: EC_SUCCESS, EC_INVALID_ARG, EC_FILE_NOT_FOUND,
+#          EC_FAILED_UPDATE_CONFIG
+function __logic_instance_rewrite_paths() {
+  local _config_file="$1"
+  local _old="${2%/}"
+  local _new="${3%/}"
+  local _library_dir="${4%/}"
+
+  if [[ -z "$_config_file" ]] || [[ -z "$_old" ]] || [[ -z "$_new" ]] ||
+    [[ -z "$_library_dir" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  if [[ ! -f "$_config_file" ]]; then
+    return $EC_FILE_NOT_FOUND
+  fi
+
+  # Collected before anything is written: the enumeration reads the same file
+  # the rewrite edits, and a reader walking a file that is being rewritten under
+  # it has no defined result.
+  local -a _pairs=()
+  mapfile -t _pairs < <(__logic_instance_path_keys_under "$_config_file" "$_old")
+
+  local _pair _key _value _suffix
+  for _pair in "${_pairs[@]}"; do
+    [[ -z "$_pair" ]] && continue
+    _key="${_pair%%$'\t'*}"
+    _value="${_pair#*$'\t'}"
+
+    _suffix="${_value#"$_old"}"
+
+    if ! __add_or_update_config "$_config_file" "$_key" "\"${_new}${_suffix}\"" \
+      > /dev/null 2>&1; then
+      return $EC_FAILED_UPDATE_CONFIG
+    fi
+  done
+
+  # library_dir is not under the working directory, so the enumeration above
+  # never sees it. It is the one key a move changes on its own terms.
+  if ! __add_or_update_config "$_config_file" "library_dir" "\"$_library_dir\"" \
+    > /dev/null 2>&1; then
+    return $EC_FAILED_UPDATE_CONFIG
+  fi
+
+  return $EC_SUCCESS
+}
+
+export -f __logic_instance_rewrite_paths
+
+# Echoes the size of a directory tree in whole megabytes.
+#
+# Measured with du rather than taken from the blueprint's base_disk_mb: what a
+# game needs to be installed and what one instance of it has grown to are
+# different numbers, and only the second one is about to be copied.
+#
+# Args: $1 = directory
+# Returns: EC_SUCCESS, EC_INVALID_ARG, EC_DIRECTORY_NOT_FOUND, or EC_ERROR when
+#          du reported something this cannot read
+function __logic_instance_tree_size_mb() {
+  local _dir="$1"
+
+  if [[ -z "$_dir" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  if [[ ! -d "$_dir" ]]; then
+    return $EC_DIRECTORY_NOT_FOUND
+  fi
+
+  local _out
+  _out="$(du -s -m "$_dir" 2> /dev/null | cut -f1)"
+
+  if [[ ! "$_out" =~ ^[0-9]+$ ]]; then
+    return $EC_ERROR
+  fi
+
+  echo "$_out"
+  return $EC_SUCCESS
+}
+
+export -f __logic_instance_tree_size_mb
+
+# Copies an instance's tree to another location.
+#
+# rsync with --delete rather than cp, because the copy has to be resumable: a
+# move that fails before the registry points at the new tree leaves the source
+# authoritative, and the partial copy at the target is then whatever the run got
+# through. Re-running has to converge on an exact replica, which is what
+# --delete makes true — a plain copy over the remains of an interrupted one
+# leaves files the source no longer has.
+#
+# Args: $1 = source directory, $2 = target directory
+# Returns: EC_SUCCESS, EC_INVALID_ARG, EC_DIRECTORY_NOT_FOUND,
+#          EC_MISSING_DEPENDENCY, EC_FAILED_MKDIR, or EC_FAILED_CP
+function __logic_instance_copy_tree() {
+  local _source="${1%/}"
+  local _target="${2%/}"
+
+  if [[ -z "$_source" ]] || [[ -z "$_target" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  if [[ ! -d "$_source" ]]; then
+    return $EC_DIRECTORY_NOT_FOUND
+  fi
+
+  if ! command -v rsync > /dev/null 2>&1; then
+    return $EC_MISSING_DEPENDENCY
+  fi
+
+  if ! __create_dir "$_target" > /dev/null 2>&1; then
+    return $EC_FAILED_MKDIR
+  fi
+
+  if ! rsync -a --delete "${_source}/" "${_target}/" > /dev/null 2>&1; then
+    return $EC_FAILED_CP
+  fi
+
+  return $EC_SUCCESS
+}
+
+export -f __logic_instance_copy_tree
+
+# Reports whether an instance has ever been started.
+#
+# The signal is its log file: both runtimes write one on the way up and rotate
+# it into logs_dir on the next start, so either the live file or one rotated
+# copy exists for an instance that has run, and neither exists for one that has
+# not. Measured on disk rather than inferred from anything the instance
+# declares.
+#
+# Args: $1 = log file, $2 = logs directory
+# Returns: 0 when the instance has been started, 1 when nothing says it has
+function __logic_instance_has_run() {
+  local _log_file="$1"
+  local _logs_dir="${2%/}"
+
+  if [[ -n "$_log_file" ]] && [[ -e "$_log_file" ]]; then
+    return 0
+  fi
+
+  if [[ -n "$_logs_dir" ]] && [[ -d "$_logs_dir" ]] &&
+    [[ -n "$(ls -A "$_logs_dir" 2> /dev/null)" ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
+export -f __logic_instance_has_run
+
 # Mark module as loaded
 declare -g KGSM_LOGIC_INSTANCES_LOADED=1
 export KGSM_LOGIC_INSTANCES_LOADED

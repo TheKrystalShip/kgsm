@@ -568,3 +568,37 @@ Status: ✓ Active"
 
   assert_equals "$raw" "$out" "Text form is left as-is"
 }
+
+# =============================================================================
+# THE LOAD GUARD MUST NOT CROSS A PROCESS BOUNDARY
+# =============================================================================
+
+function test_load_guard_is_not_exported() {
+  log_test_step "The module's load guard stays inside the process that set it"
+
+  local inherited
+  inherited="$(bash -c 'printf "%s" "${KGSM_LOGIC_WATCHDOG_LOADED:-}"')"
+
+  assert_equals "" "$inherited" \
+    "A child that inherited the guard would skip loading the module"
+}
+
+function test_a_child_that_sources_the_module_has_a_socket_path() {
+  log_test_step "A child kgsm process keeps a usable socket path"
+
+  # What a child does: the guard is unset, so it sources the module itself and
+  # re-declares the readonly socket constant, which bash cannot export. Skipping
+  # the load would leave the inherited functions querying an empty path, so
+  # every watchdog answer would be a connection failure and the caller would
+  # fall back to the management script's PID check — which reports every
+  # cgroup-spawned instance stopped.
+  local resolved
+  resolved="$(bash -c '
+    source "'"$KGSM_ROOT"'/core/bootstrap.sh" > /dev/null 2>&1
+    source "$(__find_command_handler watchdog.sh)" > /dev/null 2>&1
+    __watchdog_socket_path
+  ' 2> /dev/null)"
+
+  assert_not_null "$resolved" "A child should resolve a non-empty socket path"
+  assert_starts_with "$resolved" "/" "The socket path should be absolute"
+}

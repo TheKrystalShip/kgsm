@@ -94,7 +94,7 @@ normally.
 
 ```bash
 kgsm libraries add <path> [--name <name>]
-kgsm libraries remove <name> [--force]
+kgsm libraries remove <name> [--drain <target>] [--force]
 kgsm libraries list [--json]
 kgsm libraries rename <old> <new>
 ```
@@ -122,8 +122,17 @@ Three things are refused, each naming what is already registered:
 Deregisters the library and takes the marker off the root when the root is reachable. **No file
 inside the library is touched**, including the instances placed there.
 
-A library that holds instances is refused, and the refusal names them. `--force` deregisters it
-anyway and leaves everything on disk where it is.
+A library that holds instances is refused, and the refusal names them. There are two ways past it,
+and they do opposite things, so passing both is refused:
+
+- **`--drain <target>`** moves every instance in the library into the target library first, one at
+  a time, and deregisters the library once the last one has landed. This is how a disk is emptied
+  before it is taken out. Every resident has to be stopped: the drain lists the ones that are
+  running and moves nothing, rather than stopping servers on its caller's behalf. A drain that
+  fails partway through leaves the library registered, with the instances it has already moved in
+  the target and the rest where they were — re-running it carries on.
+- **`--force`** deregisters the library and moves nothing. The instances stay on the disk and this
+  host stops knowing where they are.
 
 Removing an **offline** library leaves its marker behind: the identity stays on the disk, so
 re-adding it later adopts the library it already holds instead of minting a second one over the
@@ -181,7 +190,19 @@ requires beyond the blueprint's declared `metadata.base_disk_mb` before it proce
 Instances are placed at `<library-root>/instances/<blueprint>/<instance>`. See
 [Creating a new game server instance](create_new_game_server_instance.md).
 
+## Moving an instance between libraries
+
+```bash
+kgsm instances move <instance> --library <name> [--skip-space-check]
+```
+
+Moves a stopped instance's files into another library. The instance must be stopped and both
+libraries must be reachable; a backup is taken before anything is copied. See
+[Instances](instances.md#moving-an-instance-between-libraries) for the whole sequence.
+
 ## Events
 
 Registering and deregistering a library are recorded in the event journal as `library_added` and
-`library_removed`, each carrying `LibraryName` and `Path`. See [Event System](events.md).
+`library_removed`, each carrying `LibraryName` and `Path`. Moving an instance is recorded as
+`instance_moved`, carrying `InstanceName`, `FromLibrary` and `ToLibrary`, and an install records
+the library it landed in as `Library` on `instance_installed`. See [Event System](events.md).

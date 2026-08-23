@@ -87,6 +87,8 @@ ${BOLD}${UNDERLINE}Examples:${END}
   ${BOLD}Libraries:${END}
   ${self} libraries add /mnt/ssd/kgsm --name ssd
   ${self} libraries list
+  ${self} instances move factorio-01 --library ssd
+  ${self} libraries remove ssd --drain archive
   ${self} libraries remove ssd
 
   ${BOLD}Blueprints:${END}

@@ -198,6 +198,12 @@ export EC_LIBRARY_OFFLINE
 declare -g -r EC_INSUFFICIENT_DISK=56
 export EC_INSUFFICIENT_DISK
 
+# The operation needs the instance stopped and it is running. A refusal, not a
+# fault: nothing was attempted, and stopping the server is the caller's decision
+# to make because there are players on the other end of it.
+declare -g -r EC_INSTANCE_RUNNING=57
+export EC_INSTANCE_RUNNING
+
 # =============================================================================
 # EVENT SUCCESS CODES (200-255 range)
 # =============================================================================
@@ -425,6 +431,7 @@ declare -A EXIT_CODES=(
    [$EC_LIBRARY_IN_USE]="Library holds instances"
    [$EC_LIBRARY_OFFLINE]="Library root is not reachable"
    [$EC_INSUFFICIENT_DISK]="Not enough free space in the library"
+   [$EC_INSTANCE_RUNNING]="This instance must be stopped first"
 )
 
 declare -g KGSM_ERRORS_LOADED=1

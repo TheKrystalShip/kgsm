@@ -58,7 +58,23 @@ Event types use **underscore-separated** names in JSON payloads and **dash-separ
 | `instance_deploy_finished` | Deployment of server files completed | `InstanceName` |
 | `instance_deployed` | Server files fully deployed | `InstanceName` |
 | `instance_installation_finished` | Installation process completed | `InstanceName`, `Blueprint` |
-| `instance_installed` | Server fully installed and ready | `InstanceName`, `Blueprint` |
+| `instance_installed` | Server fully installed and ready | `InstanceName`, `Blueprint`, `Library` |
+
+`instance_installed` is the one installation event that also says **where** the files landed:
+`Library` is the name of the library the install was placed in. The placement is resolved before a
+single directory is created, so it is always known, and on a host with several disks it is what an
+audit row needs most.
+
+### 📦 Placement Events
+
+| Event Name | Description | Data Fields |
+|------------|-------------|-------------|
+| `instance_moved` | An instance's files now live in a different library | `InstanceName`, `FromLibrary`, `ToLibrary` |
+
+Both library names are carried because a reader that learns only the destination cannot say which
+disk just got its space back — and emptying a disk before it is unplugged is the whole reason
+`kgsm instances move` and `kgsm libraries remove --drain` exist. An instance the registry places in
+no library reports `unregistered`, which is a measurement rather than an absence.
 
 ### 🔄 Update Events
 

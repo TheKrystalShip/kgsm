@@ -125,6 +125,13 @@ export EVENT_INSTANCE_INSTALLATION_FINISHED
 declare -g -r EVENT_INSTANCE_INSTALLED="instance_installed"
 export EVENT_INSTANCE_INSTALLED
 
+# An instance's files now live in a different library. Carries the library it
+# came from and the one it is in, because a reader that learns only the
+# destination cannot tell which disk just got its space back — and draining a
+# disk before it is unplugged is the whole reason the verb exists.
+declare -g -r EVENT_INSTANCE_MOVED="instance_moved"
+export EVENT_INSTANCE_MOVED
+
 declare -g -r EVENT_INSTANCE_STARTED="instance_started"
 export EVENT_INSTANCE_STARTED
 
@@ -414,7 +421,14 @@ declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_UPDATE_AVAILABLE"]="instance current_version latest_version"
   ["$EVENT_INSTANCE_INSTALLATION_STARTED"]="instance blueprint"
   ["$EVENT_INSTANCE_INSTALLATION_FINISHED"]="instance blueprint"
-  ["$EVENT_INSTANCE_INSTALLED"]="instance blueprint"
+  # `library` is the name of the library the install landed in. Required: the
+  # placement is resolved before a single directory is created, so an installer
+  # always knows it, and an audit row that cannot say which disk a server went
+  # onto is the row a multi-disk host needs most.
+  ["$EVENT_INSTANCE_INSTALLED"]="instance blueprint library"
+  # `from_library`/`to_library` are library names, and the instance is still the
+  # same instance — only its files went anywhere.
+  ["$EVENT_INSTANCE_MOVED"]="instance from_library to_library"
   ["$EVENT_INSTANCE_STARTED"]="instance"
   ["$EVENT_INSTANCE_STOPPED"]="instance"
   ["$EVENT_INSTANCE_RESTARTED"]="instance"
@@ -672,10 +686,31 @@ function __logic_build_event_payload() {
   # Build data object based on event type
   local data_object=""
   case "$event_type" in
-    "$EVENT_INSTANCE_CREATED" | "$EVENT_INSTANCE_INSTALLATION_STARTED" | "$EVENT_INSTANCE_INSTALLATION_FINISHED" | "$EVENT_INSTANCE_INSTALLED")
+    "$EVENT_INSTANCE_CREATED" | "$EVENT_INSTANCE_INSTALLATION_STARTED" | "$EVENT_INSTANCE_INSTALLATION_FINISHED")
       data_object='{
         InstanceName: $instance,
         Blueprint: $blueprint
+      }'
+      ;;
+    "$EVENT_INSTANCE_INSTALLED")
+      # The one installation event that also says where the files landed. The
+      # bracket around the run states what is being installed; this states what
+      # exists now, and on a host with several disks that includes which one.
+      data_object='{
+        InstanceName: $instance,
+        Blueprint: $blueprint,
+        Library: $library
+      }'
+      ;;
+    "$EVENT_INSTANCE_MOVED")
+      # `$from_library`/`$to_library` bind from the EVENT_CONFIGS spec. Both are
+      # required, so neither is null-coalesced: an instance the registry places
+      # in no library reports "unregistered", which is a measurement, not an
+      # absence.
+      data_object='{
+        InstanceName: $instance,
+        FromLibrary: $from_library,
+        ToLibrary: $to_library
       }'
       ;;
     "$EVENT_INSTANCE_VERSION_UPDATED")

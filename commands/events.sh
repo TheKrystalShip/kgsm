@@ -161,7 +161,12 @@ ${UNDERLINE}Instance Creation Process:${END}
 ${UNDERLINE}Instance Installation:${END}
   instance-installation-started <instance> [blueprint]
   instance-installation-finished <instance> [blueprint]
-  instance-installed <instance> [blueprint]
+  instance-installed <instance> <blueprint> <library>
+
+  <library> is the name of the library the install landed in.
+
+${UNDERLINE}Instance Placement:${END}
+  instance-moved <instance> <from_library> <to_library>
 
 ${UNDERLINE}Instance Updates:${END}
   instance-update-started <instance>
@@ -215,6 +220,8 @@ Optional parameters (shown in brackets) can be omitted or left as empty strings.
 
 ${UNDERLINE}Examples:${END}
   ${self} emit instance-created myserver factorio
+  ${self} emit instance-installed myserver factorio ssd
+  ${self} emit instance-moved myserver ssd archive
   ${self} emit instance-started myserver
   ${self} emit instance-version-updated myserver 1.0.0 1.1.1
   ${self} emit instance-backup-created myserver auto 1.2.3

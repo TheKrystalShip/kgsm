@@ -24,6 +24,8 @@ ${UNDERLINE}Usage:${END}
 ${UNDERLINE}Commands:${END}
   create <blueprint>          Create a new instance from a blueprint
   remove <instance>           Remove an instance configuration
+  move <instance> --library <name>
+                              Move a stopped instance into another library
   list [blueprint]            List all instances or filter by blueprint
   info <instance>             Display instance configuration
   status <instance>           Show instance runtime status
@@ -61,6 +63,7 @@ ${UNDERLINE}Options:${END}
 
 ${UNDERLINE}Examples:${END}
   $self create factorio --library ssd --name factorio-01
+  $self move factorio-01 --library archive
   $self list
   $self list factorio
   $self list --json
@@ -161,6 +164,45 @@ still holds of it while the disk is away.
 ${UNDERLINE}Examples:${END}
   $self remove factorio-01
   $self remove terraria-main
+"
+}
+
+function show_usage_move() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Move Instance${END}
+
+Move a stopped instance's files into another library.
+
+${UNDERLINE}Usage:${END}
+  $self move <instance> --library <name> [--skip-space-check]
+
+${UNDERLINE}Arguments:${END}
+  instance                    Instance to move
+
+${UNDERLINE}Options:${END}
+  --library <name>            Library to move the instance into (required)
+  --skip-space-check          Move even when the target library has less free
+                              space than the instance currently occupies
+  --help                      Display this help information
+
+${UNDERLINE}Description:${END}
+The instance must be stopped, and both libraries must be reachable. A backup is
+taken before anything is copied.
+
+The move lands at <library>/instances/<blueprint>/<instance>, rewrites every
+path the instance holds, regenerates its management file, re-points its registry
+entry and starts it once on the new path to confirm it runs there. Only then is
+the old tree removed, so a failure at any point up to the re-point leaves the
+original authoritative and re-running the move picks up where it stopped.
+
+Backups are unaffected: they live outside the instance's directory and stay
+where they are.
+
+${UNDERLINE}Examples:${END}
+  $self move factorio-01 --library ssd
+  $self move terraria-main --library archive --skip-space-check
 "
 }
 
@@ -1183,6 +1225,327 @@ function _cmd_remove() {
       exit $exit_code
       ;;
   esac
+}
+
+# How long a start-verify waits for the instance to come up on its new path,
+# and how often it looks. A game server that has not reported itself running
+# within this has not shown that it runs from the new location, which is the
+# only question the verify asks.
+readonly MOVE_START_VERIFY_TIMEOUT_SECONDS=120
+readonly MOVE_START_VERIFY_INTERVAL_SECONDS=2
+
+# Waits for an instance to report itself active.
+# Args: $1 = instance name
+# Returns: EC_SUCCESS once it is active, EC_TIMEOUT when it never was
+function _wait_until_active() {
+  local instance="$1"
+
+  local waited=0
+  while [[ $waited -lt $MOVE_START_VERIFY_TIMEOUT_SECONDS ]]; do
+    if lifecycle.sh is-active "$instance" > /dev/null 2>&1; then
+      return $EC_SUCCESS
+    fi
+    sleep "$MOVE_START_VERIFY_INTERVAL_SECONDS"
+    waited=$((waited + MOVE_START_VERIFY_INTERVAL_SECONDS))
+  done
+
+  return $EC_TIMEOUT
+}
+
+# Starts an instance, waits for it to run, and stops it again.
+#
+# The move has already re-pointed the registry when this runs, so this is the
+# step that decides whether the instance is usable where it now lives — every
+# path in its config, its regenerated management file and, for a container, the
+# bind mounts in its compose file are exercised by one real start.
+#
+# Args: $1 = instance name
+# Returns: EC_SUCCESS when the instance ran, an error code otherwise
+function _verify_start_on_new_path() {
+  local instance="$1"
+
+  if ! lifecycle.sh start "$instance" > /dev/null 2>&1; then
+    return $EC_ERROR
+  fi
+
+  local exit_code=$EC_SUCCESS
+  if ! _wait_until_active "$instance"; then
+    exit_code=$EC_TIMEOUT
+  fi
+
+  # Stopped whether or not it came up: the instance was stopped when the move
+  # started and the move does not hand it back running.
+  lifecycle.sh stop "$instance" > /dev/null 2>&1 || true
+
+  return $exit_code
+}
+
+function _cmd_move() {
+  local instance=""
+  local target_library=""
+  local skip_space_check=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_move
+        return 0
+        ;;
+      --library)
+        shift
+        [[ -z "${1:-}" ]] && __print_error "Missing argument for --library" && return $EC_MISSING_ARG
+        target_library="$1"
+        ;;
+      --skip-space-check)
+        skip_space_check=true
+        ;;
+      -*)
+        __print_error "Invalid option for move command: $1"
+        __print_error "Use '$self move --help' for usage information"
+        return $EC_INVALID_ARG
+        ;;
+      *)
+        instance="$1"
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self move --help' for usage information"
+    return $EC_MISSING_ARG
+  fi
+
+  if [[ -z "$target_library" ]]; then
+    __print_error "Missing required argument: --library <name>"
+    __print_error "Use '$self move --help' for usage information"
+    return $EC_MISSING_ARG
+  fi
+
+  # Every step below reads the instance's files, so the disk holding them has to
+  # be here. Called first, because the refusal it gives names the library and
+  # where it is expected instead of failing later on an unreadable config.
+  _refuse_when_library_offline "$instance" || return $?
+
+  if ! __logic_library_exists "$target_library"; then
+    __print_error "No library named '$target_library' is registered"
+    __print_error "Run 'kgsm libraries list' to see the registered ones"
+    return $EC_LIBRARY_NOT_FOUND
+  fi
+
+  local target_root
+  target_root="$(__logic_library_path "$target_library")"
+
+  if ! __logic_library_is_online "$target_library"; then
+    __print_error "Library '$target_library' is not reachable at $target_root"
+    __print_error "Mount it, or move the instance into another library"
+    return $EC_LIBRARY_OFFLINE
+  fi
+
+  # Called without a command substitution so its globals survive; the source
+  # library's name is what the refusals and the event below report.
+  __logic_instance_library_state "$instance" > /dev/null
+
+  # An instance that no registered library contains is reported as placed
+  # nowhere rather than assigned to the nearest root, and moving it into a
+  # library is exactly the way that state is resolved.
+  local source_library="${__instance_library_name_out:-unregistered}"
+
+  if [[ "$source_library" == "$target_library" ]]; then
+    __print_error "Instance '$instance' is already in library '$target_library'"
+    return $EC_INVALID_ARG
+  fi
+
+  __source_instance "$instance"
+
+  # shellcheck disable=SC2154
+  local source_working_dir="$instance_working_dir"
+
+  # The registry entry is what the move re-points, so the blueprint namespace it
+  # already sits in is the one it keeps.
+  local instance_symlink
+  if ! instance_symlink="$(__logic_instance_symlink "$instance")"; then
+    __print_error "Instance '$instance' has no registry entry to move"
+    return $EC_INVALID_INSTANCE
+  fi
+
+  local blueprint
+  blueprint="$(basename "$(dirname "$instance_symlink")")"
+
+  local target_working_dir
+  if ! target_working_dir="$(__logic_instance_target_working_dir \
+    "$target_root" "$blueprint" "$instance")"; then
+    __print_error "Could not determine where '$instance' would live in library '$target_library'"
+    return $EC_ERROR
+  fi
+
+  # A running server writes to the files this is about to copy, so the copy
+  # would be of a world nobody saved. Refused rather than stopped for the
+  # caller: stopping a server is a decision with players on the other end of it.
+  if lifecycle.sh is-active "$instance" > /dev/null 2>&1; then
+    __print_error "Instance '$instance' is running; stop it before moving it"
+    return $EC_INSTANCE_RUNNING
+  fi
+
+  # What the instance has grown to, not what its blueprint says a fresh install
+  # needs. Only the first figure is about to be written to the target.
+  local size_mb
+  if size_mb="$(__logic_instance_tree_size_mb "$source_working_dir")"; then
+    # shellcheck disable=SC2154
+    local margin_mb="${config_install_free_space_margin_mb:-1024}"
+    [[ "$margin_mb" =~ ^[0-9]+$ ]] || margin_mb=1024
+
+    __logic_library_space_check "$target_root" "$size_mb" "$margin_mb"
+    local space_code=$?
+
+    if [[ $space_code -eq $EC_INSUFFICIENT_DISK ]]; then
+      local free_mb=$((__library_space_free_out / 1024 / 1024))
+      local required_mb=$((__library_space_required_out / 1024 / 1024))
+      local message="Library '$target_library' has ${free_mb}MB free at ${target_root}; '$instance' occupies ${size_mb}MB and needs a ${margin_mb}MB margin (${required_mb}MB)"
+
+      if [[ "$skip_space_check" == true ]]; then
+        __print_warning "$message"
+        __print_warning "Moving anyway (--skip-space-check)"
+      else
+        __print_error "$message"
+        __print_error "Free space in that library, move into another one, or pass --skip-space-check"
+        return $EC_INSUFFICIENT_DISK
+      fi
+    elif [[ $space_code -ne $EC_SUCCESS ]]; then
+      __print_warning "Could not measure free space in library '$target_library'; free space was not checked"
+    fi
+  else
+    __print_warning "Could not measure the size of '$source_working_dir'; free space was not checked"
+  fi
+
+  # Whether the instance has ever run decides what a failed start means later,
+  # so it is measured while the source tree is still the one on disk.
+  local has_run=false
+  # shellcheck disable=SC2154
+  if __logic_instance_has_run "$instance_log_file" "$instance_logs_dir"; then
+    has_run=true
+  fi
+
+  # Taken before a single file is copied, and kept outside the instance's
+  # directory like every other backup, so it survives the move whichever way the
+  # move goes.
+  __print_info "Backing up '$instance' before the move..."
+  if ! instances.sh create-backup "$instance" > /dev/null; then
+    __print_error "Failed to back up '$instance'; nothing has been moved"
+    return $EC_ERROR
+  fi
+
+  __print_info "Copying '$instance' to ${target_working_dir}..."
+  __logic_instance_copy_tree "$source_working_dir" "$target_working_dir"
+  local copy_code=$?
+
+  case $copy_code in
+    $EC_SUCCESS) ;;
+    $EC_MISSING_DEPENDENCY)
+      __print_error "Moving an instance requires rsync, which is not installed"
+      return $copy_code
+      ;;
+    *)
+      __print_error "Failed to copy '$instance' to ${target_working_dir}"
+      __print_error "The instance is untouched at ${source_working_dir}; re-run the move to retry"
+      return $copy_code
+      ;;
+  esac
+
+  # The copy's own config, addressed by path: the registry still points at the
+  # source, so resolving the instance by name here would rewrite the tree that
+  # is still authoritative.
+  local target_config_file="${target_working_dir}/${instance}.config.ini"
+
+  if ! __logic_instance_rewrite_paths "$target_config_file" \
+    "$source_working_dir" "$target_working_dir" "$target_root"; then
+    __print_error "Failed to rewrite the paths in ${target_config_file}"
+    __print_error "The instance is untouched at ${source_working_dir}; re-run the move to retry"
+    return $EC_FAILED_UPDATE_CONFIG
+  fi
+
+  # The management file is generated from the config, and a container's compose
+  # file bakes the working directory into its bind mounts, so both are rebuilt
+  # from the rewritten config rather than carried over by the copy.
+  if [[ -z "${KGSM_LOGIC_FILES_MANAGEMENT_LOADED:-}" ]]; then
+    # shellcheck source=handlers/files.management.sh
+    source "$(__find_command_handler files.management.sh)" || {
+      __print_error "Failed to load files management logic library"
+      return $EC_FAILED_SOURCE
+    }
+  fi
+
+  # Loaded alongside it: the command shortcut this move has to re-point once it
+  # commits is the same symlink that module creates.
+  if [[ -z "${KGSM_LOGIC_FILES_SYMLINK_LOADED:-}" ]]; then
+    # shellcheck source=handlers/files.symlink.sh
+    source "$(__find_command_handler files.symlink.sh)" || {
+      __print_error "Failed to load files symlink logic library"
+      return $EC_FAILED_SOURCE
+    }
+  fi
+
+  __logic_create_management_file "$target_config_file"
+  local management_code=$?
+
+  if [[ $management_code -ne $EC_SUCCESS_MANAGEMENT_FILE_CREATED ]]; then
+    __print_error "Failed to regenerate the management file at ${target_working_dir}"
+    __print_error "The instance is untouched at ${source_working_dir}; re-run the move to retry"
+    return $management_code
+  fi
+
+  # The commit. Everything above is recoverable by re-running; from here the
+  # host looks for the instance at its new home.
+  if ! __logic_create_instance_symlink "$blueprint" "$instance" "$target_working_dir"; then
+    __print_error "Failed to point the registry entry for '$instance' at ${target_working_dir}"
+    __print_error "The instance is untouched at ${source_working_dir}; re-run the move to retry"
+    return $EC_FAILED_LN
+  fi
+
+  if [[ "$has_run" == true ]]; then
+    __print_info "Starting '$instance' once to confirm it runs from its new path..."
+    if ! _verify_start_on_new_path "$instance"; then
+      # Put the registry back before saying so: the source tree is still intact
+      # and complete, so the instance the host knows about is the one that
+      # works. The copy is left where it is for the re-run to converge on.
+      __logic_create_instance_symlink "$blueprint" "$instance" "$source_working_dir" || true
+
+      __print_error "Instance '$instance' did not start from ${target_working_dir}"
+      __print_error "It has been left where it was, at ${source_working_dir}; the copy at ${target_working_dir} is not in use"
+      return $EC_ERROR
+    fi
+  else
+    __print_warning "Instance '$instance' has never been started, so the move was not verified by starting it"
+  fi
+
+  # The command shortcut is a symlink on the user's PATH pointing at the
+  # management file, so it is the one thing outside the instance that the move
+  # breaks. Re-pointed only once the move has committed: rebuilding it earlier
+  # would aim it at a tree a rollback then takes out of use.
+  # shellcheck disable=SC2154
+  if [[ "$instance_enable_command_shortcuts" == "true" ]]; then
+    __logic_enable_symlink_integration "$target_config_file"
+    if [[ $? -ne $EC_SUCCESS_SYMLINK_CREATED ]]; then
+      __print_warning "Moved '$instance', but could not re-point its command shortcut"
+      __print_warning "Re-create it with: kgsm files symlink enable $instance"
+    fi
+  fi
+
+  __logic_remove_directories "$instance" "$source_working_dir"
+  if [[ $? -ne $EC_SUCCESS_DIRECTORIES_REMOVED ]]; then
+    __print_warning "Moved '$instance', but could not remove the old tree at ${source_working_dir}"
+  else
+    # The blueprint directory the instance was the last resident of is left
+    # behind by the removal above; taking it too keeps the source library as
+    # tidy as the move found it.
+    rmdir "$(dirname "$source_working_dir")" 2> /dev/null || true
+  fi
+
+  __print_success "Moved '$instance' from library '$source_library' to '$target_library' (${target_working_dir})"
+  __emit_event instance-moved "$instance" "$source_library" "$target_library"
+
+  return 0
 }
 
 function _cmd_list() {
@@ -3163,6 +3526,9 @@ function _cmd_help() {
     remove)
       show_usage_remove
       ;;
+    move)
+      show_usage_move
+      ;;
     list)
       show_usage_list
       ;;
@@ -3281,6 +3647,10 @@ case "$command" in
     ;;
   remove)
     _cmd_remove "$@"
+    ;;
+  move)
+    _cmd_move "$@"
+    exit $?
     ;;
   list)
     _cmd_list "$@"

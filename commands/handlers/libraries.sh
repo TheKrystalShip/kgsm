@@ -65,6 +65,36 @@ function __library_registry_names() {
 
 export -f __library_registry_names
 
+# Fills the array named by $1 with every registered library name.
+#
+# The names are collected before they are looked at. A search that reads them
+# from a process substitution and returns on the first match leaves the writer
+# holding a closed pipe, and its next `echo` prints `write error: Broken pipe`
+# onto the caller's stderr — two stray lines ahead of every refusal that
+# searches the registry twice. Reading the whole list first is what removes the
+# early exit that causes it.
+#
+# Args: $1 = the name of an array to fill
+# Returns: EC_SUCCESS, or EC_INVALID_ARG when no array was named
+function __library_registry_name_list() {
+  local -n __library_names_ref="$1" 2> /dev/null || return $EC_INVALID_ARG
+
+  local -a _raw=()
+  mapfile -t _raw < <(__library_registry_names)
+
+  # mapfile keeps a trailing empty line as an element; a blank name is not a
+  # library and must not be counted as one.
+  __library_names_ref=()
+  local _name
+  for _name in "${_raw[@]}"; do
+    [[ -n "$_name" ]] && __library_names_ref+=("$_name")
+  done
+
+  return $EC_SUCCESS
+}
+
+export -f __library_registry_name_list
+
 # Echoes one field of one library.
 # Args: $1 = library name, $2 = field name (id|path)
 # Returns: EC_SUCCESS, EC_INVALID_ARG, or EC_LIBRARY_NOT_FOUND
@@ -239,15 +269,17 @@ function __library_by_path() {
     return $EC_INVALID_ARG
   fi
 
+  local -a _names=()
+  __library_registry_name_list _names
+
   local _name _registered
-  while IFS= read -r _name; do
-    [[ -z "$_name" ]] && continue
+  for _name in "${_names[@]}"; do
     _registered="$(__library_registry_field "$_name" path)" || continue
     if [[ "${_registered%/}" == "$_path" ]]; then
       echo "$_name"
       return $EC_SUCCESS
     fi
-  done < <(__library_registry_names)
+  done
 
   return $EC_NOT_FOUND
 }
@@ -264,15 +296,17 @@ function __library_by_id() {
     return $EC_INVALID_ARG
   fi
 
+  local -a _names=()
+  __library_registry_name_list _names
+
   local _name _registered
-  while IFS= read -r _name; do
-    [[ -z "$_name" ]] && continue
+  for _name in "${_names[@]}"; do
     _registered="$(__library_registry_field "$_name" id)" || continue
     if [[ "$_registered" == "$_id" ]]; then
       echo "$_name"
       return $EC_SUCCESS
     fi
-  done < <(__library_registry_names)
+  done
 
   return $EC_NOT_FOUND
 }
@@ -435,12 +469,15 @@ function __logic_library_exists() {
     return $EC_INVALID_ARG
   fi
 
+  local -a _names=()
+  __library_registry_name_list _names
+
   local _registered
-  while IFS= read -r _registered; do
+  for _registered in "${_names[@]}"; do
     if [[ "$_registered" == "$_name" ]]; then
       return $EC_SUCCESS
     fi
-  done < <(__library_registry_names)
+  done
 
   return $EC_LIBRARY_NOT_FOUND
 }
@@ -584,9 +621,11 @@ function __logic_library_for_working_dir() {
     return $EC_INVALID_ARG
   fi
 
+  local -a _names=()
+  __library_registry_name_list _names
+
   local _name _path _best="" _best_length=0
-  while IFS= read -r _name; do
-    [[ -z "$_name" ]] && continue
+  for _name in "${_names[@]}"; do
     _path="$(__library_registry_field "$_name" path)" || continue
     _path="${_path%/}"
     [[ -z "$_path" ]] && continue
@@ -595,7 +634,7 @@ function __logic_library_for_working_dir() {
       _best="$_name"
       _best_length=${#_path}
     fi
-  done < <(__library_registry_names)
+  done
 
   if [[ -z "$_best" ]]; then
     return $EC_NOT_FOUND
@@ -789,16 +828,8 @@ function __logic_library_resolve_placement() {
     return $EC_SUCCESS
   fi
 
-  local -a _names=()
-  mapfile -t _names < <(__library_registry_names)
-
-  # mapfile keeps a trailing empty line as an element; drop anything blank so a
-  # single library is counted as one.
   local -a _registered=()
-  local _name
-  for _name in "${_names[@]}"; do
-    [[ -n "$_name" ]] && _registered+=("$_name")
-  done
+  __library_registry_name_list _registered
 
   if [[ ${#_registered[@]} -eq 0 ]]; then
     return $EC_NOT_FOUND

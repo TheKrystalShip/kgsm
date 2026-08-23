@@ -370,7 +370,7 @@ function _cmd_install() {
   }
 
   __print_success "Instance '${instance}', version '${version}', has been created in '${working_dir}'"
-  __emit_event instance-installed "${instance}" "${blueprint}"
+  __emit_event instance-installed "${instance}" "${blueprint}" "${library}"
 
   # Emitted LAST, after instance-installed: a consumer that reads "the run ended"
   # and re-reads the roster must find the new instance already there rather than
