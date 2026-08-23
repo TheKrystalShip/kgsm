@@ -496,6 +496,39 @@ function test_an_id_wins_over_a_display_name() {
     "An existing id should resolve as itself regardless of any label matching it"
 }
 
+function test_uninstall_by_display_name_acts_on_the_id() {
+  log_test_step "Testing uninstall resolves a label to the id before it does anything"
+
+  _create "" "Uninstall Me"
+  local id="$CREATED_ID"
+
+  local segment segment_before
+  segment="$(_journal_segment)"
+  segment_before=0
+  [[ -n "$segment" ]] && segment_before="$(wc -l < "$segment")"
+
+  # Uninstall by the label, not the id. The whole point of resolving up front is
+  # that everything inward — including the events emitted — sees the id, never
+  # the label: an event keyed on the label would poison every downstream store
+  # the id is meant to hold together. The watchdog is disabled so the sandbox
+  # never reaches the host daemon; the running-gate that path guards is exercised
+  # against a live instance in the deployed-engine checks, not here.
+  KGSM_WATCHDOG_DISABLE=true "$KGSM_ROOT/kgsm.sh" uninstall "Uninstall Me" --force \
+    > /dev/null 2>&1
+
+  # The instance is gone.
+  assert_command_fails "$INSTANCES_MODULE info $id --json" \
+    "The instance should be uninstalled"
+
+  # The uninstall-started event names the id, not the label it was called by.
+  local started
+  started="$(_journal_since "$segment" "$segment_before" \
+    | jq -c 'select(.EventType == "instance_uninstall_started")' | tail -n 1)"
+  assert_not_null "$started" "Uninstall should emit instance_uninstall_started"
+  assert_equals "$id" "$(jq -r '.Data.InstanceName' <<< "$started")" \
+    "The event should carry the id, never the display name it was called by"
+}
+
 # =============================================================================
 # TEST: a config written before instances carried a label
 # =============================================================================

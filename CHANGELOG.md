@@ -47,6 +47,22 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **An instance argument resolves to its id once, at the top of every command that takes one.**
+  A command names an instance by its id or its display name, and the resolution from one to the
+  other happens in a single place per entry point — the `instances` and `lifecycle` dispatchers
+  already did this; `uninstall`, `autostart`, `watcher`, and the instance-first verbs of `files`
+  and `directories` now do too. Inward of that line nothing sees anything but an id, which is what
+  the watchdog, the registry, the firewall and every event and downstream store key on. Without it
+  a command handed a display name could half-act on it: `uninstall <label>` deleted an instance's
+  files while the watchdog, handed a name it did not recognise, neither stopped the running server
+  nor refused, and emitted its events under the label rather than the id.
+
+- **Uninstall refuses a running instance unless `--force`.** Stopping a server people may be
+  connected to is a deliberate act, not a side effect of removing it — the place a shutdown
+  announcement belongs. Without `--force`, uninstalling a running instance is refused with a note to
+  stop it first; with `--force`, it is stopped and removed in one step, as a non-interactive caller
+  intends.
+
 - **A display name holds no dollar sign, so it cannot expand when a reader sources the config.**
   Every other free-text value in an instance config keeps its `$` live on purpose — `executable_arguments`
   carries `$instance_level_name` and the like, expanded when the management script sources the file —

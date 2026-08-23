@@ -45,14 +45,16 @@ ${UNDERLINE}Usage:${END}
   ${self} <instance> [options]
 
 ${UNDERLINE}Arguments:${END}
-  <instance>                  Instance name to uninstall
+  <instance>                  Instance id or display name to uninstall
 
 ${UNDERLINE}Options:${END}
   -h, --help                  Display this help information
   -y, --force, --yes          Skip the confirmation prompt (for non-interactive
                               callers; the destructive intent is confirmed already).
-                              When the instance's library is offline, this instead
-                              deregisters the instance and leaves its files alone
+                              A running instance is stopped and removed in one step
+                              instead of being refused. When the instance's library
+                              is offline, this instead deregisters the instance and
+                              leaves its files alone
   --purge-backups             Also delete the instance's backups. Without this,
                               backups are kept (they live outside the instance)
 
@@ -66,6 +68,9 @@ ${UNDERLINE}Warning:${END}
   This operation is irreversible. All instance data, configuration,
   and associated files will be permanently removed. Backups are kept
   unless --purge-backups is given.
+
+  A running instance is refused: stop it first, or pass --force to stop and
+  remove it in one step.
 
   An instance whose library is offline is refused: there are no files to
   remove while the disk is away, only the host's record of the instance.
@@ -155,6 +160,15 @@ function _uninstall() {
     return $EC_MISSING_ARG
   fi
 
+  # Resolve a display name to the id once, here, so every step below acts on the
+  # id: the library-state check, the watchdog stop, the file and directory
+  # removal, and the events those emit. The watchdog and the registry key on the
+  # id and would silently not recognise a label — a deregister that no-ops while
+  # the files are deleted anyway strands a running server and poisons the event
+  # journal with a name nothing else uses. An id resolves to itself; an argument
+  # that matches nothing is left as it is for the not-found error below to name.
+  instance="$(__resolve_instance_id "$instance")" || return $?
+
   # An uninstall is defined by the files it deletes, and while the library is
   # not mounted there are none to delete — only a registry entry that is the
   # host's last record of a server whose data is intact on a disk somewhere
@@ -186,6 +200,25 @@ function _uninstall() {
     __print_error "Failed to determine blueprint name for instance '$instance'"
     return $EC_GENERAL
   }
+
+  # Whether the game is up is sampled here, before anything is asked or removed,
+  # for two reasons. Without --force a running instance is refused outright: a
+  # server with people on it is stopped as its own deliberate act — where a
+  # shutdown announcement belongs — not as a side effect of an uninstall. With
+  # --force the uninstall stops it as part of deregistering below, so this value
+  # also decides whether that stop is a real event to emit or a fabricated one.
+  # The reading has to be taken before the deregister that kills it: afterwards
+  # there is nothing left to ask.
+  local was_running=0
+  if __watchdog_available && [[ "$(__watchdog_active_value "$instance")" == "true" ]]; then
+    was_running=1
+  fi
+
+  if [[ "$was_running" -eq 1 ]] && [[ "$force" -ne 1 ]]; then
+    __print_error "Instance '$instance' is running"
+    __print_error "Stop it first, then uninstall — or pass --force to stop and remove it in one step"
+    return $EC_ERROR
+  fi
 
   # Warning + confirmation prompt — skipped when --force is given (a non-interactive
   # caller has already confirmed the destructive intent). A declined prompt returns a
@@ -238,15 +271,10 @@ function _uninstall() {
   # An unreachable daemon is best-effort (a host without one must still be able to uninstall),
   # but an explicit refusal is fatal: it means the daemon could not stop the instance, so the
   # game is still running. Deleting a running server's files out from under it corrupts saves
-  # and strands the process — abort and let the operator deal with it.
-  # Whether the game is up has to be sampled BEFORE the deregister that kills it:
-  # afterwards there is nothing left to ask, and the answer decides whether the
-  # stop below is a real event or a fabricated one.
-  local was_running=0
-  if __watchdog_available && [[ "$(__watchdog_active_value "$instance")" == "true" ]]; then
-    was_running=1
-  fi
-
+  # and strands the process — abort and let the operator deal with it. This is the
+  # --force path (a stopped instance never reaches it running); was_running was
+  # sampled above, before the prompt, and decides whether the stop is a real
+  # event or a fabricated one.
   if __watchdog_available; then
     __watchdog_deregister "$instance"
     case $? in

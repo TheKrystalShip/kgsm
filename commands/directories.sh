@@ -548,6 +548,21 @@ function _cmd_help() {
 command="${1:-}"
 shift 2> /dev/null || true
 
+# `create` and `remove` name an instance first and accept its display name as
+# well as its id, resolved here so nothing inward sees anything but an id.
+# `ensure-created` takes a working-directory path and `link-instance` /
+# `unlink-instance` take a blueprint first, so they are deliberately excluded —
+# resolving their first argument as an instance would be wrong. An id resolves
+# to itself.
+case "$command" in
+  create | remove)
+    if [[ -n "${1:-}" ]] && [[ "$1" != -* ]]; then
+      resolved_instance="$(__resolve_instance_id "$1")" || exit $?
+      set -- "$resolved_instance" "${@:2}"
+    fi
+    ;;
+esac
+
 case "$command" in
   "")
     show_usage

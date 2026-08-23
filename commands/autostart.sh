@@ -171,6 +171,20 @@ function _cmd_list() {
 command="${1:-}"
 shift 2> /dev/null || true
 
+# Every verb below whose first argument names an instance accepts its display
+# name as well as its id, resolved here so nothing inward of this line sees
+# anything but an id — the watchdog these verbs drive keys on the id and would
+# quietly do nothing for a label. `list` takes no instance. An id resolves to
+# itself; an unmatched argument is left for the handler to reject.
+case "$command" in
+  enable | disable | status)
+    if [[ -n "${1:-}" ]] && [[ "$1" != -* ]]; then
+      resolved_instance="$(__resolve_instance_id "$1")" || exit $?
+      set -- "$resolved_instance" "${@:2}"
+    fi
+    ;;
+esac
+
 case "$command" in
   "" | -h | --help | help)
     show_usage
