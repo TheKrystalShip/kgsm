@@ -20,6 +20,13 @@ if [[ -z "${KGSM_LOGIC_WATCHDOG_LOADED}" ]]; then
   source "$(__find_command_handler watchdog.sh)" || exit $EC_FAILED_SOURCE
 fi
 
+# Library logic. An uninstall deletes files, so whether the files are reachable
+# at all decides whether there is an uninstall to do.
+if [[ -z "${KGSM_LOGIC_LIBRARIES_LOADED:-}" ]]; then
+  # shellcheck source=handlers/libraries.sh
+  source "$(__find_command_handler libraries.sh)" || exit $EC_FAILED_SOURCE
+fi
+
 self="$(basename "$0")"
 
 # =============================================================================
@@ -43,7 +50,9 @@ ${UNDERLINE}Arguments:${END}
 ${UNDERLINE}Options:${END}
   -h, --help                  Display this help information
   -y, --force, --yes          Skip the confirmation prompt (for non-interactive
-                              callers; the destructive intent is confirmed already)
+                              callers; the destructive intent is confirmed already).
+                              When the instance's library is offline, this instead
+                              deregisters the instance and leaves its files alone
   --purge-backups             Also delete the instance's backups. Without this,
                               backups are kept (they live outside the instance)
 
@@ -57,7 +66,52 @@ ${UNDERLINE}Warning:${END}
   This operation is irreversible. All instance data, configuration,
   and associated files will be permanently removed. Backups are kept
   unless --purge-backups is given.
+
+  An instance whose library is offline is refused: there are no files to
+  remove while the disk is away, only the host's record of the instance.
+  --force removes that record alone, leaving the tree on the disk.
 "
+}
+
+# Forgets an instance whose library is not mounted, without touching a file.
+#
+# Nothing of the instance is reachable, so this is the whole of what can be
+# done: the supervisor stops being told to look after it, and the registry entry
+# — the last thing on this host that says the instance exists — is removed. Its
+# working directory, saves and backups are all still there, on the disk that is
+# away, and re-registering that library does not bring the instance back: this
+# host has forgotten it, deliberately.
+#
+# Reads the globals a preceding __logic_instance_library_state call assigned.
+# Args: $1 = instance name
+function _deregister_offline_instance() {
+  local instance="$1"
+
+  __print_info "Deregistering '$instance' from library '${__instance_library_name_out}'"
+
+  __emit_event instance-uninstall-started "${instance}"
+
+  # Best-effort, and it matters most here: an instance the daemon still holds
+  # desired-state for is one it keeps trying to spawn out of a directory that is
+  # not there.
+  if __watchdog_available; then
+    __watchdog_deregister "$instance" > /dev/null 2>&1 || true
+  fi
+
+  if ! directories.sh unlink-instance "$__instance_blueprint_out" "$instance" --force; then
+    __print_error "Failed to remove the registry entry for '$instance'"
+    __emit_event instance-uninstall-failed "${instance}"
+    return $EC_FAILED_RM
+  fi
+
+  __print_success "Instance '${instance}' deregistered"
+  __print_info "Its files were left untouched at ${__instance_working_dir_out}"
+  __print_info "Firewall rules and command shortcuts it recorded could not be read and were not removed"
+
+  __emit_event instance-uninstalled "${instance}"
+  __emit_event instance-uninstall-finished "${instance}"
+
+  return 0
 }
 
 function _uninstall() {
@@ -99,6 +153,23 @@ function _uninstall() {
     __print_error "Missing required argument: <instance>"
     show_usage
     return $EC_MISSING_ARG
+  fi
+
+  # An uninstall is defined by the files it deletes, and while the library is
+  # not mounted there are none to delete — only a registry entry that is the
+  # host's last record of a server whose data is intact on a disk somewhere
+  # else. Deleting that record is a separate, much smaller thing, so it is asked
+  # for separately.
+  __logic_instance_library_state "$instance" > /dev/null
+  if [[ "$__instance_library_state_out" == "offline" ]]; then
+    if [[ "$force" -ne 1 ]]; then
+      __print_error "Instance '$instance' is in library '${__instance_library_name_out}', which is not reachable at ${__instance_library_path_out}"
+      __print_error "Mount it to uninstall the instance, or pass --force to deregister it and leave its files on the disk"
+      return $EC_LIBRARY_OFFLINE
+    fi
+
+    _deregister_offline_instance "$instance"
+    return $?
   fi
 
   # Validate instance exists before proceeding and resolve blueprint name

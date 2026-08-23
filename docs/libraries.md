@@ -57,6 +57,39 @@ Offline is a **state, not an error**. `kgsm libraries list` reports an offline l
 nothing about its free space, because nothing measured it. An unplugged disk is a measured
 absence, never an uninstall.
 
+## What happens to the instances in an offline library
+
+An instance's registry entry is a symlink in `$KGSM_INSTANCES_DIR/<blueprint>/<instance>`, and an
+unmounted library leaves it dangling rather than removing it. So the instance is still there — it
+is only unreadable, and every part of the engine treats those as different facts.
+
+- **It still enumerates.** `kgsm instances list` names it, and `--detailed` and `--json` describe
+  it with what can be measured without the disk: its name, its blueprint, its working directory,
+  its library and where that library is expected. Every other field is absent rather than guessed,
+  because all of them live in a config file behind the dangling link.
+- **It reports `library_state`.** The field is on every instance, `online`, `offline` or
+  `unregistered`, in `instances info --json`, the detailed listing and `instances status --json`.
+  An offline instance's `status` is `null`: whether a server whose files cannot be read is running
+  is not something that was measured, and `false` would be an invention.
+- **Lifecycle verbs fail fast.** `start`, `stop`, `restart`, `status`, `is-active` and `logs` all
+  need the instance's own files, so they refuse up front with `EC_LIBRARY_OFFLINE` (55), naming the
+  library and the path it is expected at, rather than failing somewhere in the middle on a missing
+  file.
+- **Nothing removes the record.** `kgsm instances remove`, `kgsm directories unlink-instance` and
+  `kgsm uninstall` all refuse while the library is offline. That symlink is the last thing on this
+  host that says the instance exists, and the files it points at are intact on a disk that is
+  simply elsewhere.
+
+`--force` on any of those three deregisters the instance and touches not one file: the supervisor
+stops being told to look after it, the registry entry goes, and the working directory, saves and
+backups stay on the disk. It is how an instance is forgotten on purpose. Firewall rules and command
+shortcuts the instance recorded in its own config cannot be read, so they are not removed either,
+and the uninstall says so.
+
+Putting the disk back is the whole of the recovery. Nothing has to be re-registered, re-linked or
+repaired: the next invocation measures the library as online again and every instance in it reads
+normally.
+
 ## Verbs
 
 ```bash

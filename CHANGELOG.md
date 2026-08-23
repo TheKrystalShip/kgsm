@@ -47,6 +47,31 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **An unplugged disk is a measured absence, never an uninstall.** An instance in a library that is
+  not mounted keeps its registry entry — the symlink dangles rather than disappearing — and the
+  engine now reads that as what it is. It still enumerates in `instances list`, and `--detailed`,
+  `instances info` and `instances status` describe it with what can be measured without the disk:
+  its name, blueprint, working directory, library and the path that library is expected at. Every
+  value that lives in its config file is absent rather than guessed at, and a new `library_state`
+  field (`online` | `offline` | `unregistered`) carries the measurement on every instance. An
+  offline instance's `status` is `null`, not `false`: whether a server whose files cannot be read
+  is running was not measured.
+
+  Enumeration matched instance symlinks with a trailing slash, which resolves the link to decide
+  whether it is a directory — so an unmounted library's instances silently vanished from the
+  roster, reading to every consumer exactly like an uninstall.
+
+  `start`, `stop`, `restart`, `status`, `is-active` and `logs` refuse up front with
+  `EC_LIBRARY_OFFLINE`, naming the library and where it is expected, rather than failing partway
+  through on a missing file. `instances remove`, `directories unlink-instance` and `uninstall`
+  refuse outright: that symlink is the last thing on the host that says the instance exists, and
+  the files behind it are intact on a disk that is simply elsewhere. `--force` on any of the three
+  deregisters the instance without touching a file — the supervisor stops being told to look after
+  it, the entry goes, and the working directory, saves and backups stay where they are.
+
+  Mounting the library back is the whole of the recovery: nothing is re-registered, re-linked or
+  repaired.
+
 - **⚠ BREAKING: `--install-dir` is gone. An instance is placed with `--library <name>`.**
   `kgsm install` and `kgsm instances create` take the library to place a new instance in from
   `--library`, else the `default_library` config key, else the sole registered library when the

@@ -140,18 +140,23 @@ function show_usage_remove() {
 Remove an instance configuration file.
 
 ${UNDERLINE}Usage:${END}
-  $self remove <instance>
+  $self remove <instance> [--force]
 
 ${UNDERLINE}Arguments:${END}
   instance                    Instance name to remove
 
 ${UNDERLINE}Options:${END}
+  --force                     Remove the record of an instance whose library
+                              is offline, leaving its files on the disk
   --help                      Display this help information
 
 ${UNDERLINE}Warning:${END}
 This only removes the instance configuration file, not the actual server
 files. Use the instance management script or directories module to remove
 actual server data.
+
+An instance whose library is offline is refused: this record is all the host
+still holds of it while the disk is away.
 
 ${UNDERLINE}Examples:${END}
   $self remove factorio-01
@@ -671,8 +676,73 @@ function _stamp_library_dir() {
   return 0
 }
 
+# Refuses a verb that needs the instance's files while its library is offline.
+# Silent in every other state, so the caller carries on.
+# Args: $1 = instance name
+# Returns: EC_SUCCESS when the verb may proceed, EC_LIBRARY_OFFLINE otherwise
+function _refuse_when_library_offline() {
+  local instance="$1"
+
+  __logic_instance_library_state "$instance" > /dev/null
+
+  [[ "$__instance_library_state_out" == "offline" ]] || return $EC_SUCCESS
+
+  __print_error "Instance '$instance' is in library '${__instance_library_name_out}', which is not reachable at ${__instance_library_path_out}"
+  __print_error "Mount it and try again. Nothing about the instance has been changed or forgotten."
+  return $EC_LIBRARY_OFFLINE
+}
+
+# Everything that can honestly be said about an instance whose library is not
+# mounted.
+#
+# Its config sits behind a dangling symlink, so not one of the values a mounted
+# instance reports is readable. These are: the registry holds the blueprint and
+# the working directory, and the library registry holds the rest. They are
+# printed as key=value, the shape the readable config is printed in, and the
+# absence of every other key is the honest form of "the disk is not here".
+#
+# Reads the globals a preceding __logic_instance_library_state call assigned.
+function _print_info_offline() {
+  printf 'name=%s\n' "$1"
+  printf 'blueprint=%s\n' "$__instance_blueprint_out"
+  printf 'working_dir=%s\n' "$__instance_working_dir_out"
+  printf 'library=%s\n' "$__instance_library_name_out"
+  printf 'library_dir=%s\n' "$__instance_library_path_out"
+  printf 'library_state=offline\n'
+}
+
+# The same measurement as _print_info_offline, as JSON.
+# Reads the globals a preceding __logic_instance_library_state call assigned.
+function _print_info_offline_json() {
+  jq -n \
+    --arg name "$1" \
+    --arg blueprint "$__instance_blueprint_out" \
+    --arg working_dir "$__instance_working_dir_out" \
+    --arg library "$__instance_library_name_out" \
+    --arg library_dir "$__instance_library_path_out" \
+    '{
+      name: $name,
+      blueprint: $blueprint,
+      working_dir: $working_dir,
+      library: $library,
+      library_dir: $library_dir,
+      library_state: "offline"
+    }'
+}
+
 function _print_info() {
   local instance=$1
+
+  # The library decides this, not the config file: an unmounted library is
+  # exactly the case where the config cannot be read, and reading nothing is not
+  # the same fact as there being nothing. Called without a command substitution,
+  # which would keep the measurement's globals to itself.
+  __logic_instance_library_state "$instance" > /dev/null
+  if [[ "$__instance_library_state_out" == "offline" ]]; then
+    _print_info_offline "$instance"
+    return $EC_SUCCESS
+  fi
+
   local instance_config_file
   instance_config_file=$(__find_instance_config "$instance")
 
@@ -681,6 +751,13 @@ function _print_info() {
 
 function _print_info_json() {
   local instance=$1
+
+  __logic_instance_library_state "$instance" > /dev/null
+  if [[ "$__instance_library_state_out" == "offline" ]]; then
+    _print_info_offline_json "$instance"
+    return $EC_SUCCESS
+  fi
+
   local instance_config_file
   instance_config_file=$(__find_instance_config "$instance")
 
@@ -711,6 +788,12 @@ function _print_info_json() {
   if [[ -n "$_working_dir" ]]; then
     library="$(__logic_library_for_working_dir "$_working_dir")" || library="unregistered"
   fi
+
+  # Reaching here means the config was readable, so the library is reachable
+  # too — the field carries the measurement anyway, because it is the field a
+  # consumer reads to tell a placed instance from one whose disk is away, and it
+  # has to be present on both to be readable as either.
+  local library_state="${__instance_library_state_out:-unregistered}"
 
   # Read ports directly from the already-found config file, avoiding a second
   # __find_instance_config call through __get_instance_config_value.
@@ -753,11 +836,13 @@ function _print_info_json() {
       printf '%s\t%s\n' "$key" "$value"
     done < "$instance_config_file"
   } | jq -Rs --arg cg "$cgroup_path" --argjson ports "$ports_json" --arg library "$library" \
+    --arg library_state "$library_state" \
     '[split("\n")[] | select(length > 0) | split("\t") | {(.[0]): .[1]}]
      | add // {}
      | . + {cgroup_path: (if .runtime == "native" then $cg else "" end),
             ports: $ports,
-            library: $library}'
+            library: $library,
+            library_state: $library_state}'
 }
 
 function _list_instances() {
@@ -842,8 +927,90 @@ function _list_instances_status_json() {
     done | jq -s 'from_entries')" '$instances_list'
 }
 
+# The status of an instance whose library is not mounted, in the shape the
+# management script reports status in. Every reading it takes — whether the
+# process is up, the installed version, disk usage, the log tail — comes out of
+# the instance's own directory, so none of them can be taken and every one of
+# them is null. `status` included: an unreadable instance is not a stopped one.
+#
+# Reads the globals a preceding __logic_instance_library_state call assigned.
+function _get_instance_status_offline_json() {
+  jq -n \
+    --arg instance_name "$1" \
+    --arg blueprint "$__instance_blueprint_out" \
+    --arg directory "$__instance_working_dir_out" \
+    --arg library "$__instance_library_name_out" \
+    --arg library_dir "$__instance_library_path_out" \
+    '{
+      instance_name: $instance_name,
+      status: null,
+      library_state: "offline",
+      process: { pid: null, status: null, start_time: null },
+      version: { current: null, latest: null, checked: false,
+                 updates_available: null, checked_at: null },
+      configuration: { blueprint: $blueprint, runtime: null,
+                       directory: $directory, ports: null,
+                       library: $library, library_dir: $library_dir },
+      resources: { disk_usage: null },
+      backups: [],
+      recent_logs: []
+    }'
+}
+
+# The same, for a reader rather than a program.
+# Reads the globals a preceding __logic_instance_library_state call assigned.
+function _get_instance_status_offline() {
+  echo "=== Instance Status: $1 ==="
+  echo "Status: library offline"
+  echo "Library: ${__instance_library_name_out} (expected at ${__instance_library_path_out})"
+  echo "Directory: ${__instance_working_dir_out}"
+  echo "Blueprint: ${__instance_blueprint_out}"
+  echo "Nothing else can be read while the library is away."
+}
+
+# Adds the library measurement to a status object.
+#
+# The field has to read the same on an instance whose disk is there as on one
+# whose disk is not: a key present in only one of the two cases is a key a
+# consumer cannot join on, and its absence would look like the unknown it is not.
+# The human form is the management script's own and is left as it wrote it.
+#
+# Args: $1 = json flag, $2 = the measured state, $3 = the status output
+function _overlay_library_state() {
+  local json_flag="$1"
+  local state="$2"
+  local raw="$3"
+
+  if [[ -z "$json_flag" ]] || [[ -z "$state" ]]; then
+    printf '%s' "$raw"
+    return 0
+  fi
+
+  local out
+  if out=$(printf '%s' "$raw" | jq --arg s "$state" '. + {library_state: $s}' 2> /dev/null) \
+    && [[ -n "$out" ]]; then
+    printf '%s' "$out"
+  else
+    printf '%s' "$raw"
+  fi
+}
+
 function _get_instance_status() {
   local instance=$1
+
+  # Sampled before the instance is sourced, which is what fails — and fatally,
+  # taking a whole fleet listing with it — when the library holding the config
+  # is not mounted.
+  __logic_instance_library_state "$instance" > /dev/null
+  if [[ "$__instance_library_state_out" == "offline" ]]; then
+    if [[ -n "$json_format" ]]; then
+      _get_instance_status_offline_json "$instance"
+    else
+      _get_instance_status_offline "$instance"
+    fi
+    return $EC_SUCCESS
+  fi
+
   __source_instance "$instance"
 
   local status_args=""
@@ -859,11 +1026,19 @@ function _get_instance_status() {
   _active=$(__watchdog_active_value "$instance")
   _pid=$(__watchdog_pid_value "$instance")
   _raw=$(__overlay_status_active "$json_format" "$_active" "$_raw")
-  __overlay_process_pid "$json_format" "$_pid" "$_raw"
+  _raw=$(__overlay_process_pid "$json_format" "$_pid" "$_raw")
+  _overlay_library_state "$json_format" "$__instance_library_state_out" "$_raw"
 }
 
 function _get_instance_status_json() {
   local instance=$1
+
+  __logic_instance_library_state "$instance" > /dev/null
+  if [[ "$__instance_library_state_out" == "offline" ]]; then
+    _get_instance_status_offline_json "$instance"
+    return $EC_SUCCESS
+  fi
+
   __source_instance "$instance"
 
   local status_args="--json"
@@ -876,7 +1051,8 @@ function _get_instance_status_json() {
   _active=$(__watchdog_active_value "$instance")
   _pid=$(__watchdog_pid_value "$instance")
   _raw=$(__overlay_status_active "1" "$_active" "$_raw")
-  __overlay_process_pid "1" "$_pid" "$_raw"
+  _raw=$(__overlay_process_pid "1" "$_pid" "$_raw")
+  _overlay_library_state "1" "$__instance_library_state_out" "$_raw"
 }
 
 # Command handler functions
@@ -957,12 +1133,16 @@ function _cmd_create() {
 
 function _cmd_remove() {
   local instance=""
+  local force=false
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -h | --help | help)
         show_usage_remove
         return 0
+        ;;
+      --force)
+        force=true
         ;;
       -*)
         __print_error "Invalid option for remove command: $1"
@@ -971,9 +1151,9 @@ function _cmd_remove() {
         ;;
       *)
         instance="$1"
-        break
         ;;
     esac
+    shift
   done
 
   # Validate required parameter
@@ -984,7 +1164,7 @@ function _cmd_remove() {
   fi
 
   # Remove instance
-  __logic_remove_instance "$instance"
+  __logic_remove_instance "$instance" "$force"
   local exit_code=$?
 
   case $exit_code in
@@ -992,6 +1172,11 @@ function _cmd_remove() {
       __print_success "Removed instance: $instance"
       __dispatch_event_from_exit_code "$exit_code" "$instance"
       exit 0
+      ;;
+    $EC_LIBRARY_OFFLINE)
+          __print_error "Instance '$instance' is in library '${__instance_library_name_out}', which is not reachable at ${__instance_library_path_out}"
+      __print_error "Mount it, or pass --force to forget the instance and leave its files on the disk"
+      exit $exit_code
       ;;
     *)
       __print_error "Failed to remove instance: $instance"
@@ -1086,14 +1271,21 @@ function _cmd_info() {
   # than rendering a skeletal/empty object for a missing instance, so a consumer
   # (e.g. kgsm-lib) can tell "no such instance" apart from real data. Mirrors the
   # not-found contract in core/loader.sh.
-  local instance_config_file
-  instance_config_file=$(__find_instance_config "$instance")
-  if [[ -z "$instance_config_file" ]]; then
-    __print_error "Instance config file for '$instance' not found."
-    exit $EC_FILE_NOT_FOUND
-  fi
+  #
+  # An instance whose library is not mounted is the exception, and it is not a
+  # missing instance: it is a registered one that cannot be read right now, and
+  # it reports what can be measured of it rather than an error.
+  __logic_instance_library_state "$instance" > /dev/null
+  if [[ "$__instance_library_state_out" != "offline" ]]; then
+    local instance_config_file
+    instance_config_file=$(__find_instance_config "$instance")
+    if [[ -z "$instance_config_file" ]]; then
+      __print_error "Instance config file for '$instance' not found."
+      exit $EC_FILE_NOT_FOUND
+    fi
 
-  _stamp_library_dir "$instance"
+    _stamp_library_dir "$instance"
+  fi
 
   if [[ -z "$json_format" ]]; then
     _print_info "$instance"

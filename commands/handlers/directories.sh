@@ -19,6 +19,13 @@ if [[ -n "${KGSM_LOGIC_DIRECTORIES_LOADED:-}" ]]; then
   return 0
 fi
 
+# Load library logic. Removing an instance's registry entry is refused while the
+# library holding it is offline, and only that module can say whether it is.
+if [[ -z "${KGSM_LOGIC_LIBRARIES_LOADED:-}" ]]; then
+  # shellcheck source=libraries.sh
+  source "$(__find_command_handler libraries.sh)" || return $EC_FAILED_SOURCE
+fi
+
 # =============================================================================
 # DIRECTORY STRUCTURE MANAGEMENT
 # =============================================================================
@@ -218,11 +225,15 @@ function __logic_create_instance_symlink() {
 export -f __logic_create_instance_symlink
 
 # Removes a symlink from KGSM's instances directory
-# Args: $1 = blueprint_name, $2 = instance_name
+# Args: $1 = blueprint_name, $2 = instance_name, $3 = force ("true" to remove
+#       the entry of an instance whose library is offline)
+# Outputs: the __instance_library_*_out globals, so that a caller refused with
+#          EC_LIBRARY_OFFLINE can name the library and where it is expected
 # Returns: EC_SUCCESS on success, error codes on failure
 function __logic_remove_instance_symlink() {
   local blueprint_name="$1"
   local instance_name="$2"
+  local force="${3:-false}"
 
   # Validate required parameters
   if [[ -z "$blueprint_name" || -z "$instance_name" ]]; then
@@ -236,6 +247,19 @@ function __logic_remove_instance_symlink() {
   if [[ ! -L "$symlink_path" ]]; then
     # Symlink doesn't exist - success (idempotent)
     return $EC_SUCCESS
+  fi
+
+  # This link is the whole of what the host knows about the instance. When it
+  # dangles because the library is not mounted, removing it forgets a server
+  # whose files are still on the disk, and nothing left behind would say where
+  # they went — the deliberate exception being the caller that asks for exactly
+  # that, to deregister an instance a disk took with it.
+  # Called without a command substitution so its globals survive into the caller,
+  # which is where the refusal is worded.
+  __logic_instance_library_state "$instance_name" > /dev/null
+
+  if [[ "$force" != "true" ]] && [[ "$__instance_library_state_out" == "offline" ]]; then
+    return $EC_LIBRARY_OFFLINE
   fi
 
   # Remove the symlink

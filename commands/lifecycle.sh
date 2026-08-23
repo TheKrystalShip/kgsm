@@ -234,6 +234,28 @@ function _stamp_library_dir() {
   return 0
 }
 
+# Refuses a lifecycle verb while the instance's library is not mounted, naming
+# the library and where it is expected to be.
+#
+# Every verb here needs the instance's own files — its management script, its
+# game binaries, its saves — so none of them can do anything at all until the
+# disk is back. Refused here, up front, rather than left to fail somewhere in
+# the middle of a start with an error about a missing file.
+#
+# Args: $1 = instance name
+# Returns: EC_SUCCESS when the verb may proceed, EC_LIBRARY_OFFLINE otherwise
+function _refuse_when_library_offline() {
+  local instance="$1"
+
+  __logic_instance_library_state "$instance" > /dev/null
+
+  [[ "$__instance_library_state_out" == "offline" ]] || return $EC_SUCCESS
+
+  __print_error "Instance '$instance' is in library '${__instance_library_name_out}', which is not reachable at ${__instance_library_path_out}"
+  __print_error "Mount it and try again. Nothing about the instance has been changed or forgotten."
+  return $EC_LIBRARY_OFFLINE
+}
+
 # Whether the instance is running RIGHT NOW, sampled before a lifecycle verb runs:
 # "active", "inactive", or "unknown" when the probe itself could not answer.
 #
@@ -305,6 +327,7 @@ function _cmd_start() {
   fi
 
   # Call pure logic function
+  _refuse_when_library_offline "$instance_name" || return $?
   _stamp_library_dir "$instance_name"
 
   __print_info "Starting instance $instance_name"
@@ -375,6 +398,7 @@ function _cmd_stop() {
   fi
 
   # Call pure logic function
+  _refuse_when_library_offline "$instance_name" || return $?
   _stamp_library_dir "$instance_name"
 
   __print_info "Stopping instance $instance_name"
@@ -481,6 +505,7 @@ function _cmd_restart() {
   fi
 
   # Call pure logic function
+  _refuse_when_library_offline "$instance_name" || return $?
   _stamp_library_dir "$instance_name"
 
   __print_info "Restarting instance $instance_name"
@@ -572,6 +597,8 @@ function _cmd_status() {
     exit $EC_MISSING_ARG
   fi
 
+  _refuse_when_library_offline "$instance_name" || exit $?
+
   # Call pure logic function
   local exit_code
   __logic_instance_status "$instance_name" "$json_format" "$fast_mode"
@@ -611,6 +638,8 @@ function _cmd_is_active() {
     __print_error "Use '${self} is-active --help' for usage information"
     return $EC_MISSING_ARG
   fi
+
+  _refuse_when_library_offline "$instance_name" || return $?
 
   # Call pure logic function
   local exit_code
@@ -669,6 +698,8 @@ function _cmd_logs() {
     __print_error "Use '${self} logs --help' for usage information"
     return $EC_MISSING_ARG
   fi
+
+  _refuse_when_library_offline "$instance_name" || return $?
 
   # Call pure logic function
   __logic_instance_logs "$instance_name" "$follow_flag" "$line_count"

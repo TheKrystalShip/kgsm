@@ -75,6 +75,18 @@ valheim-community
 terraria-hardmode
 ```
 
+### An instance whose library is offline
+
+An instance placed in a library that is not currently mounted still appears in every listing. It is
+not gone, it is unreadable, and the two are reported differently: `--detailed` and `--json` carry
+`library_state=offline` and describe the instance with what can be measured without the disk — its
+name, blueprint, working directory and library — while every value that lives in its config file is
+absent rather than guessed at.
+
+Lifecycle verbs against such an instance refuse up front, naming the library and where it is
+expected, and nothing removes the host's record of it. Mounting the library restores everything with
+no commands at all. Full behaviour: [Libraries](libraries.md).
+
 ## How to create an instance
 
 Creating an instance registers the instance configuration with KGSM and sets up the directory structure. The game server files themselves are downloaded during the separate `install` step.
@@ -214,6 +226,8 @@ kgsm.sh instances remove <instance-name>
 ```
 
 This removes only the symbolic link and the instance configuration file from KGSM's tracking. The game server files in the working directory are left intact. This is useful when you want to deregister an instance without deleting the underlying server data.
+
+Both commands refuse when the instance's library is offline: there are no files to uninstall while the disk is away, and the symlink they would remove is the host's last record of the instance. `--force` on either one deregisters the instance without touching a file, which is how an instance that left with its disk is forgotten deliberately.
 
 ---
 

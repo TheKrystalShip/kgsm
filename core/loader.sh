@@ -429,6 +429,20 @@ function __source_instance() {
   fi
 
   if [[ -z "$instance_config_file" ]]; then
+    # A registered instance whose files cannot be reached is not a missing one.
+    # Its registry entry survives the library being unmounted — the symlink
+    # dangles rather than disappearing — and calling that "not found" invites
+    # exactly the response that would lose it. Which library is away is the
+    # libraries module's answer to give; this layer says what it measured.
+    local _entry
+    for _entry in "$KGSM_INSTANCES_DIR"/*/"$_instance_name"; do
+      if [[ -L "$_entry" ]]; then
+        __print_error "Instance '$_instance_name' is registered, but its files are not reachable at '$(readlink "$_entry")'."
+        __print_error "Its library is offline; 'kgsm libraries list' names it."
+        exit $EC_LIBRARY_OFFLINE
+      fi
+    done
+
     __print_error "Instance config file for '$_instance_name' not found."
     exit $EC_FILE_NOT_FOUND
   fi

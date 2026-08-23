@@ -636,6 +636,96 @@ function __logic_library_instances() {
 
 export -f __logic_library_instances
 
+# Echoes the registry symlink of an instance, found without following it.
+#
+# The registry layout is $KGSM_INSTANCES_DIR/<blueprint>/<instance>, and only
+# the blueprint is unknown, so one glob resolves it. The test is -L and not -e
+# on purpose: a library that is not mounted leaves the link dangling, and an
+# instance nothing can find is an instance nothing can refuse to destroy.
+#
+# Args: $1 = instance name
+# Returns: EC_SUCCESS, EC_INVALID_ARG, or EC_NOT_FOUND
+function __logic_instance_symlink() {
+  local _instance="$1"
+
+  if [[ -z "$_instance" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  local _candidate
+  for _candidate in "$KGSM_INSTANCES_DIR"/*/"$_instance"; do
+    if [[ -L "$_candidate" ]]; then
+      echo "$_candidate"
+      return $EC_SUCCESS
+    fi
+  done
+
+  return $EC_NOT_FOUND
+}
+
+export -f __logic_instance_symlink
+
+# Echoes the state of the library an instance is placed in: online, offline or
+# unregistered.
+#
+# Everything here is read from the symlink's target rather than through it. An
+# instance on an unmounted library is precisely an instance whose every file is
+# unreadable, so a check that opened its config could report only that it was
+# gone — the one thing that is not true. The blueprint and the working directory
+# are recoverable from the registry alone, and they are the whole of what can
+# honestly be said about the instance until its disk is back.
+#
+# Args: $1 = instance name
+# Outputs (globals, always assigned):
+#   __instance_library_state_out  the state, echoed as well so that a caller
+#                                 needing only it can use a subshell
+#   __instance_library_name_out   the library's name, empty when unregistered
+#   __instance_library_path_out   the library's registered root, empty likewise
+#   __instance_working_dir_out    the directory the registry points at
+#   __instance_blueprint_out      the blueprint the instance was made from
+# Returns: EC_SUCCESS, EC_INVALID_ARG, or EC_NOT_FOUND when the instance is not
+#          in the registry at all
+function __logic_instance_library_state() {
+  local _instance="$1"
+
+  __instance_library_state_out=""
+  __instance_library_name_out=""
+  __instance_library_path_out=""
+  __instance_working_dir_out=""
+  __instance_blueprint_out=""
+
+  if [[ -z "$_instance" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  local _symlink
+  _symlink="$(__logic_instance_symlink "$_instance")" || return $EC_NOT_FOUND
+
+  __instance_blueprint_out="$(basename "$(dirname "$_symlink")")"
+  __instance_working_dir_out="$(readlink "$_symlink")"
+
+  local _library
+  if ! _library="$(__logic_library_for_working_dir "$__instance_working_dir_out")"; then
+    __instance_library_state_out="unregistered"
+    echo "unregistered"
+    return $EC_SUCCESS
+  fi
+
+  __instance_library_name_out="$_library"
+  __instance_library_path_out="$(__logic_library_path "$_library")"
+
+  if __logic_library_is_online "$_library"; then
+    __instance_library_state_out="online"
+  else
+    __instance_library_state_out="offline"
+  fi
+
+  echo "$__instance_library_state_out"
+  return $EC_SUCCESS
+}
+
+export -f __logic_instance_library_state
+
 # =============================================================================
 # PLACEMENT
 # =============================================================================

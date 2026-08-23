@@ -445,28 +445,49 @@ function __logic_create_instance() {
 export -f __logic_create_instance
 
 # Remove an instance configuration
-# Args: $1 = _instance_name
+#
+# Args: $1 = _instance_name, $2 = force ("true" to remove a registry entry whose
+#       library is offline)
+# Outputs: the __instance_library_*_out globals, so that a caller refused with
+#          EC_LIBRARY_OFFLINE can name the library and where it is expected
 # Returns: EC_SUCCESS_INSTANCE_REMOVED on success, error code on failure
 function __logic_remove_instance() {
   local instance=$1
+  local force="${2:-false}"
 
   if [[ -z "$instance" ]]; then
     return $EC_INVALID_ARG
   fi
 
-  # Find instance config file (inside the symlinked directory)
-  local instance_config_file
-  if ! instance_config_file=$(__find_instance_config "$instance"); then
-    return $EC_NOT_FOUND
-  fi
-
-  # Extract the directory symlink path (parent of config file)
+  # Located from the registry rather than from the instance's config, because an
+  # instance placed in a library that is not mounted has no readable config and
+  # the entry protecting it has to be findable before it can be protected.
   local instance_symlink_dir
-  instance_symlink_dir="$(dirname "$instance_config_file")"
+  if ! instance_symlink_dir="$(__logic_instance_symlink "$instance")"; then
+    # An instance outside the standard layout still resolves by search.
+    local instance_config_file
+    if ! instance_config_file=$(__find_instance_config "$instance"); then
+      return $EC_NOT_FOUND
+    fi
+    instance_symlink_dir="$(dirname "$instance_config_file")"
+  fi
 
   # Verify it's actually a symlink
   if [[ ! -L "$instance_symlink_dir" ]]; then
     return $EC_INVALID_INSTANCE
+  fi
+
+  # A dangling registry symlink is what an unmounted library leaves behind, and
+  # it is also what an already-removed instance leaves behind. The library, not
+  # the link, tells the two apart: removing the entry for a disk that is merely
+  # absent is the one way this loses an instance the disk still holds, and the
+  # files it would be forgetting are the ones nothing here can see.
+  # Called without a command substitution so its globals survive into the caller,
+  # which is where the refusal is worded.
+  __logic_instance_library_state "$instance" > /dev/null
+
+  if [[ "$force" != "true" ]] && [[ "$__instance_library_state_out" == "offline" ]]; then
+    return $EC_LIBRARY_OFFLINE
   fi
 
   # Extract blueprint name from symlink path
@@ -504,19 +525,22 @@ function __logic_get_instances() {
 
   shopt -s extglob nullglob
 
+  # The patterns carry no trailing slash. A trailing slash restricts the match to
+  # directories and resolves the symlink to decide, which drops every instance
+  # whose library is not mounted — the registry entry is still there, the link is
+  # merely dangling, and an instance that vanishes from the roster when a disk is
+  # unplugged reads to every consumer as one that was uninstalled. The -L test
+  # below is what keeps a stray regular file out.
   local -a instance_dirs=()
   if [[ -z "$blueprint" ]]; then
-    # Find all directory symlinks at depth 2 (blueprint/instance)
-    instance_dirs=("$KGSM_INSTANCES_DIR"/*/*/)
+    # Find all instance symlinks at depth 2 (blueprint/instance)
+    instance_dirs=("$KGSM_INSTANCES_DIR"/*/*)
   else
-    instance_dirs=("$KGSM_INSTANCES_DIR/$blueprint"/*/)
+    instance_dirs=("$KGSM_INSTANCES_DIR/$blueprint"/*)
   fi
 
-  # Extract just the instance names (basename of directory)
+  # Extract just the instance names (basename of the symlink)
   for instance_dir in "${instance_dirs[@]}"; do
-    # Remove trailing slash
-    instance_dir="${instance_dir%/}"
-    # Check if it's a symlink (skip regular directories)
     if [[ -L "$instance_dir" ]]; then
       basename "$instance_dir"
     fi
@@ -535,17 +559,19 @@ function __logic_get_instance_paths() {
 
   shopt -s extglob nullglob
 
+  # Matched without a trailing slash, for the reason __logic_get_instances gives.
+  # The config-file test below still drops an instance whose library is not
+  # mounted, which is correct here: this function promises paths that can be
+  # read, and there is no readable config behind a dangling link.
   local -a instance_dirs=()
   if [[ -z "$blueprint" ]]; then
-    instance_dirs=("$KGSM_INSTANCES_DIR"/*/*/)
+    instance_dirs=("$KGSM_INSTANCES_DIR"/*/*)
   else
-    instance_dirs=("$KGSM_INSTANCES_DIR/$blueprint"/*/)
+    instance_dirs=("$KGSM_INSTANCES_DIR/$blueprint"/*)
   fi
 
   # Echo full paths to config files inside symlinked directories
   for instance_dir in "${instance_dirs[@]}"; do
-    # Remove trailing slash
-    instance_dir="${instance_dir%/}"
     # Check if it's a symlink (skip regular directories)
     if [[ -L "$instance_dir" ]]; then
       local instance_name

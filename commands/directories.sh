@@ -167,18 +167,24 @@ function show_usage_unlink_instance() {
 Remove the symlink from KGSM's instances directory.
 
 ${UNDERLINE}Usage:${END}
-  ${self} unlink-instance <blueprint> <instance>
+  ${self} unlink-instance <blueprint> <instance> [--force]
 
 ${UNDERLINE}Arguments:${END}
   <blueprint>                 Blueprint name (required)
   <instance>                  Instance name (required)
 
 ${UNDERLINE}Options:${END}
+  --force                     Unlink even when the instance's library is
+                              offline, deregistering it while its files stay
+                              on the disk
   -h | --help                 Display this help information
 
 ${UNDERLINE}Description:${END}
 Removes the symlink at \$KGSM_INSTANCES_DIR/<blueprint>/<instance>. This
 does not delete the actual instance files, only the tracking symlink.
+
+An instance whose library is offline is refused: the symlink is the only
+record of it that this host still holds.
 
 ${UNDERLINE}Examples:${END}
   ${self} unlink-instance factorio factorio-01
@@ -440,6 +446,7 @@ function _cmd_link_instance() {
 function _cmd_unlink_instance() {
   local blueprint_name=""
   local instance_name=""
+  local force=false
 
   # Parse unlink-instance command options
   while [[ "$#" -gt 0 ]]; do
@@ -447,6 +454,9 @@ function _cmd_unlink_instance() {
       -h | --help | help)
         show_usage_unlink_instance
         return 0
+        ;;
+      --force)
+        force=true
         ;;
       -*)
         __print_error "Invalid option for unlink-instance command: $1"
@@ -481,13 +491,18 @@ function _cmd_unlink_instance() {
 
   # Call pure logic function
   local exit_code
-  __logic_remove_instance_symlink "$blueprint_name" "$instance_name"
+  __logic_remove_instance_symlink "$blueprint_name" "$instance_name" "$force"
   exit_code=$?
 
   # Handle result based on exit code
   case $exit_code in
     $EC_SUCCESS)
       exit 0
+      ;;
+    $EC_LIBRARY_OFFLINE)
+          __print_error "Instance '$instance_name' is in library '${__instance_library_name_out}', which is not reachable at ${__instance_library_path_out}"
+      __print_error "Mount it, or pass --force to deregister the instance and leave its files on the disk"
+      exit $exit_code
       ;;
     *)
       __print_error "Failed to remove instance symlink"
