@@ -275,14 +275,16 @@ function test_id_format_validator_accepts_and_refuses() {
 function test_name_flag_is_never_validated() {
   log_test_step "Testing --name accepts text no id could be"
 
-  _create "" "  bad/name \$here  "
+  _create "" "  bad/name here!  "
   local id="$CREATED_ID"
   assert_not_null "$id" "A display name is free text and is never refused"
 
-  # Refused nothing: the slash and the dollar an id could never carry are both
-  # stored. Only the surrounding whitespace goes, because a label made of spaces
-  # is a server with no visible name.
-  assert_equals "bad/name \$here" "$(__get_instance_config_value "$id" display_name)" \
+  # Refused nothing: the slash, the space and the bang an id could never carry
+  # are all stored. Only the surrounding whitespace goes, because a label made of
+  # spaces is a server with no visible name. (The dollar is the one character a
+  # label cannot keep — it is dropped so a sourcing reader cannot expand it; that
+  # is covered on its own above.)
+  assert_equals "bad/name here!" "$(__get_instance_config_value "$id" display_name)" \
     "The display name should keep every character an id could not"
 }
 
@@ -615,6 +617,110 @@ function test_control_characters_are_stripped_from_every_value() {
   assert_equals "$(printf -- '--one--two--three\n--one--two--three')" \
     "$(_both_readers "$id" executable_arguments)" \
     "Both readers should report the same value"
+}
+
+# =============================================================================
+# TEST: a label cannot carry a shell expansion into a sourcing reader
+#
+# Every other free-text config value keeps its '$' live on purpose, so the
+# escape helper leaves it be — and several surfaces read the config by sourcing
+# it (the log and port watchers, the interactive wizard). A display name is
+# opaque decoration no reader should expand, so '$' is dropped from it before it
+# is stored. These assert the character is gone from the file and that sourcing
+# the file — exactly what watchers.sh does — expands nothing.
+# =============================================================================
+
+# Source the config the way watchers.sh:34 does and echo the raw display_name.
+# Any surviving $(...) would run here; the sandbox teardown removes the marker
+# path regardless. Args: $1 = instance
+function _source_display_name() {
+  local config_file
+  config_file="$(__find_instance_config "$1")" || return 1
+  (
+    # shellcheck disable=SC1090
+    source "$config_file" 2> /dev/null
+    printf '%s' "$display_name"
+  )
+}
+
+function test_a_command_substitution_in_a_label_never_executes() {
+  log_test_step "Testing \$(...) in a label is neutralized, not run when sourced"
+
+  _create "" "safe"
+  local id="$CREATED_ID"
+
+  local marker="$DISPLAY_TEST_DIR/injection_proof_$$"
+  rm -f "$marker"
+
+  # shellcheck disable=SC2016  # single quotes are intentional: feed the literal string
+  "$INSTANCES_MODULE" rename "$id" "$(printf 'pwn$(touch %s)end' "$marker")" \
+    > /dev/null 2>&1
+
+  # Sourcing the config must not create the marker.
+  _source_display_name "$id" > /dev/null
+  assert_file_not_exists "$marker" \
+    "Sourcing a label with \$(...) must not execute it"
+
+  # The stored value is the literal text with the dollar removed, and both text
+  # readers agree on it.
+  assert_equals "pwn(touch $marker)end" \
+    "$(__get_instance_config_value "$id" display_name)" \
+    "The dollar should be gone and the rest kept literally"
+  assert_equals "$(printf 'pwn(touch %s)end\npwn(touch %s)end' "$marker" "$marker")" \
+    "$(_both_readers "$id" display_name)" \
+    "Both readers should report the same neutralized label"
+}
+
+function test_a_variable_expansion_in_a_label_is_inert() {
+  log_test_step "Testing \${IFS} and \$HOME in a label expand to nothing"
+
+  _create "" "safe"
+  local id="$CREATED_ID"
+
+  # shellcheck disable=SC2016  # single quotes are intentional: feed the literal string
+  "$INSTANCES_MODULE" rename "$id" "$(printf 'a${IFS}b $HOME z')" \
+    > /dev/null 2>&1
+
+  # The braces and names survive as literal text; only the dollar is gone, so
+  # nothing expands when the file is sourced.
+  local sourced
+  sourced="$(_source_display_name "$id")"
+  assert_equals "a{IFS}b HOME z" "$sourced" \
+    "A sourced label should hold no expansion"
+  assert_equals "a{IFS}b HOME z" \
+    "$(__get_instance_config_value "$id" display_name)" \
+    "The stored label should match what a reader sources"
+}
+
+function test_a_label_of_only_a_dollar_reads_as_the_id() {
+  log_test_step "Testing a label made only of dollars empties to the id"
+
+  _create "" "safe"
+  local id="$CREATED_ID"
+
+  "$INSTANCES_MODULE" rename "$id" '$$$' > /dev/null 2>&1
+
+  assert_equals "$id" \
+    "$("$INSTANCES_MODULE" info "$id" --json 2> /dev/null | jq -r '.display_name')" \
+    "A label with nothing left after the dollars is gone reads as the id"
+}
+
+function test_a_dollar_bearing_label_still_leaves_the_config_sourceable() {
+  log_test_step "Testing a hostile label keeps the whole config sourceable"
+
+  _create "" "safe"
+  local id="$CREATED_ID"
+
+  "$INSTANCES_MODULE" rename "$id" \
+    # shellcheck disable=SC2016  # single quotes are intentional: feed the literal string
+    "$(printf 'x$(id)`whoami` "q" \\b ${HOME}')" > /dev/null 2>&1
+
+  # The config as a whole still sources without error — the other keys are intact
+  # and the label carries no live metacharacter.
+  local config_file
+  config_file="$(__find_instance_config "$id")"
+  assert_command_succeeds "bash -c 'source \"$config_file\"'" \
+    "The config should still source cleanly with a hostile label"
 }
 
 function test_sanitizer_keeps_text_outside_ascii() {

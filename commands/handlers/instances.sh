@@ -174,11 +174,23 @@ export -f __override_primary_port
 # reaches the CLI, so the same input stores the same value whichever surface
 # typed it.
 #
+# A dollar sign is removed outright. Every other free-text value in the config
+# keeps its dollars live on purpose — executable_arguments carries
+# $instance_level_name and the like, expanded when the management script sources
+# the file — so the escape helper leaves $ unescaped. A display name is opaque
+# decoration that no reader should ever expand, but it lands in the same
+# key="value" form and is read by the surfaces that source the config
+# (the log and port watchers, the interactive wizard). A label of $(command) or
+# ${var} would run or expand there. It cannot template anything and nothing is
+# owed the character, so it is dropped rather than escaped: the value that
+# reaches disk holds no dollar for any reader to act on.
+#
 # Args: $1 = the label as it was supplied
 # Returns: 0, echoing the label as it will be stored
 function __normalize_instance_display_name() {
   local _value
   _value="$(__sanitize_instance_config_value "$1")"
+  _value="${_value//\$/}"
   _value="${_value#"${_value%%[![:space:]]*}"}"
   _value="${_value%"${_value##*[![:space:]]}"}"
   printf '%s' "$_value"

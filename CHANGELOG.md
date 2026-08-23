@@ -47,6 +47,18 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **A display name holds no dollar sign, so it cannot expand when a reader sources the config.**
+  Every other free-text value in an instance config keeps its `$` live on purpose — `executable_arguments`
+  carries `$instance_level_name` and the like, expanded when the management script sources the file —
+  so the escape helper leaves `$` alone. A display name lands in the same `key="value"` form and is
+  read by the surfaces that source the config directly (the log and port watchers, the interactive
+  wizard), but it is opaque decoration no reader should ever expand. A label of `$(command)` or
+  `${var}` would run or expand there, as the kgsm user, when a watcher or the wizard next reads that
+  instance. The dollar is now dropped from a display name as it is normalized, alongside the control
+  characters already removed there — a label cannot template anything and nothing is owed the
+  character, so the value that reaches disk holds no dollar for any reader to act on. Every other
+  character a label carries, including the slash and spaces an id could never hold, is kept.
+
 - **A config value holds no character the file has no room for.** The instance config is a
   line-oriented list of `key="value"` pairs, and its text readers separate a key from its value on a
   tab and one pair from the next on a newline — so a value carrying either was not one value. A tab
