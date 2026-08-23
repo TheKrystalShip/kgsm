@@ -279,8 +279,11 @@ function test_name_flag_is_never_validated() {
   local id="$CREATED_ID"
   assert_not_null "$id" "A display name is free text and is never refused"
 
-  assert_equals "  bad/name \$here  " "$(__get_instance_config_value "$id" display_name)" \
-    "The display name should be stored exactly as typed"
+  # Refused nothing: the slash and the dollar an id could never carry are both
+  # stored. Only the surrounding whitespace goes, because a label made of spaces
+  # is a server with no visible name.
+  assert_equals "bad/name \$here" "$(__get_instance_config_value "$id" display_name)" \
+    "The display name should keep every character an id could not"
 }
 
 # =============================================================================
@@ -534,4 +537,206 @@ function test_an_instance_without_the_key_can_still_be_renamed() {
 
   assert_equals "Now It Has One" "$(__get_instance_config_value "$id" display_name)" \
     "The label should have been added to the config"
+}
+
+# =============================================================================
+# TEST: a value cannot carry a character the file has no room for
+#
+# The config is a line-oriented list of key="value" pairs, and its text readers
+# separate a key from its value on a tab and one pair from the next on a
+# newline. A value holding either is therefore not one value, and the two
+# readers below have to agree about it or a surface renders something the engine
+# does not think it stored.
+# =============================================================================
+
+# Both text readers' answer for one key, as a single string, so a test asserts
+# on the pair rather than on either one of them.
+# Args: $1 = instance, $2 = key
+function _both_readers() {
+  printf '%s\n%s' \
+    "$("$INSTANCES_MODULE" info "$1" --json 2> /dev/null | jq -r --arg k "$2" '.[$k]')" \
+    "$("$INSTANCES_MODULE" config-list "$1" --json 2> /dev/null \
+      | jq -r --arg k "$2" '.[] | select(.key == $k) | .value')"
+}
+
+function test_a_tab_never_reaches_the_config() {
+  log_test_step "Testing a tab in a label is dropped rather than stored"
+
+  _create "" "Before"
+  local id="$CREATED_ID"
+
+  "$INSTANCES_MODULE" config-set "$id" "$(printf 'display_name=Before\tAfter')" \
+    > /dev/null 2>&1
+
+  assert_equals "BeforeAfter" "$(__get_instance_config_value "$id" display_name)" \
+    "The tab should be gone from the stored value"
+  assert_equals "$(printf 'BeforeAfter\nBeforeAfter')" "$(_both_readers "$id" display_name)" \
+    "Both readers should report the same label"
+}
+
+function test_a_newline_never_reaches_the_config() {
+  log_test_step "Testing a newline in a label cannot open a second config line"
+
+  _create "" "Before"
+  local id="$CREATED_ID"
+
+  # Shaped to forge a key: were the newline stored, everything after it would
+  # parse as another key=value pair and the instance would report an id that is
+  # not its own.
+  "$INSTANCES_MODULE" config-set "$id" \
+    "$(printf 'display_name=Innocent"\nname="forged-id')" > /dev/null 2>&1
+
+  assert_equals "$id" "$("$INSTANCES_MODULE" info "$id" --json 2> /dev/null | jq -r '.name')" \
+    "info --json should report the instance's own id"
+  assert_equals "$id" \
+    "$("$INSTANCES_MODULE" list --detailed --json 2> /dev/null | jq -r --arg id "$id" '.[$id].name')" \
+    "The roster should report the instance's own id"
+
+  local config_file
+  config_file="$(readlink -f "$(__find_instance_config "$id")")"
+  assert_equals 1 "$(grep -c '^name=' "$config_file")" \
+    "The config should hold exactly one name key"
+}
+
+function test_control_characters_are_stripped_from_every_value() {
+  log_test_step "Testing the strip applies to any config value, not only a label"
+
+  _create "" "Before"
+  local id="$CREATED_ID"
+
+  # executable_arguments is an ordinary settable value and carries the same rule:
+  # the reader is the same reader.
+  "$INSTANCES_MODULE" config-set "$id" \
+    "$(printf 'executable_arguments=--one\t--two\r--three')" > /dev/null 2>&1
+
+  assert_equals "--one--two--three" \
+    "$(__get_instance_config_value "$id" executable_arguments)" \
+    "Tab and carriage return should both be gone"
+  assert_equals "$(printf -- '--one--two--three\n--one--two--three')" \
+    "$(_both_readers "$id" executable_arguments)" \
+    "Both readers should report the same value"
+}
+
+function test_sanitizer_keeps_text_outside_ascii() {
+  log_test_step "Testing the strip leaves multi-byte characters alone"
+
+  assert_equals "a🏭b" "$(__sanitize_instance_config_value "$(printf 'a\t🏭\vb')")" \
+    "A multi-byte character should survive a byte-oriented strip"
+  assert_equals "Ana's \"Big\" Factory" \
+    "$(__sanitize_instance_config_value "Ana's \"Big\" Factory")" \
+    "Nothing but control characters should be removed"
+}
+
+function test_display_name_of_only_whitespace_reads_as_the_id() {
+  log_test_step "Testing a label made of whitespace leaves the instance shown by its id"
+
+  _create "" "Before"
+  local id="$CREATED_ID"
+
+  "$INSTANCES_MODULE" rename "$id" "   " > /dev/null 2>&1
+
+  assert_equals "" "$(__get_instance_config_value "$id" display_name)" \
+    "A label of only whitespace should store as empty"
+  assert_equals "$id" "$("$INSTANCES_MODULE" info "$id" --json 2> /dev/null | jq -r '.display_name')" \
+    "An empty label should read as the instance id, never as blank"
+}
+
+function test_a_legacy_tab_in_a_value_is_read_whole() {
+  log_test_step "Testing a tab already in a config file no longer truncates"
+
+  _create "" "Before"
+  local id="$CREATED_ID"
+
+  # Exactly what a config written before the strip existed holds. Put there
+  # directly, because no write path can produce it any more.
+  local config_file
+  config_file="$(readlink -f "$(__find_instance_config "$id")")"
+  local tabbed
+  tabbed="$(printf 'Legacy\tValue')"
+  sed -i "s|^display_name=.*|display_name=\"${tabbed}\"|" "$config_file"
+
+  assert_equals "$(printf 'Legacy\tValue\nLegacy\tValue')" \
+    "$(_both_readers "$id" display_name)" \
+    "Both readers should report the whole value, tab included"
+  assert_equals "$tabbed" "$(__get_instance_config_value "$id" display_name)" \
+    "config-get should report the whole value too"
+}
+
+function test_a_legacy_duplicate_key_cannot_redefine_the_id() {
+  log_test_step "Testing a stray duplicate key in a config loses to the real one"
+
+  _create "" "Before"
+  local id="$CREATED_ID"
+
+  # What the newline case left behind in a config corrupted before the strip:
+  # an orphaned line the setter never owned and so never rewrites.
+  local config_file
+  config_file="$(readlink -f "$(__find_instance_config "$id")")"
+  printf 'name="forged-id"\n' >> "$config_file"
+
+  assert_equals "$id" "$("$INSTANCES_MODULE" info "$id" --json 2> /dev/null | jq -r '.name')" \
+    "The key the template wrote should win over the stray one that follows it"
+  assert_equals "$id" \
+    "$("$INSTANCES_MODULE" list --detailed --json 2> /dev/null | jq -r --arg id "$id" '.[$id].name')" \
+    "The roster should agree"
+}
+
+# =============================================================================
+# TEST: a label that looks like a flag is still a label
+# =============================================================================
+
+function test_rename_accepts_a_label_that_is_a_help_flag() {
+  log_test_step "Testing '--help' and 'help' are written as labels, not read as help"
+
+  _create "" "Before"
+  local id="$CREATED_ID"
+
+  local label
+  for label in "--help" "help" "-h"; do
+    "$INSTANCES_MODULE" rename "$id" "$label" > /dev/null 2>&1
+    assert_equals 0 "$?" "rename should succeed with '$label' as the label"
+    assert_equals "$label" "$(__get_instance_config_value "$id" display_name)" \
+      "'$label' should have been written as the display name"
+  done
+}
+
+function test_rename_accepts_a_help_word_inside_a_longer_label() {
+  log_test_step "Testing a help word among the label's other words is just a word"
+
+  _create "" "Before"
+  local id="$CREATED_ID"
+
+  "$INSTANCES_MODULE" rename "$id" Ana needs --help now > /dev/null 2>&1
+
+  assert_equals "Ana needs --help now" "$(__get_instance_config_value "$id" display_name)" \
+    "Every argument after the instance should be part of the label"
+}
+
+function test_rename_still_shows_usage_in_the_first_position() {
+  log_test_step "Testing help is still recognised where it is meant to be"
+
+  local flag
+  for flag in "-h" "--help" "help"; do
+    local output
+    output="$("$INSTANCES_MODULE" rename "$flag" 2>&1)"
+    assert_equals 0 "$?" "rename $flag should exit 0"
+    assert_contains "$output" "Rename Instance" "rename $flag should print usage"
+  done
+}
+
+function test_rename_without_a_label_is_refused() {
+  log_test_step "Testing a rename with nothing to rename to is refused, not silent"
+
+  _create "" "Before"
+  local id="$CREATED_ID"
+
+  local output
+  output="$("$INSTANCES_MODULE" rename "$id" 2>&1)"
+  local exit_code=$?
+
+  assert_equals "$EC_MISSING_ARG" "$exit_code" \
+    "rename with no label should exit EC_MISSING_ARG"
+  assert_contains "$output" "display name" "The refusal should name what is missing"
+  assert_equals "Before" "$(__get_instance_config_value "$id" display_name)" \
+    "The label should be untouched by the refused rename"
 }

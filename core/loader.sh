@@ -547,6 +547,36 @@ export -f __source_instance
 # ways: the management script sources it, and everything here parses the text.
 # The pair below is what keeps those two agreeing.
 #
+# Drop the characters a config value cannot hold at all.
+#
+# Escaping is for characters that need a representation; this is for the ones
+# that have none. The file is a line-oriented list of key="value" pairs, and the
+# text readers separate a key from its value on a tab and one pair from the next
+# on a newline. A value carrying either of those is therefore not one value: a
+# tab truncates it at the first reader that splits on tabs while the readers that
+# do not return it whole, so two of them report different values for the same
+# key; a newline ends the line, and everything past it parses as further keys —
+# which is enough to make an instance report an id that is not its own, in
+# `instances info --json` and in the roster alike. Both are silent.
+#
+# Every control character goes, not only those two: the config is read by
+# several parsers and displayed by several surfaces, and a value that renders
+# differently depending on which one is looking at it is the class of bug this
+# closes rather than one member of it. Stripping is the defined outcome on every
+# write path — a value is stored, and what is stored is a value every reader
+# agrees on.
+#
+# tr is byte-oriented and [:cntrl:] under LC_ALL=C is exactly 0x00-0x1F and 0x7F,
+# none of which appear in a UTF-8 multi-byte sequence, so text outside ASCII
+# passes through untouched.
+#
+# Usage: __sanitize_instance_config_value <raw_value>
+function __sanitize_instance_config_value() {
+  printf '%s' "$1" | LC_ALL=C tr -d '[:cntrl:]'
+}
+
+export -f __sanitize_instance_config_value
+
 # Escape a value for the key="value" form.
 #
 # Sourcing puts a value in bash's double-quote context, where a bare " ends the
@@ -556,6 +586,9 @@ export -f __source_instance
 # and a backtick opens a command substitution. Escape those three, backslash
 # first so the escapes added here are not themselves re-escaped.
 #
+# The value is sanitized before any of that, so this is the one place every
+# escaped write path passes through and the strip needs no second definition.
+#
 # $ is deliberately left live: executable_arguments carries $instance_level_name
 # into the config precisely so it expands when the management script sources it.
 # The cost is that a value containing a literal $name sequence is not safe here —
@@ -564,7 +597,8 @@ export -f __source_instance
 #
 # Usage: __escape_instance_config_value <raw_value>
 function __escape_instance_config_value() {
-  local _value="$1"
+  local _value
+  _value="$(__sanitize_instance_config_value "$1")"
   _value="${_value//\\/\\\\}"
   _value="${_value//\"/\\\"}"
   _value="${_value//\`/\\\`}"

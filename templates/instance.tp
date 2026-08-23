@@ -15,7 +15,9 @@ name="${instance_name}"
 # punctuation are all fine, because nothing derives a path, a file name or a key
 # from it. Not unique, and changed at any time with
 # 'kgsm instances rename <instance> <text>'. Absent or empty reads as the
-# instance's name above.
+# instance's name above. One line: control characters and the surrounding
+# whitespace are dropped when it is written, since this file is read line by
+# line and a value cannot hold a line ending or a field separator.
 display_name="${instance_display_name}"
 
 # Path to the blueprint file used to create this instance

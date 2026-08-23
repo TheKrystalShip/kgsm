@@ -163,6 +163,29 @@ function __override_primary_port() {
 
 export -f __override_primary_port
 
+# Reduce a display name to the single line of text it is meant to be.
+#
+# Control characters are dropped, which the escape helper would do anyway, and
+# the surrounding whitespace with them: a label is read, not parsed, so one made
+# only of spaces is a server with no visible name rather than a server named
+# something. Emptied here, it reads as the instance's id, which is the honest
+# answer and the one every other reader already gives for a label that was never
+# set. This matches what a C# caller's label is normalized to before it ever
+# reaches the CLI, so the same input stores the same value whichever surface
+# typed it.
+#
+# Args: $1 = the label as it was supplied
+# Returns: 0, echoing the label as it will be stored
+function __normalize_instance_display_name() {
+  local _value
+  _value="$(__sanitize_instance_config_value "$1")"
+  _value="${_value#"${_value%%[![:space:]]*}"}"
+  _value="${_value%"${_value##*[![:space:]]}"}"
+  printf '%s' "$_value"
+}
+
+export -f __normalize_instance_display_name
+
 function __logic_create_base_instance() {
   local instance_config_file="$1"
   local _instance_name="$2"
@@ -196,6 +219,7 @@ function __logic_create_base_instance() {
   # is shown by its id, which is what the id being the nicest thing to type is
   # for.
   export instance_display_name
+  display_name="$(__normalize_instance_display_name "$display_name")"
   instance_display_name="$(
     __escape_instance_config_value "${display_name:-$_instance_name}"
   )"
@@ -739,6 +763,12 @@ function __set_instance_config_value() {
   # Refuse keys that are unsafe to set directly.
   if __is_protected_instance_config_key "$key"; then
     return $EC_INVALID_ARG
+  fi
+
+  # A label carries its own rule about what a stored value is, and it is applied
+  # here rather than at the CLI so that every caller of the setter gets it.
+  if [[ "$key" == "display_name" ]]; then
+    value="$(__normalize_instance_display_name "$value")"
   fi
 
   local config_file

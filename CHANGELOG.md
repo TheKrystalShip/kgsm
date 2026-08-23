@@ -47,6 +47,36 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **A config value holds no character the file has no room for.** The instance config is a
+  line-oriented list of `key="value"` pairs, and its text readers separate a key from its value on a
+  tab and one pair from the next on a newline — so a value carrying either was not one value. A tab
+  truncated it in `instances info --json` and in the roster while `config-list --json` returned it
+  whole, two readers reporting different values for the same key; a newline ended the line, and
+  everything past it parsed as further keys, which was enough to make an instance report an id that
+  was not its own in both the info object and the roster. Both were silent, and neither was shell
+  injection — the escaping already held — but a label is the first field on an instance that is
+  unconstrained human text, and it made the shape reachable from a rename.
+
+  Every control character is now dropped from every value on its way into the file, in
+  `__escape_instance_config_value`, which is the one place every write path already passed through.
+  A display name is normalized further, to the single line of text it is meant to be: the
+  surrounding whitespace goes with the control characters, so a label of only spaces stores as empty
+  and the instance reads as its id rather than as a blank — the same value a C# caller's label is
+  reduced to before it ever reaches the CLI.
+
+  The reader is fixed on its own terms too, because a config written before this holds what it
+  holds: `instances info --json` splits a line on its first tab only and rejoins the rest, so a
+  stored tab is reported whole instead of truncating the value, and it merges repeated keys
+  first-wins, so an orphaned line left behind by the newline case cannot redefine `name`. A value
+  split across lines that way is still reported truncated at its own newline; which of the following
+  lines are continuations and which are keys is not something any reading of the file can answer.
+
+- **A display name spelled like a flag is written, not read as a request for help.** `instances
+  rename` scanned every argument for `-h`, `--help` and `help`, so those labels — and any label with
+  one of those words among its others — printed usage and exited successfully having written
+  nothing, which reads exactly like a rename that worked. Help is recognised in the first position
+  and nowhere else; past the instance, every argument is label text.
+
 - **An instance has an id it keeps and a name it can change.** The identifier KGSM generates —
   `factorio`, `factorio-42` — is the id: it is what every path, file name, registry symlink, cgroup,
   event payload and downstream store keys on, and it is now the only thing a caller can put there.

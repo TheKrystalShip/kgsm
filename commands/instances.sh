@@ -615,7 +615,11 @@ ${UNDERLINE}Options:${END}
 
 ${UNDERLINE}Description:${END}
 Updates an existing key (or adds it if absent) and writes it back as
-key=\"value\". Only plain runtime values are settable — auto_update,
+key=\"value\". Control characters are dropped from the value first: the config is
+a line-oriented file whose readers split a key from its value on a tab and one
+pair from the next on a newline, so a value holding either is not one value.
+
+Only plain runtime values are settable — auto_update,
 display_name, executable_arguments, level_name, stop_command, save_command, the
 *_timeout_seconds values, startup_success_regex, and similar.
 
@@ -880,6 +884,23 @@ function _print_info_json() {
   # Parse the INI config into a JSON object via a pure-bash loop (no per-line
   # $(echo | sed) subshells, no <(grep | grep) process substitution) feeding a
   # single jq call that merges all key-value pairs and attaches cgroup_path/ports.
+  #
+  # The loop hands jq one `key<TAB>value` line per key, and jq splits each line
+  # on the FIRST tab only — everything after it is the value, tabs included. A
+  # value written since the sanitizer landed holds no tab at all; one written
+  # before it does, and rejoining is what keeps this reader's answer equal to
+  # every other reader's instead of silently truncating at the first tab.
+  #
+  # The merge takes the FIRST occurrence of a repeated key rather than the last.
+  # A config cannot gain a duplicate key through any write path — the setter
+  # rewrites the key it owns in place, and no value can carry a newline to open a
+  # second line — so a duplicate only exists in a config corrupted before the
+  # sanitizer, where the real key is the one the template wrote and the stray one
+  # follows it. First-wins is what stops such a line from redefining `name`.
+  # A value split across lines that way is still reported truncated at its own
+  # newline: reconstructing it would mean guessing which of the following lines
+  # are continuations and which are keys, and there is no reading of the file
+  # that answers that.
   {
     while IFS='=' read -r key value || [[ -n "$key" ]]; do
       # Skip comments and blank/whitespace-only lines (pure bash, zero forks)
@@ -907,8 +928,8 @@ function _print_info_json() {
     done < "$instance_config_file"
   } | jq -Rs --arg cg "$cgroup_path" --argjson ports "$ports_json" --arg library "$library" \
     --arg library_state "$library_state" \
-    '[split("\n")[] | select(length > 0) | split("\t") | {(.[0]): .[1]}]
-     | add // {}
+    '[split("\n")[] | select(length > 0) | split("\t") | {(.[0]): (.[1:] | join("\t"))}]
+     | reduce .[] as $pair ({}; $pair + .)
      | . + {cgroup_path: (if .runtime == "native" then $cg else "" end),
             ports: $ports,
             library: $library,
@@ -2187,10 +2208,12 @@ ${UNDERLINE}Usage:${END}
 ${UNDERLINE}Arguments:${END}
   instance                    Instance id, or the display name it has now
   display name                The new label. Every remaining argument is joined
-                              with single spaces, so quoting is optional
+                              with single spaces, so quoting is optional, and
+                              all of them are text — one spelled like a flag
+                              included
 
 ${UNDERLINE}Options:${END}
-  --help                      Display this help information
+  --help                      Display this help information (first position only)
 
 ${UNDERLINE}Description:${END}
 The display name is decoration: spaces, casing, punctuation and emoji are all
@@ -2199,38 +2222,34 @@ name in its paths, its files, its events and every downstream store — is
 untouched, so a rename breaks nothing and can be done at any time, running or
 stopped.
 
+A label is one line of text: control characters are dropped and the surrounding
+whitespace with them, so a label of only spaces stores as empty and the instance
+is shown by its id.
+
 This is \`config-set <instance> display_name=<text>\` with one obvious verb in
 front of it, and it records the same events.
 
 ${UNDERLINE}Examples:${END}
   $self rename factorio-01 Weekend Server
   $self rename factorio-01 \"Ana's Factory\"
+  $self rename factorio-01 --help
 "
 }
 
 function _cmd_rename() {
-  local instance=""
-  local -a words=()
+  # Help is recognised in the first position and nowhere else. Past the instance,
+  # every argument is label text taken verbatim: `--help` and `help` are things
+  # somebody may reasonably want a server called, and a scan that kept looking
+  # for them would print usage and exit successfully having written nothing —
+  # which reads exactly like a rename that worked.
+  case "${1:-}" in
+    -h | --help | help)
+      show_usage_rename
+      return 0
+      ;;
+  esac
 
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      -h | --help | help)
-        show_usage_rename
-        return 0
-        ;;
-      *)
-        # Only the first positional is the instance; everything after it is the
-        # label, taken verbatim — a display name may start with a dash or look
-        # like a flag, and it is text either way.
-        if [[ -z "$instance" ]]; then
-          instance="$1"
-        else
-          words+=("$1")
-        fi
-        ;;
-    esac
-    shift
-  done
+  local instance="${1:-}"
 
   if [[ -z "$instance" ]]; then
     __print_error "Missing required argument: <instance>"
@@ -2238,13 +2257,17 @@ function _cmd_rename() {
     exit $EC_MISSING_ARG
   fi
 
-  if [[ ${#words[@]} -eq 0 ]]; then
+  shift
+
+  if [[ $# -eq 0 ]]; then
     __print_error "Missing required argument: <display name>"
     __print_error "Use '$self rename --help' for usage information"
     exit $EC_MISSING_ARG
   fi
 
-  local display_name="${words[*]}"
+  # Joined on the first character of IFS, a space, so the shell's own word
+  # splitting is what decides where the spaces in an unquoted label go.
+  local display_name="$*"
 
   _set_instance_config_key "$instance" "display_name" "$display_name"
   local exit_code=$?

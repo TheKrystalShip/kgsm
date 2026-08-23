@@ -30,6 +30,13 @@ emoji are all fine, because nothing derives a path or a key from it, and it need
 `--name` on `install`/`instances create` sets it, `kgsm instances rename` changes it at any time,
 and an instance that was never given one is shown by its id.
 
+A label is one line of text, and it is stored as that. Control characters are dropped and the
+surrounding whitespace with them, so a label made only of spaces stores as empty and the instance
+reads as its id rather than as a blank. This is not tidiness: the instance config is a line-oriented
+list of `key="value"` pairs whose text readers separate a key from its value on a tab and one pair
+from the next on a newline, so a value carrying either would be read differently by different
+readers. The same rule applies to every value written into an instance config, not only to labels.
+
 ```sh
 kgsm.sh install factorio --name "Ana's Factory"     # id: factorio, shown as Ana's Factory
 kgsm.sh install factorio --id factorio-prod         # id: factorio-prod, shown as factorio-prod
@@ -198,9 +205,15 @@ kgsm.sh instances generate-id factorio --id my-factory
 # Every remaining argument becomes part of the label
 kgsm.sh instances rename factorio-01 Weekend Server
 
+# Including one that looks like a flag: past the instance, it is all text
+kgsm.sh instances rename factorio-01 --help
+
 # The same thing through the generic setter
 kgsm.sh instances config-set factorio-01 "display_name=Weekend Server"
 ```
+
+`rename` reads `-h`, `--help` and `help` as a request for usage only in the first position. After
+the instance, every argument is label text.
 
 Both record `instance_config_changed` and `instance_display_name_changed`, the latter carrying the
 old and new label so a surface can re-render without asking the engine anything. Nothing moves on
