@@ -500,6 +500,18 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Changed — a packaged install enables the journal-prune timer (`3.18.0-rc6`)
+
+`packaging/kgsm.install` applies kgsm-base's `50-kgsm.preset` to `kgsm-journal-prune.timer` in
+`post_install`, so retention runs on a node with nobody enabling it. The node's post-transaction hook
+starts it. `post_upgrade` does not preset: an administrator's `disable` survives every later version.
+
+`depends=('kgsm-base')`, and the package no longer lays down `/usr/lib/sysusers.d/kgsm.conf` or the
+`/usr/lib/tmpfiles.d/kgsm.conf` heredoc. The `kgsm` account and the `/var/lib/kgsm` tree are written
+by several components and owned by none, so declaring them on the engine made the engine's presence
+a precondition for a leaf's state directory — a node can run kgsm-monitor with no engine at all.
+`deploy/sysusers.d/kgsm.conf` is gone with them.
+
 ### Changed — journal retention is a system timer
 
 `kgsm-journal-prune.{service,timer}` are system units running as the KGSM account, installed to

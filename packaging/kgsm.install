@@ -1,0 +1,31 @@
+# The preset policy in kgsm-base decides which of this host's kgsm units run; applying it is
+# symlink manipulation on disk, so it works during the transaction and in a chroot alike. Starting
+# anything is the node's post-transaction hook's job, which is where a running system is available.
+#
+# post_install only. An administrator who disabled the timer keeps it disabled across every later
+# version — re-presetting on upgrade would quietly undo that.
+
+post_install() {
+    systemctl preset kgsm-journal-prune.timer >/dev/null 2>&1 || true
+
+    cat <<'MSG'
+
+  The engine is installed at /opt/kgsm, on PATH as /usr/bin/kgsm.
+
+  Instances, blueprints and overrides live under the kgsm account's XDG paths and survive every
+  upgrade. Nothing here needs configuring before the engine works.
+
+  Native instances are supervised by kgsm-watchdog. Without it kgsm spawns a game directly and run
+  state is unreliable, so install it unless this host runs container instances only.
+
+MSG
+}
+
+post_upgrade() {
+    cat <<'MSG'
+
+  If pacman wrote a .pacnew beside a file under /etc, merge it. The engine's own config is under
+  the kgsm account's home and is migrated in place on the next run.
+
+MSG
+}
