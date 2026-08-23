@@ -169,6 +169,7 @@ function __logic_create_base_instance() {
   local blueprint_abs_path="$3"
   local library_dir="$4"
   local override_port="${5:-}"
+  local display_name="${6:-}"
 
   if [[ -z "$instance_config_file" || -z "$_instance_name" || -z "$blueprint_abs_path" || -z "$library_dir" ]]; then
     return $EC_INVALID_ARG
@@ -181,9 +182,23 @@ function __logic_create_base_instance() {
     return $EC_FAILED_SOURCE
   fi
 
-  # Set instance variables
+  # Set instance variables. The id is exported under both spellings: this
+  # function's own parameter, and the instance_* name the template expands, which
+  # every other value in the config is also written from.
   export _instance_name=$_instance_name
+  export instance_name=$_instance_name
   export instance_blueprint_file=$blueprint_abs_path
+
+  # The label human-facing surfaces render. Escaped for the key="value" form the
+  # template writes and the source that reads it back, like every other free-text
+  # value here — a label containing a quote would otherwise close the string
+  # early and make the whole config unsourceable. An instance created without one
+  # is shown by its id, which is what the id being the nicest thing to type is
+  # for.
+  export instance_display_name
+  instance_display_name="$(
+    __escape_instance_config_value "${display_name:-$_instance_name}"
+  )"
 
   local instance_blueprint_name
   instance_blueprint_name="$(__extract_blueprint_name "$blueprint_abs_path")"
@@ -366,14 +381,16 @@ export -f __logic_create_base_instance
 
 # Create a complete instance
 # Args: $1 = blueprint, $2 = library_dir (absolute library root),
-#       $3 = identifier (optional),
-#       $4 = override_port (optional — overrides the blueprint's primary port)
+#       $3 = identifier (optional — the instance id; generated when empty),
+#       $4 = override_port (optional — overrides the blueprint's primary port),
+#       $5 = display_name (optional — defaults to the id)
 # Returns: Echoes _instance_name on success (EC_SUCCESS_INSTANCE_CREATED), error code on failure
 function __logic_create_instance() {
   local blueprint=$1
   local library_dir=${2%/}
   local identifier=${3:-}
   local override_port=${4:-}
+  local display_name=${5:-}
 
   # Validate blueprint
   if ! validate_blueprint "$blueprint" >/dev/null 2>&1; then
@@ -412,13 +429,16 @@ function __logic_create_instance() {
   local blueprint_name
   blueprint_name="$(__extract_blueprint_name "$blueprint_abs_path")"
 
-  # Generate or validate instance name
+  # Generate or validate the instance id
   local _instance_name
   if [[ -z "$identifier" ]]; then
     _instance_name="$(__logic_generate_unique_instance_name "$blueprint_name")"
   else
     _instance_name="$identifier"
-    # Check if instance already exists
+    # A caller-supplied id is always checked, both for shape and for being free.
+    if ! validate_instance_id_format "$_instance_name" > /dev/null 2>&1; then
+      return $EC_INVALID_ARG
+    fi
     if __logic_instance_config_exists "$_instance_name" "$blueprint_name"; then
       return $EC_INVALID_INSTANCE
     fi
@@ -435,7 +455,7 @@ function __logic_create_instance() {
 
   # Create base instance configuration. The failure code is taken with || so it
   # survives: inside an `if ! cmd` branch $? is the negated status, always 0.
-  __logic_create_base_instance "$instance_config_file" "$_instance_name" "$blueprint_abs_path" "$library_dir" "$override_port" || return $?
+  __logic_create_base_instance "$instance_config_file" "$_instance_name" "$blueprint_abs_path" "$library_dir" "$override_port" "$display_name" || return $?
 
   # Success - echo instance name for caller
   echo "$_instance_name"
@@ -600,9 +620,12 @@ export -f __logic_get_instance_paths
   #   - the side-effecting toggles, which have dedicated enable/disable flows
   #     (`kgsm files <firewall|symlink> enable|disable <instance>`) — writing the
   #     flag alone would desync KGSM from the actual firewall/symlink state.
-  # Everything else (auto_update, executable_arguments, level_name, stop_command,
-  # the *_timeout_seconds values, startup_success_regex, …) is a plain runtime
-  # value that KGSM simply re-reads, and is therefore settable.
+  # Everything else (auto_update, display_name, executable_arguments, level_name,
+  # stop_command, the *_timeout_seconds values, startup_success_regex, …) is a
+  # plain runtime value that KGSM simply re-reads, and is therefore settable.
+  # display_name in particular is deliberately absent from the identity class
+  # above: `name` is the identity, and the label beside it exists precisely so
+  # that it can be changed.
   function __is_protected_instance_config_key() {
     local key="$1"
 

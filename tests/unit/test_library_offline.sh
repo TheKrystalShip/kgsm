@@ -80,7 +80,7 @@ function _place_instance() {
     "${KGSM_INSTANCES_DIR}/factorio/${instance_name}"
 
   "$INSTANCES_MODULE" create factorio --library probe-lib \
-    --name "$instance_name" > /dev/null 2>&1
+    --id "$instance_name" > /dev/null 2>&1
 
   declare -g OFFLINE_INSTANCE="$instance_name"
   echo "$instance_name"

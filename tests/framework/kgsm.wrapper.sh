@@ -211,7 +211,7 @@ function create_test_instance() {
   local generated_instance_name
 
   # Create instance config
-  generated_instance_name=$("$KGSM_ROOT/kgsm.sh" instances create "$blueprint" --name "$instance_name" --library "$library" 2>/dev/null) || return 1
+  generated_instance_name=$("$KGSM_ROOT/kgsm.sh" instances create "$blueprint" --id "$instance_name" --library "$library" 2>/dev/null) || return 1
 
   # Create instance management script
   "$KGSM_ROOT/kgsm.sh" files management create "$instance_name" 1>/dev/null 2>&1 || return 1

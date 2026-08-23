@@ -327,6 +327,19 @@ export EVENT_INSTANCE_PLAYER_UNBANNED
 declare -g -r EVENT_INSTANCE_CONFIG_CHANGED="instance_config_changed"
 export EVENT_INSTANCE_CONFIG_CHANGED
 
+# Instance display-name event. Emitted alongside instance_config_changed when the
+# `display_name` key is set, by `instances rename` or by `instances config-set`.
+#
+# Its subject is still the instance, so `InstanceName` carries the ID exactly as
+# every other instance event does — the ID is what a consumer keys on, and it is
+# unchanged by a rename. The two labels ride along in full: a display name is the
+# one value in the instance config that exists to be shown, so the key-only rule
+# instance_config_changed follows would leave this event unable to say what it is
+# about, and every surface reading it would have to go back to the engine to
+# learn the label it was just told had changed.
+declare -g -r EVENT_INSTANCE_DISPLAY_NAME_CHANGED="instance_display_name_changed"
+export EVENT_INSTANCE_DISPLAY_NAME_CHANGED
+
 # Console-input audit event. Emitted by the command layer when an arbitrary
 # console command is delivered to a running instance via `instances input`.
 # Carries the instance name and the verbatim command text. Unlike
@@ -475,6 +488,10 @@ declare -g -A EVENT_CONFIGS=(
   # `key` only — NEVER the value (instance config holds secrets). The matching
   # case arm in _build_event_payload renders Data { InstanceName, Key }.
   ["$EVENT_INSTANCE_CONFIG_CHANGED"]="instance key"
+  # Both labels are required, and an emitter that has neither has nothing to
+  # report: an instance with no display name set reads as its id, which is the
+  # value that goes here rather than an empty string.
+  ["$EVENT_INSTANCE_DISPLAY_NAME_CHANGED"]="instance old_display_name new_display_name"
   # `command` is the verbatim console command. The matching case arm in
   # _build_event_payload renders Data { InstanceName, Command }.
   ["$EVENT_INSTANCE_INPUT_SENT"]="instance command"
@@ -769,6 +786,17 @@ function __logic_build_event_payload() {
       data_object='{
         InstanceName: $instance,
         Key: $key
+      }'
+      ;;
+    "$EVENT_INSTANCE_DISPLAY_NAME_CHANGED")
+      # `$old_display_name`/`$new_display_name` bind because those are the 2nd
+      # and 3rd EVENT_CONFIGS param names. InstanceName is the ID, unchanged by
+      # the rename — it is what the consumer updating a label looks the label up
+      # by.
+      data_object='{
+        InstanceName: $instance,
+        OldDisplayName: $old_display_name,
+        NewDisplayName: $new_display_name
       }'
       ;;
     "$EVENT_INSTANCE_INPUT_SENT")

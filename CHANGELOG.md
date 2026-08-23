@@ -47,6 +47,37 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **An instance has an id it keeps and a name it can change.** The identifier KGSM generates —
+  `factorio`, `factorio-42` — is the id: it is what every path, file name, registry symlink, cgroup,
+  event payload and downstream store keys on, and it is now the only thing a caller can put there.
+  Beside it sits `display_name`, a new instance-config key holding free text: spaces, casing,
+  punctuation and emoji are all fine, it need not be unique, and nothing derives anything from it. A
+  typo in the name a person reads is a `kgsm instances rename <instance> <text>` away from fixed,
+  where before it could only be corrected by uninstalling and reinstalling the server.
+
+  `--name` on `install` and `instances create` now sets the display name and is never validated;
+  the new `--id` sets the identifier and is always validated, against the character set
+  `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` and against the ids already in use. `generate-id` takes the
+  same `--id`. A script that installed with `--name x` and then addressed `x` gets an
+  auto-generated id instead — and still resolves, because every command that takes an instance now
+  accepts either name: an id resolves as itself, and anything else is matched against display names
+  and resolves when exactly one instance carries it. When several do, the command refuses and lists
+  their ids rather than picking one.
+
+  The label is stored escaped, like every other free-text value in the config, so a quote or a
+  backtick in it cannot make the file unsourceable. `instances info`, `info --json` and
+  `list --detailed --json` all carry it; a config written before the key existed reads as its id, so
+  no instance needs migrating. Changing it emits `instance_display_name_changed`, carrying the id
+  and both labels — unlike `instance_config_changed`, which withholds every value because the file
+  holds secrets, a display name is the one value in it that exists to be shown.
+
+- **The instance config records the id it was created under.** The `name` key was written from a
+  variable that happened to be in the caller's scope rather than from the id being created, so
+  `instances create <blueprint>` with no name at all wrote `name=""` — and every command that reads
+  the name out of the file, the management-script generator included, then refused the instance as
+  invalidly configured. The id is exported by the function that creates the instance, which is where
+  it is known.
+
 - **Both status verbs answer the library question.** `kgsm status <instance> --json` carries the
   `library_state` field that `kgsm instances status <instance> --json` carries, so a consumer joins
   on it without knowing which entrypoint produced the object. The measurement and the overlay have

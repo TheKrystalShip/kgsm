@@ -310,7 +310,7 @@ To adjust a system blueprint without modifying the original:
 Once you have a blueprint, create a new game server instance with:
 
 ```sh
-./kgsm.sh install <blueprint> [--library <name>] [--name <instance-name>]
+./kgsm.sh install <blueprint> [--library <name>] [--name <display-name>] [--id <id>]
 ```
 
 `create` is an accepted alias for `install`.
@@ -320,13 +320,13 @@ KGSM reads the blueprint's `runtime` field to decide whether to install it as a 
 ### Native Server Example
 
 ```sh
-./kgsm.sh install minecraft --library ssd --name survival-server
+./kgsm.sh install minecraft --library ssd --name "Survival Server"
 ```
 
 ### Container Server Example
 
 ```sh
-./kgsm.sh install enshrouded --library ssd --name enshrouded-server
+./kgsm.sh install enshrouded --library ssd --name "Enshrouded Server"
 ```
 
 > [!NOTE]

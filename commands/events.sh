@@ -147,6 +147,11 @@ ${UNDERLINE}Instance Lifecycle:${END}
 
 ${UNDERLINE}Instance Configuration:${END}
   instance-config-changed <instance> <key>
+  instance-display-name-changed <instance> <old_display_name> <new_display_name>
+
+  A config change carries the key alone — never the value, which may be a
+  secret. A display-name change carries both labels, because a label exists to
+  be shown.
 
 ${UNDERLINE}Instance Creation Process:${END}
   instance-directories-created <instance>
@@ -234,6 +239,7 @@ ${UNDERLINE}Examples:${END}
   ${self} emit instance-player-joined myserver 76561198000000000 Alice
   ${self} emit instance-player-left myserver '' Bob
   ${self} emit instance-config-changed myserver rcon_password
+  ${self} emit instance-display-name-changed myserver myserver 'Weekend Server'
   ${self} emit blueprint-created mygame user false native
   ${self} emit blueprint-updated terraria user true native
   ${self} emit blueprint-removed terraria user true

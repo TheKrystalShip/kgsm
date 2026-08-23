@@ -40,6 +40,8 @@ ${UNDERLINE}Commands:${END}
   config-list <instance>      List every config key, value and whether it is settable
   config-set <instance> <key>=<value>
                               Set a runtime value in the instance config
+  rename <instance> <display name...>
+                              Give an instance a new display name
   backups <instance>          List available backups
   create-backup <instance>    Create a backup (instance must be stopped)
   restore-backup <instance> <id>
@@ -62,7 +64,9 @@ ${UNDERLINE}Options:${END}
   -h, --help                  Show help and exit
 
 ${UNDERLINE}Examples:${END}
-  $self create factorio --library ssd --name factorio-01
+  $self create factorio --library ssd --name \"Weekend Server\"
+  $self create factorio --library ssd --id factorio-01
+  $self rename factorio-01 Weekend Server
   $self move factorio-01 --library archive
   $self list
   $self list factorio
@@ -91,7 +95,8 @@ ${UNDERLINE}Examples:${END}
   $self help create
 
 ${UNDERLINE}Notes:${END}
-  • Instance names are auto-generated if not specified
+  • An instance's id is auto-generated; --name gives it a display label
+  • Any command taking an instance accepts its id or its display name
   • Use --json for programmatic consumption
   • Status command shows process state, version, and resource usage
   • Regenerate updates instance files after KGSM updates
@@ -116,20 +121,28 @@ ${UNDERLINE}Options:${END}
   --library <name>            Library to place the instance in (default: the
                               configured default_library, or the sole
                               registered library)
-  --name <name>               Custom instance name (optional, auto-generated if not provided)
+  --name <text>               Display name for the instance: free text, shown by
+                              every surface, changed later with 'rename'
+  --id <id>                   Set the instance id explicitly instead of letting
+                              KGSM generate one. Letters, digits, '.', '_' and
+                              '-', starting with a letter or digit, max 64
   --port <port>               Override the blueprint's primary game port (optional)
   --help                      Display this help information
 
 ${UNDERLINE}Description:${END}
 Creates a new instance configuration file and sets up the instance structure.
-If --name is not provided, a unique name will be auto-generated based on the
-blueprint name. The instance is placed at
-<library>/instances/<blueprint>/<instance> and holds all its data, saves and
-logs. Backups are kept outside it.
+The instance is placed at <library>/instances/<blueprint>/<instance> and holds
+all its data, saves and logs. Backups are kept outside it.
+
+The id is what every path, file name, event and downstream store keys on, and it
+never changes; KGSM generates it from the blueprint name unless --id names one.
+The display name is decoration — not unique, never part of a path — and defaults
+to the id.
 
 ${UNDERLINE}Examples:${END}
   $self create factorio --library ssd
-  $self create terraria --library ssd --name terraria-main
+  $self create terraria --library ssd --name \"Terraria Main\"
+  $self create terraria --library ssd --id terraria-main
   $self create minecraft.bp.yaml --library archive
 "
 }
@@ -256,7 +269,8 @@ ${UNDERLINE}Options:${END}
 
 ${UNDERLINE}Description:${END}
 Shows the raw instance configuration file or outputs it as JSON for
-programmatic consumption.
+programmatic consumption. Both carry display_name, which reads as the instance's
+id when the config sets none.
 
 ${UNDERLINE}Examples:${END}
   $self info factorio-01
@@ -331,22 +345,26 @@ function show_usage_generate_id() {
 Generate a unique instance identifier for a blueprint.
 
 ${UNDERLINE}Usage:${END}
-  $self generate-id <blueprint>
+  $self generate-id <blueprint> [--id <id>]
 
 ${UNDERLINE}Arguments:${END}
   blueprint                   Blueprint name
 
 ${UNDERLINE}Options:${END}
+  --id <id>                   Check this id instead of generating one: it is
+                              echoed back when it is well-formed and free, and
+                              refused otherwise
   --help                      Display this help information
 
 ${UNDERLINE}Description:${END}
-Generates a unique instance name based on the blueprint name. If no instance
-with the blueprint name exists, returns the blueprint name. Otherwise, appends
-a random numeric suffix.
+Generates a unique instance id from the blueprint name. If no instance carries
+the blueprint name, that is the id. Otherwise, a random numeric suffix is
+appended.
 
 ${UNDERLINE}Examples:${END}
   $self generate-id factorio
   $self generate-id terraria.bp.yaml
+  $self generate-id factorio --id factorio-prod
 "
 }
 
@@ -598,8 +616,11 @@ ${UNDERLINE}Options:${END}
 ${UNDERLINE}Description:${END}
 Updates an existing key (or adds it if absent) and writes it back as
 key=\"value\". Only plain runtime values are settable — auto_update,
-executable_arguments, level_name, stop_command, save_command, the
+display_name, executable_arguments, level_name, stop_command, save_command, the
 *_timeout_seconds values, startup_success_regex, and similar.
+
+display_name has a verb of its own: '$self rename <instance> <text>' does the
+same thing and reads better.
 
 Identity and path keys (name, runtime, every *_dir/*_file, …) are managed by
 KGSM and are refused. The integration toggles (enable_firewall_management,
@@ -788,6 +809,13 @@ function _print_info() {
   local instance_config_file
   instance_config_file=$(__find_instance_config "$instance")
 
+  # A config written before instances carried a label has no display_name key,
+  # and the value it reads as is the instance's id. Stated here so that every
+  # instance answers the question, rather than only the ones written since.
+  if ! grep -qE '^display_name[[:space:]]*=' "$instance_config_file"; then
+    printf 'display_name="%s"\n' "$instance"
+  fi
+
   cat "$instance_config_file"
 }
 
@@ -884,7 +912,8 @@ function _print_info_json() {
      | . + {cgroup_path: (if .runtime == "native" then $cg else "" end),
             ports: $ports,
             library: $library,
-            library_state: $library_state}'
+            library_state: $library_state,
+            display_name: (if (.display_name // "") == "" then .name else .display_name end)}'
 }
 
 function _list_instances() {
@@ -1073,7 +1102,8 @@ function _get_instance_status_json() {
 # Command handler functions
 
 function _cmd_create() {
-  local instance_name=""
+  local instance_id=""
+  local display_name=""
   local blueprint=""
   local library=""
   local port=""
@@ -1089,10 +1119,16 @@ function _cmd_create() {
         [[ -z "$1" ]] && __print_error "Missing argument for --library" && return $EC_MISSING_ARG
         library="$1"
         ;;
+      --id)
+        shift
+        [[ -z "$1" ]] && __print_error "Missing argument for --id" && return $EC_MISSING_ARG
+        validate_instance_id_format "$1" || return $EC_INVALID_ARG
+        instance_id="$1"
+        ;;
       --name)
         shift
         [[ -z "$1" ]] && __print_error "Missing argument for --name" && return $EC_MISSING_ARG
-        instance_name="$1"
+        display_name="$1"
         ;;
       --port)
         shift
@@ -1130,7 +1166,7 @@ function _cmd_create() {
 
   # Create instance
   local created_instance
-  created_instance=$(__logic_create_instance "$blueprint" "$library_dir" "$instance_name" "$port")
+  created_instance=$(__logic_create_instance "$blueprint" "$library_dir" "$instance_id" "$port" "$display_name")
   local exit_code=$?
 
   case $exit_code in
@@ -1709,7 +1745,7 @@ function _cmd_find() {
 
 function _cmd_generate_id() {
   local blueprint=""
-  local custom_name=""
+  local custom_id=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -1717,13 +1753,14 @@ function _cmd_generate_id() {
         show_usage_generate_id
         return 0
         ;;
-      --name)
+      --id)
         shift
         if [[ -z "$1" ]]; then
-          __print_error "Missing argument for --name"
+          __print_error "Missing argument for --id"
           return $EC_MISSING_ARG
         fi
-        custom_name="$1"
+        validate_instance_id_format "$1" || return $EC_INVALID_ARG
+        custom_id="$1"
         ;;
       -*)
         __print_error "Invalid option for generate-id command: $1"
@@ -1754,17 +1791,18 @@ function _cmd_generate_id() {
   local blueprint_name
   blueprint_name="$(__extract_blueprint_name "$blueprint")"
 
-  # If custom name provided, validate it's unique and return it
-  if [[ -n "$custom_name" ]]; then
-    if __logic_instance_config_exists "$custom_name" "$blueprint_name"; then
-      __print_error "Instance '$custom_name' already exists for blueprint '$blueprint_name'"
+  # A supplied id is checked for being free and echoed back, so a caller that
+  # wants a specific id learns here whether it can have it.
+  if [[ -n "$custom_id" ]]; then
+    if __logic_instance_config_exists "$custom_id" "$blueprint_name"; then
+      __print_error "Instance '$custom_id' already exists for blueprint '$blueprint_name'"
       return $EC_INVALID_INSTANCE
     fi
-    echo "$custom_name"
+    echo "$custom_id"
     return 0
   fi
 
-  # Otherwise, generate unique name
+  # Otherwise, generate a unique id
   __logic_generate_unique_instance_name "$blueprint_name"
 }
 
@@ -2003,6 +2041,49 @@ function _cmd_config_get() {
   exit $?
 }
 
+# Writes one instance-config assignment and records what it was.
+#
+# Every successful set emits instance-config-changed, carrying the instance and
+# the key only — never the value, because instance config holds secrets. A
+# display-name change also emits its own event carrying both labels: the generic
+# event deliberately withholds the value, so a surface that renders labels
+# cannot learn the new one from it, and a label is the one value in the file
+# that exists to be shown.
+#
+# Emitted from the command layer, not the handler, so internal default-writes
+# stay event-free (matches the create/backup convention).
+#
+# Args: $1 = instance, $2 = key, $3 = value (may be the empty string)
+# Returns: 0 on success, the setter's EC_* code otherwise
+function _set_instance_config_key() {
+  local instance="$1"
+  local key="$2"
+  local value="$3"
+
+  local old_display_name=""
+  if [[ "$key" == "display_name" ]]; then
+    old_display_name="$(__get_instance_config_value "$instance" "$key" 2> /dev/null)"
+    [[ -n "$old_display_name" ]] || old_display_name="$instance"
+  fi
+
+  __set_instance_config_value "$instance" "$key" "$value"
+  local exit_code=$?
+  [[ $exit_code -eq 0 ]] || return $exit_code
+
+  __emit_event instance-config-changed "$instance" "$key"
+
+  if [[ "$key" == "display_name" ]]; then
+    # An emptied label reads as the id, which is the value the event reports —
+    # the same answer every reader of the config gets.
+    local new_display_name="$value"
+    [[ -n "$new_display_name" ]] || new_display_name="$instance"
+    __emit_event instance-display-name-changed \
+      "$instance" "$old_display_name" "$new_display_name"
+  fi
+
+  return 0
+}
+
 function _cmd_config_set() {
   local instance=""
   local assignment=""
@@ -2054,15 +2135,11 @@ function _cmd_config_set() {
   local key="${assignment%%=*}"
   local value="${assignment#*=}"
 
-  __set_instance_config_value "$instance" "$key" "$value"
+  _set_instance_config_key "$instance" "$key" "$value"
   local exit_code=$?
 
   case $exit_code in
     0)
-      # Audit the change (instance + key only — never the value: instance config
-      # holds secrets). Emitted from the command layer, not the handler, so internal
-      # default-writes stay event-free (matches the create/backup convention).
-      __emit_event instance-config-changed "$instance" "$key"
       __print_success "Set '$key' on instance '$instance'"
       exit 0
       ;;
@@ -2091,6 +2168,98 @@ function _cmd_config_set() {
       ;;
     *)
       __print_error "Failed to set '$key' on instance '$instance' ($exit_code)"
+      exit $exit_code
+      ;;
+  esac
+}
+
+function show_usage_rename() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Rename Instance${END}
+
+Give an instance a new display name.
+
+${UNDERLINE}Usage:${END}
+  $self rename <instance> <display name...>
+
+${UNDERLINE}Arguments:${END}
+  instance                    Instance id, or the display name it has now
+  display name                The new label. Every remaining argument is joined
+                              with single spaces, so quoting is optional
+
+${UNDERLINE}Options:${END}
+  --help                      Display this help information
+
+${UNDERLINE}Description:${END}
+The display name is decoration: spaces, casing, punctuation and emoji are all
+fine, it need not be unique, and nothing keys on it. The instance's id — the
+name in its paths, its files, its events and every downstream store — is
+untouched, so a rename breaks nothing and can be done at any time, running or
+stopped.
+
+This is \`config-set <instance> display_name=<text>\` with one obvious verb in
+front of it, and it records the same events.
+
+${UNDERLINE}Examples:${END}
+  $self rename factorio-01 Weekend Server
+  $self rename factorio-01 \"Ana's Factory\"
+"
+}
+
+function _cmd_rename() {
+  local instance=""
+  local -a words=()
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_rename
+        return 0
+        ;;
+      *)
+        # Only the first positional is the instance; everything after it is the
+        # label, taken verbatim — a display name may start with a dash or look
+        # like a flag, and it is text either way.
+        if [[ -z "$instance" ]]; then
+          instance="$1"
+        else
+          words+=("$1")
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self rename --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  if [[ ${#words[@]} -eq 0 ]]; then
+    __print_error "Missing required argument: <display name>"
+    __print_error "Use '$self rename --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  local display_name="${words[*]}"
+
+  _set_instance_config_key "$instance" "display_name" "$display_name"
+  local exit_code=$?
+
+  case $exit_code in
+    0)
+      __print_success "Instance '$instance' is now shown as '$display_name'"
+      exit 0
+      ;;
+    $EC_FILE_NOT_FOUND)
+      __print_error "Instance '$instance' not found"
+      exit $exit_code
+      ;;
+    *)
+      __print_error "Failed to rename instance '$instance' ($exit_code)"
       exit $exit_code
       ;;
   esac
@@ -3535,6 +3704,9 @@ function _cmd_help() {
     config-set)
       show_usage_config_set
       ;;
+    rename)
+      show_usage_rename
+      ;;
     backups)
       show_usage_backups
       ;;
@@ -3607,6 +3779,22 @@ fi
 command="${1:-}"
 shift 2> /dev/null || true
 
+# Every verb below whose first argument names an existing instance accepts its
+# display name as well as its id, resolved here so that exactly one place knows
+# the rule and nothing inward of it ever sees anything but an id. `create` and
+# `generate-id` are absent on purpose: their first argument is a blueprint.
+case "$command" in
+  remove | move | info | status | find | save | input | kick | ban | unban | \
+    config-get | config-list | config-set | rename | backups | create-backup | \
+    restore-backup | delete-backup | pin-backup | unpin-backup | \
+    prune-backups | update | check-update | version)
+    if [[ -n "${1:-}" ]] && [[ "$1" != -* ]]; then
+      resolved_instance="$(__resolve_instance_id "$1")" || exit $?
+      set -- "$resolved_instance" "${@:2}"
+    fi
+    ;;
+esac
+
 case "$command" in
   "")
     show_usage
@@ -3657,6 +3845,9 @@ case "$command" in
     ;;
   config-set)
     _cmd_config_set "$@"
+    ;;
+  rename)
+    _cmd_rename "$@"
     ;;
   backups)
     _cmd_backups "$@"

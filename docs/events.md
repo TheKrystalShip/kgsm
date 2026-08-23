@@ -151,6 +151,21 @@ Emitted when an operator removes a player from a running server, blocks them, or
 
 These are their own event types rather than a console-input record because the subject is a **player**, not a command: a consumer asking "who was banned on this server" filters on the type instead of pattern-matching command text — text a hand-typed `instances input` could produce with no moderation intent behind it.
 
+### ⚙️ Configuration Events
+
+Emitted by the command layer when an instance's `.config.ini` is written through `instances config-set` or `instances rename`.
+
+| Event Name | Description | Data Fields |
+|------------|-------------|-------------|
+| `instance_config_changed` | A key in the instance config was set | `InstanceName`, `Key` |
+| `instance_display_name_changed` | The instance's display name was changed | `InstanceName`, `OldDisplayName`, `NewDisplayName` |
+
+`instance_config_changed` carries the **key only, never the value**. Instance config holds secrets — RCON and admin passwords, tokens — and an event payload fans out to every enabled transport, so the record is "key X changed on instance Y" and nothing more.
+
+A display-name change is the one exception, and it is not one: both labels are carried in full because a display name is the value in that file which exists to be shown. Withholding it would leave the event unable to say what it is about, and every surface reading it would have to go back to the engine for the label it was just told had changed. Both events fire on a display-name change — the generic record, and the specific one a surface re-renders off.
+
+`InstanceName` is the **id**, which a rename does not touch. The id is what every consumer keys on; the label beside it is decoration.
+
 ### 📘 Blueprint Events
 
 These are the only events whose subject is **not an instance**. They fire when a blueprint file in the catalog is written or deleted, so that no consumer serves a stale blueprint and the change lands in event history.

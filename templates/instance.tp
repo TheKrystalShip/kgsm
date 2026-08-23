@@ -11,6 +11,13 @@
 # Name of the instance, used for identification and file naming
 name="${instance_name}"
 
+# Human-readable label for this instance. Free text — spaces, casing, emoji and
+# punctuation are all fine, because nothing derives a path, a file name or a key
+# from it. Not unique, and changed at any time with
+# 'kgsm instances rename <instance> <text>'. Absent or empty reads as the
+# instance's name above.
+display_name="${instance_display_name}"
+
 # Path to the blueprint file used to create this instance
 blueprint_file="${instance_blueprint_file}"
 

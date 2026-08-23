@@ -13,6 +13,33 @@ An instance is a complete, functional installation of a game server created from
 
 You can create multiple instances from a single blueprint (for example, several different Minecraft servers with different mods, worlds or purposes), each with its own unique configuration, world data, and player communities.
 
+## Two names: the id and the display name
+
+Every instance has two names, and they do different jobs.
+
+The **id** is what KGSM generates at creation: the bare blueprint name for the first instance of a
+game (`factorio`), and `<blueprint>-NN` for the ones after it (`factorio-42`). It is what every
+path, file name, registry symlink, cgroup, event payload and downstream store keys on, and it never
+changes for the life of the instance. It is path-safe by construction: a letter or digit, then
+letters, digits, `.`, `_` and `-`, up to 64 characters. `--id` on `install`/`instances create` sets
+it explicitly — for automation and tests that need a determined identifier — and is checked against
+that character set and against every id already in use.
+
+The **display name** is the label people read. It is free text: spaces, casing, punctuation and
+emoji are all fine, because nothing derives a path or a key from it, and it need not be unique.
+`--name` on `install`/`instances create` sets it, `kgsm instances rename` changes it at any time,
+and an instance that was never given one is shown by its id.
+
+```sh
+kgsm.sh install factorio --name "Ana's Factory"     # id: factorio, shown as Ana's Factory
+kgsm.sh install factorio --id factorio-prod         # id: factorio-prod, shown as factorio-prod
+kgsm.sh instances rename factorio Weekend Server    # relabelled; the id is still factorio
+```
+
+Every command that takes an instance accepts either name. An id resolves as itself; anything else is
+matched against display names, and resolves when exactly one instance carries it. When several do,
+the command refuses and lists their ids rather than guessing which server was meant.
+
 ## Where are instances stored?
 
 Each instance consists of two main components:
@@ -95,12 +122,15 @@ Creating an instance registers the instance configuration with KGSM and sets up 
 # Full install (create + download + deploy) via the top-level command
 kgsm.sh install <blueprint> [--library <name>]
 
-# Provide a custom instance name (auto-generated if omitted)
-kgsm.sh install minecraft --library ssd --name survival-server
+# Give it a display name (shown by every surface; the id is still generated)
+kgsm.sh install minecraft --library ssd --name "Survival Server"
+
+# Choose the id yourself instead of letting KGSM generate one
+kgsm.sh install minecraft --library ssd --id survival-server
 
 # Create only the instance configuration (no download)
 kgsm.sh instances create <blueprint> [--library <name>]
-kgsm.sh instances create factorio --library ssd --name factorio-01
+kgsm.sh instances create factorio --library ssd --name "Factorio One"
 
 # Interactive wizard
 kgsm.sh   # Then select "Install" from the menu
@@ -109,7 +139,7 @@ kgsm.sh   # Then select "Install" from the menu
 During a full `kgsm.sh install`, KGSM:
 
 1. Validates the blueprint and the target directory
-2. Generates a unique instance name if one is not supplied
+2. Generates a unique instance id, unless `--id` supplied one
 3. Creates the working directory structure (`install/`, `backups/`, `saves/`, `temp/`, `logs/`)
 4. Writes the instance configuration file (`<instance-name>.config.ini`)
 5. Generates the instance management script (`<instance-name>.manage.sh`)
@@ -152,15 +182,29 @@ kgsm.sh instances status factorio-01 --json --fast
 kgsm.sh instances find factorio-01
 ```
 
-### Generate a unique instance name
+### Generate a unique instance id
 
 ```sh
-# Preview the name KGSM would auto-generate for a blueprint
+# Preview the id KGSM would generate for a blueprint
 kgsm.sh instances generate-id factorio
 
-# Validate a custom name and echo it back if it is available
-kgsm.sh instances generate-id factorio --name my-factory
+# Check an id and echo it back when it is well-formed and free
+kgsm.sh instances generate-id factorio --id my-factory
 ```
+
+### Change an instance's display name
+
+```sh
+# Every remaining argument becomes part of the label
+kgsm.sh instances rename factorio-01 Weekend Server
+
+# The same thing through the generic setter
+kgsm.sh instances config-set factorio-01 "display_name=Weekend Server"
+```
+
+Both record `instance_config_changed` and `instance_display_name_changed`, the latter carrying the
+old and new label so a surface can re-render without asking the engine anything. Nothing moves on
+disk: the id, every path and every downstream store are untouched.
 
 ## Sending commands to a running instance
 
@@ -238,7 +282,7 @@ Please refer to the [Managing Game Servers](managing_game_servers.md) document.
 
 ## Best practices for instance management
 
-- **Meaningful names:** Use descriptive names for your instances (e.g., `minecraft-survival`, `valheim-pvp`) to easily identify them.
+- **Meaningful names:** Give an instance a display name that says what it is (e.g. `Survival`, `Valheim PvP`). It costs nothing to change later, and it is the only name a person has to get right.
 
 - **Regular backups:** Use the `--create-backup` option on the management script before making significant changes, or schedule it via cron.
 

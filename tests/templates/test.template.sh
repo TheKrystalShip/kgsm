@@ -163,7 +163,7 @@ function test_complete_workflow() {
 
   # Create
   local created
-  created=$("$KGSM_ROOT/commands/instances.sh" create factorio --name "$instance" 2>&1)
+  created=$("$KGSM_ROOT/commands/instances.sh" create factorio --id "$instance" 2>&1)
   assert_not_null "$created" "Instance should be created"
 
   # Configure (directories, files, etc.)

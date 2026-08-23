@@ -748,6 +748,18 @@ function _cmd_help() {
 command="${1:-}"
 shift 2> /dev/null || true
 
+# Every verb here takes an instance first, and accepts its display name as well
+# as its id. Resolved in one place so nothing inward of this line sees anything
+# but an id.
+case "$command" in
+  start | stop | restart | status | is-active | logs)
+    if [[ -n "${1:-}" ]] && [[ "$1" != -* ]]; then
+      resolved_instance="$(__resolve_instance_id "$1")" || exit $?
+      set -- "$resolved_instance" "${@:2}"
+    fi
+    ;;
+esac
+
 case "$command" in
   "")
     show_usage

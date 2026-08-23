@@ -160,6 +160,7 @@ function test_validate_event_type_all_40_constants() {
     "instance_player_joined"
     "instance_player_left"
     "instance_config_changed"
+    "instance_display_name_changed"
     "instance_input_sent"
     "blueprint_created"
     "blueprint_updated"
@@ -177,7 +178,7 @@ function test_validate_event_type_all_40_constants() {
   done
 
   assert_equals "${#failed_events[@]}" "0" \
-    "All 44 event types should be valid. Failed: ${failed_events[*]}"
+    "All 45 event types should be valid. Failed: ${failed_events[*]}"
 }
 
 function test_validate_event_type_case_sensitive() {
@@ -488,6 +489,7 @@ function test_get_param_spec_all_40_events() {
     "instance_player_joined"
     "instance_player_left"
     "instance_config_changed"
+    "instance_display_name_changed"
     "instance_input_sent"
     "blueprint_created"
     "blueprint_updated"
@@ -508,7 +510,7 @@ function test_get_param_spec_all_40_events() {
   done
 
   assert_equals "${#failed_events[@]}" "0" \
-    "All 44 events should return valid specs. Failed: ${failed_events[*]}"
+    "All 45 events should return valid specs. Failed: ${failed_events[*]}"
 }
 
 function test_get_param_spec_firewall_ports_events() {
@@ -1105,12 +1107,12 @@ function test_edge_case_event_count_matches_configs() {
   # A canary, not a rule: the number itself carries no meaning, but a change to it means the event
   # vocabulary grew or shrank, which is worth being deliberate about. Update it in the same commit
   # that adds or removes an event, together with the param spec beside it.
-  log_test_step "Testing EVENT_CONFIGS count matches expected 66 events"
+  log_test_step "Testing EVENT_CONFIGS count matches expected 67 events"
 
   local config_count="${#EVENT_CONFIGS[@]}"
 
-  assert_equals "$config_count" "66" \
-    "EVENT_CONFIGS should contain exactly 66 entries (found: $config_count)"
+  assert_equals "$config_count" "67" \
+    "EVENT_CONFIGS should contain exactly 67 entries (found: $config_count)"
 }
 
 # Conformance guard: every event a call site actually emits must be registered

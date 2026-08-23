@@ -455,7 +455,7 @@ function test_duplicate_instance_creation_fails() {
   # Attempt to create second instance with same name (prereqs already exist)
   "$INSTANCES_MODULE" create factorio \
     --library "$TEST_LIBRARY" \
-    --name "$instance_name" 2>/dev/null
+    --id "$instance_name" 2>/dev/null
   local dup_exit=$?
 
   assert_not_equals 0 "$dup_exit" \

@@ -175,7 +175,7 @@ function test_create_instance() {
 
   output=$("$MODULE" create factorio \
     --library "$library" \
-    --name "$instance_name" 2>&1)
+    --id "$instance_name" 2>&1)
   local exit_code=$?
 
   assert_equals 0 "$exit_code" "create should succeed"

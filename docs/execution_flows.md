@@ -207,14 +207,14 @@ This means any script that has sourced bootstrap can call `instances.sh generate
 
 ## 1. Instance Creation Flow
 
-**Command:** `kgsm.sh install BLUEPRINT [--library NAME] [--version VER] [--name NAME]`  
+**Command:** `kgsm.sh install BLUEPRINT [--library NAME] [--version VER] [--name TEXT] [--id ID]`  
 **Aliases:** `kgsm.sh create BLUEPRINT …`  
 **Handled by:** `commands/install.sh`
 
 ```mermaid
 graph TD
     A["kgsm.sh install BLUEPRINT [options]"] --> AA["Bootstrap environment"]
-    AA --> B["Parse arguments<br/>(blueprint, library, version, name)"]
+    AA --> B["Parse arguments<br/>(blueprint, library, version, display name, id)"]
     B --> C{"Resolve library:<br/>--library → default_library<br/>→ sole registered"}
     C -->|"None"| C1["❌ EC_LIBRARY_NOT_FOUND<br/>or EC_MISSING_ARG (several, none chosen)"]
     C -->|"Offline"| C2["❌ EC_LIBRARY_OFFLINE"]
@@ -224,9 +224,9 @@ graph TD
     SG -->|"Undeclared"| D
     SG -->|"Yes"| D
 
-    D["instances.sh generate-id BLUEPRINT [--name NAME]<br/>→ unique instance identifier"] --> F["directories.sh ensure-created working_dir<br/>(library/instances/BLUEPRINT/INSTANCE)"]
+    D["instances.sh generate-id BLUEPRINT [--id ID]<br/>→ unique instance identifier"] --> F["directories.sh ensure-created working_dir<br/>(library/instances/BLUEPRINT/INSTANCE)"]
     F --> G["directories.sh link-instance BLUEPRINT INSTANCE working_dir<br/>(symlink in KGSM_INSTANCES_DIR)"]
-    G --> H["instances.sh create BLUEPRINT --library --name<br/>→ writes INSTANCE.config.ini"]
+    G --> H["instances.sh create BLUEPRINT --library --id [--name]<br/>→ writes INSTANCE.config.ini"]
     H --> EVT1["events.sh emit instance-installation-started"]
 
     EVT1 --> I["directories.sh create INSTANCE<br/>(install, saves, backups, temp, logs)"]
@@ -419,7 +419,7 @@ graph TD
     B --> C["list [--json]<br/>📋 All instances"]
     B --> D["list BLUEPRINT [--json]<br/>📋 Instances of given blueprint"]
     B --> E["info INSTANCE [--json]<br/>📄 Single instance details"]
-    B --> F["generate-id BLUEPRINT [--name NAME]<br/>🔑 Generate unique instance ID"]
+    B --> F["generate-id BLUEPRINT [--id ID]<br/>🔑 Generate unique instance ID"]
     B --> G["create BLUEPRINT [options]<br/>📝 Write instance config file"]
     B --> H["remove INSTANCE<br/>🗑️ Remove instance config"]
 

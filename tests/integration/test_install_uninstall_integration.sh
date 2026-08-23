@@ -9,7 +9,7 @@
 # Integration points tested:
 # - install.sh validates blueprint before any structure is created
 # - install.sh creates instance config, directories, and files before download
-# - install.sh with --name creates an instance with the specified name
+# - install.sh with --id creates an instance with the specified id
 # - uninstall.sh rejects nonexistent instances before prompting
 # - uninstall.sh removes instance structure when confirmed
 # - uninstall.sh with "y" confirmation fully cleans up instances created by the wrapper
@@ -115,10 +115,10 @@ function test_install_creates_instance_config_before_download() {
   local instance_name="test-install-pre-$$"
 
   # Run install.sh - it will create structures and then fail at the download/version step
-  # We use --name to know the exact instance name created
+  # We use --id to know the exact instance id created
   "$INSTALL_MODULE" factorio \
     --library "$TEST_LIBRARY" \
-    --name "$instance_name" 2>/dev/null
+    --id "$instance_name" 2>/dev/null
   local install_exit=$?
 
   # install.sh may exit with non-zero (download failure) but may create partial state
@@ -150,9 +150,9 @@ function test_install_creates_instance_config_before_download() {
   fi
 }
 
-# TEST 5: install.sh with --name creates instance directory under the named instance
+# TEST 5: install.sh with --id creates the instance directory under that id
 function test_install_with_name_creates_named_instance_dir() {
-  log_test_step "Testing: install.sh --name creates working directory with specified name"
+  log_test_step "Testing: install.sh --id creates the working directory under that id"
 
   local instance_name="test-named-inst-$$"
   local expected_working_dir="$TEST_INSTALL_DIR/instances/factorio/$instance_name"
@@ -160,7 +160,7 @@ function test_install_with_name_creates_named_instance_dir() {
   # Run install.sh (will fail at download but may create working dir first)
   "$INSTALL_MODULE" factorio \
     --library "$TEST_LIBRARY" \
-    --name "$instance_name" 2>/dev/null
+    --id "$instance_name" 2>/dev/null
   local install_exit=$?
 
   # The working directory should have been created before the download step
@@ -186,7 +186,7 @@ function test_install_creates_directory_structure() {
 
   "$INSTALL_MODULE" factorio \
     --library "$TEST_LIBRARY" \
-    --name "$instance_name" 2>/dev/null
+    --id "$instance_name" 2>/dev/null
 
   local instance_config
   instance_config=$("$INSTANCES_MODULE" find "$instance_name" 2>/dev/null)

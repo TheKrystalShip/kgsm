@@ -73,19 +73,19 @@ source "$instances_logic" || {
 #   $1 - blueprint_name
 #   $2 - library (name of a registered library)
 #   $3 - version (optional, empty for latest)
-#   $4 - _instance_name (optional, empty for default)
+#   $4 - display_name (optional, empty to be shown by the generated id)
 #
 # Returns:
 #   0 on success
 #   Error codes on failure
 #
 # Example:
-#   __logic_wizard_install "factorio" "ssd" "1.1.87" "production"
+#   __logic_wizard_install "factorio" "ssd" "1.1.87" "Ana's Factory"
 function __logic_wizard_install() {
   local blueprint_name="$1"
   local library="$2"
   local version="$3"
-  local _instance_name="$4"
+  local display_name="$4"
 
   # Validate required parameters
   if [[ -z "$blueprint_name" ]]; then
@@ -103,7 +103,7 @@ function __logic_wizard_install() {
   # Build command arguments
   local install_args=("$install_logic" "$blueprint_name" --library "$library")
   [[ -n "$version" ]] && install_args+=(--version "$version")
-  [[ -n "$_instance_name" ]] && install_args+=(--name "$_instance_name")
+  [[ -n "$display_name" ]] && install_args+=(--name "$display_name")
 
   # Execute installation
   "${install_args[@]}" >/dev/null 2>&1

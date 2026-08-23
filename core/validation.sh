@@ -322,6 +322,36 @@ export -f validate_directory_writable
 # INSTANCE VALIDATION FUNCTIONS
 # =============================================================================
 
+# Validates the character set an instance id must satisfy.
+#
+# The id is a path component, a file basename, a registry symlink name and a
+# cgroup directory name all at once, so it is restricted to what every one of
+# those accepts: it opens with a letter or digit and carries only letters,
+# digits, '.', '_' and '-', up to 64 characters. This is checked on every id a
+# caller supplies and on none that KGSM generates — a generated id is drawn from
+# the blueprint name and digits, which is already inside this set.
+#
+# Usage: validate_instance_id_format <instance_id>
+# Returns: 0 when the id is usable, EC_INVALID_ARG otherwise
+function validate_instance_id_format() {
+  local instance_id="$1"
+
+  if [[ -z "$instance_id" ]]; then
+    __print_error "Instance id cannot be empty"
+    return $EC_INVALID_ARG
+  fi
+
+  if [[ ! "$instance_id" =~ ^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$ ]]; then
+    __print_error "Invalid instance id '$instance_id'"
+    __print_error "An id starts with a letter or digit and may contain letters, digits, '.', '_' and '-', up to 64 characters"
+    return $EC_INVALID_ARG
+  fi
+
+  return 0
+}
+
+export -f validate_instance_id_format
+
 # Validates instance name and returns config file path
 # Usage: validate_instance_name <instance_name>
 # Returns: 0 on success, error code on failure
@@ -333,6 +363,12 @@ function validate_instance_name() {
     __print_error "validate_instance_name: Instance name cannot be empty"
     return $EC_INVALID_ARG
   fi
+
+  # An argument that is not an id may be a display name, which resolves to one
+  # when exactly one instance carries it. The resolver echoes the argument back
+  # unchanged when nothing matches, so the not-found message below still names
+  # what the caller actually typed.
+  instance_name="$(__resolve_instance_id "$instance_name")" || return $?
 
   # Try to find the instance config file
   local instance_config_file

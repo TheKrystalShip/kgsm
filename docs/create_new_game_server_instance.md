@@ -19,7 +19,7 @@ There are three ways to create a new game server instance:
 This is the simplest way to create an instance:
 
 ```sh
-./kgsm.sh install <blueprint> [--library <name>] [--version <version>] [--name <name>]
+./kgsm.sh install <blueprint> [--library <name>] [--version <version>] [--name <text>] [--id <id>]
 ```
 
 `create` is an alias for `install` and can be used interchangeably.
@@ -29,13 +29,14 @@ This is the simplest way to create an instance:
 - **`<blueprint>`**: The blueprint name (without the `.bp.yaml` extension). KGSM searches user blueprints first, then bundled blueprints. Run `./kgsm.sh blueprints list` to see all available blueprints.
 - **`--library <name>`** *(optional)*: The library to place the instance in. Omitted, the placement is the configured `default_library`, or the sole registered library when only one exists. Run `./kgsm.sh libraries list` to see them, and see [Libraries](libraries.md) for how to register one.
 - **`--version <version>`** *(optional)*: A specific version to install. If omitted, the latest available version is fetched automatically.
-- **`--name <name>`** *(optional)*: Custom name for the instance. If omitted, KGSM generates a unique identifier based on the blueprint name.
+- **`--name <text>`** *(optional)*: Display name for the instance — free text, shown by every surface, changed later with `./kgsm.sh instances rename`. It is never part of a path. If omitted, the instance is shown by its id.
+- **`--id <id>`** *(optional)*: The instance id, the identifier every path, file name, event and downstream store keys on. If omitted, KGSM generates one from the blueprint name. A supplied id must be a letter or digit followed by letters, digits, `.`, `_` and `-`, up to 64 characters, and must not already be in use.
 - **`--skip-space-check`** *(optional)*: Install even when the library has less free space than the blueprint's `metadata.base_disk_mb` plus the `install_free_space_margin_mb` config value. The measured shortfall is printed either way.
 
 ### Example
 
 ```sh
-./kgsm.sh install factorio --library ssd --name factorio-space-age
+./kgsm.sh install factorio --library ssd --name "Factorio Space Age"
 ```
 
 ---
@@ -103,10 +104,10 @@ shows the registered ones with their free space.
 ### 3. Generate an Instance Identifier
 
 ```sh
-instance=$(./kgsm.sh instances generate-id factorio --name my-factorio-server)
+instance=$(./kgsm.sh instances generate-id factorio --id my-factorio-server)
 ```
 
-This validates that the blueprint exists and produces a unique identifier for the new instance. The `--name` flag is optional — if omitted, a name is auto-generated from the blueprint name.
+This validates that the blueprint exists and produces a unique identifier for the new instance. The `--id` flag is optional — if omitted, an id is generated from the blueprint name; if supplied, it is checked for shape and for being free, and echoed back.
 
 ---
 
@@ -134,7 +135,7 @@ This creates a symlink from KGSM's internal instances directory to the working d
 ### 6. Create the Instance Configuration
 
 ```sh
-./kgsm.sh instances create factorio --library ssd --name "$instance"
+./kgsm.sh instances create factorio --library ssd --id "$instance"
 ```
 
 This generates the instance configuration file (`<instance>.config.ini`) inside the working directory.

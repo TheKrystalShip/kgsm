@@ -499,7 +499,7 @@ function __wizard_install_server() {
   local libraries
   local selected_library
   local version
-  local instance_name
+  local display_name
 
   # Get available blueprints
   mapfile -t blueprints < <(__logic_get_blueprints 2>/dev/null)
@@ -540,8 +540,9 @@ function __wizard_install_server() {
   # Get version (optional)
   version=$(__ui_prompt_user "Version (leave empty for latest):")
 
-  # Get instance name (optional)
-  instance_name=$(__ui_prompt_user "Instance name (leave empty for default):")
+  # Get the display name (optional). The id is never typed here: KGSM generates
+  # it, and this is the label the server is shown under.
+  display_name=$(__ui_prompt_user "Display name (leave empty to use the generated id):")
 
   # Confirm installation
   __ui_clear_screen
@@ -549,7 +550,7 @@ function __wizard_install_server() {
   __ui_print_box_line "Blueprint: $selected_blueprint"
   __ui_print_box_line "Library: $selected_library ($(__logic_library_path "$selected_library"))"
   __ui_print_box_line "Version: ${version:-latest}"
-  __ui_print_box_line "Name: ${instance_name:-default}"
+  __ui_print_box_line "Display name: ${display_name:-the generated id}"
   __ui_close_box
 
   if ! __ui_confirm_action "Proceed with installation?"; then
@@ -562,7 +563,7 @@ function __wizard_install_server() {
   echo -e "${UI_COLOR_INFO}Installing server instance...${UI_COLOR_RESET}" >&2
 
   local exit_code
-  __logic_wizard_install "$selected_blueprint" "$selected_library" "$version" "$instance_name"
+  __logic_wizard_install "$selected_blueprint" "$selected_library" "$version" "$display_name"
   exit_code=$?
 
   if [[ $exit_code -eq 0 ]]; then

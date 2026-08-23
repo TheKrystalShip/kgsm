@@ -325,18 +325,18 @@ function test_instance_removal_does_not_affect_blueprint() {
 
 # =============================================================================
 # TEST 8: generate-id uses blueprint name and is consistent with instance create
-# generate-id output can be used directly with instance create --name
+# generate-id output can be used directly with instance create --id
 # =============================================================================
 
 function test_generate_id_compatible_with_create() {
-  log_test_step "Testing: generate-id output is usable with instance create --name"
+  log_test_step "Testing: generate-id output is usable with instance create --id"
 
-  # Generate a unique ID with a custom name to avoid real-system conflicts
+  # Ask for a specific id to avoid real-system conflicts
   local genid_name="test-genid-$$"
   local generated_id
-  generated_id=$("$INSTANCES_MODULE" generate-id factorio --name "$genid_name" 2>&1)
-  assert_equals 0 "$?" "generate-id factorio --name should succeed"
-  assert_equals "$genid_name" "$generated_id" "generate-id --name should return the provided name"
+  generated_id=$("$INSTANCES_MODULE" generate-id factorio --id "$genid_name" 2>&1)
+  assert_equals 0 "$?" "generate-id factorio --id should succeed"
+  assert_equals "$genid_name" "$generated_id" "generate-id --id should return the provided id"
 
   # Use that ID to create an instance via create_test_instance (reliable path)
   local created_name
@@ -377,7 +377,7 @@ function test_duplicate_instance_name_rejected() {
   setup_instance_prereqs "factorio" "$alt_name" "$TEST_INSTALL_DIR" 2>/dev/null || true
   "$INSTANCES_MODULE" create factorio \
     --library "$TEST_LIBRARY" \
-    --name "$instance_name" 2>/dev/null
+    --id "$instance_name" 2>/dev/null
   local dup_exit=$?
 
   assert_not_equals 0 "$dup_exit" \

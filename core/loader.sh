@@ -180,6 +180,96 @@ function __find_instance_config() {
 
 export -f __find_instance_config
 
+# Echoes an instance's display_name as it is stored, or nothing when the config
+# carries no such key. Reads the file directly rather than going through
+# __get_instance_config_value, which resolves an instance by name and would send
+# the resolver below back through itself.
+#
+# Usage: __instance_display_name_from_config <config_file>
+function __instance_display_name_from_config() {
+  local _config_file="$1"
+
+  local _line _value
+  while IFS= read -r _line || [[ -n "$_line" ]]; do
+    [[ "$_line" =~ ^display_name[[:space:]]*= ]] || continue
+
+    _value="${_line#*=}"
+    _value="${_value#"${_value%%[![:space:]]*}"}"
+    _value="${_value%"${_value##*[![:space:]]}"}"
+    _value="${_value#\"}"
+    _value="${_value%\"}"
+    __unescape_instance_config_value "$_value"
+    return 0
+  done < "$_config_file"
+
+  return 0
+}
+
+export -f __instance_display_name_from_config
+
+# Resolves whatever a caller typed into an instance id.
+#
+# An id resolves as itself, which is the only path a normally-addressed instance
+# takes and the only one that costs anything on a large host. Anything else is
+# looked up as a display name: display names are decoration and are not unique,
+# so exactly one match resolves and several is a refusal listing the ids — never
+# a guess about which server the caller meant. An argument matching nothing is
+# echoed back untouched, so the caller's own not-found message names what was
+# actually typed.
+#
+# Usage: __resolve_instance_id <instance-id-or-display-name>
+# Returns: 0 and echoes an id, or EC_INVALID_ARG when the display name is
+#          ambiguous
+function __resolve_instance_id() {
+  local _wanted="$1"
+
+  if [[ -z "$_wanted" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  # The registry entry, not the config file: an instance whose library is not
+  # mounted has a dangling symlink and no readable config, and it is still that
+  # id rather than a display name to go looking for.
+  local _entry
+  for _entry in "$KGSM_INSTANCES_DIR"/*/"$_wanted"; do
+    if [[ -L "$_entry" ]]; then
+      echo "$_wanted"
+      return 0
+    fi
+  done
+
+  local -a _matches=()
+  local _id _config_file _display_name
+  for _entry in "$KGSM_INSTANCES_DIR"/*/*; do
+    [[ -L "$_entry" ]] || continue
+
+    _id="${_entry##*/}"
+    _config_file="${_entry}/${_id}.config.ini"
+    [[ -f "$_config_file" ]] || continue
+
+    _display_name="$(__instance_display_name_from_config "$_config_file")"
+    [[ -n "$_display_name" ]] || _display_name="$_id"
+
+    [[ "$_display_name" == "$_wanted" ]] && _matches+=("$_id")
+  done
+
+  if [[ ${#_matches[@]} -eq 1 ]]; then
+    echo "${_matches[0]}"
+    return 0
+  fi
+
+  if [[ ${#_matches[@]} -gt 1 ]]; then
+    __print_error "Several instances are named '$_wanted': ${_matches[*]}"
+    __print_error "Address one of them by its id"
+    return $EC_INVALID_ARG
+  fi
+
+  echo "$_wanted"
+  return 0
+}
+
+export -f __resolve_instance_id
+
 function __find_template() {
   local template=$1
   [[ "$template" != *.tp ]] && template="${template}.tp"

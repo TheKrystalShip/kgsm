@@ -162,6 +162,7 @@ The following `$instance_*` variables are available in templates that are expand
 | Variable | Description |
 |---|---|
 | `$instance_name` | Unique instance identifier |
+| `$instance_display_name` | Human-readable label, escaped for the `key="value"` form. Defaults to the identifier |
 | `$instance_blueprint_file` | Absolute path to the blueprint file |
 | `$instance_install_datetime` | Timestamp of when the instance was installed |
 

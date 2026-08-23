@@ -46,7 +46,12 @@ ${UNDERLINE}Options:${END}
                               configured default_library, or the sole
                               registered library)
   --version <version>         Specific version to install (default: latest)
-  --name <name>               Custom instance name (default: auto-generated)
+  --name <text>               Display name for the instance: free text, shown by
+                              every surface, changed later with
+                              'kgsm instances rename'
+  --id <id>                   Set the instance id explicitly instead of letting
+                              KGSM generate one. Letters, digits, '.', '_' and
+                              '-', starting with a letter or digit, max 64
   --port <port>               Override the blueprint's primary game port (1-65535)
   --skip-space-check          Install even when the library has less free space
                               than the blueprint declares the game needs
@@ -58,10 +63,16 @@ Instances are placed at <library>/instances/<blueprint>/<instance>. Register a
 library with 'kgsm libraries add <path>' and list them with
 'kgsm libraries list'.
 
+The id is what every path, file name, event and downstream store keys on, and it
+never changes; KGSM generates it from the blueprint name unless --id names one.
+The display name is decoration — not unique, never part of a path — and defaults
+to the id.
+
 ${UNDERLINE}Examples:${END}
   ${self} factorio
   ${self} factorio --library ssd
-  ${self} factorio --library ssd --name factorio-prod
+  ${self} factorio --library ssd --name \"Ana's Factory\"
+  ${self} factorio --library ssd --id factorio-prod
   ${self} factorio --library ssd --version 1.1.87
   ${self} factorio --port 34200
   ${self} factorio --start
@@ -199,7 +210,8 @@ function _cmd_install() {
 
   local library=""
   local version=0 # 0 means get latest
-  local identifier
+  local instance_id=""
+  local display_name=""
   local port=""
   local start_after=false
   local skip_space_check=false
@@ -248,7 +260,16 @@ function _cmd_install() {
           __print_error "Missing argument for --name"
           return $EC_MISSING_ARG
         fi
-        identifier=$1
+        display_name=$1
+        ;;
+      --id)
+        shift
+        if [[ -z "$1" ]]; then
+          __print_error "Missing argument for --id"
+          return $EC_MISSING_ARG
+        fi
+        validate_instance_id_format "$1" || return $EC_INVALID_ARG
+        instance_id=$1
         ;;
       --start)
         start_after=true
@@ -270,9 +291,15 @@ function _cmd_install() {
 
   __print_info "Creating a new instance of $blueprint in library '$library' ($library_dir)..."
 
-  # Generate instance name early (before any config/file creation)
+  # Settle the id early (before any config/file creation): every directory, file
+  # name and symlink below is derived from it. Assembled as an array because a
+  # display name holds spaces, and an unquoted expansion would hand each word to
+  # the command as its own argument.
+  local -a generate_args=("$blueprint")
+  [[ -n "$instance_id" ]] && generate_args+=(--id "$instance_id")
+
   local instance
-  instance="$(instances.sh generate-id "$blueprint" ${identifier:+--name "$identifier"})" || {
+  instance="$(instances.sh generate-id "${generate_args[@]}")" || {
     exit_code=$?
     __print_error "Failed to generate instance identifier"
     return $exit_code
@@ -299,7 +326,11 @@ function _cmd_install() {
   # Create instance configuration (name is now pre-determined)
   # Config will be created at $KGSM_INSTANCES_DIR/$blueprint/$instance/$instance.config.ini
   # which resolves through the symlink to $working_dir/$instance.config.ini
-  instance="$(instances.sh create "$blueprint" --library "$library" --name "$instance" ${port:+--port "$port"})" || {
+  local -a create_args=("$blueprint" --library "$library" --id "$instance")
+  [[ -n "$display_name" ]] && create_args+=(--name "$display_name")
+  [[ -n "$port" ]] && create_args+=(--port "$port")
+
+  instance="$(instances.sh create "${create_args[@]}")" || {
     exit_code=$?
     __print_error "Failed to create instance configuration"
     # Clean up on failure

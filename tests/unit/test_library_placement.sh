@@ -303,7 +303,7 @@ function test_create_places_the_instance_nested_in_the_library() {
   ln -s "${root}/instances/factorio/${instance_name}" \
     "${KGSM_INSTANCES_DIR}/factorio/${instance_name}"
 
-  "$INSTANCES_MODULE" create factorio --library nested --name "$instance_name" \
+  "$INSTANCES_MODULE" create factorio --library nested --id "$instance_name" \
     > /dev/null 2>&1
   local exit_code=$?
 
@@ -331,7 +331,7 @@ function test_create_records_the_library_root() {
   ln -s "${root}/instances/factorio/${instance_name}" \
     "${KGSM_INSTANCES_DIR}/factorio/${instance_name}"
 
-  "$INSTANCES_MODULE" create factorio --library stamped --name "$instance_name" \
+  "$INSTANCES_MODULE" create factorio --library stamped --id "$instance_name" \
     > /dev/null 2>&1
 
   local config_file="${root}/instances/factorio/${instance_name}/${instance_name}.config.ini"
@@ -353,7 +353,7 @@ function test_create_without_a_flag_uses_the_sole_library() {
   ln -s "${root}/instances/factorio/${instance_name}" \
     "${KGSM_INSTANCES_DIR}/factorio/${instance_name}"
 
-  "$INSTANCES_MODULE" create factorio --name "$instance_name" > /dev/null 2>&1
+  "$INSTANCES_MODULE" create factorio --id "$instance_name" > /dev/null 2>&1
   local exit_code=$?
 
   assert_equals 0 "$exit_code" "create should resolve the sole library"
@@ -383,7 +383,7 @@ function test_create_without_a_flag_uses_the_configured_default() {
   ln -s "${second}/instances/factorio/${instance_name}" \
     "${KGSM_INSTANCES_DIR}/factorio/${instance_name}"
 
-  "$INSTANCES_MODULE" create factorio --name "$instance_name" > /dev/null 2>&1
+  "$INSTANCES_MODULE" create factorio --id "$instance_name" > /dev/null 2>&1
   local exit_code=$?
 
   unset config_default_library
@@ -497,7 +497,7 @@ function test_info_json_carries_the_library_and_its_root() {
   ln -s "${root}/instances/factorio/${instance_name}" \
     "${KGSM_INSTANCES_DIR}/factorio/${instance_name}"
 
-  "$INSTANCES_MODULE" create factorio --library reported --name "$instance_name" \
+  "$INSTANCES_MODULE" create factorio --library reported --id "$instance_name" \
     > /dev/null 2>&1
 
   local output
@@ -578,16 +578,27 @@ function test_wizard_install_places_into_the_named_library() {
   local root
   root="$(_add_library wizard-lib)"
 
-  local instance_name="placement-wizard-$$"
-  __logic_wizard_install "factorio" "wizard-lib" "" "$instance_name"
+  # The wizard collects a display name; the id it lands under is generated, so
+  # the assertion is that something landed in the named library rather than that
+  # it landed under a name the test chose.
+  __logic_wizard_install "factorio" "wizard-lib" "" "Placement Wizard $$"
 
   # The install fails at the download step in a sandbox with no network, but
   # placement happens before it: what is asserted is where the instance landed,
   # not that the game arrived.
-  assert_dir_exists "${root}/instances/factorio/${instance_name}" \
+  local -a placed=("${root}/instances/factorio"/*)
+  assert_equals 1 "${#placed[@]}" \
+    "The wizard should place exactly one instance inside the named library"
+  assert_dir_exists "${placed[0]}" \
     "The wizard should place the instance inside the named library"
 
-  rm -f "${KGSM_INSTANCES_DIR}/factorio/${instance_name}"
+  local placed_id
+  placed_id="$(basename "${placed[0]}")"
+  assert_equals "Placement Wizard $$" \
+    "$(__get_instance_config_value "$placed_id" display_name)" \
+    "The name the wizard collected should be the instance's display name"
+
+  rm -f "${KGSM_INSTANCES_DIR}/factorio/${placed_id}"
 }
 
 # =============================================================================
