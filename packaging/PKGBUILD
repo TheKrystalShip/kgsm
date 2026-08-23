@@ -69,18 +69,19 @@ package() {
     # The engine's event journal and the shared leaf-descriptor directory every leaf writes into.
     # kgsm owns them because it is the base package: a host with any KGSM on it has this one.
     install -Dm644 /dev/stdin "${pkgdir}/usr/lib/tmpfiles.d/${pkgname}.conf" <<'TMPFILES'
-d /var/lib/kgsm         0755 kgsm kgsm -
-d /var/lib/kgsm/events  0755 kgsm kgsm -
-d /var/lib/kgsm/leaves  0755 kgsm kgsm -
+d /var/lib/kgsm                  0755 kgsm kgsm -
+d /var/lib/kgsm/events           0755 kgsm kgsm -
+d /var/lib/kgsm/leaves           0755 kgsm kgsm -
+d /var/lib/kgsm/leaves/commands  0755 kgsm kgsm -
 TMPFILES
 
-    # Journal retention. These are USER units by design — pruning needs no privilege — so they go
-    # to /usr/lib/systemd/user/ and the node bootstrap enables them for the service account. A
-    # package scriptlet cannot: `systemctl --user enable` has no user to act for.
+    # Journal retention. System units running as the kgsm account: one `systemctl enable` covers a
+    # node with no login session, which `systemctl --user` cannot — it acts on one user's session
+    # and a package scriptlet has no user to act for.
     install -Dm644 "${repo}/deploy/kgsm-journal-prune.service" \
-        "${pkgdir}/usr/lib/systemd/user/kgsm-journal-prune.service"
+        "${pkgdir}/usr/lib/systemd/system/kgsm-journal-prune.service"
     install -Dm644 "${repo}/deploy/kgsm-journal-prune.timer" \
-        "${pkgdir}/usr/lib/systemd/user/kgsm-journal-prune.timer"
+        "${pkgdir}/usr/lib/systemd/system/kgsm-journal-prune.timer"
 
     install -Dm644 "${repo}/LICENSE" "${pkgdir}/usr/share/licenses/${pkgname}/LICENSE"
 }

@@ -500,6 +500,19 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Changed — journal retention is a system timer
+
+`kgsm-journal-prune.{service,timer}` are system units running as the KGSM account, installed to
+`/etc/systemd/system/` by `setup.sh` (rendering `User=`/`Group=` to the provisioning user, as every
+sibling repo does) and to `/usr/lib/systemd/system/` by the package. One `systemctl enable` covers a
+node with no login session, which `systemctl --user` cannot: it acts on one user's session, and a
+package scriptlet has no user to act for.
+
+The prune `ExecStart` names `/usr/bin/kgsm`, the entry point both the package and `setup.sh` create.
+
+`/usr/lib/tmpfiles.d/kgsm.conf` also declares `/var/lib/kgsm/leaves/commands`, the directory each
+leaf drops its command manifest into.
+
 ### Added — an Arch package, built from the tested binaries
 
 `packaging/PKGBUILD` builds this project into a pacman package. It compiles nothing: CI publishes

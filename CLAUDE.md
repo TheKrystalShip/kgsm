@@ -87,7 +87,7 @@ Native instances are supervised by the resident **kgsm-watchdog** daemon (cgroup
 
 The canonical install lives at `/opt/kgsm` — a byte-identical copy of this checkout
 (minus `.git`, `node_modules`, `.dev-instances`). The `kgsm` on `PATH`
-(`/usr/local/bin/kgsm` → `/opt/kgsm/kgsm.sh`) resolves there.
+(`/usr/bin/kgsm` → `/opt/kgsm/kgsm.sh`) resolves there.
 
 Two scripts in `deploy/`:
 
@@ -99,7 +99,8 @@ Two scripts in `deploy/`:
 `setup.sh` is the only part that needs privilege, and it is idempotent — re-run it freely. Because
 it makes `/opt/kgsm` **yours**, the deploy itself is an ordinary file write, so **`deploy.sh` never
 asks for a password and never prompts.** It refuses up front, with *"run `deploy/setup.sh`"*, when
-the host is not provisioned. There are no systemd units here, so unlike the .NET projects this one
+the host is not provisioned. The one unit here is the `kgsm-journal-prune` timer, which `setup.sh`
+installs and enables outright — `deploy.sh` never touches it, so unlike the .NET projects this one
 needs no polkit grant at all.
 
 After changing engine code, run `./deploy/deploy.sh` so the deployed copy stays identical.

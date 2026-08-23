@@ -7,10 +7,10 @@
 # entry points can never disagree about what this project installs.
 #
 # The canonical source of this pattern is tks/scripts/deploy-template/ — see its README for the
-# contract. kgsm is the simplest case in the ecosystem: the engine is a bash tree with NO systemd
-# unit and NO daemon, so there is no unit to link and no polkit grant to install. setup.sh only
-# has to create the install prefix and put `kgsm` on PATH; after that deploy.sh is a plain rsync
-# into a directory you own, with no privilege whatsoever.
+# contract. kgsm is the simplest case in the ecosystem: the engine is a bash tree with NO daemon,
+# so there is no unit to link and no polkit grant to install — setup.sh installs the one
+# journal-retention timer outright and enables it. After that deploy.sh is a plain rsync into a
+# directory you own, with no privilege whatsoever.
 #
 # Not executable on its own.
 
@@ -48,6 +48,19 @@ JOURNAL_DIR="/var/lib/kgsm/events"
 # The list itself lives in deploy/tree-excludes.txt, which packaging/PKGBUILD reads too — so the
 # deployed tree and the packaged one are the same set of files rather than two lists that drift.
 RSYNC_EXCLUDES=(--exclude-from="${REPO_DIR}/deploy/tree-excludes.txt")
+
+# Where setup.sh installs the journal-retention timer. The engine has no daemon, so this is the
+# only unit kgsm owns and deploy.sh never touches it — the pair is committed content that changes
+# on the cadence of a release, not of a deploy.
+SYSTEMD_DIR="/etc/systemd/system"
+
+# Render a unit file to stdout. The committed unit names the packaged `kgsm` service account; a
+# host provisioned by setup.sh runs it as whoever provisioned it, which is the account that owns
+# the journal directory being pruned.
+render_unit() {   # $1 = unit filename
+    sed "s/^User=.*/User=${DEPLOY_USER}/; s/^Group=.*/Group=${DEPLOY_GROUP}/" \
+        "${REPO_DIR}/deploy/$1"
+}
 # ── END PROJECT BLOCK ─────────────────────────────────────────────────────────
 
 SUDO="${SUDO:-sudo}"

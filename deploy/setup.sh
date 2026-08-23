@@ -13,12 +13,12 @@
 # What it provisions:
 #   1. /opt/kgsm            — the canonical install, chowned to you so deploy.sh rsyncs into it
 #                             with no privilege.
-#   2. /usr/local/bin/kgsm  — the symlink that puts `kgsm` on PATH, pointing at /opt/kgsm/kgsm.sh.
+#   2. /usr/bin/kgsm        — the symlink that puts `kgsm` on PATH, pointing at /opt/kgsm/kgsm.sh.
 #                             The link target is stable, so redeploying the tree behind it needs
 #                             no privilege and no re-linking.
 #
-# No system unit and no polkit grant here: the engine is a bash tree, not a daemon. The only
-# unit is a USER timer for event-journal retention, which needs no privilege.
+# No polkit grant here: the engine is a bash tree, not a daemon. The only unit is a system timer
+# for event-journal retention, enabled once by this script and never touched by deploy.sh.
 # (Native game-server lifecycle is supervised by the resident kgsm-watchdog, which has its own
 # setup.sh in its own repo.)
 #
@@ -69,31 +69,24 @@ elif [[ "$(stat -c '%U' "$JOURNAL_DIR")" != "$DEPLOY_USER" ]]; then
     $SUDO chown -R "${DEPLOY_USER}:${DEPLOY_GROUP}" "$JOURNAL_DIR"
 fi
 
-# ── 4. Journal retention timer (a USER unit — no privilege, no system unit) ───
-# The engine stays a bash tree with no system service. Retention is periodic
-# maintenance, not a daemon, so it runs as a user timer: it needs no sudo, no
-# polkit grant, and touches nothing outside the deploying user's own systemd.
+# ── 4. Journal retention timer (a SYSTEM timer running as the KGSM user) ──────
+# The engine stays a bash tree with no daemon; retention is periodic maintenance,
+# and it runs in system scope so one enable covers a headless host with no login
+# session. The committed .service names the packaged `kgsm` account — render_unit
+# rewrites User=/Group= to whoever provisioned this host, the same substitution
+# every sibling repo makes, so the deployed unit runs as the account that owns
+# the journal it prunes.
 if command -v systemctl > /dev/null 2>&1; then
-    USER_UNIT_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/systemd/user"
-    mkdir -p "$USER_UNIT_DIR"
-    install -m 0644 "$REPO_DIR/deploy/kgsm-journal-prune.service" "$USER_UNIT_DIR/"
-    install -m 0644 "$REPO_DIR/deploy/kgsm-journal-prune.timer" "$USER_UNIT_DIR/"
+    for u in kgsm-journal-prune.service kgsm-journal-prune.timer; do
+        rendered="$(mktemp)"
+        render_unit "$u" > "$rendered"
+        $SUDO install -m 0644 -o root -g root "$rendered" "${SYSTEMD_DIR}/${u}"
+        rm -f "$rendered"
+    done
 
-    # A non-login shell (CI, an agent, `sudo` without the session) inherits no
-    # XDG_RUNTIME_DIR, and `systemctl --user` cannot find the bus without it —
-    # which would silently skip the timer on exactly the headless hosts this
-    # script exists for. Point it at the running user manager when it exists.
-    RUNTIME_DIR="/run/user/$(id -u)"
-    if [[ -z "${XDG_RUNTIME_DIR:-}" && -d "$RUNTIME_DIR" ]]; then
-        export XDG_RUNTIME_DIR="$RUNTIME_DIR"
-    fi
-
-    if systemctl --user daemon-reload 2>/dev/null &&
-        systemctl --user enable --now kgsm-journal-prune.timer 2>/dev/null; then
-        log "journal retention timer enabled (systemctl --user)"
-    else
-        log "user systemd unreachable — run 'kgsm events journal prune' from cron instead"
-    fi
+    $SUDO systemctl daemon-reload
+    $SUDO systemctl enable --now kgsm-journal-prune.timer
+    log "journal retention timer enabled (${SYSTEMD_DIR}/kgsm-journal-prune.timer)"
 else
     log "systemd absent — run 'kgsm events journal prune' from cron for retention"
 fi
