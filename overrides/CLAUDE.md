@@ -19,21 +19,19 @@ overrides/<name>/06-download.sh
 An override module is a **complete copy** of the corresponding default module
 from `templates/manage.{native,container}.d/`, with only the functions that need
 game-specific behavior changed. Bundled examples: `factorio/`, `terraria/`,
-`minecraft/`, `veloren/`, `barotrauma/` (most only override 05/06/07).
-
-> Note: the older single-file form `<name>.overrides.sh` is **legacy** and no
-> longer used for management-script assembly. Anything new is module-based.
+`minecraft/`, `veloren/`, `barotrauma/`, `projectzomboid/` (each overrides only
+the modules it needs, typically 05/06/07).
 
 ## How binding works (the critical gotcha)
 
 The override directory name comes from the blueprint's logical name, **not** its
-filename:
-- Native `.bp`: the `name=` field.
-- Container `.docker-compose.yml`: the first service name under `services:`.
+filename: the `name:` field in the blueprint (`<file>.bp.yaml`), for **both**
+runtimes.
 
-So `terraria-modded.bp` with `name=terraria` resolves to `overrides/terraria/`,
-and several blueprint variants can deliberately share one override dir. If the
-name doesn't line up, KGSM silently falls back to the default module.
+So `terraria-modded.bp.yaml` with `name: terraria` resolves to
+`overrides/terraria/`, and several blueprint variants can deliberately share one
+override dir. If the name doesn't line up, KGSM silently falls back to the
+default module.
 
 ## Resolution order
 
@@ -46,8 +44,8 @@ Prefer the user dir for customization; system files here ship with KGSM.
 
 ## What may be overridden
 
-Only modules **03–11**. `00–02` and `12–13` are structural and cannot be
-overridden.
+Only modules **03–08, 10, 11** (the modules in the table below). `00–02` and
+`12–13` are structural and cannot be overridden.
 
 | Module | Key functions |
 |--------|---------------|

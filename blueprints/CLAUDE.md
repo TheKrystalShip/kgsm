@@ -7,9 +7,8 @@ parameters. KGSM creates **instances** from them. Full reference:
 ## Format & layout
 
 One **unified YAML** file per game: `<name>.bp.yaml`, in a single **flat**
-`blueprints/` directory. There is no `native/` vs `container/` split — the
-`runtime` field inside the file (`native` | `container`) decides how the server
-runs. Parsing is done with **mikefarah/yq** (Arch package `go-yq`), a **hard
+`blueprints/` directory. The `runtime` field inside the file
+(`native` | `container`) decides how the server runs. Parsing is done with **mikefarah/yq** (Arch package `go-yq`), a **hard
 dependency**: a blueprint operation on a host without it fails fast with an
 actionable error (`__require_yq` in `core/loader.sh`).
 
@@ -55,10 +54,10 @@ Top-level, runtime-agnostic fields (both native and container):
 
 **Every blueprint declares the RCON family, whether or not the game uses it** —
 an empty `rcon_port` leaves it off, and the fields being present is how a reader
-sees the capability exists for that game and is simply not wired up yet. Fill
-them in only from a server observed answering them, the same rule the presence
-patterns follow. RCON presence is polled for **native** instances only; on a
-container blueprint the fields are declared but nothing reads them yet.
+sees which capabilities the game itself offers. Fill them in only from a server
+observed answering them, the same rule the presence patterns follow. RCON
+presence is polled for **native** instances only; on a container blueprint the
+fields are declared but no poller reads them.
 
 - `ports` is **single-quoted, pipe-separated** UFW format:
   `ports: '1111:2222/tcp|3333/udp'`.
@@ -124,9 +123,7 @@ images: `ghcr.io/thekrystalship/` (see the kgsm-containers project).
 
 A blueprint binds to an override directory by its **logical `name`, not its
 filename**, for **both** runtimes: a blueprint with `name: terraria` uses
-`overrides/terraria/` regardless of the file name. (Containers used to bind on
-the "first service name under `services:`" — that hack is gone; the explicit
-`name` field is now authoritative for every runtime.)
+`overrides/terraria/` regardless of the file name.
 
 Multiple blueprint variants can share one `name` (and thus one override dir) on
 purpose. See `overrides/CLAUDE.md` and `docs/overrides.md`.

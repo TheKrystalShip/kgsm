@@ -39,13 +39,13 @@ shellcheck path/to/script.sh
 `commands/*.sh` are the I/O layer: argument parsing, user-facing messages, calling `__print_error`/`__print_warning`/`__print_info`. The actual business logic lives in `commands/handlers/*.sh` as pure functions that take inputs and return exit codes with no I/O. Put logic in handlers so it stays testable and reusable; keep `commands/` thin. The two layers are paired by name (`commands/instances.sh` ↔ `commands/handlers/instances.sh`).
 
 ### Blueprint → Instance → Override (the core data model)
-- **Blueprints** (`blueprints/*.bp.yaml`) are **unified YAML** templates — one file per game in a single flat directory — that are a game server's complete identity: `schema_version`, `name`, `runtime` (`native`|`container`), a nullable `metadata:` block (display name + resource requirements, for UIs), and a runtime-tagged body (`native:` fields or `container.compose`). The `runtime` **field** replaces the old file-extension/directory type split. Parsed with **mikefarah/yq** (Arch `go-yq`), a **hard dependency**. Native `ports` is single-quoted, pipe-separated (`'1111:2222/tcp|3333/udp'`); container ports are **derived** from the embedded compose. Metadata values are nullable — `null` means unknown, **never a fabricated `0`**. These are the system (read-only) blueprints; user blueprints live under `~/.local/share/kgsm/blueprints/*.bp.yaml` and shadow same-named system ones. See `blueprints/CLAUDE.md`.
+- **Blueprints** (`blueprints/*.bp.yaml`) are **unified YAML** templates — one file per game in a single flat directory — that are a game server's complete identity: `schema_version`, `name`, `runtime` (`native`|`container`), a nullable `metadata:` block (display name + resource requirements, for UIs), and a runtime-tagged body (`native:` fields or `container.compose`). Parsed with **mikefarah/yq** (Arch `go-yq`), a **hard dependency**. Native `ports` is single-quoted, pipe-separated (`'1111:2222/tcp|3333/udp'`); container ports are **derived** from the embedded compose. Metadata values are nullable — `null` means unknown, **never a fabricated `0`**. These are the system (read-only) blueprints; user blueprints live under `~/.local/share/kgsm/blueprints/*.bp.yaml` and shadow same-named system ones. See `blueprints/CLAUDE.md`.
 - **Instances** are deployed servers created from a blueprint, each with isolated `server/ saves/ backups/ logs/` directories and a generated management script.
 - **Overrides** (`overrides/<name>/NN-*.sh`) supply game-specific install/update/lifecycle logic as module-based files. See `overrides/CLAUDE.md`.
 
-**Critical gotcha:** a blueprint binds to an override directory by its logical *name*, *not* its filename — the `name` field, for **both** runtimes (containers no longer bind on the first `services:` entry). `terraria-modded.bp.yaml` with `name: terraria` uses `overrides/terraria/`. This lets multiple blueprint variants share one override directory.
+**Critical gotcha:** a blueprint binds to an override directory by its logical *name*, *not* its filename — the `name` field, for **both** runtimes. `terraria-modded.bp.yaml` with `name: terraria` uses `overrides/terraria/`. This lets multiple blueprint variants share one override directory.
 
-The override system is **module-based**: a game's override directory (`overrides/<name>/`) holds complete copies of the default management-script modules from `templates/manage.{native,container}.d/`, with only the game-specific functions changed. Only modules `03`–`11` may be overridden. The older single-file `<name>.overrides.sh` form is legacy and no longer used for script assembly. Override functions follow fixed signatures documented in `templates/overrides.tp` (the authoritative API reference) — e.g. `_get_latest_version()` echoes a version or `exit 1`; `_download()`/`_deploy()` return 0/1. They operate on `instance_*` variables (`instance_install_dir`, `instance_temp_dir`, `instance_working_dir`, etc.). Read `templates/overrides.tp` before writing an override; copy `overrides/factorio/` or `overrides/terraria/` as a working example.
+The override system is **module-based**: a game's override directory (`overrides/<name>/`) holds complete copies of the default management-script modules from `templates/manage.{native,container}.d/`, with only the game-specific functions changed. Only modules `03`–`08`, `10`, `11` may be overridden. Override functions follow fixed signatures documented in `templates/overrides.tp` (the authoritative API reference) — e.g. `_get_latest_version()` echoes a version or `exit 1`; `_download()`/`_deploy()` return 0/1. They operate on `instance_*` variables (`instance_install_dir`, `instance_temp_dir`, `instance_working_dir`, etc.). Read `templates/overrides.tp` before writing an override; copy `overrides/factorio/` or `overrides/terraria/` as a working example.
 
 ### Error codes (`core/errors.sh`)
 All exit codes are named `EC_*` constants (`EC_SUCCESS=0`, `EC_BLUEPRINT_NOT_FOUND=27`, `EC_MIGRATION_FAILED=245`, …). Return these, not magic numbers. Exit codes are written unquoted (`return $EC_GENERAL`) — this is why SC2086 is disabled globally in `.shellcheckrc`.
@@ -74,7 +74,7 @@ The testing framework has its own substantial conventions (per-test setup/teardo
 
 UFW firewall rules (`enable_firewall_management`) and the optional webhook event transport (`commands/events.webhook.sh`). Events themselves are always appended to the on-disk journal (`commands/events.journal.sh`, `docs/events.md`) — that is the transport and the audit record, and it is not optional. Log/port watchers live in `commands/watcher.*.sh`.
 
-Native instances are supervised by the resident **kgsm-watchdog** daemon (cgroup-v2 spawn + crash-restart). `kgsm start/stop` route to it when present (`commands/handlers/watchdog.sh`), and `kgsm autostart enable|disable|status|list` controls boot auto-start via its persisted desired-state — the in-house replacement for systemd's `enable`/`WantedBy=`. systemd is no longer an instance lifecycle manager.
+Native instances are supervised by the resident **kgsm-watchdog** daemon (cgroup-v2 spawn + crash-restart). `kgsm start/stop` route to it when present (`commands/handlers/watchdog.sh`), and `kgsm autostart enable|disable|status|list` controls boot auto-start via the watchdog's persisted desired-state. The watchdog owns native instance lifecycle; systemd manages only the daemon itself.
 
 ## Key references
 
@@ -138,6 +138,12 @@ history; never duplicate it into docs or code.
   survive it: *"temporary shim for the rework"*, *"added to satisfy the new requirement"*,
   milestone/phase labels (*"per M2"*, *"the Phase 1 step"*). If a line's justification is the work
   that produced it rather than the system as it now stands, it goes.
+- **No volatile numbers.** Counts and versions that drift — how many projects/files/tests/
+  partials exist, a dependency's pinned version, a file's line count — never go in prose: they are
+  stale the moment anything changes, and nothing fails to remind anyone. Name the authoritative
+  source instead (the csproj, the directory, the barrel file). A number belongs in prose only when
+  it *is* the contract (a port, a timeout, a cap) or a measured fact that is itself the reason a
+  design exists.
 - **Edits are replacements, not appends.** When changing an existing feature, rewrite the affected
   doc/comment fresh as if writing it for the first time — never append a correction under the
   stale version, and never leave the stale version standing beside the new. The current revision

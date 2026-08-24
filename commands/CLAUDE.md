@@ -20,8 +20,7 @@ call it from the command; don't grow the command file.
 ## File families
 
 Related commands cluster by prefix — keep new files in the existing family:
-- `blueprints.sh` (one unified module — the former `blueprints.native.sh` /
-  `blueprints.container.sh` split is gone, since runtime is now a blueprint field)
+- `blueprints.sh` (one module for both runtimes — `runtime` is a blueprint field)
 - `files.sh`, `files.management.sh`, `files.firewall.sh`,
   `files.symlink.sh` (+ paired handlers)
 - `events.sh`, `events.journal.sh`, `events.webhook.sh`
@@ -43,8 +42,8 @@ Handlers without a 1:1 command pair exist for shared logic
   `__find_command_handler`, `__find_core_module`, `__find_or_fail`.
 - **Handler functions are `__logic_*`** (internal helpers `__name`), and
   **any function used in a subshell MUST be `export -f`'d** right after its
-  definition (used 31× across this tree — forgetting it is the most common
-  silent breakage). See `handlers/instances.sh` for the pattern.
+  definition (forgetting it is the most common silent breakage). See
+  `handlers/instances.sh` for the pattern.
 - **Lazy-load guard** at the top of handlers:
   `if [[ -n "${KGSM_LOGIC_X_LOADED}" ]]; then return 0; fi` … set it at the end.
 - **Exit-code contract** (from `handlers/instances.sh`):
