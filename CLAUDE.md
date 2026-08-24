@@ -118,3 +118,32 @@ sibling repo carries the same `setup.sh`-once / `deploy.sh`-forever pattern.
 - Bump the version whenever you make a user-facing change (new feature, bug fix, behaviour change). Patch for fixes, minor for new features, major for breaking changes.
 - Update `CHANGELOG.md` under `## [Unreleased]` with a brief entry for every meaningful change.
 - A git tag matching the new version should be created on release: `git tag v<version>`.
+
+## Documentation & comments: present-tense canon only
+
+Prose in this repo — every doc, `README`/`CLAUDE.md` section, and in-code comment — describes
+**how the thing works right now**, nothing else. History lives in the `CHANGELOG` and git
+history; never duplicate it into docs or code.
+
+- **No transitions.** Never "was X, now Y", "used to…", "changed from…", "no longer…", or any
+  before/after framing. State the current rule flat: a sentence that only makes sense to a reader
+  who knows what the code *used to* do is dead weight, because that "before" no longer exists
+  anywhere in the code.
+- **Tombstones leave no marker.** When something is removed — dying naturally as part of the work,
+  or explicitly asked to be deleted — the removal is silent: no *"removed X"*, no *"X is gone"*,
+  no *"deprecated, use Y instead"* pointing at a corpse. The prose reads as if it never was. Code
+  kept while the thing that justified it was deleted gets a live present-tense reason to exist —
+  or goes too.
+- **No residue of the active work.** References only meaningful *during* a piece of work don't
+  survive it: *"temporary shim for the rework"*, *"added to satisfy the new requirement"*,
+  milestone/phase labels (*"per M2"*, *"the Phase 1 step"*). If a line's justification is the work
+  that produced it rather than the system as it now stands, it goes.
+- **Edits are replacements, not appends.** When changing an existing feature, rewrite the affected
+  doc/comment fresh as if writing it for the first time — never append a correction under the
+  stale version, and never leave the stale version standing beside the new. The current revision
+  does not converse with prior revisions.
+
+A reader six months from now should learn the system from the doc without knowing what it
+replaced. If you catch yourself explaining a change, stop — that sentence belongs in the commit
+message. When touching prose that already violates this, rewrite it to present-tense canon in
+passing.
