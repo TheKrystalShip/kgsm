@@ -3,8 +3,8 @@
 # KGSM Pure Logic Layer - Firewall Authority Routing
 #
 # Routes host-firewall open/close operations to the resident kgsm-firewall
-# authority — the ecosystem's single owner of host-firewall state (see
-# ../../../headless-network-plan.md §7 and the kgsm-firewall repo). kgsm shells
+# authority — the ecosystem's single owner of host-firewall state (design +
+# rationale: the kgsm-firewall repo's CLAUDE.md). kgsm shells
 # the authority's bundled CLI client (`kgsm-firewall ensure-open | remove`); the
 # binary owns ALL socket/wire talk, so bash never parses a wire protocol — the
 # mirror of how handlers/watchdog.sh routes lifecycle to kgsm-watchdog.

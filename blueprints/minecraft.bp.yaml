@@ -10,8 +10,8 @@ metadata:
   min_ram_mb: 1024
   recommended_ram_mb: 2048
   base_disk_mb: 120
-# Player-presence detection, authored from real server output (see
-# player-presence-contract.md). The connection pair is used rather than the
+# Player-presence detection, authored from real server output (field
+# contract: templates/blueprint.tp). The connection pair is used rather than the
 # "joined/left the game" chat broadcasts: it is core server logging a plugin or
 # mod does not reword, and it carries the address and the disconnect reason.
 # Minecraft logs the account UUID on a separate line ("UUID of player X is …"),

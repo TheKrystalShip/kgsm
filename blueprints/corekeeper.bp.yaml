@@ -10,8 +10,8 @@ metadata:
   min_ram_mb: 4096
   recommended_ram_mb: 6144
   base_disk_mb: 653
-# Player-presence detection, authored from real server output (see
-# player-presence-plan.md). Opaque session token (`userid`) — correlate on
+# Player-presence detection, authored from real server output (field
+# contract: templates/blueprint.tp). Opaque session token (`userid`) — correlate on
 # `key`; the leave line also carries a disconnect `reason`.
 player_joined_regex: '\[userid:(?<key>\d+)\] player (?<name>.+?) connected'
 player_left_regex: 'Disconnected from userid:(?<key>\d+) with reason (?<reason>\S+)'

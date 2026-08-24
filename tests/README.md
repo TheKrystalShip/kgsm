@@ -385,7 +385,7 @@ echo "SKIP_STEAMCMD_TESTS=true" >> tests/config.test.ini
 
 ## Resources
 
-- **Testing Specification**: `docs/specs/testing_specification.md` (required reading)
+- **Testing Specification**: `docs/specs/testing-framework/testing_specification.md` (required reading)
 - **Test Template**: `tests/templates/test.template.sh`
 - **Example Tests**: `tests/unit/test_config_merge_logic.sh`
 - **VS Code Extension**: `.vscode/kgsm-test-adapter/README.md`

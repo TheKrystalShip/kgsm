@@ -10,8 +10,8 @@ metadata:
   min_ram_mb: 4096
   recommended_ram_mb: 8192
   base_disk_mb: 4096
-# Player-presence detection, authored from real server output (see
-# player-presence-plan.md). Direct-socket game: leave carries only the
+# Player-presence detection, authored from real server output (field
+# contract: templates/blueprint.tp). Direct-socket game: leave carries only the
 # endpoint, so `addr` is the correlation token on both sides.
 player_joined_regex: 'Character ''(?<name>[^'']+)'' \(Peer \d+ - (?<addr>[\d.]+:\d+)\) logged in'
 player_left_regex: 'Peer (?<addr>[\d.]+:\d+) disconnected'

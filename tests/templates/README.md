@@ -49,4 +49,4 @@ Simply uncomment and modify the patterns that match your test needs.
 
 ## Documentation
 
-See `docs/testing_specification.md` for complete testing guide.
+See `docs/specs/testing-framework/testing_specification.md` for complete testing guide.

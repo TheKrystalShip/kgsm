@@ -10,8 +10,8 @@ metadata:
   min_ram_mb: 2048
   recommended_ram_mb: 4096
   base_disk_mb: 5120
-# Player-presence detection, authored from real server output (see
-# player-presence-plan.md). Scattered identity (SteamID and name never
+# Player-presence detection, authored from real server output (field
+# contract: templates/blueprint.tp). Scattered identity (SteamID and name never
 # co-located) — correlate on the ZDOID (`key`); `id` stays null (bridging it
 # to the character would be a cross-layer guess).
 player_joined_regex: 'Got character ZDOID from (?<name>.+?) : (?<key>\d+):\d+'

@@ -10,8 +10,8 @@ metadata:
   min_ram_mb: 8192
   recommended_ram_mb: 16384
   base_disk_mb: 8192
-# Player-presence detection, authored from real server output (see
-# player-presence-plan.md). Self-identifying both sides — `id` is the
+# Player-presence detection, authored from real server output (field
+# contract: templates/blueprint.tp). Self-identifying both sides — `id` is the
 # correlation token on both join and leave. The join edge is "joined the
 # server" (player loaded into the world), not the earlier "connected" line.
 # Palworld is crossplay: `User id:` carries a platform prefix (`steam_` +

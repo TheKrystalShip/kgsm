@@ -10,8 +10,8 @@ metadata:
   min_ram_mb: 2048
   recommended_ram_mb: 4096
   base_disk_mb: 279
-# Player-presence detection, authored from real server output (see
-# player-presence-contract.md). The two sides carry disjoint identity: the connect
+# Player-presence detection, authored from real server output (field
+# contract: templates/blueprint.tp). The two sides carry disjoint identity: the connect
 # line has the account id and the endpoint but no character name, and the
 # disconnect line has the account id and the name but no endpoint. The account id
 # is the only field on both, so `key` pins the session key to it — leaving the

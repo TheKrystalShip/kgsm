@@ -295,8 +295,8 @@ Example: ID generation should either ALWAYS validate blueprints or NEVER validat
 - **Architecture docs**: `docs/execution_flows.md`, `docs/blueprints.md`, `docs/overrides.md`, `docs/instances.md`
 - **Config management**: `docs/configuration_management.md` (user guide), `docs/config_management_specification.md` (technical spec)
 - **API reference**: `templates/overrides.tp` (complete override function documentation)
-- **Testing specification**: `docs/testing_specification.md` (**REQUIRED** reference for all test creation/modification)
-- **Testing guide**: `docs/testing_framework.md`, `tests/README.md`
+- **Testing specification**: `docs/specs/testing-framework/testing_specification.md` (**REQUIRED** reference for all test creation/modification)
+- **Testing guide**: `tests/README.md`
 - **Example overrides**: `overrides/factorio.overrides.sh`, `overrides/terraria.overrides.sh`
 - **Example blueprints**: `blueprints/default/native/factorio.bp`, `blueprints/default/native/minecraft.bp`
 - **Example migration**: `migrations/config/001_v0_to_v1_flat_to_sectioned.sh` (flat to sectioned format)
