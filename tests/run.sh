@@ -130,6 +130,26 @@ export -f _count_filtered_tests
 # TEST EXECUTION
 # =============================================================================
 
+# Keep the most recent runs' logs and delete the rest.
+#
+# A run's directory is named for the moment it started, so ordinal order is
+# chronological. What a person reads after a run is this run and the few before
+# it; every older one is weight on a directory that is copied into a sandbox per
+# test file, which is where an unbounded history stops being free.
+readonly TEST_LOG_RUNS_KEPT=20
+
+function _prune_run_logs() {
+  local -a runs
+  mapfile -t runs < <(find "$TESTS_ROOT/logs" -mindepth 1 -maxdepth 1 -type d -printf '%f\n' 2>/dev/null | sort -r)
+
+  local index
+  for ((index = TEST_LOG_RUNS_KEPT; index < ${#runs[@]}; index++)); do
+    rm -rf "${TESTS_ROOT:?}/logs/${runs[index]:?}"
+  done
+}
+
+export -f _prune_run_logs
+
 function run_test_suite() {
   local test_type="$1"
 
@@ -439,6 +459,8 @@ function main() {
   local timestamp="$(date '+%Y-%m-%d_%H-%M-%S')"
   TEST_LOG_DIR="$TESTS_ROOT/logs/$timestamp"
   mkdir -p "$TEST_LOG_DIR"
+
+  _prune_run_logs
 
   # Set up signal handlers for cleanup
   trap 'cleanup_all' EXIT INT TERM

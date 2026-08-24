@@ -51,6 +51,30 @@ export -f __generate_sandbox_id
 # Sandbox Creation
 # ============================================================================
 
+# Copy the tests tree into a sandbox without its log history.
+# Usage: __copy_tests_tree "<source tests dir>" "<destination tests dir>"
+# Returns: 0 on success, 1 on failure
+function __copy_tests_tree() {
+  local source="$1"
+  local destination="$2"
+
+  mkdir -p "$destination" || return 1
+
+  local entry
+  for entry in "$source"/*; do
+    [[ "$(basename "$entry")" == "logs" ]] && continue
+    cp -r "$entry" "$destination/" || return 1
+  done
+
+  # The runner writes into the real tree's log directory, so the sandbox's only
+  # has to be there.
+  mkdir -p "$destination/logs" || return 1
+
+  return 0
+}
+
+export -f __copy_tests_tree
+
 # Create isolated KGSM sandbox environment
 # Usage: create_sandbox "sandbox_id"
 # Returns: Path to created sandbox (stdout), exits 1 on failure
@@ -89,12 +113,38 @@ function create_sandbox() {
     return 1
   fi
 
-  # Copy KGSM to sandbox
-  if ! cp -r "$KGSM_ROOT"/* "$sandbox_path/"; then
-    echo "ERROR: Failed to copy KGSM to sandbox" >&2
-    rm -rf "$sandbox_path" # Cleanup partial copy
-    return 1
-  fi
+  # Copy KGSM to sandbox.
+  #
+  # What a sandbox needs is the tree KGSM runs from. Two directories inside it
+  # are read by nothing under test and are the two that grow without bound:
+  # the accumulated log history under tests/logs, and node_modules. Every test
+  # file gets its own sandbox and several exist at once, so copying either one
+  # is paid per test and lands in the same tmpfs the sandboxes live in — where
+  # running out of room fails sandbox creation itself, which reads as a whole
+  # suite failing for no stated reason.
+  local _entry _name
+  for _entry in "$KGSM_ROOT"/*; do
+    _name="$(basename "$_entry")"
+
+    if [[ "$_name" == "node_modules" ]]; then
+      continue
+    fi
+
+    if [[ "$_name" == "tests" ]]; then
+      if ! __copy_tests_tree "$_entry" "$sandbox_path/tests"; then
+        echo "ERROR: Failed to copy KGSM to sandbox" >&2
+        rm -rf "$sandbox_path" # Cleanup partial copy
+        return 1
+      fi
+      continue
+    fi
+
+    if ! cp -r "$_entry" "$sandbox_path/"; then
+      echo "ERROR: Failed to copy KGSM to sandbox" >&2
+      rm -rf "$sandbox_path" # Cleanup partial copy
+      return 1
+    fi
+  done
 
   # Create test-specific config
   if ! create_test_config "$sandbox_path"; then

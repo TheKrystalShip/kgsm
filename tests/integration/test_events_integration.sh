@@ -32,14 +32,22 @@ readonly WEBHOOK_MODULE="$KGSM_ROOT/commands/events.webhook.sh"
 # set, so bootstrap skips config re-load and uses the inherited config_* values).
 # We can therefore control subprocess behavior by exporting config_* variables.
 
+# The segment the last emit landed in, found by asking the directory instead of
+# by naming a date. Segment names are dates, so ordinal order is chronological
+# and the newest file is the one an emit just appended to — which holds whether
+# or not the UTC day turned over between the emit and this lookup, where a
+# computed name would fall on the wrong side of midnight.
+function _newest_journal_segment() {
+  local journal_dir="${config_event_journal_dir:-$KGSM_TEST_SANDBOX/events}"
+  find "$journal_dir" -maxdepth 1 -type f -name '*.ndjson' 2> /dev/null | sort | tail -1
+}
+
 # The journal is where an emitted event actually lands, so payload-shape tests read
 # it back from there. The sandbox redirects event_journal_dir into itself, so this
-# never touches the host's real journal. Newest segment, last line — segment names
-# are dates, so ordinal order is chronological.
+# never touches the host's real journal.
 function _last_journal_event() {
-  local journal_dir="${config_event_journal_dir:-$KGSM_TEST_SANDBOX/events}"
   local segment
-  segment=$(find "$journal_dir" -maxdepth 1 -type f -name '*.ndjson' 2> /dev/null | sort | tail -1)
+  segment=$(_newest_journal_segment)
   [[ -n "$segment" ]] && tail -n 1 "$segment"
 }
 
@@ -230,8 +238,9 @@ function test_emit_valid_event_succeeds_without_optional_transports() {
   assert_command_succeeds "$EVENTS_MODULE emit instance-created test-server factorio" \
     "emit should succeed when the journal is the only transport"
 
-  local segment="${KGSM_ROOT}/events/$(date -u +%Y-%m-%d).ndjson"
-  assert_file_exists "$segment" \
+  local segment
+  segment=$(_newest_journal_segment)
+  assert_not_null "$segment" \
     "the journal segment should exist after emitting"
   assert_file_contains "$segment" '"EventType":"instance_created"' \
     "the journal should carry the emitted event"
@@ -1101,22 +1110,42 @@ function test_journal_prune_ages_a_segment_by_its_name() {
   local journal_dir="${config_event_journal_dir:-$KGSM_TEST_SANDBOX/events}"
   mkdir -p "$journal_dir"
 
-  local cutoff older
-  cutoff=$(date -u -d "90 days ago" +%F)
-  older=$(date -u -d "91 days ago" +%F)
+  # Prune derives its cutoff from the window it is configured with, so the two
+  # segment names are derived from the same knob rather than restating a default
+  # that only the command owns.
+  local days="${config_event_journal_retention_days:-90}"
 
-  printf '{"V":1}\n' > "$journal_dir/$older.ndjson"
-  printf '{"V":1}\n' > "$journal_dir/$cutoff.ndjson"
+  # The names and prune's cutoff have to describe the same UTC day. A day that
+  # turns over between them moves the cutoff one day past the names already on
+  # disk, which is a fact about when the suite ran rather than about the code.
+  # An attempt that straddles a turnover is therefore thrown away and redone on
+  # the new day instead of asserted on: a day turns over once, and the body
+  # takes milliseconds, so the redo cannot meet a second one.
+  local anchor cutoff older
+  while :; do
+    anchor=$(date -u +%F)
+    cutoff=$(date -u -d "$days days ago" +%F)
+    older=$(date -u -d "$((days + 1)) days ago" +%F)
 
-  # Old by name, brand new by mtime: under an mtime rule this survives, which is
-  # exactly the divergence being pinned.
-  touch "$journal_dir/$older.ndjson"
+    printf '{"V":1}\n' > "$journal_dir/$older.ndjson"
+    printf '{"V":1}\n' > "$journal_dir/$cutoff.ndjson"
 
-  # Not a segment. The directory belongs to this producer, which is a reason to be
-  # careful with it rather than a licence to delete whatever is in it.
-  printf 'x\n' > "$journal_dir/notes.txt"
+    # Old by name, brand new by mtime: under an mtime rule this survives, which
+    # is exactly the divergence being pinned.
+    touch "$journal_dir/$older.ndjson"
 
-  "$KGSM_ROOT/commands/events.journal.sh" prune > /dev/null 2>&1 || true
+    # Not a segment. The directory belongs to this producer, which is a reason to
+    # be careful with it rather than a licence to delete whatever is in it.
+    printf 'x\n' > "$journal_dir/notes.txt"
+
+    "$KGSM_ROOT/commands/events.journal.sh" prune > /dev/null 2>&1 || true
+
+    if [[ "$(date -u +%F)" == "$anchor" ]]; then
+      break
+    fi
+
+    rm -f "$journal_dir/$older.ndjson" "$journal_dir/$cutoff.ndjson"
+  done
 
   assert_file_not_exists "$journal_dir/$older.ndjson" \
     "A segment named past the window must be pruned despite a fresh mtime"

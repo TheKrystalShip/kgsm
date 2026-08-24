@@ -178,20 +178,26 @@ function test_cgroup_lifecycle_roundtrip() {
   assert_equals "$?" "$EC_SUCCESS" "cgroup create should succeed"
   assert_dir_exists "$cg" "instance cgroup directory should exist"
 
-  # Spawn a short-lived helper and try to place it in the cgroup. Rootless entry
-  # only works from INSIDE a user-owned delegated subtree (the cgroup-v2
+  # Spawn a helper and try to place it in the cgroup. Rootless entry only works
+  # from INSIDE a user-owned delegated subtree (the cgroup-v2
   # delegation-containment rule needs write on the source/dest common ancestor);
   # an SSH/system.slice login or CI without delegation cannot, so we skip rather
-  # than fail. NOTE: the helper is bounded (sleep 5) and always killed before any
-  # wait, so this test can never block the suite.
-  sleep 5 &
-  local sleep_pid=$!
-  __cgroup_attach "$inst" "$sleep_pid"
+  # than fail.
+  #
+  # The helper blocks on a pipe this shell owns rather than on a duration, so it
+  # is alive for exactly as long as the test needs it and no elapsed time can
+  # retire it early. Closing the pipe ends it, and the shell dying closes the
+  # pipe, so it cannot outlive the test either.
+  local helper_fd helper_pid
+  exec {helper_fd}> >(exec cat > /dev/null)
+  helper_pid=$!
+  __cgroup_attach "$inst" "$helper_pid"
   local attach_rc=$?
 
   if [[ "$attach_rc" -ne "$EC_SUCCESS" ]]; then
-    kill -9 "$sleep_pid" 2> /dev/null
-    wait "$sleep_pid" 2> /dev/null
+    exec {helper_fd}>&- 2> /dev/null
+    kill -9 "$helper_pid" 2> /dev/null
+    wait "$helper_pid" 2> /dev/null
     rmdir "$cg" 2> /dev/null
     skip_test "cannot enter delegated base from this cgroup context (needs root or a systemd user session)" && return
   fi
@@ -204,17 +210,12 @@ function test_cgroup_lifecycle_roundtrip() {
   __cgroup_kill "$inst"
   assert_equals "$?" "$EC_SUCCESS" "cgroup kill should succeed"
 
-  # Bounded drain (<= 5s); never an unbounded wait.
-  local i=0
-  while __cgroup_is_populated "$inst" && [[ "$i" -lt 50 ]]; do
-    sleep 0.1
-    ((i++)) || true
-  done
-
-  # The helper was SIGKILLed by cgroup.kill; kill -9 is a no-op safety net, and
-  # wait only ever runs after a kill, so it reaps instantly and cannot block.
-  kill -9 "$sleep_pid" 2> /dev/null
-  wait "$sleep_pid" 2> /dev/null
+  # Reap before reading the flag rather than polling for it. wait returns only
+  # once the helper is gone, which is the event the emptiness assertion is
+  # about, so the check is ordered behind a fact instead of behind a deadline.
+  exec {helper_fd}>&- 2> /dev/null
+  kill -9 "$helper_pid" 2> /dev/null
+  wait "$helper_pid" 2> /dev/null
 
   __cgroup_is_populated "$inst"
   assert_equals "$?" "1" "cgroup should be empty after kill"

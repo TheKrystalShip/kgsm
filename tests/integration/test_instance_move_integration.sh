@@ -88,6 +88,34 @@ function _sweep_registry() {
   return 0
 }
 
+LIVE_PID=""
+LIVE_FD=""
+
+# Leaves a genuinely running process behind in LIVE_PID, for the refusals that
+# have to see a live server behind an instance's pid file.
+#
+# The holder blocks on a pipe this shell owns rather than on a duration, so no
+# amount of elapsed time can end it early and let a refusal test pass because
+# the process it described had quietly gone away. Closing the pipe ends it, and
+# the shell dying closes the pipe, so it cannot outlive the test either.
+function _spawn_live_process() {
+  exec {LIVE_FD}> >(exec cat > /dev/null)
+  LIVE_PID=$!
+}
+
+# Ends the holder and clears the pair, so a second call and a teardown that runs
+# after an explicit reap are both no-ops.
+function _reap_live_process() {
+  [[ -n "$LIVE_PID" ]] || return 0
+
+  exec {LIVE_FD}>&- 2> /dev/null || true
+  kill "$LIVE_PID" 2> /dev/null || true
+  wait "$LIVE_PID" 2> /dev/null || true
+
+  LIVE_PID=""
+  LIVE_FD=""
+}
+
 # Echoes the target of an instance's registry symlink.
 function _registry_target() {
   local blueprint="$1"
@@ -119,6 +147,8 @@ function setup() {
 }
 
 function teardown() {
+  _reap_live_process
+
   chmod u+rwx "$SOURCE_ROOT" "$TARGET_ROOT" 2> /dev/null || true
 
   _sweep_registry
@@ -278,15 +308,13 @@ function test_move_refuses_a_running_instance() {
 
   # A process that is genuinely alive, so the management script's own liveness
   # check answers the way a running server would.
-  sleep 30 &
-  local fake_pid=$!
-  echo "$fake_pid" > "$pid_file"
+  _spawn_live_process
+  echo "$LIVE_PID" > "$pid_file"
 
   "$KGSM_ROOT/kgsm.sh" instances move "$instance" --library "$TARGET_LIBRARY" > /dev/null 2>&1
   local exit_code=$?
 
-  kill "$fake_pid" 2> /dev/null || true
-  wait "$fake_pid" 2> /dev/null || true
+  _reap_live_process
   rm -f "$pid_file"
 
   assert_equals "$exit_code" "$EC_INSTANCE_RUNNING" \
@@ -479,15 +507,13 @@ function test_drain_refuses_while_a_resident_is_running() {
   local pid_file
   pid_file="$("$KGSM_ROOT/kgsm.sh" instances config-get "$instance" pid_file)"
 
-  sleep 30 &
-  local fake_pid=$!
-  echo "$fake_pid" > "$pid_file"
+  _spawn_live_process
+  echo "$LIVE_PID" > "$pid_file"
 
   "$KGSM_ROOT/kgsm.sh" libraries remove "$SOURCE_LIBRARY" --drain "$TARGET_LIBRARY" > /dev/null 2>&1
   local exit_code=$?
 
-  kill "$fake_pid" 2> /dev/null || true
-  wait "$fake_pid" 2> /dev/null || true
+  _reap_live_process
   rm -f "$pid_file"
 
   assert_equals "$exit_code" "$EC_INSTANCE_RUNNING" \

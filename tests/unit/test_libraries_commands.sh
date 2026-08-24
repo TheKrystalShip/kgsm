@@ -19,6 +19,16 @@ readonly HANDLER="$KGSM_ROOT/commands/handlers/libraries.sh"
 # TEST FUNCTIONS
 # =============================================================================
 
+# The newest segment in a journal directory. Segment names are dates, so ordinal
+# order is chronological and the newest file is the one an event just landed
+# in — true whether or not the UTC day turned over mid-command, which a computed
+# name would get wrong.
+#
+# Args: $1 = journal directory
+function _newest_journal_segment() {
+  find "$1" -maxdepth 1 -type f -name '*.ndjson' 2> /dev/null | sort | tail -1
+}
+
 function setup_file() {
   log_test_step "Setting up library command tests"
 
@@ -171,8 +181,8 @@ function test_add_emits_library_added() {
   assert_not_null "$journal_dir" "The sandbox should redirect the journal"
 
   local segment
-  segment="${journal_dir}/$(date -u +%Y-%m-%d).ndjson"
-  assert_file_exists "$segment" "The journal segment should exist"
+  segment="$(_newest_journal_segment "$journal_dir")"
+  assert_not_null "$segment" "The journal segment should exist"
   assert_file_contains "$segment" "library_added" "The event type should be recorded"
   assert_file_contains "$segment" "LibraryName" "The payload should be library-scoped"
 }
@@ -359,8 +369,8 @@ function test_remove_emits_library_removed() {
   assert_equals "$?" "0" "Remove should succeed"
 
   local segment
-  segment="${config_event_journal_dir}/$(date -u +%Y-%m-%d).ndjson"
-  assert_file_exists "$segment" "The journal segment should exist"
+  segment="$(_newest_journal_segment "$config_event_journal_dir")"
+  assert_not_null "$segment" "The journal segment should exist"
   assert_file_contains "$segment" "library_removed" "The event type should be recorded"
 }
 

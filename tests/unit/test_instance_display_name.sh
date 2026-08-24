@@ -27,6 +27,7 @@ readonly INSTALL_MODULE="$KGSM_ROOT/commands/install.sh"
 readonly AWKWARD_NAME='Ana'"'"'s "Big" \Factory\ `here` 🏭'
 
 DISPLAY_TEST_DIR=""
+DISPLAY_TEST_SEQ=0
 CREATED_ID=""
 _TEARDOWN_INSTANCES=()
 
@@ -49,7 +50,13 @@ function setup_file() {
 }
 
 function setup() {
-  DISPLAY_TEST_DIR="${KGSM_TEST_SANDBOX}/display_${RANDOM}_$$"
+  # Counted, not drawn. The library a test registers is named after the
+  # directory it points at, so two tests handed the same directory are handed
+  # the same library name, and the second registration is refused as a
+  # duplicate — every instance that test tries to create then fails for a reason
+  # that has nothing to do with what it asserts.
+  DISPLAY_TEST_SEQ=$((DISPLAY_TEST_SEQ + 1))
+  DISPLAY_TEST_DIR="${KGSM_TEST_SANDBOX}/display_${DISPLAY_TEST_SEQ}_$$"
   mkdir -p "$DISPLAY_TEST_DIR"
   _TEARDOWN_INSTANCES=()
 }
@@ -61,7 +68,22 @@ function teardown() {
     name="${entry#*:}"
     remove_test_instance "$bp" "$name" "$DISPLAY_TEST_DIR" 2> /dev/null || true
   done
+
+  # The registry entry goes with the tree it describes. One left pointing at a
+  # deleted directory is a library the next test has to work around.
+  "$KGSM_ROOT/kgsm.sh" libraries remove "$(__test_library_name "$DISPLAY_TEST_DIR")" \
+    --force > /dev/null 2>&1 || true
+
   rm -rf "$DISPLAY_TEST_DIR"
+}
+
+# Reports a fixture step that did not do its job. A helper that gives up quietly
+# leaves the test asserting against an empty id, which reads in the log as the
+# code under test having answered wrongly.
+#
+# Args: $1 = what was being done
+function _fixture_failed() {
+  assert_not_null "" "Test fixture: $1"
 }
 
 # Creates an instance through the command layer, with whatever id and label the
@@ -80,7 +102,10 @@ function _create() {
   CREATED_ID=""
 
   local _library
-  _library="$(__ensure_test_library "$DISPLAY_TEST_DIR")" || return 1
+  _library="$(__ensure_test_library "$DISPLAY_TEST_DIR")" || {
+    _fixture_failed "registering a library at $DISPLAY_TEST_DIR"
+    return 1
+  }
 
   # The id has to be settled before the working directory and the symlink can be
   # made, which is the order install.sh works in.
@@ -88,14 +113,23 @@ function _create() {
   [[ -n "$_id" ]] && _generate_args+=(--id "$_id")
 
   local _resolved_id
-  _resolved_id="$("$INSTANCES_MODULE" generate-id "${_generate_args[@]}" 2> /dev/null)" || return 1
+  _resolved_id="$("$INSTANCES_MODULE" generate-id "${_generate_args[@]}" 2> /dev/null)" || {
+    _fixture_failed "settling the id for '${_id:-<generated>}'"
+    return 1
+  }
 
-  setup_instance_prereqs "factorio" "$_resolved_id" "$DISPLAY_TEST_DIR" || return 1
+  setup_instance_prereqs "factorio" "$_resolved_id" "$DISPLAY_TEST_DIR" || {
+    _fixture_failed "preparing the working directory for '$_resolved_id'"
+    return 1
+  }
 
   local -a _create_args=(factorio --library "$_library" --id "$_resolved_id")
   [[ -n "$_display_name" ]] && _create_args+=(--name "$_display_name")
 
-  "$INSTANCES_MODULE" create "${_create_args[@]}" > /dev/null 2>&1 || return 1
+  "$INSTANCES_MODULE" create "${_create_args[@]}" > /dev/null 2>&1 || {
+    _fixture_failed "creating instance '$_resolved_id'"
+    return 1
+  }
 
   _TEARDOWN_INSTANCES+=("factorio:$_resolved_id")
   CREATED_ID="$_resolved_id"

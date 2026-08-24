@@ -29,6 +29,24 @@ readonly MODULE="$KGSM_ROOT/commands/events.sh"
 # TEST FUNCTIONS
 # =============================================================================
 
+# The newest segment in a journal directory. Segment names are dates, so ordinal
+# order is chronological and the newest file is the one an emit just appended
+# to — true whether or not the UTC day turned over mid-emit, which a computed
+# name would get wrong.
+#
+# Args: $1 = journal directory
+function _newest_journal_segment() {
+  find "$1" -maxdepth 1 -type f -name '*.ndjson' 2> /dev/null | sort | tail -1
+}
+
+# Every event the journal holds, counted across all its segments so the total is
+# unaffected by which segment a line landed in.
+#
+# Args: $1 = journal directory
+function _journal_line_count() {
+  find "$1" -maxdepth 1 -type f -name '*.ndjson' -exec cat {} + 2> /dev/null | wc -l
+}
+
 function setup_file() {
   log_test_step "Setting up events command tests"
 
@@ -287,23 +305,25 @@ function test_emit_appends_one_line_to_the_journal() {
   log_test_step "Testing: emit appends exactly one JSON line to the journal"
 
   local journal_dir="${KGSM_ROOT}/events"
-  local segment="${journal_dir}/$(date -u +%Y-%m-%d).ndjson"
 
-  local before=0
-  if [[ -f "$segment" ]]; then
-    before=$(wc -l < "$segment")
-  fi
+  # Counted over every segment, and the segment itself is found afterwards by
+  # asking the directory. Both keep the arithmetic right when the UTC day turns
+  # over during the emit and the line lands in a segment named tomorrow, which a
+  # count against one computed name would read as no line appended at all.
+  local before after
+  before=$(_journal_line_count "$journal_dir")
 
   assert_command_succeeds "$MODULE emit instance-stopped journaltest" \
     "emit should succeed"
 
-  assert_file_exists "$segment" \
+  local segment
+  segment=$(_newest_journal_segment "$journal_dir")
+  assert_not_null "$segment" \
     "the journal segment should exist after emitting"
 
-  local after
-  after=$(wc -l < "$segment")
+  after=$(_journal_line_count "$journal_dir")
   assert_equals "$((before + 1))" "$after" \
-    "emit should append exactly one line to the journal segment"
+    "emit should append exactly one line to the journal"
 
   # One event per line is the contract every consumer's cursor depends on, so
   # the last line must be complete, parseable JSON on its own.
