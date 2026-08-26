@@ -47,6 +47,14 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **An instance carries what it should say before a scheduled restart.** Three keys —
+  `announce_lead_minutes`, `announce_restart_message` and `announce_restart_cancelled_message` — say when
+  to speak, in what words, and what to say if the restart is called off. The `kgsm-scheduler` leaf reads
+  them; they are inert on a host without it, and inert for a game whose blueprint declares no
+  `broadcast_command`. Lead times are empty by default, so a server speaking to its players is something
+  somebody turns on. `{minutes}` and `{instance}` are substituted into the message; the result is then
+  substituted into the game's own broadcast template, which is a separate step owned by the blueprint.
+
 - **A blueprint cannot write a value the instance config has no room for.** The config is a
   line-oriented list of `key="value"` pairs whose text readers separate a key from its value on a
   tab and one pair from the next on a newline, so a value carrying either is not one value: a tab

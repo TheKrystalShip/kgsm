@@ -357,6 +357,19 @@ function __logic_create_base_instance() {
   export instance_steamcmd_arguments="${blueprint_steamcmd_arguments:-}"
   export instance_is_steam_account_required="${blueprint_is_steam_account_required:-false}"
 
+  # Announcement defaults, host-wide unless the instance overrides them later. Empty
+  # lead times mean a new instance announces nothing until somebody asks it to.
+  #
+  # The message defaults are held in variables rather than written inline as
+  # ${x:-default}. A {token} inside that form is mangled by the parameter expansion
+  # itself — "{minutes} min" comes back out as "{minutes min}" — so any default
+  # carrying a placeholder has to reach the expansion as a value, not as literal text.
+  local _default_announce_message='Server restart in {minutes} min'
+  local _default_announce_cancelled='Server restart cancelled'
+  export instance_announce_lead_minutes="${config_instance_announce_lead_minutes:-}"
+  export instance_announce_restart_message="${config_instance_announce_restart_message:-$_default_announce_message}"
+  export instance_announce_restart_cancelled_message="${config_instance_announce_restart_cancelled_message:-$_default_announce_cancelled}"
+
   export instance_save_command_timeout_seconds="${config_instance_save_command_timeout_seconds:-5}"
   export instance_stop_command_timeout_seconds="${config_instance_stop_command_timeout_seconds:-30}"
   export instance_compress_backups="${config_enable_backup_compression:-true}"

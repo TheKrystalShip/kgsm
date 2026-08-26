@@ -155,6 +155,22 @@ backup_day="${instance_backup_day:-sun}"
 # 0 = keep all (no pruning).
 backup_retention="${instance_backup_retention:-5}"
 
+# Announcement lead times before a scheduled restart, in minutes, comma-separated
+# and largest-first by convention (e.g. "15,5,1"). Empty announces nothing, which
+# is the default: a server speaking to its players is opt-in. Read by the
+# kgsm-scheduler leaf; inert on hosts without it, and inert for a game whose
+# blueprint declares no broadcast_command.
+announce_lead_minutes="${instance_announce_lead_minutes}"
+
+# What each lead-time announcement says. {minutes} is the lead being announced and
+# {instance} is this instance's display name; anything else is sent verbatim.
+announce_restart_message="${instance_announce_restart_message}"
+
+# What is said when an announced restart is abandoned — the server stopped, or the
+# watchdog gave up on it, between the first announcement and the restart itself.
+# Players were told a restart was coming, so they are told it is not.
+announce_restart_cancelled_message="${instance_announce_restart_cancelled_message}"
+
 # Whether the kgsm-watchdog should auto-restart this instance on crash (true|false).
 crash_restart="${instance_crash_restart:-true}"
 
