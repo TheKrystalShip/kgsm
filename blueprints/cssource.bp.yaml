@@ -33,9 +33,12 @@ native:
   is_steam_account_required: false
   platform: linux
   level_name: de_dust
-  executable_subdirectory: DedicatedServer
+  executable_subdirectory: ""
   executable_file: srcds_run
   executable_arguments: -console -game cstrike -secure +maxplayers 22 +map $instance_level_name
-  stop_command: exit
+  # This server does not read its stdin: a command written to the console FIFO is never
+  # consumed. Declaring one would spend the whole stop timeout on a line nobody reads before
+  # the stop falls through to a signal, which this game answers in milliseconds.
+  stop_command: ""
   save_command: ""
   startup_success_regex: Server started

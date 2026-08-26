@@ -47,6 +47,15 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **`gmod` and `cssource` declare no stop command, because their servers do not read one.** Both run a
+  dedicated server whose stdin nothing consumes: a line written into the console FIFO sits there unread,
+  so the command a blueprint named would reach nobody while the instance spent its whole stop timeout
+  waiting for an answer. Both games end on a signal in milliseconds, which is what stopping them uses.
+  `left4dead` keeps its `exit` — its server reads the console and acts on it.
+
+- **`cssource` launches from its install root.** SteamCMD lays app 232330's `srcds_run` down there, so
+  the blueprint names no executable subdirectory.
+
 - **A key in `[instance_defaults]` is one a new instance actually inherits.** The section seeds a
   newly created instance's own config, and a key there reaches the instance only because the creation
   handler assigns it — the instance template states its own fallback for every field it writes, so an
