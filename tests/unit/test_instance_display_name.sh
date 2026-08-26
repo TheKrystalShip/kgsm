@@ -31,6 +31,10 @@ DISPLAY_TEST_SEQ=0
 CREATED_ID=""
 _TEARDOWN_INSTANCES=()
 
+# The user blueprint the creation-path tests build from. One file, rewritten by
+# whichever test needs it and removed after each.
+POISONED_BLUEPRINT="poisoned"
+
 # =============================================================================
 # TEST FUNCTIONS
 # =============================================================================
@@ -74,6 +78,7 @@ function teardown() {
   "$KGSM_ROOT/kgsm.sh" libraries remove "$(__test_library_name "$DISPLAY_TEST_DIR")" \
     --force > /dev/null 2>&1 || true
 
+  rm -f "${KGSM_USER_BLUEPRINTS_DIR}/${POISONED_BLUEPRINT}.bp.yaml"
   rm -rf "$DISPLAY_TEST_DIR"
 }
 
@@ -686,6 +691,110 @@ function test_control_characters_are_stripped_from_every_value() {
     "Both readers should report the same value"
 }
 
+# The setter is one of the config's two write paths. The other is the template
+# the creation path renders, and its values come from a blueprint — a file
+# written by hand, whose scalars reach the template exactly as typed. The two
+# below hold that path to the same rule.
+
+# A copy of a real blueprint with one native scalar replaced. The `name` inside
+# is left alone, so the copy binds to the same override directory the original
+# does; the instance it creates is laid out under the copy's own file name,
+# which is what the engine derives a blueprint's directory from.
+# Args: $1 = the native field to poison, $2 = the value to put in it
+function _write_poisoned_blueprint() {
+  local field="$1"
+  local value="$2"
+
+  mkdir -p "$KGSM_USER_BLUEPRINTS_DIR"
+
+  local source_blueprint
+  source_blueprint="$(__find_blueprint factorio)" || return 1
+
+  POISONED_VALUE="$value" yq ".native.${field} = strenv(POISONED_VALUE)" \
+    "$source_blueprint" > "${KGSM_USER_BLUEPRINTS_DIR}/${POISONED_BLUEPRINT}.bp.yaml"
+}
+
+# Creates an instance from the poisoned blueprint and records it for teardown.
+function _create_poisoned() {
+  CREATED_ID=""
+
+  local _library
+  _library="$(__ensure_test_library "$DISPLAY_TEST_DIR")" || {
+    _fixture_failed "registering a library at $DISPLAY_TEST_DIR"
+    return 1
+  }
+
+  local _resolved_id
+  _resolved_id="$("$INSTANCES_MODULE" generate-id "$POISONED_BLUEPRINT" 2> /dev/null)" || {
+    _fixture_failed "settling the id for the poisoned blueprint"
+    return 1
+  }
+
+  setup_instance_prereqs "$POISONED_BLUEPRINT" "$_resolved_id" "$DISPLAY_TEST_DIR" || {
+    _fixture_failed "preparing the working directory for '$_resolved_id'"
+    return 1
+  }
+
+  "$INSTANCES_MODULE" create "$POISONED_BLUEPRINT" \
+    --library "$_library" --id "$_resolved_id" > /dev/null 2>&1 || {
+    _fixture_failed "creating instance '$_resolved_id'"
+    return 1
+  }
+
+  _TEARDOWN_INSTANCES+=("${POISONED_BLUEPRINT}:$_resolved_id")
+  CREATED_ID="$_resolved_id"
+  return 0
+}
+
+function test_a_blueprint_tab_never_reaches_a_new_config() {
+  log_test_step "Testing a tab in a blueprint value is dropped as the config is written"
+
+  _write_poisoned_blueprint executable_arguments "$(printf -- '--one\t--two')"
+  _create_poisoned || return
+  local id="$CREATED_ID"
+
+  assert_equals "--one--two" \
+    "$(__get_instance_config_value "$id" executable_arguments)" \
+    "The tab should be gone from the value the template wrote"
+  assert_equals "$(printf -- '--one--two\n--one--two')" \
+    "$(_both_readers "$id" executable_arguments)" \
+    "Both readers should report the same value"
+}
+
+function test_a_blueprint_newline_cannot_forge_the_id() {
+  log_test_step "Testing a newline in a blueprint value cannot open a second config line"
+
+  # Shaped to forge a key: were the newline written, everything after it would
+  # be a line of its own, and the instance would report an id that is not its
+  # own from the moment it was created.
+  _write_poisoned_blueprint executable_arguments "$(printf -- '--one\nname=forged-id')"
+  _create_poisoned || return
+  local id="$CREATED_ID"
+
+  local config_file
+  config_file="$(readlink -f "$(__find_instance_config "$id")")"
+  assert_equals 1 "$(grep -c '^name=' "$config_file")" \
+    "The config should hold exactly one name key"
+
+  assert_equals "$id" "$("$INSTANCES_MODULE" info "$id" --json 2> /dev/null | jq -r '.name')" \
+    "info --json should report the instance's own id"
+  assert_equals "$id" \
+    "$("$INSTANCES_MODULE" list --detailed --json 2> /dev/null | jq -r --arg id "$id" '.[$id].name')" \
+    "The roster should report the instance's own id"
+
+  # The reader that takes the last occurrence of a key rather than the first,
+  # which is the one a forged line further down the file would win against.
+  local reported_name
+  reported_name="$(bash -c "source '$KGSM_ROOT/core/bootstrap.sh' > /dev/null 2>&1; \
+    __source_instance '$id' > /dev/null 2>&1; printf '%s' \"\$instance_name\"")"
+  assert_equals "$id" "$reported_name" \
+    "The sourcing reader should report the instance's own id too"
+
+  assert_equals "$(printf -- '--onename=forged-id\n--onename=forged-id')" \
+    "$(_both_readers "$id" executable_arguments)" \
+    "Both readers should report the whole value on one line"
+}
+
 # =============================================================================
 # TEST: a label cannot carry a shell expansion into a sourcing reader
 #
@@ -778,8 +887,8 @@ function test_a_dollar_bearing_label_still_leaves_the_config_sourceable() {
   _create "" "safe"
   local id="$CREATED_ID"
 
+  # shellcheck disable=SC2016  # single quotes are intentional: feed the literal string
   "$INSTANCES_MODULE" rename "$id" \
-    # shellcheck disable=SC2016  # single quotes are intentional: feed the literal string
     "$(printf 'x$(id)`whoami` "q" \\b ${HOME}')" > /dev/null 2>&1
 
   # The config as a whole still sources without error — the other keys are intact

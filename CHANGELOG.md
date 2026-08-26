@@ -47,6 +47,18 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **A blueprint cannot write a value the instance config has no room for.** The config is a
+  line-oriented list of `key="value"` pairs whose text readers separate a key from its value on a
+  tab and one pair from the next on a newline, so a value carrying either is not one value: a tab
+  truncates it for the readers that split on one while the rest return it whole, and a newline ends
+  the line, after which everything past it parses as further keys — enough for an instance to
+  report an id that is not its own, in `instances info --json` and in the roster alike. Blueprint
+  scalars are free text authored by hand and reach the creation template exactly as typed, so every
+  value the template interpolates is stripped of control characters as the file is written. That is
+  the rule `__escape_instance_config_value` already carries on the setter's side, applied at the
+  other of the config's two write paths, and it is what keeps the file's two reader classes — the
+  surfaces that source it and the ones that parse it as text — answering with the same bytes.
+
 - **A server announces to the people playing on it.** `kgsm instances announce <instance> "<text>"`
   sends a message to everyone connected, using the game's own broadcast command. A blueprint declares
   that command as `broadcast_command`, a template carrying one `{message}` placeholder that the engine

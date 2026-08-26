@@ -406,6 +406,27 @@ function __logic_create_base_instance() {
     return $EC_FILE_NOT_FOUND
   fi
 
+  # Strip control characters from every value the template is about to
+  # interpolate. The config is a line-oriented list of key="value" pairs, and its
+  # text readers separate a key from its value on a tab and one pair from the
+  # next on a newline — so a value carrying either is not one value. A tab
+  # truncates it for the readers that split on one while the rest return it
+  # whole; a newline ends the line, and everything past it parses as further
+  # keys, which is enough to make an instance report an id that is not its own.
+  # Blueprint scalars are free text authored by hand, and they reach the template
+  # exactly as written.
+  #
+  # The strip goes at the render rather than on each field because the render is
+  # what turns a value into a line, the same way __escape_instance_config_value
+  # is that point for the setter. One rule at each of the config's two write
+  # paths is what keeps the file's two reader classes — the surfaces that source
+  # it and the ones that parse it as text — answering with the same bytes.
+  local _template_value
+  for _template_value in "${!instance_@}"; do
+    printf -v "$_template_value" '%s' \
+      "$(__sanitize_instance_config_value "${!_template_value}")"
+  done
+
   # Generate config from template
   if ! eval "cat <<EOF
 $(<"$instance_config_file_template")
