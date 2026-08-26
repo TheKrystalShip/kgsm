@@ -357,6 +357,10 @@ function __logic_create_base_instance() {
   export instance_steamcmd_arguments="${blueprint_steamcmd_arguments:-}"
   export instance_is_steam_account_required="${blueprint_is_steam_account_required:-false}"
 
+  # What a new instance does on a clock, host-wide unless the instance overrides
+  # it later. Empty means no maintenance until somebody asks for some.
+  export instance_maintenance_windows="${config_instance_maintenance_windows:-}"
+
   # Announcement defaults, host-wide unless the instance overrides them later. Empty
   # lead times mean a new instance announces nothing until somebody asks it to.
   #
@@ -367,8 +371,8 @@ function __logic_create_base_instance() {
   local _default_announce_message='Server restart in {minutes} min'
   local _default_announce_cancelled='Server restart cancelled'
   export instance_announce_lead_minutes="${config_instance_announce_lead_minutes:-}"
-  export instance_announce_restart_message="${config_instance_announce_restart_message:-$_default_announce_message}"
-  export instance_announce_restart_cancelled_message="${config_instance_announce_restart_cancelled_message:-$_default_announce_cancelled}"
+  export instance_announce_maintenance_message="${config_instance_announce_maintenance_message:-$_default_announce_message}"
+  export instance_announce_maintenance_cancelled_message="${config_instance_announce_maintenance_cancelled_message:-$_default_announce_cancelled}"
 
   export instance_save_command_timeout_seconds="${config_instance_save_command_timeout_seconds:-5}"
   export instance_stop_command_timeout_seconds="${config_instance_stop_command_timeout_seconds:-30}"
@@ -869,6 +873,210 @@ function __set_instance_config_value() {
 }
 
 export -f __set_instance_config_value
+
+# Records what an instance does on a clock as one maintenance-window list.
+#
+# Called from the commands that touch a single instance, so the key lands on
+# first use rather than needing a migration pass over every instance on the host.
+# An instance that already carries `maintenance_windows` is left exactly as it
+# is, which is what makes this cost one read on every call after the first.
+#
+# The clock keys an instance carries become one window each, and they stay two
+# windows even when they name the same time: a window is a sequence, so merging
+# them would make one task wait on another that nothing said it depended on.
+#
+# Args: $1 = instance name
+# Returns: EC_SUCCESS once the instance carries the key, EC_* on failure
+function __logic_stamp_instance_maintenance_windows() {
+  local _instance_name="$1"
+
+  if [[ -z "$_instance_name" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  local _config_file
+  _config_file="$(__find_instance_config "$_instance_name" 2> /dev/null)"
+  if [[ -z "$_config_file" ]] || [[ ! -f "$_config_file" ]]; then
+    return $EC_FILE_NOT_FOUND
+  fi
+
+  # Read forkless: this runs on every command that names an instance, and the
+  # answer for one that already carries the key is a single pass over a small
+  # file.
+  local _key _value
+  local _has_windows=false
+  local _restart_cadence="" _restart_time="" _restart_day=""
+  local _backup_cadence="" _backup_time="" _backup_day=""
+  local _announce_message="" _announce_cancelled=""
+  local _has_announce_message=false _has_announce_cancelled=false
+
+  while IFS='=' read -r _key _value || [[ -n "$_key" ]]; do
+    _value="${_value#\"}"
+    _value="${_value%\"}"
+    case "$_key" in
+      maintenance_windows) _has_windows=true ;;
+      scheduled_restart) _restart_cadence="$_value" ;;
+      restart_time) _restart_time="$_value" ;;
+      restart_day) _restart_day="$_value" ;;
+      backup_schedule) _backup_cadence="$_value" ;;
+      backup_time) _backup_time="$_value" ;;
+      backup_day) _backup_day="$_value" ;;
+      announce_restart_message) _announce_message="$_value" ;;
+      announce_restart_cancelled_message) _announce_cancelled="$_value" ;;
+      announce_maintenance_message) _has_announce_message=true ;;
+      announce_maintenance_cancelled_message) _has_announce_cancelled=true ;;
+      *) continue ;;
+    esac
+  done < "$_config_file"
+
+  if [[ "$_has_windows" == true ]]; then
+    return $EC_SUCCESS
+  fi
+
+  local -a _windows=()
+  local _window
+
+  _window="$(__compose_maintenance_window "$_restart_cadence" "$_restart_time" "$_restart_day" "04:00" "restart")"
+  [[ -n "$_window" ]] && _windows+=("$_window")
+
+  _window="$(__compose_maintenance_window "$_backup_cadence" "$_backup_time" "$_backup_day" "05:00" "backup")"
+  [[ -n "$_window" ]] && _windows+=("$_window")
+
+  local _packed=""
+  if [[ ${#_windows[@]} -gt 0 ]]; then
+    _packed="$(
+      IFS=';'
+      echo "${_windows[*]}"
+    )"
+  fi
+
+  if ! __set_instance_config_value "$_instance_name" "maintenance_windows" "$_packed"; then
+    return $EC_FAILED_UPDATE_CONFIG
+  fi
+
+  # The announcement keys are named for the window they belong to, and whatever
+  # wording the instance carries goes with them.
+  # The wording is read back out of the file as it is stored and handed to a
+  # setter that escapes what it writes, so it is unescaped once in between —
+  # otherwise every backslash in it would gain another on the way through.
+  if [[ "$_has_announce_message" == false ]] && [[ -n "$_announce_message" ]]; then
+    __set_instance_config_value "$_instance_name" "announce_maintenance_message" \
+      "$(__unescape_instance_config_value "$_announce_message")" || return $EC_FAILED_UPDATE_CONFIG
+  fi
+  if [[ "$_has_announce_cancelled" == false ]] && [[ -n "$_announce_cancelled" ]]; then
+    __set_instance_config_value "$_instance_name" "announce_maintenance_cancelled_message" \
+      "$(__unescape_instance_config_value "$_announce_cancelled")" || return $EC_FAILED_UPDATE_CONFIG
+  fi
+
+  __drop_instance_config_keys "$_instance_name" \
+    scheduled_restart restart_time restart_day \
+    backup_schedule backup_time backup_day \
+    announce_restart_message announce_restart_cancelled_message || return $EC_FAILED_UPDATE_CONFIG
+
+  return $EC_SUCCESS
+}
+
+export -f __logic_stamp_instance_maintenance_windows
+
+# One maintenance window from a cadence, or nothing when the cadence names no
+# appointment at all.
+#
+# `daily` and `weekly` are the two cadences that need a time of day spelled out
+# beside them; every other cadence is already an interval expression and is
+# carried through as written, so a host running on one keeps the period it has.
+#
+# Args: $1 = cadence, $2 = time (HH:MM), $3 = day of week, $4 = time to use when
+#       the instance names none, $5 = the task the window runs
+# Outputs: the window, or the empty string
+function __compose_maintenance_window() {
+  local _cadence="$1"
+  local _time="${2:-}"
+  local _day="${3:-}"
+  local _default_time="$4"
+  local _task="$5"
+
+  if [[ -z "$_cadence" ]] || [[ "$_cadence" == "off" ]]; then
+    return 0
+  fi
+
+  [[ -n "$_time" ]] || _time="$_default_time"
+  [[ -n "$_day" ]] || _day="sun"
+
+  case "$_cadence" in
+    daily)
+      printf 'daily@%s/%s' "$_time" "$_task"
+      ;;
+    weekly)
+      printf 'weekly.%s@%s/%s' "$_day" "$_time" "$_task"
+      ;;
+    *)
+      printf '%s/%s' "$_cadence" "$_task"
+      ;;
+  esac
+
+  return 0
+}
+
+export -f __compose_maintenance_window
+
+# Remove named keys from an instance's config, leaving every other line as it is.
+#
+# Args: $1 = instance name, then one or more key names
+# Returns: 0 on success, EC_* on failure
+function __drop_instance_config_keys() {
+  local _instance_name="$1"
+  shift
+
+  if [[ -z "$_instance_name" ]] || [[ $# -eq 0 ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  local _config_file
+  _config_file="$(__find_instance_config "$_instance_name")"
+  if [[ -z "$_config_file" ]]; then
+    return $EC_FILE_NOT_FOUND
+  fi
+
+  # The instance directory is a symlink to the working dir; resolve it so the
+  # write lands on the real file and the temp file shares its filesystem.
+  local _target_file="$_config_file"
+  if [[ -L "$_config_file" ]]; then
+    _target_file="$(readlink -f "$_config_file")"
+  fi
+
+  local _keys
+  _keys="$(
+    IFS='|'
+    echo "$*"
+  )"
+
+  local _tmp_file
+  _tmp_file="$(mktemp "${_target_file}.XXXXXX")" || return $EC_FAILED_TOUCH
+  chmod --reference="$_target_file" "$_tmp_file" 2> /dev/null || true
+
+  if ! awk -v keys="$_keys" '
+    BEGIN { n = split(keys, drop, "|") }
+    {
+      line = $0
+      for (i = 1; i <= n; i++) {
+        if (line ~ ("^" drop[i] "[ \t]*=")) { next }
+      }
+      print
+    }
+  ' "$_target_file" > "$_tmp_file"; then
+    rm -f "$_tmp_file"
+    return $EC_FAILED_SED
+  fi
+
+  if ! mv "$_tmp_file" "$_target_file"; then
+    rm -f "$_tmp_file"
+    return $EC_FAILED_MV
+  fi
+
+  return 0
+}
+
+export -f __drop_instance_config_keys
 
 # =============================================================================
 # MOVING AN INSTANCE BETWEEN LIBRARIES

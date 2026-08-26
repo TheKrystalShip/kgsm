@@ -387,6 +387,73 @@ function test_prune_skips_pinned_backups_and_does_not_count_them() {
     "the prunable backup outside the window is deleted"
 }
 
+function test_prune_holds_back_the_newest_pre_update_backup() {
+  log_test_step "Testing the rollback point survives a prune and does not consume a keep slot"
+
+  local instance_name="test-br-rollback-$$"
+  _new_instance "$instance_name"
+  _provision_backup_instance "$instance_name"
+
+  local backups
+  backups=$(_backups_of "$instance_name")
+
+  # Four backups, oldest first, one of them the archive an update took on its
+  # way in. A --keep=2 sweep keeps the two newest of what is left once that one
+  # is set aside, so the oldest is the only casualty.
+  local oldest rollback third newest
+  oldest=$(_make_backup "$instance_name")
+  sleep 1
+  rollback=$(_make_backup "$instance_name" --reason pre-update)
+  sleep 1
+  third=$(_make_backup "$instance_name")
+  sleep 1
+  newest=$(_make_backup "$instance_name")
+
+  assert_not_null "$rollback" "the pre-update backup should have been created"
+
+  "$MODULE" prune-backups "$instance_name" --keep=2 > /dev/null 2>&1
+  assert_equals 0 "$?" "the prune should succeed"
+
+  assert_dir_exists "$backups/$rollback" "the rollback point must survive"
+  assert_dir_exists "$backups/$third" "the second-newest prunable backup is kept"
+  assert_dir_exists "$backups/$newest" "the newest prunable backup is kept"
+  assert_equals "false" "$([[ -d "$backups/$oldest" ]] && echo true || echo false)" \
+    "the prunable backup outside the window is deleted"
+}
+
+function test_prune_holds_back_one_pre_update_backup_not_a_set() {
+  log_test_step "Testing only the most recent pre-update backup is held back"
+
+  local instance_name="test-br-rollback1-$$"
+  _new_instance "$instance_name"
+  _provision_backup_instance "$instance_name"
+
+  local backups
+  backups=$(_backups_of "$instance_name")
+
+  # Two updates' worth of rollback points. Only the newest is the one an
+  # operator would roll back to, so the older one rotates like any other backup.
+  local stale_rollback filler rollback newest
+  stale_rollback=$(_make_backup "$instance_name" --reason pre-update)
+  sleep 1
+  filler=$(_make_backup "$instance_name")
+  sleep 1
+  rollback=$(_make_backup "$instance_name" --reason pre-update)
+  sleep 1
+  newest=$(_make_backup "$instance_name")
+
+  assert_not_null "$filler" "the intervening backup should have been created"
+
+  "$MODULE" prune-backups "$instance_name" --keep=2 > /dev/null 2>&1
+  assert_equals 0 "$?" "the prune should succeed"
+
+  assert_dir_exists "$backups/$rollback" "the most recent rollback point must survive"
+  assert_dir_exists "$backups/$newest" "the newest prunable backup is kept"
+  assert_dir_exists "$backups/$filler" "the second-newest prunable backup is kept"
+  assert_equals "false" "$([[ -d "$backups/$stale_rollback" ]] && echo true || echo false)" \
+    "the superseded rollback point rotates like any other backup"
+}
+
 function test_delete_still_removes_a_pinned_backup() {
   log_test_step "Testing pinned stops the rotation, never the operator"
 

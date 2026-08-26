@@ -121,55 +121,54 @@ cpu_priority="${instance_cpu_priority:-normal}"
 # Applied by the watchdog at spawn via cgroup memory.max.
 memory_cap_mb="${instance_memory_cap_mb:-0}"
 
-# Scheduled restart cadence (off | daily | weekly | 6h). Enforced by the
-# kgsm-scheduler leaf; inert on hosts without the scheduler deployed.
-scheduled_restart="${instance_scheduled_restart:-off}"
+# What this instance does on a clock: a ';'-joined list of maintenance windows,
+# each one a schedule and the tasks it runs, written <schedule>/<tasks>.
+#
+#   maintenance_windows="daily@05:00/backup;weekly.sun@04:00/backup,update,restart"
+#
+# A schedule is either an APPOINTMENT — daily@HH:MM, weekly.<sun..sat>@HH:MM or
+# monthly.<1-31>@HH:MM, read in the timezone below, with a day-of-month past the
+# month's end firing on its last day — or an INTERVAL, <n> followed by m, h or d
+# from 10m to 30d, which is aligned to whole-N boundaries from the epoch and so
+# ignores both time of day and timezone. The '@' is what tells them apart.
+#
+# The tasks are backup, update and restart, comma-separated. They run in that
+# fixed order whatever order they are written in, because a backup taken after
+# an update archives the new build instead of the rollback point, and the first
+# one to fail abandons the rest of its window. Tasks in one window are a
+# sequence; separate windows are independent appointments that share only this
+# instance, so anything that must happen after something else belongs in the
+# same window as it. A container instance can carry backup only.
+#
+# Empty means no maintenance. Enforced by the kgsm-scheduler leaf; inert on
+# hosts without the scheduler deployed.
+maintenance_windows="${instance_maintenance_windows}"
 
-# Time of day to perform the scheduled restart (HH:MM, 24h, host-local timezone).
-restart_time="${instance_restart_time:-04:00}"
-
-# Day of week for weekly restarts (sun | mon | tue | wed | thu | fri | sat).
-# Only used when scheduled_restart=weekly.
-restart_day="${instance_restart_day:-sun}"
-
-# IANA timezone for scheduling (e.g. Europe/Madrid). Empty = host-local. Shared
-# by the restart and backup schedules — one instance, one answer for what time
-# it is.
+# IANA timezone for scheduling (e.g. Europe/Madrid). Empty = host-local. Read by
+# every appointment window above — one instance, one answer for what time it is.
 timezone="${instance_timezone:-}"
-
-# Scheduled backup cadence (off | daily | weekly | 6h). Enforced by the
-# kgsm-scheduler leaf; inert on hosts without the scheduler deployed. Backups run
-# against the instance as it is, running or not, so this cadence is independent
-# of scheduled_restart — the two schedules share only the timezone below.
-backup_schedule="${instance_backup_schedule:-off}"
-
-# Time of day to take the scheduled backup (HH:MM, 24h). Interpreted in the
-# instance's timezone. Ignored when backup_schedule=6h.
-backup_time="${instance_backup_time:-05:00}"
-
-# Day of week for weekly backups (sun | mon | tue | wed | thu | fri | sat).
-# Only used when backup_schedule=weekly.
-backup_day="${instance_backup_day:-sun}"
 
 # Number of backups to keep after each scheduled backup prunes (1-100).
 # 0 = keep all (no pruning).
 backup_retention="${instance_backup_retention:-5}"
 
-# Announcement lead times before a scheduled restart, in minutes, comma-separated
+# Announcement lead times before a maintenance window, in minutes, comma-separated
 # and largest-first by convention (e.g. "15,5,1"). Empty announces nothing, which
 # is the default: a server speaking to its players is opt-in. Read by the
 # kgsm-scheduler leaf; inert on hosts without it, and inert for a game whose
 # blueprint declares no broadcast_command.
 announce_lead_minutes="${instance_announce_lead_minutes}"
 
-# What each lead-time announcement says. {minutes} is the lead being announced and
-# {instance} is this instance's display name; anything else is sent verbatim.
-announce_restart_message="${instance_announce_restart_message}"
+# What each lead-time announcement says. {minutes} is the lead being announced,
+# {instance} is this instance's display name, and {reason} is what the window is
+# about, worded from its disruptive tasks; anything else is sent verbatim. A
+# window carrying no disruptive task is never announced.
+announce_maintenance_message="${instance_announce_maintenance_message}"
 
-# What is said when an announced restart is abandoned — the server stopped, or the
-# watchdog gave up on it, between the first announcement and the restart itself.
-# Players were told a restart was coming, so they are told it is not.
-announce_restart_cancelled_message="${instance_announce_restart_cancelled_message}"
+# What is said when an announced window is abandoned — the server stopped, or the
+# watchdog gave up on it, between the first announcement and the window itself.
+# Players were told something was coming, so they are told it is not.
+announce_maintenance_cancelled_message="${instance_announce_maintenance_cancelled_message}"
 
 # Whether the kgsm-watchdog should auto-restart this instance on crash (true|false).
 crash_restart="${instance_crash_restart:-true}"

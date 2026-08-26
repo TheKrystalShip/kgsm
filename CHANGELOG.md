@@ -47,6 +47,32 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **An instance says what it does on a clock in one key.** `maintenance_windows` holds a `;`-joined
+  list of windows, each written `<schedule>/<tasks>` — a schedule is either an appointment
+  (`daily@HH:MM`, `weekly.<sun..sat>@HH:MM`, `monthly.<1-31>@HH:MM`, read in the instance's
+  `timezone`) or an interval (`<n>m|h|d`, 10m to 30d, aligned to whole-N boundaries from the epoch),
+  and the tasks are `backup`, `update` and `restart`. Tasks inside a window are one sequence, run in
+  that fixed order whatever order they are written in, and the first to fail abandons the rest;
+  separate windows are independent appointments that share only the instance, so anything that must
+  happen after something else belongs in the same window as it. Empty means no maintenance.
+  `instance_maintenance_windows` in `[instance_defaults]` seeds a new instance's list, and an
+  instance that carries none composes its own on the first command that names it. Enforced by the
+  `kgsm-scheduler` leaf; inert on a host without it.
+
+- **`config-set` checks that a maintenance-window list is written in the grammar's alphabet.** It is
+  the one instance-config key whose value is looked at before it is written, because a misspelt
+  window is a maintenance schedule that quietly does nothing. What a window MEANS — that an interval
+  sits between 10m and 30d, that two windows do not claim the same appointment, that a container
+  instance carries `backup` alone — is the `kgsm-lib` parser's to say, and it is the authority every
+  surface reads windows through.
+
+- **`prune-backups` holds back the rollback point.** The most recent `pre-update` backup is removed
+  from the sequence before `--keep=N` is applied, exactly as a pinned one is: never deleted, never
+  taking a slot. The rotation knows nothing about why an archive was taken, so without that it is the
+  sweep run by a nightly backup window that deletes the only copy of the build the server was on. One
+  is held back — the newest — because the rollback point is the last one and an accumulating set is a
+  second retention policy nobody asked for.
+
 - **`gmod` and `cssource` declare no stop command, because their servers do not read one.** Both run a
   dedicated server whose stdin nothing consumes: a line written into the console FIFO sits there unread,
   so the command a blueprint named would reach nobody while the instance spent its whole stop timeout
@@ -61,9 +87,10 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   handler assigns it — the instance template states its own fallback for every field it writes, so an
   entry nothing reads sets nothing and the fallback stands. The section holds the keys that are
   seeded: the name suffix length, the save and stop command timeouts, whether to update before
-  starting, and the three announcement keys. A scheduled restart's cadence, time, day and timezone,
-  an instance's cgroup priority and memory cap, its crash-restart policy and its backup retention are
-  per-instance settings, stated by the instance template and edited with `kgsm instances config-set`.
+  starting, the maintenance windows a new instance opens with, and the three announcement keys. An
+  instance's timezone, its cgroup priority and memory cap, its crash-restart policy and its backup
+  retention are per-instance settings, stated by the instance template and edited with
+  `kgsm instances config-set`.
   A value an operator wrote against one of them is preserved on the next `kgsm config merge`,
   commented and listed under the deprecated keys.
 
@@ -72,13 +99,14 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   key whose default is deliberately blank — the default library, the backups directory, a webhook URL,
   the Steam credentials — is a live key, reported as nothing and left where it is.
 
-- **An instance carries what it should say before a scheduled restart.** Three keys —
-  `announce_lead_minutes`, `announce_restart_message` and `announce_restart_cancelled_message` — say when
-  to speak, in what words, and what to say if the restart is called off. The `kgsm-scheduler` leaf reads
-  them; they are inert on a host without it, and inert for a game whose blueprint declares no
+- **An instance carries what it should say before a maintenance window.** Three keys —
+  `announce_lead_minutes`, `announce_maintenance_message` and `announce_maintenance_cancelled_message` —
+  say when to speak, in what words, and what to say if the window is called off. The `kgsm-scheduler`
+  leaf reads them; they are inert on a host without it, and inert for a game whose blueprint declares no
   `broadcast_command`. Lead times are empty by default, so a server speaking to its players is something
-  somebody turns on. `{minutes}` and `{instance}` are substituted into the message; the result is then
-  substituted into the game's own broadcast template, which is a separate step owned by the blueprint.
+  somebody turns on. `{minutes}`, `{instance}` and `{reason}` are substituted into the message; the
+  result is then substituted into the game's own broadcast template, which is a separate step owned by
+  the blueprint.
 
 - **A blueprint cannot write a value the instance config has no room for.** The config is a
   line-oriented list of `key="value"` pairs whose text readers separate a key from its value on a

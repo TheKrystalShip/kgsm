@@ -168,7 +168,7 @@ Downloads land in `install/steamapps/workshop/content/108600/<id>/`.
 
 These live in the game's `saves/Server/<servername>.ini` and govern **Project Zomboid's own** backups,
 written to `saves/backups/`. They are not KGSM backups: `kgsm instances backups` does not list them,
-and the instance's separate `backup_schedule` and `compress_backups` settings drive a different
+and the instance's separate `maintenance_windows` and `compress_backups` settings drive a different
 mechanism entirely.
 
 `SaveWorldEveryMinutes=0` is worth changing on a server that matters — with the default, a crash can

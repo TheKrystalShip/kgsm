@@ -779,6 +779,16 @@ function _stamp_library_dir() {
   return 0
 }
 
+# Records what an instance does on a clock as one maintenance-window list.
+# Called from the commands that touch a single instance, so the key lands on
+# first use rather than needing a migration pass over every instance on the host.
+function _stamp_maintenance_windows() {
+  local instance="$1"
+
+  __logic_stamp_instance_maintenance_windows "$instance" || return 0
+  return 0
+}
+
 # Refuses a verb that needs the instance's files while its library is offline.
 # Silent in every other state, so the caller carries on.
 # Args: $1 = instance name
@@ -1714,6 +1724,7 @@ function _cmd_info() {
     fi
 
     _stamp_library_dir "$instance"
+    _stamp_maintenance_windows "$instance"
   fi
 
   if [[ -z "$json_format" ]]; then
@@ -2174,6 +2185,38 @@ function _cmd_config_get() {
   exit $?
 }
 
+# Whether a maintenance-window list is written in the grammar's own alphabet.
+#
+# A window list is ';'-joined <schedule>/<tasks>, a schedule is daily@HH:MM,
+# weekly.<dow>@HH:MM, monthly.<dom>@HH:MM or an interval <n>m|h|d, and the tasks
+# are backup, update and restart. Empty is a list of no windows, which is how an
+# instance says it does nothing on a clock.
+#
+# This is a shape check and nothing more: what a window MEANS — that an interval
+# sits between 10m and 30d, that two windows do not claim the same appointment,
+# that a container instance carries backup only — is the kgsm-lib parser's to
+# say, and it is the authority every surface reads windows through. What is
+# worth catching here is a typed expression that is not a window list at all,
+# because the alternative is a maintenance schedule that silently does nothing.
+#
+# Args: $1 = the value
+# Returns: 0 when the value is a window list, 1 otherwise
+function __maintenance_windows_shape_ok() {
+  local value="$1"
+
+  [[ -z "$value" ]] && return 0
+
+  local hhmm='([01][0-9]|2[0-3]):[0-5][0-9]'
+  local dow='(sun|mon|tue|wed|thu|fri|sat)'
+  local dom='([1-9]|[12][0-9]|3[01])'
+  local schedule="(daily@${hhmm}|weekly[.]${dow}@${hhmm}|monthly[.]${dom}@${hhmm}|[0-9]+[mhd])"
+  local tasks='(backup|update|restart)(,(backup|update|restart))*'
+  local window="${schedule}/${tasks}"
+  local pattern="^${window}([;]${window})*\$"
+
+  [[ "$value" =~ $pattern ]]
+}
+
 # Writes one instance-config assignment and records what it was.
 #
 # Every successful set emits instance-config-changed, carrying the instance and
@@ -2192,6 +2235,10 @@ function _set_instance_config_key() {
   local instance="$1"
   local key="$2"
   local value="$3"
+
+  if [[ "$key" == "maintenance_windows" ]] && ! __maintenance_windows_shape_ok "$value"; then
+    return $EC_INVALID_CONFIG
+  fi
 
   local old_display_name=""
   if [[ "$key" == "display_name" ]]; then
@@ -2278,6 +2325,14 @@ function _cmd_config_set() {
       ;;
     $EC_FILE_NOT_FOUND)
       __print_error "Instance '$instance' not found"
+      exit $exit_code
+      ;;
+    $EC_INVALID_CONFIG)
+      __print_error "'$value' is not a maintenance-window list"
+      __print_error "Windows are joined with ';' and each is written <schedule>/<tasks>"
+      __print_error "  schedule: daily@HH:MM, weekly.<sun..sat>@HH:MM, monthly.<1-31>@HH:MM, or <n>m|h|d"
+      __print_error "  tasks:    backup, update, restart — comma-separated"
+      __print_error "Example: daily@05:00/backup;weekly.sun@04:00/backup,update,restart"
       exit $exit_code
       ;;
     $EC_INVALID_ARG)
@@ -2567,6 +2622,12 @@ Pinned backups are skipped, and they do not count toward N: the window keeps N
 prunable backups however many are pinned. Counting them would let three pins
 starve a --keep=5 rotation down to two live backups, which is the opposite of
 what pinning one is for.
+
+The most recent pre-update backup is held back on the same terms — never
+deleted, never taking a slot. It is the rollback point an update took on its way
+in, and this rotation knows nothing about why any backup was taken, so without
+that it would be the sweep run by a nightly backup schedule that deletes the
+only copy of the build the server was on. One is held back: the newest.
 
 ${UNDERLINE}Usage:${END}
   $self prune-backups <instance> [--keep=N]
@@ -3355,15 +3416,22 @@ function _cmd_prune_backups() {
   # Anything in the store that the engine does not report is not a backup and is
   # never deleted.
   #
-  # Pinned backups are removed from the sequence before the window is applied, so
-  # they neither get deleted nor consume a slot. Letting them consume one would
-  # mean three pins starve a --keep=5 rotation down to two live backups — the
-  # rotation would erode exactly as the operator protected more of it.
+  # Two archives are removed from the sequence before the window is applied, so
+  # that neither gets deleted nor consumes a slot: every pinned one, and the most
+  # recent pre-update one. Letting a reserved archive consume a slot would mean
+  # three pins starve a --keep=5 rotation down to two live backups — the rotation
+  # would erode exactly as more of it was protected. The pre-update archive is
+  # the rollback point an update took on its way in, and this rotation knows
+  # nothing about why any archive was taken: with a nightly backup window and a
+  # weekly update, it is the sixth-newest within a week and a routine sweep would
+  # delete the only copy of the build the server was on. One is held back, the
+  # newest, because the rollback point is the last one and an accumulating set is
+  # a second retention policy nobody asked for.
   #
-  # The manifests are read rather than the id listing because the retention lives
-  # in them; `backups --json` fills a missing retention in as prunable, and the
-  # fallback here repeats that so an older management file's raw manifest reads
-  # the same way.
+  # The manifests are read rather than the id listing because both the retention
+  # and the reason live in them; `backups --json` fills a missing retention in as
+  # prunable, and the fallback here repeats that so an older management file's raw
+  # manifest reads the same way.
   local backups_json
   backups_json="$("$instance_management_file" backups --json 2> /dev/null)"
   [[ -n "$backups_json" ]] || backups_json="[]"
@@ -3371,19 +3439,30 @@ function _cmd_prune_backups() {
   local -a to_delete
   mapfile -t to_delete < <(printf '%s' "$backups_json" |
     jq -r --argjson keep "$keep" \
-      '[.[] | select((.retention // "prunable") != "pinned")][$keep:][].id' 2> /dev/null)
+      '[.[] | select((.retention // "prunable") != "pinned")]
+       | (map(.reason == "pre-update") | index(true)) as $rollback
+       | (if $rollback == null then . else del(.[$rollback]) end)
+       | .[$keep:][].id' 2> /dev/null)
 
   local pinned
   pinned="$(printf '%s' "$backups_json" |
     jq -r '[.[] | select((.retention // "prunable") == "pinned")] | length' 2> /dev/null)"
   [[ "$pinned" =~ ^[0-9]+$ ]] || pinned=0
 
+  local rollback
+  rollback="$(printf '%s' "$backups_json" |
+    jq -r '[.[] | select((.retention // "prunable") != "pinned")]
+           | if (map(.reason == "pre-update") | index(true)) == null then 0 else 1 end' 2> /dev/null)"
+  [[ "$rollback" =~ ^[0-9]+$ ]] || rollback=0
+
+  # What the counts are called when they are printed. A held-back archive is
+  # named only when there is one, so the common line stays the short one.
+  local reserved=""
+  [[ "$pinned" -gt 0 ]] && reserved=", $pinned pinned"
+  [[ "$rollback" -gt 0 ]] && reserved="${reserved}, $rollback rollback"
+
   if [[ ${#to_delete[@]} -eq 0 ]]; then
-    if [[ "$pinned" -gt 0 ]]; then
-      __print_info "Nothing to prune for '$instance' (≤$keep prunable backups present, $pinned pinned)"
-    else
-      __print_info "Nothing to prune for '$instance' (≤$keep backups present)"
-    fi
+    __print_info "Nothing to prune for '$instance' (≤$keep prunable backups present${reserved})"
     exit 0
   fi
 
@@ -3417,7 +3496,7 @@ function _cmd_prune_backups() {
     __emit_event instance-backups-pruned "$instance" "$deleted" "$keep" "$pinned"
   fi
 
-  __print_info "Pruned $deleted backup(s) for '$instance' (kept: $keep, pinned: $pinned)"
+  __print_info "Pruned $deleted backup(s) for '$instance' (kept: $keep${reserved})"
   [[ $failed -gt 0 ]] && exit $EC_ERROR
   exit 0
 }

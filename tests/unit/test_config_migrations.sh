@@ -36,6 +36,8 @@ function setup_file() {
   assert_file_executable "$MIGRATION_DIR/005_v4_to_v5_backups_directory.sh" "Migration 005 should be executable"
   assert_file_exists "$MIGRATION_DIR/010_v9_to_v10_default_library.sh" "Migration 010 should exist"
   assert_file_executable "$MIGRATION_DIR/010_v9_to_v10_default_library.sh" "Migration 010 should be executable"
+  assert_file_exists "$MIGRATION_DIR/011_v10_to_v11_maintenance_windows.sh" "Migration 011 should exist"
+  assert_file_executable "$MIGRATION_DIR/011_v10_to_v11_maintenance_windows.sh" "Migration 011 should be executable"
 
   log_test_step "Config migration test environment validated"
 }
@@ -1155,4 +1157,84 @@ INI
 
   rm -f "$registry"
   rm -rf "$library_root"
+}
+
+# =============================================================================
+# TEST: Migration 011 - Maintenance windows
+# =============================================================================
+
+function test_migration_011_adds_maintenance_windows() {
+  log_test_step "Testing migration 011 seeds maintenance windows and renames the announcement keys"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v10_windows.ini"
+  cat > "$test_config" << 'INI'
+config_schema_version=10
+
+[instance_defaults]
+default_library=
+instance_suffix_length=2
+# Announcement lead times before a scheduled restart, comma-separated minutes
+# (e.g. 15,5,1). Empty announces nothing.
+instance_announce_lead_minutes=15,5
+instance_announce_restart_message=Down in {minutes}
+instance_announce_restart_cancelled_message=False alarm
+
+[accessibility]
+enable_command_shortcuts=false
+INI
+
+  bash "$MIGRATION_DIR/011_v10_to_v11_maintenance_windows.sh" "$test_config"
+  assert_equals "$?" "0" "Migration 011 should succeed"
+
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "11" "Schema version should be 11"
+
+  assert_command_succeeds "grep -q '^instance_maintenance_windows=\$' '$test_config'"
+
+  # …inside [instance_defaults], not appended past the following section
+  local key_line next_section_line
+  key_line=$(grep -n '^instance_maintenance_windows=' "$test_config" | cut -d: -f1)
+  next_section_line=$(grep -n '^\[accessibility\]' "$test_config" | cut -d: -f1)
+  assert_command_succeeds "[[ $key_line -lt $next_section_line ]]"
+
+  # The announcement keys are named for the window they belong to, and the
+  # operator's own wording rides across with them.
+  assert_command_succeeds "grep -q '^instance_announce_maintenance_message=Down in {minutes}\$' '$test_config'"
+  assert_command_succeeds "grep -q '^instance_announce_maintenance_cancelled_message=False alarm\$' '$test_config'"
+  assert_command_fails "grep -q '^instance_announce_restart_message=' '$test_config'"
+  assert_command_fails "grep -q '^instance_announce_restart_cancelled_message=' '$test_config'"
+
+  # Existing keys preserved
+  assert_command_succeeds "grep -q '^instance_suffix_length=2\$' '$test_config'"
+  assert_command_succeeds "grep -q '^instance_announce_lead_minutes=15,5\$' '$test_config'"
+
+  assert_file_exists "${test_config}.pre-migration-v11.bak"
+}
+
+function test_migration_011_idempotent() {
+  log_test_step "Testing migration 011 idempotency"
+
+  local test_config="${KGSM_TEST_SANDBOX}/test_config_v10_windows_idempotent.ini"
+  cat > "$test_config" << 'INI'
+config_schema_version=10
+
+[instance_defaults]
+instance_announce_restart_message=Down in {minutes}
+INI
+
+  bash "$MIGRATION_DIR/011_v10_to_v11_maintenance_windows.sh" "$test_config"
+  assert_equals "$?" "0" "First run should succeed"
+
+  bash "$MIGRATION_DIR/011_v10_to_v11_maintenance_windows.sh" "$test_config"
+  assert_equals "$?" "0" "Second run should succeed (idempotent)"
+
+  local schema_version
+  schema_version=$(grep "^config_schema_version=" "$test_config" | cut -d= -f2)
+  assert_equals "$schema_version" "11" "Schema version should be 11"
+
+  assert_equals "1" "$(grep -c '^instance_maintenance_windows=' "$test_config")" \
+    "instance_maintenance_windows should appear exactly once"
+  assert_equals "1" "$(grep -c '^instance_announce_maintenance_message=' "$test_config")" \
+    "The announcement key should appear exactly once"
 }

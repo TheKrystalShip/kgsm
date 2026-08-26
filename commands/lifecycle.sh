@@ -220,6 +220,13 @@ source "$(__find_command_handler libraries.sh)" || {
   exit $EC_FAILED_SOURCE
 }
 
+# Instance-config logic, for the keys an instance stamps on first use.
+# shellcheck source=handlers/instances.sh
+source "$(__find_command_handler instances.sh)" || {
+  __print_error "Failed to load instances logic library"
+  exit $EC_FAILED_SOURCE
+}
+
 # Records the library root of an instance created before instances recorded one.
 # Placed on the lifecycle verbs so the key lands on first use rather than needing
 # a migration pass over every instance on the host.
@@ -231,6 +238,16 @@ function _stamp_library_dir() {
   [[ -n "$instance_config_file" ]] || return 0
 
   __logic_stamp_instance_library_dir "$instance_config_file" || return 0
+  return 0
+}
+
+# Records what an instance does on a clock as one maintenance-window list.
+# Placed on the lifecycle verbs so the key lands on first use rather than needing
+# a migration pass over every instance on the host.
+function _stamp_maintenance_windows() {
+  local instance="$1"
+
+  __logic_stamp_instance_maintenance_windows "$instance" || return 0
   return 0
 }
 
@@ -329,6 +346,7 @@ function _cmd_start() {
   # Call pure logic function
   _refuse_when_library_offline "$instance_name" || return $?
   _stamp_library_dir "$instance_name"
+  _stamp_maintenance_windows "$instance_name"
 
   __print_info "Starting instance $instance_name"
 
@@ -400,6 +418,7 @@ function _cmd_stop() {
   # Call pure logic function
   _refuse_when_library_offline "$instance_name" || return $?
   _stamp_library_dir "$instance_name"
+  _stamp_maintenance_windows "$instance_name"
 
   __print_info "Stopping instance $instance_name"
 
@@ -507,6 +526,7 @@ function _cmd_restart() {
   # Call pure logic function
   _refuse_when_library_offline "$instance_name" || return $?
   _stamp_library_dir "$instance_name"
+  _stamp_maintenance_windows "$instance_name"
 
   __print_info "Restarting instance $instance_name"
 
