@@ -47,6 +47,22 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **A key in `[instance_defaults]` is one a new instance actually inherits.** The section seeds a
+  newly created instance's own config, and a key there reaches the instance only because the creation
+  handler assigns it — the instance template states its own fallback for every field it writes, so an
+  entry nothing reads sets nothing and the fallback stands. The section holds the keys that are
+  seeded: the name suffix length, the save and stop command timeouts, whether to update before
+  starting, and the three announcement keys. A scheduled restart's cadence, time, day and timezone,
+  an instance's cgroup priority and memory cap, its crash-restart policy and its backup retention are
+  per-instance settings, stated by the instance template and edited with `kgsm instances config-set`.
+  A value an operator wrote against one of them is preserved on the next `kgsm config merge`,
+  commented and listed under the deprecated keys.
+
+- **A configuration key is deprecated when the defaults no longer declare it, not when its default
+  is empty.** `kgsm config merge` decides by whether the shipped defaults carry the key at all, so a
+  key whose default is deliberately blank — the default library, the backups directory, a webhook URL,
+  the Steam credentials — is a live key, reported as nothing and left where it is.
+
 - **An instance carries what it should say before a scheduled restart.** Three keys —
   `announce_lead_minutes`, `announce_restart_message` and `announce_restart_cancelled_message` — say when
   to speak, in what words, and what to say if the restart is called off. The `kgsm-scheduler` leaf reads

@@ -181,7 +181,9 @@ function __handle_deprecated_keys() {
     # Skip schema version key
     [[ "$key" == "config_schema_version" ]] && continue
 
-    if [[ -z "${_default_map[$key]}" ]]; then
+    # Presence, not emptiness: a key the default declares with an empty value is
+    # still a live key, and testing its value would report it as deprecated.
+    if [[ ! -v _default_map[$key] ]]; then
       # Key is deprecated - add warning section if first deprecated key
       if [[ "$has_deprecated" -eq 0 ]]; then
         cat >> "$merged_file" << 'EOF'
