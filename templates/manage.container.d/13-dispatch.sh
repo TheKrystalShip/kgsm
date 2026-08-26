@@ -51,6 +51,10 @@ input)
   _cmd_input "$@"
   exit $?
   ;;
+announce)
+  _cmd_announce "$@"
+  exit $?
+  ;;
 kick)
   _cmd_kick "$@"
   exit $?

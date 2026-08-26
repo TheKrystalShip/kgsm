@@ -30,6 +30,9 @@ rcon_poll_interval_seconds: 10
 # poller read any of them without knowing which game it is talking to.
 rcon_players_command: ""
 rcon_players_regex: ''
+# The console command this game accepts to send a message to everyone connected.
+# One {message} placeholder; everything else is sent verbatim.
+broadcast_command: 'say {message}'
 # Player moderation. Romestead addresses a player by IP address alone — it has
 # no notion of a persistent account id — so every template takes {ip}.
 # Disconnect the player at this address; they may reconnect immediately.

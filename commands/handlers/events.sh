@@ -351,6 +351,20 @@ export EVENT_INSTANCE_DISPLAY_NAME_CHANGED
 declare -g -r EVENT_INSTANCE_INPUT_SENT="instance_input_sent"
 export EVENT_INSTANCE_INPUT_SENT
 
+# Announcement audit event. Emitted by the command layer when a broadcast is
+# delivered to a running instance via `instances announce`. Carries the instance
+# name, the message as it was given, and the resolved console command the game
+# received. Both are kept: the message is what a person wrote and what every
+# surface should show, while the resolved form is the literal effect and the only
+# record of which template produced it.
+#
+# Separate from instance_input_sent, whose subject is an operator running an
+# arbitrary console command. An announcement's subject is the players, so a
+# consumer asking "what were people told on this server" filters on the type
+# instead of pattern-matching command text.
+declare -g -r EVENT_INSTANCE_ANNOUNCEMENT_SENT="instance_announcement_sent"
+export EVENT_INSTANCE_ANNOUNCEMENT_SENT
+
 # Blueprint file events. The ONLY events in the system that are not
 # instance-scoped: their subject is a blueprint, so their Data carries
 # `BlueprintName` where every other event carries `InstanceName`. They exist so
@@ -495,6 +509,12 @@ declare -g -A EVENT_CONFIGS=(
   # `command` is the verbatim console command. The matching case arm in
   # _build_event_payload renders Data { InstanceName, Command }.
   ["$EVENT_INSTANCE_INPUT_SENT"]="instance command"
+  # `message` is what a person wrote; `command` is the resolved console command
+  # the game received. Both are required — the message is what every surface
+  # shows, and the resolved form is the only record of which template produced
+  # it. The matching case arm in _build_event_payload renders
+  # Data { InstanceName, Message, Command }.
+  ["$EVENT_INSTANCE_ANNOUNCEMENT_SENT"]="instance message command"
   # Blueprint-scoped, not instance-scoped: the first param is a blueprint name
   # and renders as Data.BlueprintName. `runtime` is NOT in the spec because it
   # is nullable — it is read positionally and rendered as JSON null when the
@@ -805,6 +825,17 @@ function __logic_build_event_payload() {
       # `$command` binds because `command` is the 2nd EVENT_CONFIGS param name.
       data_object='{
         InstanceName: $instance,
+        Command: $command
+      }'
+      ;;
+    "$EVENT_INSTANCE_ANNOUNCEMENT_SENT")
+      # What was said, and what was sent to say it. `$message` and `$command`
+      # bind because `message`/`command` are the 2nd and 3rd EVENT_CONFIGS param
+      # names. A surface reads Message; Command answers which template resolved
+      # it, which is what makes a broadcast that reached nobody diagnosable.
+      data_object='{
+        InstanceName: $instance,
+        Message: $message,
         Command: $command
       }'
       ;;

@@ -147,6 +147,36 @@ metadata:
 # unban_command: ''
 
 # -----------------------------------------------------------------------------
+# Broadcast (optional, top-level — applies to both runtimes)
+# -----------------------------------------------------------------------------
+# The console command this game accepts to send a message to everyone connected.
+# KGSM substitutes the announcement text and sends the result to the console, so
+# author it from a REAL server command, never guessed.
+#
+# The value is a TEMPLATE carrying EXACTLY ONE {message} placeholder. Everything
+# outside the placeholder is sent verbatim:
+#   broadcast_command: 'say {message}'
+#   broadcast_command: 'servermsg "{message}"'
+#   broadcast_command: 'c_announce("{message}")'
+#
+# The placeholder MAY BE THE WHOLE TEMPLATE. A console that treats any bare line
+# as chat needs no verb in front of the text:
+#   broadcast_command: '{message}'
+#
+# Quote the message in the template when the game needs it quoted — that is the
+# game's rule, and it belongs here rather than in the text a person types.
+#
+# The announcement text is prose, so unlike the moderation templates it carries
+# punctuation freely; only a line break is refused, because a console reads one
+# command per line and a second line would be a command nobody issued.
+#
+# Leave EMPTY/unset when the game has no such command, which includes a game
+# whose broadcast exists only over RCON, telnet or an in-game admin console:
+# this field is the STDIN console and nothing else. That is an honest unknown —
+# KGSM refuses the announcement rather than approximating it.
+# broadcast_command: ''
+
+# -----------------------------------------------------------------------------
 # NATIVE runtime (delete this block for container blueprints)
 # -----------------------------------------------------------------------------
 native:

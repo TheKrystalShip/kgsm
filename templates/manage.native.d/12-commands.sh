@@ -94,6 +94,14 @@ function _cmd_input() {
   _send_input "$1"
 }
 
+function _cmd_announce() {
+  if [[ -z "${1:-}" ]]; then
+    __print_error "Missing argument: <message>"
+    return $EC_MISSING_ARG
+  fi
+  _send_broadcast "$1"
+}
+
 function _cmd_kick() {
   _send_moderation_command "${instance_kick_command}" "${1:-}" "kick"
 }

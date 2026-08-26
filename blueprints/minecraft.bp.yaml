@@ -38,6 +38,9 @@ rcon_poll_interval_seconds: 10
 # poller read any of them without knowing which game it is talking to.
 rcon_players_command: ""
 rcon_players_regex: ''
+# The console command this game accepts to send a message to everyone connected.
+# One {message} placeholder; everything else is sent verbatim.
+broadcast_command: '/say {message}'
 # Player moderation. Minecraft addresses a player by username — the same token
 # the presence regexes capture — and keeps the ban list keyed on the account, so
 # every template takes {name}.

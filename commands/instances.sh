@@ -33,6 +33,7 @@ ${UNDERLINE}Commands:${END}
   generate-id <blueprint>     Generate unique instance identifier
   save <instance>             Send save command to instance
   input <instance> <command>  Send command to instance console
+  announce <instance> <message>  Broadcast a message to connected players
   kick <instance> <target>    Disconnect a player
   ban <instance> <target>     Disconnect a player and block them
   unban <instance> <target>   Lift a block
@@ -420,6 +421,41 @@ Sends a command directly to the instance's console and displays the last
 ${UNDERLINE}Examples:${END}
   $self input factorio-01 \"/say Hello world\"
   $self input terraria-main \"save-all\"
+"
+}
+
+function show_usage_announce() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Announce to Instance${END}
+
+Broadcast a message to everyone connected to a running instance.
+
+${UNDERLINE}Usage:${END}
+  $self announce <instance> <message>
+
+${UNDERLINE}Arguments:${END}
+  instance                    Instance name
+  message                     The text to show players. Quote it — it is one
+                              argument, and it is prose: punctuation is fine,
+                              a line break is not
+
+${UNDERLINE}Options:${END}
+  --help                      Display this help information
+
+${UNDERLINE}Description:${END}
+The blueprint declares this game's own broadcast command as a template with a
+{message} placeholder, and KGSM substitutes the text into it before sending it
+to the console. A game that declares no such command is refused rather than
+being sent a different one, and so is an instance that is not running.
+
+The template covers the STDIN console only. A game whose broadcast exists solely
+over RCON or an in-game admin console declares none.
+
+${UNDERLINE}Examples:${END}
+  $self announce factorio-01 \"Server restarting in 5 minutes!\"
+  $self announce minecraft \"Maintenance at 22:00 — save your progress\"
 "
 }
 
@@ -1907,6 +1943,82 @@ function _cmd_input() {
     # event helpers), and only on a successful send. Matches the config-set
     # convention.
     __emit_event instance-input-sent "$instance" "$command"
+  fi
+
+  exit $exit_code
+}
+
+function _cmd_announce() {
+  local instance=""
+  local message=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_announce
+        return 0
+        ;;
+      *)
+        break
+        ;;
+    esac
+    shift
+  done
+
+  if [[ $# -gt 0 ]] && [[ "$1" != --* ]]; then
+    instance="$1"
+    shift
+  fi
+
+  if [[ $# -gt 0 ]]; then
+    message="$1"
+    shift
+  fi
+
+  if [[ -z "$instance" ]]; then
+    __print_error "Missing required argument: <instance>"
+    __print_error "Use '$self announce --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  if [[ -z "$message" ]]; then
+    __print_error "Missing required argument: <message>"
+    __print_error "Use '$self announce --help' for usage information"
+    exit $EC_MISSING_ARG
+  fi
+
+  __source_instance "$instance"
+
+  # An announcement only means anything to a running game. A native instance's
+  # FIFO outlives the process that read it, so a send into a stopped instance is
+  # accepted by the kernel and delivered to nobody — reported as an announcement
+  # that never happened. The watchdog owns the process and is the only thing that
+  # can answer, so the state is resolved here (the management script's own probe
+  # reports every supervised instance stopped). A container probes itself against
+  # docker and echoes nothing here.
+  local run_state
+  run_state="$(__resolve_run_state "$instance")"
+  case "$run_state" in
+    inactive)
+      __print_error "Cannot announce on '$instance': the server is not running"
+      exit $EC_ERROR
+      ;;
+    unknown)
+      __print_error "Cannot announce on '$instance': the watchdog is unreachable"
+      __print_error "Whether the server is running cannot be determined"
+      exit $EC_ERROR
+      ;;
+  esac
+
+  "$instance_management_file" announce "$message"
+  local exit_code=$?
+
+  if [[ $exit_code -eq 0 ]]; then
+    # The message as written and the console command that carried it. Emitted
+    # from the command layer (the management script is a standalone artifact
+    # without the event helpers) and only on a successful send.
+    local resolved="${instance_broadcast_command//\{message\}/$message}"
+    __emit_event instance-announcement-sent "$instance" "$message" "$resolved"
   fi
 
   exit $exit_code
@@ -3715,6 +3827,9 @@ function _cmd_help() {
     input)
       show_usage_input
       ;;
+    announce)
+      show_usage_announce
+      ;;
     kick | ban | unban)
       show_usage_moderation
       ;;
@@ -3807,7 +3922,8 @@ shift 2> /dev/null || true
 # the rule and nothing inward of it ever sees anything but an id. `create` and
 # `generate-id` are absent on purpose: their first argument is a blueprint.
 case "$command" in
-  remove | move | info | status | find | save | input | kick | ban | unban | \
+  remove | move | info | status | find | save | input | announce | \
+    kick | ban | unban | \
     config-get | config-list | config-set | rename | backups | create-backup | \
     restore-backup | delete-backup | pin-backup | unpin-backup | \
     prune-backups | update | check-update | version)
@@ -3856,6 +3972,9 @@ case "$command" in
     ;;
   input)
     _cmd_input "$@"
+    ;;
+  announce)
+    _cmd_announce "$@"
     ;;
   kick | ban | unban)
     _cmd_moderation "$command" "$@"

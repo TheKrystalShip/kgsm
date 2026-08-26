@@ -28,7 +28,8 @@
 # WHICH MODULES CAN BE OVERRIDDEN:
 #
 #   03-lifecycle.sh    Server start/stop/restart logic
-#   04-io.sh           Input/output helpers (send_input, send_save_command)
+#   04-io.sh           Input/output helpers (send_input, send_save_command,
+#                      send_broadcast)
 #   05-version.sh      Version retrieval and comparison. Note that the
 #                      update-check STATE accessors (_get_stored_latest_version,
 #                      _get_stored_latest_checked_at, _save_latest_version) are
@@ -155,6 +156,8 @@
 # Server Control:
 # $instance_stop_command         Command to gracefully stop server
 # $instance_save_command         Command to save game state
+# $instance_broadcast_command    Template for a message to all players; one
+#                               {message} placeholder, substituted before send
 # $instance_save_command_timeout_seconds  Seconds to wait for save command
 # $instance_stop_command_timeout_seconds  Seconds to wait for graceful shutdown
 #

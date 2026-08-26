@@ -25,6 +25,11 @@ rcon_poll_interval_seconds: 10
 # poller read any of them without knowing which game it is talking to.
 rcon_players_command: ""
 rcon_players_regex: ''
+# The console command this game accepts to send a message to everyone connected.
+# One {message} placeholder; everything else is sent verbatim.
+# The headless console sends any bare line to chat, and makes /shout inert when it
+# comes from the console rather than a player — so the message is the whole command.
+broadcast_command: '{message}'
 native:
   ports: "34197"
   steam_app_id: 0

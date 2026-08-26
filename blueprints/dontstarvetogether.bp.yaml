@@ -25,6 +25,10 @@ rcon_poll_interval_seconds: 10
 # poller read any of them without knowing which game it is talking to.
 rcon_players_command: ""
 rcon_players_regex: ''
+# The console command this game accepts to send a message to everyone connected.
+# One {message} placeholder; everything else is sent verbatim.
+# The console takes Lua, the same as stop_command's c_shutdown().
+broadcast_command: 'c_announce("{message}")'
 native:
   ports: 10999/tcp|10999/udp
   steam_app_id: 343050

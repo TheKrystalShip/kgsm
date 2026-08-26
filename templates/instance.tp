@@ -267,6 +267,13 @@ kick_command="${instance_kick_command}"
 ban_command="${instance_ban_command}"
 unban_command="${instance_unban_command}"
 
+# Broadcast command template (from the blueprint). Carries exactly one
+# {message} placeholder, which KGSM replaces with the announcement text before
+# sending the result to the console. The placeholder may be the whole template,
+# for a console that sends any bare line to chat. Empty = the game has no
+# broadcast command and the announcement is refused.
+broadcast_command="${instance_broadcast_command}"
+
 #=============================================================================
 # BACKUP CONFIGURATION
 # Settings related to backup and data preservation

@@ -47,6 +47,33 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **A server announces to the people playing on it.** `kgsm instances announce <instance> "<text>"`
+  sends a message to everyone connected, using the game's own broadcast command. A blueprint declares
+  that command as `broadcast_command`, a template carrying one `{message}` placeholder that the engine
+  substitutes into — the same shape the moderation templates use, so a game's console vocabulary keeps
+  living in its blueprint. The placeholder may be the whole template, because a console that treats any
+  bare line as chat needs no verb in front of the text. A game that declares none is refused rather than
+  sent a different command, and so is an instance that is not running: a native instance's FIFO outlives
+  the process that read it, so a write into a stopped server is accepted by the kernel and delivered to
+  nobody. Delivery is audited as `instance_announcement_sent`, carrying both the message as written and
+  the console command it resolved to.
+
+- **Announcement text takes its own path to the console, not the free-form input one.**
+  `__sanitize_input_command` rejects `; & | ` $( ) { } [ ] \ < > * ? ~ $ !`, which guards a path where an
+  operator types an arbitrary command. Announcements are prose, and a broadcast that cannot say "5
+  minutes!" is not a broadcast, so `_send_broadcast` validates what actually matters instead: the
+  console reads one command per line, so a line break would deliver a second command nobody issued, and
+  that is what is refused. Nothing else in the text is restricted — the bytes reach the game through a
+  plain write into a FIFO with no shell anywhere between, so a shell metacharacter carries no meaning.
+  The write holds the FIFO open read-write, so a server that died leaving its socket behind cannot hang
+  the call.
+
+- **Eight blueprints carry a broadcast command**, each authored from a documented server console:
+  7 Days to Die, Project Zomboid, Factorio, Minecraft, Terraria, StarMade, Romestead and Don't Starve
+  Together. The rest declare none. That is an honest split rather than an incomplete one: several games
+  have no console command surface at all, and several more expose one only over RCON, telnet or an
+  in-game admin console, which this field does not cover.
+
 - **An instance argument resolves to its id once, at the top of every command that takes one.**
   A command names an instance by its id or its display name, and the resolution from one to the
   other happens in a single place per entry point — the `instances` and `lifecycle` dispatchers

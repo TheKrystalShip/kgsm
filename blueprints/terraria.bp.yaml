@@ -32,6 +32,9 @@ rcon_players_regex: ''
 kick_command: 'kick {name}'
 ban_command: 'ban {name}'
 unban_command: ''
+# The console command this game accepts to send a message to everyone connected.
+# One {message} placeholder; everything else is sent verbatim.
+broadcast_command: 'say {message}'
 native:
   # The server holds a TCP listener only — observed on a running 1.4.5.6 server, which
   # opens no UDP socket. The protocol is stated so the firewall does not also open a UDP

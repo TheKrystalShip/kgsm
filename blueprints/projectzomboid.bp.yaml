@@ -34,6 +34,9 @@ rcon_players_command: "players"
 # The leading dash is what separates an entry from the header, and no id is
 # stated anywhere, so only `name` is captured.
 rcon_players_regex: '^-\s*(?<name>\S.*?)\s*$'
+# The console command this game accepts to send a message to everyone connected.
+# One {message} placeholder; everything else is sent verbatim.
+broadcast_command: 'servermsg "{message}"'
 # Player moderation. Project Zomboid addresses a player by their in-game user
 # name, so every template takes {name}.
 # Disconnect this player; they may reconnect immediately.

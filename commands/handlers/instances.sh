@@ -346,6 +346,10 @@ function __logic_create_base_instance() {
   export instance_kick_command="${blueprint_kick_command:-}"
   export instance_ban_command="${blueprint_ban_command:-}"
   export instance_unban_command="${blueprint_unban_command:-}"
+
+  # Broadcast template, carried through verbatim. Empty means the game declares
+  # no broadcast command and the announcement is refused.
+  export instance_broadcast_command="${blueprint_broadcast_command:-}"
   export instance_platform="${blueprint_platform:-linux}"
   export instance_level_name="${blueprint_level_name:-default}"
   export instance_steam_app_id="${blueprint_steam_app_id:-0}"

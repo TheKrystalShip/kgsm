@@ -235,6 +235,7 @@ function __logic_get_blueprint_info_json() {
     --arg kick_command "$blueprint_kick_command" \
     --arg ban_command "$blueprint_ban_command" \
     --arg unban_command "$blueprint_unban_command" \
+    --arg broadcast_command "$blueprint_broadcast_command" \
     --argjson metadata "$metadata_json" \
     '{
       Name: $name,
@@ -252,6 +253,7 @@ function __logic_get_blueprint_info_json() {
       KickCommand: $kick_command,
       BanCommand: $ban_command,
       UnbanCommand: $unban_command,
+      BroadcastCommand: $broadcast_command,
       Metadata: $metadata
     }'
 

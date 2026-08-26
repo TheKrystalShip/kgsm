@@ -25,6 +25,10 @@ rcon_poll_interval_seconds: 10
 # poller read any of them without knowing which game it is talking to.
 rcon_players_command: ""
 rcon_players_regex: ''
+# The console command this game accepts to send a message to everyone connected.
+# One {message} placeholder; everything else is sent verbatim.
+# A bare line is broadcast; a leading / would run a command instead.
+broadcast_command: '{message}'
 native:
   ports: 4242/tcp|4242/udp
   steam_app_id: 244770

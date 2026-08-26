@@ -99,6 +99,73 @@ function _send_moderation_command() {
   _send_input "$resolved"
 }
 
+# Resolve the blueprint's broadcast template against a message and deliver it to
+# the console.
+#
+# The template is authored in the blueprint and the message is prose, so the two
+# are validated differently. The template must contain the placeholder; the
+# message is checked only for a line break, because the console reads one command
+# per line and a second line would be a command nobody issued. Nothing else in
+# the text is restricted: an announcement that cannot say "5 minutes!" is not an
+# announcement. There is no shell between here and the game — the bytes go into a
+# FIFO with a plain write — so shell metacharacters carry no meaning.
+# Args: $1 = message
+function _send_broadcast() {
+  local message="$1"
+
+  # An absent template means the game declares no broadcast command. Refuse:
+  # sending a different command in its place would report an announcement that
+  # never happened.
+  if [[ -z "${instance_broadcast_command:-}" ]]; then
+    __print_error "$instance_name does not support announcements"
+    __print_error "No broadcast_command is declared for this instance"
+    return $EC_ERROR
+  fi
+
+  if [[ -z "$message" ]]; then
+    __print_error "Missing message to announce"
+    return $EC_MISSING_ARG
+  fi
+
+  if [[ "$message" == *$'\n'* ]] || [[ "$message" == *$'\r'* ]]; then
+    __print_error "Invalid message: line breaks are not allowed"
+    return $EC_INVALID_ARG
+  fi
+
+  if [[ ${#message} -gt 1000 ]]; then
+    __print_error "Message too long (${#message} characters, max 1000)"
+    return $EC_INVALID_ARG
+  fi
+
+  local resolved="${instance_broadcast_command//\{message\}/$message}"
+
+  # No substitution happened, so the text would never reach the players and the
+  # bare verb would be sent instead — a different command than the one asked for.
+  if [[ "$resolved" == "${instance_broadcast_command}" ]]; then
+    __print_error "Malformed broadcast_command: '${instance_broadcast_command}'"
+    __print_error "Expected a {message} placeholder"
+    return $EC_ERROR
+  fi
+
+  if [[ ! -p "${instance_socket_file}" ]]; then
+    __print_error "Announcement failed: No active server found or socket file missing."
+    return $EC_ERROR
+  fi
+
+  # Open the FIFO read-write rather than appending to it. A plain append blocks
+  # until something opens the read end, so a server that died leaving its socket
+  # behind would hang this call forever.
+  local _bcast_fd
+  if ! exec {_bcast_fd}<>"${instance_socket_file}"; then
+    __print_error "Announcement failed: could not open ${instance_socket_file}"
+    return $EC_ERROR
+  fi
+  printf '%s\n' "$resolved" >&"${_bcast_fd}"
+  exec {_bcast_fd}>&-
+
+  return $EC_SUCCESS
+}
+
 # This function is used to save the game state
 # It will send the save command to the server through the named pipe
 function _send_save_command() {

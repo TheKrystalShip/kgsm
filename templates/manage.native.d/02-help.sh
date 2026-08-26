@@ -25,6 +25,7 @@ ${BOLD}${UNDERLINE}Lifecycle Commands:${END}
 ${BOLD}${UNDERLINE}Server Commands:${END}
   save                        Save the current game state
   input <command>             Send a command to the server console
+  announce <message>          Broadcast a message to connected players
   status [--json] [--fast]    Display comprehensive runtime status
   logs [-f] [--tail N]        View server logs
 
@@ -186,6 +187,39 @@ ${UNDERLINE}Examples:${END}
   $self logs --follow
   $self logs --tail 50
   $self logs --follow --tail 100
+"
+}
+
+function show_usage_announce() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Announce${END}
+
+Broadcast a message to everyone connected to this server.
+
+${UNDERLINE}Usage:${END}
+  $self announce <message>
+
+${UNDERLINE}Arguments:${END}
+  message                     The text to show players. Quote it — it is one
+                              argument, and it is prose: punctuation is fine,
+                              a line break is not
+
+${UNDERLINE}Description:${END}
+The blueprint declares this game's own broadcast command as a template with a
+{message} placeholder, and KGSM substitutes the text into it. This instance's
+template is:
+
+  ${instance_broadcast_command:-<unsupported>}
+
+A game with no declared command is refused; KGSM never substitutes a different
+one. The template covers the STDIN console only — a game whose broadcast exists
+solely over RCON or an in-game admin console declares none here.
+
+${UNDERLINE}Examples:${END}
+  $self announce \"Server restarting in 5 minutes!\"
+  $self announce \"Maintenance window at 22:00 — save your progress\"
 "
 }
 
@@ -397,6 +431,9 @@ function _cmd_help() {
     ;;
   update)
     show_usage_update
+    ;;
+  announce)
+    show_usage_announce
     ;;
   kick | ban | unban)
     show_usage_moderation

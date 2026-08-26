@@ -442,6 +442,13 @@ function __source_blueprint() {
   declare -g blueprint_unban_command
   blueprint_unban_command=$(__bp_yaml_field "$bp" '.unban_command')
 
+  # Broadcast template (top-level, runtime-agnostic). Carries exactly one
+  # {message} placeholder, and may consist of nothing else: a console that sends
+  # any bare line to chat needs no verb in front of the text. Empty means the
+  # game has no broadcast command and the action is refused.
+  declare -g blueprint_broadcast_command
+  blueprint_broadcast_command=$(__bp_yaml_field "$bp" '.broadcast_command')
+
   # Native field family — default everything empty so a container source (or a
   # re-source of a different blueprint) cannot leak stale values.
   declare -g blueprint_ports=""
@@ -488,7 +495,8 @@ function __source_blueprint() {
     blueprint_rcon_port blueprint_rcon_password \
     blueprint_rcon_poll_interval_seconds blueprint_rcon_players_command \
     blueprint_rcon_players_regex \
-    blueprint_kick_command blueprint_ban_command blueprint_unban_command
+    blueprint_kick_command blueprint_ban_command blueprint_unban_command \
+    blueprint_broadcast_command
 }
 
 export -f __source_blueprint
