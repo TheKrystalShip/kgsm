@@ -7,8 +7,8 @@
 #
 # Exit Code Conventions:
 # - 0: Success (no event needed)
-# - 200: Directories created successfully (emit instance-directories-created)
-# - 201: Directories removed successfully (emit instance-directories-removed)
+# - 200: Directories created successfully (emit server.install.directories_created)
+# - 201: Directories removed successfully (emit server.uninstall.directories_removed)
 # - Standard error codes: EC_FAILED_MKDIR, EC_FAILED_RM, EC_PERMISSION, etc.
 
 # Disabling SC2086 globally:

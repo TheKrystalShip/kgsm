@@ -34,78 +34,78 @@ if [[ -n "${KGSM_LOGIC_EVENTS_LOADED:-}" ]] && [[ "${#EVENT_CONFIGS[@]}" -gt 0 ]
 fi
 
 # Event type constants
-declare -g -r EVENT_INSTANCE_CREATED="instance_created"
+declare -g -r EVENT_INSTANCE_CREATED="server.install.created"
 export EVENT_INSTANCE_CREATED
 
-declare -g -r EVENT_INSTANCE_DIRECTORIES_CREATED="instance_directories_created"
+declare -g -r EVENT_INSTANCE_DIRECTORIES_CREATED="server.install.directories_created"
 export EVENT_INSTANCE_DIRECTORIES_CREATED
 
-declare -g -r EVENT_INSTANCE_FILES_CREATED="instance_files_created"
+declare -g -r EVENT_INSTANCE_FILES_CREATED="server.install.files_created"
 export EVENT_INSTANCE_FILES_CREATED
 
-declare -g -r EVENT_INSTANCE_DOWNLOAD_STARTED="instance_download_started"
+declare -g -r EVENT_INSTANCE_DOWNLOAD_STARTED="server.download.started"
 export EVENT_INSTANCE_DOWNLOAD_STARTED
 
-declare -g -r EVENT_INSTANCE_DOWNLOAD_FINISHED="instance_download_finished"
+declare -g -r EVENT_INSTANCE_DOWNLOAD_FINISHED="server.download.finished"
 export EVENT_INSTANCE_DOWNLOAD_FINISHED
 
-declare -g -r EVENT_INSTANCE_DOWNLOAD_FAILED="instance_download_failed"
+declare -g -r EVENT_INSTANCE_DOWNLOAD_FAILED="server.download.failed"
 export EVENT_INSTANCE_DOWNLOAD_FAILED
 
-declare -g -r EVENT_INSTANCE_DOWNLOADED="instance_downloaded"
+declare -g -r EVENT_INSTANCE_DOWNLOADED="server.download.completed"
 export EVENT_INSTANCE_DOWNLOADED
 
-declare -g -r EVENT_INSTANCE_DEPLOY_STARTED="instance_deploy_started"
+declare -g -r EVENT_INSTANCE_DEPLOY_STARTED="server.deploy.started"
 export EVENT_INSTANCE_DEPLOY_STARTED
 
-declare -g -r EVENT_INSTANCE_DEPLOY_FINISHED="instance_deploy_finished"
+declare -g -r EVENT_INSTANCE_DEPLOY_FINISHED="server.deploy.finished"
 export EVENT_INSTANCE_DEPLOY_FINISHED
 
-declare -g -r EVENT_INSTANCE_DEPLOY_FAILED="instance_deploy_failed"
+declare -g -r EVENT_INSTANCE_DEPLOY_FAILED="server.deploy.failed"
 export EVENT_INSTANCE_DEPLOY_FAILED
 
-declare -g -r EVENT_INSTANCE_DEPLOYED="instance_deployed"
+declare -g -r EVENT_INSTANCE_DEPLOYED="server.deploy.completed"
 export EVENT_INSTANCE_DEPLOYED
 
-declare -g -r EVENT_INSTANCE_RESTART_STARTED="instance_restart_started"
+declare -g -r EVENT_INSTANCE_RESTART_STARTED="server.restart.started"
 export EVENT_INSTANCE_RESTART_STARTED
 
-declare -g -r EVENT_INSTANCE_RESTART_FINISHED="instance_restart_finished"
+declare -g -r EVENT_INSTANCE_RESTART_FINISHED="server.restart.finished"
 export EVENT_INSTANCE_RESTART_FINISHED
 
 # The restart's own halves. A restart runs the stop and the start through the pure logic rather than
 # the stop and start commands, so neither of those commands' facts is emitted for it: without this,
 # the whole shutdown — and the boot after it — is a silence a consumer can only paper over, and an
 # instance whose process is dead still reads as running. This says the old run has ended; the new one
-# coming up is instance_restarted. A step inside one operation, not a standalone stop, which is why
-# it is its own type: instance_stopped is the fact an operator stopped a server, and a restart is not
+# coming up is server.restarted. A step inside one operation, not a standalone stop, which is why
+# it is its own type: server.stopped is the fact an operator stopped a server, and a restart is not
 # that.
-declare -g -r EVENT_INSTANCE_RESTART_STOPPED="instance_restart_stopped"
+declare -g -r EVENT_INSTANCE_RESTART_STOPPED="server.restart.stopped"
 export EVENT_INSTANCE_RESTART_STOPPED
 
-declare -g -r EVENT_INSTANCE_STOP_STARTED="instance_stop_started"
+declare -g -r EVENT_INSTANCE_STOP_STARTED="server.stop.started"
 export EVENT_INSTANCE_STOP_STARTED
 
-declare -g -r EVENT_INSTANCE_STOP_FINISHED="instance_stop_finished"
+declare -g -r EVENT_INSTANCE_STOP_FINISHED="server.stop.finished"
 export EVENT_INSTANCE_STOP_FINISHED
 
-declare -g -r EVENT_INSTANCE_UPDATE_STARTED="instance_update_started"
+declare -g -r EVENT_INSTANCE_UPDATE_STARTED="server.update.started"
 export EVENT_INSTANCE_UPDATE_STARTED
 
-declare -g -r EVENT_INSTANCE_UPDATE_FINISHED="instance_update_finished"
+declare -g -r EVENT_INSTANCE_UPDATE_FINISHED="server.update.finished"
 export EVENT_INSTANCE_UPDATE_FINISHED
 
 # The outcome an update run has when the version did not move and that is NOT the good news. An
 # update ends without a version change in two ways — it found nothing to do, or it could not do it —
 # and the bracket cannot tell them apart, so a consumer settling the run on it reports a refusal as a
 # completed update. This is the fact that separates them.
-declare -g -r EVENT_INSTANCE_UPDATE_FAILED="instance_update_failed"
+declare -g -r EVENT_INSTANCE_UPDATE_FAILED="server.update.failed"
 export EVENT_INSTANCE_UPDATE_FAILED
 
-declare -g -r EVENT_INSTANCE_UPDATED="instance_updated"
+declare -g -r EVENT_INSTANCE_UPDATED="server.update.completed"
 export EVENT_INSTANCE_UPDATED
 
-declare -g -r EVENT_INSTANCE_VERSION_UPDATED="instance_version_updated"
+declare -g -r EVENT_INSTANCE_VERSION_UPDATED="server.updated"
 export EVENT_INSTANCE_VERSION_UPDATED
 
 # A newer game build exists upstream and this instance is not on it. Emitted by
@@ -113,69 +113,69 @@ export EVENT_INSTANCE_VERSION_UPDATED
 # was emitted for is recorded beside the instance, so a sweep that finds the same
 # version again says nothing. The applied side is EVENT_INSTANCE_VERSION_UPDATED,
 # which is what clears it.
-declare -g -r EVENT_INSTANCE_UPDATE_AVAILABLE="instance_update_available"
+declare -g -r EVENT_INSTANCE_UPDATE_AVAILABLE="server.update.available"
 export EVENT_INSTANCE_UPDATE_AVAILABLE
 
-declare -g -r EVENT_INSTANCE_INSTALLATION_STARTED="instance_installation_started"
+declare -g -r EVENT_INSTANCE_INSTALLATION_STARTED="server.install.started"
 export EVENT_INSTANCE_INSTALLATION_STARTED
 
-declare -g -r EVENT_INSTANCE_INSTALLATION_FINISHED="instance_installation_finished"
+declare -g -r EVENT_INSTANCE_INSTALLATION_FINISHED="server.install.finished"
 export EVENT_INSTANCE_INSTALLATION_FINISHED
 
-declare -g -r EVENT_INSTANCE_INSTALLED="instance_installed"
+declare -g -r EVENT_INSTANCE_INSTALLED="server.installed"
 export EVENT_INSTANCE_INSTALLED
 
 # An instance's files now live in a different library. Carries the library it
 # came from and the one it is in, because a reader that learns only the
 # destination cannot tell which disk just got its space back — and draining a
 # disk before it is unplugged is the whole reason the verb exists.
-declare -g -r EVENT_INSTANCE_MOVED="instance_moved"
+declare -g -r EVENT_INSTANCE_MOVED="server.moved"
 export EVENT_INSTANCE_MOVED
 
-declare -g -r EVENT_INSTANCE_STARTED="instance_started"
+declare -g -r EVENT_INSTANCE_STARTED="server.started"
 export EVENT_INSTANCE_STARTED
 
-declare -g -r EVENT_INSTANCE_STOPPED="instance_stopped"
+declare -g -r EVENT_INSTANCE_STOPPED="server.stopped"
 export EVENT_INSTANCE_STOPPED
 
-declare -g -r EVENT_INSTANCE_RESTARTED="instance_restarted"
+declare -g -r EVENT_INSTANCE_RESTARTED="server.restarted"
 export EVENT_INSTANCE_RESTARTED
 
 # Autonomous supervisor (kgsm-watchdog) lifecycle events. Emitted by the daemon
 # (via kgsm-lib EmitWithProvenance, stamped actor=system/origin=system), never from
 # a kgsm exit-code dispatch — the watchdog is the only component that observes a
-# crash. instance_crashed: a desired-running process died and is being auto-restarted.
-# instance_failed: the supervisor exhausted its restart retries and gave up.
-declare -g -r EVENT_INSTANCE_CRASHED="instance_crashed"
+# crash. server.crashed: a desired-running process died and is being auto-restarted.
+# server.crash.exhausted: the supervisor exhausted its restart retries and gave up.
+declare -g -r EVENT_INSTANCE_CRASHED="server.crashed"
 export EVENT_INSTANCE_CRASHED
 
-declare -g -r EVENT_INSTANCE_FAILED="instance_failed"
+declare -g -r EVENT_INSTANCE_FAILED="server.crash.exhausted"
 export EVENT_INSTANCE_FAILED
 
-declare -g -r EVENT_INSTANCE_READY="instance_ready"
+declare -g -r EVENT_INSTANCE_READY="server.ready"
 export EVENT_INSTANCE_READY
 
 # Both backup verbs run for as long as the archiving takes — minutes on a large world — and a
 # scheduler drives them with nobody watching. These bracket each run so a surface can show the
 # instance as busy while it happens, the same way the lifecycle verbs are bracketed. Finished is
-# emitted on every outcome: it says the run ENDED, while instance-backup-created says an archive
+# emitted on every outcome: it says the run ENDED, while backup.created says an archive
 # exists.
-declare -g -r EVENT_INSTANCE_BACKUP_STARTED="instance_backup_started"
+declare -g -r EVENT_INSTANCE_BACKUP_STARTED="backup.started"
 export EVENT_INSTANCE_BACKUP_STARTED
 
-declare -g -r EVENT_INSTANCE_BACKUP_FINISHED="instance_backup_finished"
+declare -g -r EVENT_INSTANCE_BACKUP_FINISHED="backup.finished"
 export EVENT_INSTANCE_BACKUP_FINISHED
 
-declare -g -r EVENT_INSTANCE_RESTORE_STARTED="instance_restore_started"
+declare -g -r EVENT_INSTANCE_RESTORE_STARTED="backup.restore.started"
 export EVENT_INSTANCE_RESTORE_STARTED
 
-declare -g -r EVENT_INSTANCE_RESTORE_FINISHED="instance_restore_finished"
+declare -g -r EVENT_INSTANCE_RESTORE_FINISHED="backup.restore.finished"
 export EVENT_INSTANCE_RESTORE_FINISHED
 
-declare -g -r EVENT_INSTANCE_BACKUP_CREATED="instance_backup_created"
+declare -g -r EVENT_INSTANCE_BACKUP_CREATED="backup.created"
 export EVENT_INSTANCE_BACKUP_CREATED
 
-declare -g -r EVENT_INSTANCE_BACKUP_RESTORED="instance_backup_restored"
+declare -g -r EVENT_INSTANCE_BACKUP_RESTORED="backup.restored"
 export EVENT_INSTANCE_BACKUP_RESTORED
 
 # Backup-removal audit events. A backup is data, and its removal is the one
@@ -187,47 +187,47 @@ export EVENT_INSTANCE_BACKUP_RESTORED
 # threw away that backup" must not have to infer intent from a count, and a
 # reader auditing retention must not have to filter out hand-deletes.
 #
-# instance_backup_deleted carries `source` — the backup id, the same parameter
-# name the created/restored events use for it. instance_backups_pruned carries
+# backup.deleted carries `source` — the backup id, the same parameter
+# name the created/restored events use for it. backup.pruned carries
 # counts rather than ids: it is one event for the whole sweep, and the ids it
 # removed are exactly the ones no longer listed. `deleted` is what was actually
 # removed (never what was attempted) and `kept` is the retention window it ran
 # with, so the pair reads as a complete statement of what the policy did.
-declare -g -r EVENT_INSTANCE_BACKUP_DELETED="instance_backup_deleted"
+declare -g -r EVENT_INSTANCE_BACKUP_DELETED="backup.deleted"
 export EVENT_INSTANCE_BACKUP_DELETED
 
-declare -g -r EVENT_INSTANCE_BACKUPS_PRUNED="instance_backups_pruned"
+declare -g -r EVENT_INSTANCE_BACKUPS_PRUNED="backup.pruned"
 export EVENT_INSTANCE_BACKUPS_PRUNED
 
 # Retention is a policy an operator revises, so both directions are recorded.
 # Pinning takes a backup out of the rotation's reach and unpinning hands it back
 # — the second is the one that can lose data later, and a store that keeps
 # growing is answered by knowing who released what.
-declare -g -r EVENT_INSTANCE_BACKUP_PINNED="instance_backup_pinned"
+declare -g -r EVENT_INSTANCE_BACKUP_PINNED="backup.pinned"
 export EVENT_INSTANCE_BACKUP_PINNED
 
-declare -g -r EVENT_INSTANCE_BACKUP_UNPINNED="instance_backup_unpinned"
+declare -g -r EVENT_INSTANCE_BACKUP_UNPINNED="backup.unpinned"
 export EVENT_INSTANCE_BACKUP_UNPINNED
 
-declare -g -r EVENT_INSTANCE_FILES_REMOVED="instance_files_removed"
+declare -g -r EVENT_INSTANCE_FILES_REMOVED="server.uninstall.files_removed"
 export EVENT_INSTANCE_FILES_REMOVED
 
-declare -g -r EVENT_INSTANCE_DIRECTORIES_REMOVED="instance_directories_removed"
+declare -g -r EVENT_INSTANCE_DIRECTORIES_REMOVED="server.uninstall.directories_removed"
 export EVENT_INSTANCE_DIRECTORIES_REMOVED
 
-declare -g -r EVENT_INSTANCE_REMOVED="instance_removed"
+declare -g -r EVENT_INSTANCE_REMOVED="server.uninstall.removed"
 export EVENT_INSTANCE_REMOVED
 
-declare -g -r EVENT_INSTANCE_UNINSTALL_STARTED="instance_uninstall_started"
+declare -g -r EVENT_INSTANCE_UNINSTALL_STARTED="server.uninstall.started"
 export EVENT_INSTANCE_UNINSTALL_STARTED
 
-declare -g -r EVENT_INSTANCE_UNINSTALL_FINISHED="instance_uninstall_finished"
+declare -g -r EVENT_INSTANCE_UNINSTALL_FINISHED="server.uninstall.finished"
 export EVENT_INSTANCE_UNINSTALL_FINISHED
 
-declare -g -r EVENT_INSTANCE_UNINSTALL_FAILED="instance_uninstall_failed"
+declare -g -r EVENT_INSTANCE_UNINSTALL_FAILED="server.uninstall.failed"
 export EVENT_INSTANCE_UNINSTALL_FAILED
 
-declare -g -r EVENT_INSTANCE_UNINSTALLED="instance_uninstalled"
+declare -g -r EVENT_INSTANCE_UNINSTALLED="server.uninstalled"
 export EVENT_INSTANCE_UNINSTALLED
 
 # Host-firewall audit events. An instance's ports are open exactly while it runs,
@@ -246,38 +246,38 @@ export EVENT_INSTANCE_UNINSTALLED
 # The `ports` parameter carries the instance's UFW-format spec; the payload renders
 # it as the canonical structured array. Only a confirmed open/close emits — a down
 # authority warns and emits nothing (never a fabricated outcome).
-declare -g -r EVENT_INSTANCE_PORTS_OPENED="instance_ports_opened"
+declare -g -r EVENT_INSTANCE_PORTS_OPENED="network.ports.opened"
 export EVENT_INSTANCE_PORTS_OPENED
 
-declare -g -r EVENT_INSTANCE_PORTS_CLOSED="instance_ports_closed"
+declare -g -r EVENT_INSTANCE_PORTS_CLOSED="network.ports.closed"
 export EVENT_INSTANCE_PORTS_CLOSED
 
 # UPnP port-forwarding audit events. Emitted by the kgsm-watchdog (the resident
 # supervisor owns UPnP because it is process-lifetime state) when it opens/closes
 # an instance's port mappings on the local router (IGD) via upnpc — origin=system,
 # actor=system, an autonomous daemon action. DISTINCT from the firewall
-# instance_ports_* events above: a router NAT forward is a different fact from a
+# network.ports.* events above: a router NAT forward is a different fact from a
 # host ufw rule (a host can have one without the other), so they carry separate
 # event types and separate downstream audit actions. The `ports` parameter is the
 # UFW-format spec; the payload renders it as the canonical structured array (same
 # as the firewall events). Only a confirmed upnpc-exit-0 transition emits — never
 # a fabricated outcome.
-declare -g -r EVENT_INSTANCE_UPNP_OPENED="instance_upnp_opened"
+declare -g -r EVENT_INSTANCE_UPNP_OPENED="network.upnp.opened"
 export EVENT_INSTANCE_UPNP_OPENED
 
-declare -g -r EVENT_INSTANCE_UPNP_CLOSED="instance_upnp_closed"
+declare -g -r EVENT_INSTANCE_UPNP_CLOSED="network.upnp.closed"
 export EVENT_INSTANCE_UPNP_CLOSED
 
 # A forward the router dropped on its own, put back by the watchdog's periodic
 # sweep while the instance kept running. Its own type rather than a second
-# instance_upnp_opened because the two answer different questions: an open
+# network.upnp.opened because the two answer different questions: an open
 # accompanies a bring-up, whereas this one says the mapping went missing with
 # nothing on this host asking for it — the only evidence a reader gets that the
 # router discards mappings it accepted, and how often. A router may report a
 # lease as infinite and drop it anyway, so the sweep compares what the IGD
 # actually holds against what the running instances need; `ports` carries the
 # subset that was missing, not the instance's whole set.
-declare -g -r EVENT_INSTANCE_UPNP_REASSERTED="instance_upnp_reasserted"
+declare -g -r EVENT_INSTANCE_UPNP_REASSERTED="network.upnp.reasserted"
 export EVENT_INSTANCE_UPNP_REASSERTED
 
 # Player-presence events. Emitted on behalf of a running game server when a
@@ -289,10 +289,10 @@ export EVENT_INSTANCE_UPNP_REASSERTED
 # _build_event_payload, where an empty value renders as JSON null — never an
 # empty string masquerading as a real value. KGSM never fabricates the missing
 # half (the at-least-one-non-null guarantee is the emitting shim's job).
-declare -g -r EVENT_INSTANCE_PLAYER_JOINED="instance_player_joined"
+declare -g -r EVENT_INSTANCE_PLAYER_JOINED="player.joined"
 export EVENT_INSTANCE_PLAYER_JOINED
 
-declare -g -r EVENT_INSTANCE_PLAYER_LEFT="instance_player_left"
+declare -g -r EVENT_INSTANCE_PLAYER_LEFT="player.left"
 export EVENT_INSTANCE_PLAYER_LEFT
 
 # Player-moderation audit events. Emitted by the command layer when an operator
@@ -309,13 +309,13 @@ export EVENT_INSTANCE_PLAYER_LEFT
 # declared, and re-deriving it here would be a second, drifting answer.
 # `command` is the resolved console command that was actually delivered, so the
 # trail records the literal effect alongside its subject.
-declare -g -r EVENT_INSTANCE_PLAYER_KICKED="instance_player_kicked"
+declare -g -r EVENT_INSTANCE_PLAYER_KICKED="player.kicked"
 export EVENT_INSTANCE_PLAYER_KICKED
 
-declare -g -r EVENT_INSTANCE_PLAYER_BANNED="instance_player_banned"
+declare -g -r EVENT_INSTANCE_PLAYER_BANNED="player.banned"
 export EVENT_INSTANCE_PLAYER_BANNED
 
-declare -g -r EVENT_INSTANCE_PLAYER_UNBANNED="instance_player_unbanned"
+declare -g -r EVENT_INSTANCE_PLAYER_UNBANNED="player.unbanned"
 export EVENT_INSTANCE_PLAYER_UNBANNED
 
 # Instance config-change audit event. Emitted by the command layer when a
@@ -324,31 +324,31 @@ export EVENT_INSTANCE_PLAYER_UNBANNED
 # (RCON/admin passwords, tokens), so the value must never reach a transport, log,
 # or downstream audit. The downstream record is "key X changed on instance Y",
 # nothing more.
-declare -g -r EVENT_INSTANCE_CONFIG_CHANGED="instance_config_changed"
+declare -g -r EVENT_INSTANCE_CONFIG_CHANGED="config.changed"
 export EVENT_INSTANCE_CONFIG_CHANGED
 
-# Instance display-name event. Emitted alongside instance_config_changed when the
+# Instance display-name event. Emitted alongside config.changed when the
 # `display_name` key is set, by `instances rename` or by `instances config-set`.
 #
 # Its subject is still the instance, so `InstanceName` carries the ID exactly as
 # every other instance event does — the ID is what a consumer keys on, and it is
 # unchanged by a rename. The two labels ride along in full: a display name is the
 # one value in the instance config that exists to be shown, so the key-only rule
-# instance_config_changed follows would leave this event unable to say what it is
+# config.changed follows would leave this event unable to say what it is
 # about, and every surface reading it would have to go back to the engine to
 # learn the label it was just told had changed.
-declare -g -r EVENT_INSTANCE_DISPLAY_NAME_CHANGED="instance_display_name_changed"
+declare -g -r EVENT_INSTANCE_DISPLAY_NAME_CHANGED="server.renamed"
 export EVENT_INSTANCE_DISPLAY_NAME_CHANGED
 
 # Console-input audit event. Emitted by the command layer when an arbitrary
 # console command is delivered to a running instance via `instances input`.
 # Carries the instance name and the verbatim command text. Unlike
-# instance_config_changed (key only), the FULL command is carried on purpose —
+# config.changed (key only), the FULL command is carried on purpose —
 # the trail's value is recording exactly what an operator ran (console commands
 # are admin-level: ban/kick/op/...). A command can therefore contain a secret
 # (e.g. an RCON login); the surface is operator-gated upstream and a consumer
 # that must redact does so at its own boundary.
-declare -g -r EVENT_INSTANCE_INPUT_SENT="instance_input_sent"
+declare -g -r EVENT_INSTANCE_INPUT_SENT="console.input.sent"
 export EVENT_INSTANCE_INPUT_SENT
 
 # Announcement audit event. Emitted by the command layer when a broadcast is
@@ -358,11 +358,11 @@ export EVENT_INSTANCE_INPUT_SENT
 # surface should show, while the resolved form is the literal effect and the only
 # record of which template produced it.
 #
-# Separate from instance_input_sent, whose subject is an operator running an
+# Separate from console.input.sent, whose subject is an operator running an
 # arbitrary console command. An announcement's subject is the players, so a
 # consumer asking "what were people told on this server" filters on the type
 # instead of pattern-matching command text.
-declare -g -r EVENT_INSTANCE_ANNOUNCEMENT_SENT="instance_announcement_sent"
+declare -g -r EVENT_INSTANCE_ANNOUNCEMENT_SENT="announcement.sent"
 export EVENT_INSTANCE_ANNOUNCEMENT_SENT
 
 # Blueprint file events. The ONLY events in the system that are not
@@ -389,16 +389,16 @@ export EVENT_INSTANCE_ANNOUNCEMENT_SENT
 # (steamcmd arguments, server passwords in an embedded compose), and an event
 # payload fans out to every transport — the record is "blueprint X changed",
 # nothing more. A consumer that needs the content reads the file.
-declare -g -r EVENT_BLUEPRINT_CREATED="blueprint_created"
+declare -g -r EVENT_BLUEPRINT_CREATED="blueprint.created"
 export EVENT_BLUEPRINT_CREATED
 
-declare -g -r EVENT_BLUEPRINT_UPDATED="blueprint_updated"
+declare -g -r EVENT_BLUEPRINT_UPDATED="blueprint.updated"
 export EVENT_BLUEPRINT_UPDATED
 
 # `reverted_to_system` is the counterpart of `overrides_system`: true when
 # deleting the user file uncovers a shipped blueprint that takes over again,
 # false when the blueprint is gone from the host entirely.
-declare -g -r EVENT_BLUEPRINT_REMOVED="blueprint_removed"
+declare -g -r EVENT_BLUEPRINT_REMOVED="blueprint.removed"
 export EVENT_BLUEPRINT_REMOVED
 
 # Library registry events. Their subject is a placement root — a named disk
@@ -416,10 +416,10 @@ export EVENT_BLUEPRINT_REMOVED
 # No capacity or online figure rides along: both are measurements that are only
 # true at the moment they are taken, and `libraries list` is where they are
 # taken.
-declare -g -r EVENT_LIBRARY_ADDED="library_added"
+declare -g -r EVENT_LIBRARY_ADDED="library.added"
 export EVENT_LIBRARY_ADDED
 
-declare -g -r EVENT_LIBRARY_REMOVED="library_removed"
+declare -g -r EVENT_LIBRARY_REMOVED="library.removed"
 export EVENT_LIBRARY_REMOVED
 
 # Event parameter specifications
@@ -528,8 +528,89 @@ declare -g -A EVENT_CONFIGS=(
   ["$EVENT_LIBRARY_REMOVED"]="name path"
 )
 
+# How much each event matters and how it went, as "<severity> <outcome>".
+#
+# Severity is `info`, `warn` or `danger`; outcome is `success`, `failure` or
+# `neutral`. They are separate axes: a backup created and a config key set are
+# both routine and differ only in how they went, while an uninstall that
+# succeeded is still the loudest thing on the feed.
+#
+# This is the engine's own judgement and nothing downstream second-guesses it.
+# The values ride on every line, so a reader never holds a table of its own —
+# which is what lets a surface render an event it has never heard of.
+declare -g -A EVENT_GRADES=(
+  ["$EVENT_INSTANCE_CREATED"]="info neutral"
+  ["$EVENT_INSTANCE_DIRECTORIES_CREATED"]="info neutral"
+  ["$EVENT_INSTANCE_FILES_CREATED"]="info neutral"
+  ["$EVENT_INSTANCE_DOWNLOAD_STARTED"]="info neutral"
+  ["$EVENT_INSTANCE_DOWNLOAD_FINISHED"]="info neutral"
+  ["$EVENT_INSTANCE_DOWNLOAD_FAILED"]="danger failure"
+  ["$EVENT_INSTANCE_DOWNLOADED"]="info neutral"
+  ["$EVENT_INSTANCE_DEPLOY_STARTED"]="info neutral"
+  ["$EVENT_INSTANCE_DEPLOY_FINISHED"]="info neutral"
+  ["$EVENT_INSTANCE_DEPLOY_FAILED"]="danger failure"
+  ["$EVENT_INSTANCE_DEPLOYED"]="info neutral"
+  ["$EVENT_INSTANCE_RESTART_STARTED"]="info neutral"
+  ["$EVENT_INSTANCE_RESTART_FINISHED"]="info neutral"
+  ["$EVENT_INSTANCE_RESTART_STOPPED"]="info neutral"
+  ["$EVENT_INSTANCE_STOP_STARTED"]="info neutral"
+  ["$EVENT_INSTANCE_STOP_FINISHED"]="info neutral"
+  ["$EVENT_INSTANCE_UPDATE_STARTED"]="info neutral"
+  ["$EVENT_INSTANCE_UPDATE_FINISHED"]="info neutral"
+  ["$EVENT_INSTANCE_UPDATE_FAILED"]="danger failure"
+  ["$EVENT_INSTANCE_UPDATED"]="info neutral"
+  ["$EVENT_INSTANCE_VERSION_UPDATED"]="info success"
+  ["$EVENT_INSTANCE_UPDATE_AVAILABLE"]="info neutral"
+  ["$EVENT_INSTANCE_INSTALLATION_STARTED"]="info neutral"
+  ["$EVENT_INSTANCE_INSTALLATION_FINISHED"]="info neutral"
+  ["$EVENT_INSTANCE_INSTALLED"]="info success"
+  ["$EVENT_INSTANCE_MOVED"]="info neutral"
+  ["$EVENT_INSTANCE_STARTED"]="info neutral"
+  ["$EVENT_INSTANCE_STOPPED"]="warn neutral"
+  ["$EVENT_INSTANCE_RESTARTED"]="info neutral"
+  ["$EVENT_INSTANCE_CRASHED"]="warn failure"
+  ["$EVENT_INSTANCE_FAILED"]="danger failure"
+  ["$EVENT_INSTANCE_READY"]="info success"
+  ["$EVENT_INSTANCE_BACKUP_STARTED"]="info neutral"
+  ["$EVENT_INSTANCE_BACKUP_FINISHED"]="info neutral"
+  ["$EVENT_INSTANCE_RESTORE_STARTED"]="info neutral"
+  ["$EVENT_INSTANCE_RESTORE_FINISHED"]="info neutral"
+  ["$EVENT_INSTANCE_BACKUP_CREATED"]="info success"
+  ["$EVENT_INSTANCE_BACKUP_RESTORED"]="warn success"
+  ["$EVENT_INSTANCE_BACKUP_DELETED"]="warn neutral"
+  ["$EVENT_INSTANCE_BACKUPS_PRUNED"]="info neutral"
+  ["$EVENT_INSTANCE_BACKUP_PINNED"]="info neutral"
+  ["$EVENT_INSTANCE_BACKUP_UNPINNED"]="warn neutral"
+  ["$EVENT_INSTANCE_FILES_REMOVED"]="info neutral"
+  ["$EVENT_INSTANCE_DIRECTORIES_REMOVED"]="info neutral"
+  ["$EVENT_INSTANCE_REMOVED"]="info neutral"
+  ["$EVENT_INSTANCE_UNINSTALL_STARTED"]="info neutral"
+  ["$EVENT_INSTANCE_UNINSTALL_FINISHED"]="info neutral"
+  ["$EVENT_INSTANCE_UNINSTALL_FAILED"]="danger failure"
+  ["$EVENT_INSTANCE_UNINSTALLED"]="danger success"
+  ["$EVENT_INSTANCE_PORTS_OPENED"]="info neutral"
+  ["$EVENT_INSTANCE_PORTS_CLOSED"]="warn neutral"
+  ["$EVENT_INSTANCE_UPNP_OPENED"]="info neutral"
+  ["$EVENT_INSTANCE_UPNP_CLOSED"]="warn neutral"
+  ["$EVENT_INSTANCE_UPNP_REASSERTED"]="warn neutral"
+  ["$EVENT_INSTANCE_PLAYER_JOINED"]="info neutral"
+  ["$EVENT_INSTANCE_PLAYER_LEFT"]="info neutral"
+  ["$EVENT_INSTANCE_PLAYER_KICKED"]="warn neutral"
+  ["$EVENT_INSTANCE_PLAYER_BANNED"]="danger neutral"
+  ["$EVENT_INSTANCE_PLAYER_UNBANNED"]="info neutral"
+  ["$EVENT_INSTANCE_CONFIG_CHANGED"]="info neutral"
+  ["$EVENT_INSTANCE_DISPLAY_NAME_CHANGED"]="info neutral"
+  ["$EVENT_INSTANCE_INPUT_SENT"]="info neutral"
+  ["$EVENT_INSTANCE_ANNOUNCEMENT_SENT"]="info neutral"
+  ["$EVENT_BLUEPRINT_CREATED"]="info neutral"
+  ["$EVENT_BLUEPRINT_UPDATED"]="info neutral"
+  ["$EVENT_BLUEPRINT_REMOVED"]="info neutral"
+  ["$EVENT_LIBRARY_ADDED"]="info neutral"
+  ["$EVENT_LIBRARY_REMOVED"]="info neutral"
+)
+
 # Validates that an event type is supported
-# Args: $1 = event_type (e.g., "instance_created")
+# Args: $1 = event_type (e.g., "server.installed")
 # Returns: EC_SUCCESS if valid, EC_EVENT_TYPE_INVALID if not
 function __logic_validate_event_type() {
   local event_type="$1"
@@ -601,30 +682,6 @@ function __logic_get_event_param_spec() {
 
 export -f __logic_get_event_param_spec
 
-# Converts dash-separated event name to underscore constant
-# Args: $1 = event_name (e.g., "instance-created")
-# Returns: EC_SUCCESS and echoes constant name (e.g., "instance_created"), or EC_EVENT_TYPE_INVALID
-function __logic_event_name_to_type() {
-  local event_name="$1"
-
-  if [[ -z "$event_name" ]]; then
-    return $EC_EVENT_TYPE_INVALID
-  fi
-
-  # Convert dashes to underscores
-  local event_type="${event_name//-/_}"
-
-  # Validate the resulting type exists
-  if ! __logic_validate_event_type "$event_type"; then
-    return $EC_EVENT_TYPE_INVALID
-  fi
-
-  echo "$event_type"
-  return $EC_SUCCESS
-}
-
-export -f __logic_event_name_to_type
-
 # Build JSON event payload
 # Args: $1 = event_type, $2... = parameters
 # Returns: echoes JSON payload or returns error code
@@ -660,6 +717,249 @@ function __event_id() {
 }
 
 export -f __event_id
+
+# The one line of prose an event carries.
+#
+# Written here, at the moment the event happens, because the sentence is content
+# and content is the producer's: three surfaces that own no pixels read it
+# straight through (Discord announcements, Web Push, the assistant), and a feed
+# that composed its own wording would have to hold a table with one arm per
+# event — the arm that is missing for every event nobody has added yet.
+#
+# It names things as they are called right now. The instance id the emitter
+# passed is what goes in, never a label looked up somewhere else: a line written
+# today still says what the server was called today after somebody renames it.
+#
+# Phase events carry none. The `*_started`/`*_finished` brackets exist so a
+# surface can show work in flight, and prose nothing reads is prose nobody
+# maintains.
+#
+# Where a value the sentence needs is missing, the sentence keeps a subject —
+# the literal `instance`, `blueprint`, `(unnamed)` or `a player` — so a summary
+# never trails off with nothing after the verb.
+#
+# Returned in a variable rather than on stdout: a $(...) substitution is a fork,
+# and this runs on every event the engine emits.
+#
+# Args: $1 = event_type, $2... = parameters
+# Sets: __logic_event_summary_out
+function __logic_event_summary() {
+  local event_type="$1"
+  shift
+  local params=("$@")
+
+  __logic_event_summary_out=""
+
+  # The instance id, or the word that stands in its place. Every instance-scoped
+  # sentence below reads it, and each of the three other subjects has a
+  # stand-in of its own inside the arm that needs it.
+  local _instance="${params[0]:-}"
+  _instance="${_instance:-instance}"
+
+  case "$event_type" in
+    "$EVENT_INSTANCE_STARTED")
+      __logic_event_summary_out="started $_instance"
+      ;;
+    "$EVENT_INSTANCE_READY")
+      __logic_event_summary_out="finished loading $_instance"
+      ;;
+    "$EVENT_INSTANCE_STOPPED")
+      __logic_event_summary_out="stopped $_instance"
+      ;;
+    "$EVENT_INSTANCE_RESTARTED")
+      __logic_event_summary_out="restarted $_instance"
+      ;;
+    "$EVENT_INSTANCE_INSTALLED")
+      __logic_event_summary_out="installed $_instance"
+      ;;
+    "$EVENT_INSTANCE_UNINSTALLED")
+      __logic_event_summary_out="uninstalled $_instance"
+      ;;
+    "$EVENT_INSTANCE_UNINSTALL_FAILED")
+      __logic_event_summary_out="could not uninstall $_instance"
+      ;;
+    "$EVENT_INSTANCE_MOVED")
+      __logic_event_summary_out="moved $_instance"
+      ;;
+    "$EVENT_INSTANCE_VERSION_UPDATED")
+      __logic_event_summary_out="updated $_instance"
+      ;;
+    "$EVENT_INSTANCE_UPDATE_FAILED")
+      __logic_event_summary_out="could not update $_instance"
+      ;;
+    "$EVENT_INSTANCE_UPDATE_AVAILABLE")
+      __logic_event_summary_out="update available for $_instance"
+      ;;
+    "$EVENT_INSTANCE_DOWNLOAD_FAILED")
+      __logic_event_summary_out="could not download files for $_instance"
+      ;;
+    "$EVENT_INSTANCE_DEPLOY_FAILED")
+      __logic_event_summary_out="could not deploy files for $_instance"
+      ;;
+    "$EVENT_INSTANCE_CRASHED")
+      __logic_event_summary_out="$_instance crashed — auto-restarting"
+      ;;
+    "$EVENT_INSTANCE_FAILED")
+      # The restart count is a tail rather than a clause of its own: a
+      # supervisor that gave up without ever retrying has nothing to count, and
+      # "after 0 restart(s)" would report a number where there is no number.
+      local _tail=""
+      [[ -z "${params[2]:-}" ]] || _tail=" after ${params[2]} restart(s)"
+      __logic_event_summary_out="$_instance crashed — supervisor gave up${_tail}"
+      ;;
+    "$EVENT_INSTANCE_BACKUP_CREATED")
+      __logic_event_summary_out="backed up $_instance"
+      ;;
+    "$EVENT_INSTANCE_BACKUP_RESTORED")
+      __logic_event_summary_out="restored backup for $_instance"
+      ;;
+    "$EVENT_INSTANCE_BACKUP_DELETED")
+      __logic_event_summary_out="deleted a backup for $_instance"
+      ;;
+    "$EVENT_INSTANCE_BACKUPS_PRUNED")
+      __logic_event_summary_out="pruned backups for $_instance"
+      ;;
+    "$EVENT_INSTANCE_BACKUP_PINNED")
+      __logic_event_summary_out="pinned a backup for $_instance"
+      ;;
+    "$EVENT_INSTANCE_BACKUP_UNPINNED")
+      __logic_event_summary_out="unpinned a backup for $_instance"
+      ;;
+    "$EVENT_INSTANCE_PORTS_OPENED")
+      __logic_event_summary_out="opened firewall ports for $_instance"
+      ;;
+    "$EVENT_INSTANCE_PORTS_CLOSED")
+      __logic_event_summary_out="closed firewall ports for $_instance"
+      ;;
+    "$EVENT_INSTANCE_UPNP_OPENED")
+      __logic_event_summary_out="forwarded UPnP ports for $_instance"
+      ;;
+    "$EVENT_INSTANCE_UPNP_CLOSED")
+      __logic_event_summary_out="removed UPnP ports for $_instance"
+      ;;
+    "$EVENT_INSTANCE_UPNP_REASSERTED")
+      __logic_event_summary_out="restored dropped UPnP ports for $_instance"
+      ;;
+    "$EVENT_INSTANCE_PLAYER_JOINED" | "$EVENT_INSTANCE_PLAYER_LEFT")
+      # The name if the source gave one, the id if that is all it has: both are
+      # nullable and a source may carry either. Neither is fabricated from the
+      # other, so a source that gave nothing gets the stand-in.
+      local _who="${params[2]:-}"
+      [[ -n "$_who" ]] || _who="${params[1]:-}"
+      _who="${_who:-a player}"
+
+      local _presence="joined"
+      [[ "$event_type" != "$EVENT_INSTANCE_PLAYER_LEFT" ]] || _presence="left"
+      __logic_event_summary_out="$_who $_presence $_instance"
+      ;;
+    "$EVENT_INSTANCE_PLAYER_KICKED" | "$EVENT_INSTANCE_PLAYER_BANNED" | "$EVENT_INSTANCE_PLAYER_UNBANNED")
+      # `target` is the identity token the operator supplied, carried verbatim:
+      # which kind of token it is was declared by the blueprint, and classifying
+      # it here would be a second answer to that.
+      local _target="${params[1]:-}"
+      _target="${_target:-a player}"
+
+      local _moderation="kicked"
+      case "$event_type" in
+        "$EVENT_INSTANCE_PLAYER_BANNED") _moderation="banned" ;;
+        "$EVENT_INSTANCE_PLAYER_UNBANNED") _moderation="unbanned" ;;
+      esac
+      __logic_event_summary_out="$_moderation $_target on $_instance"
+      ;;
+    "$EVENT_INSTANCE_DISPLAY_NAME_CHANGED")
+      # An emptied label reads as the id, which is what a reader of the config
+      # gets and therefore what the sentence says on either end.
+      local _from="${params[1]:-}"
+      _from="${_from:-$_instance}"
+      local _to="${params[2]:-}"
+      _to="${_to:-$_instance}"
+      __logic_event_summary_out="renamed $_instance from '$_from' to '$_to'"
+      ;;
+    "$EVENT_INSTANCE_CONFIG_CHANGED")
+      # The key, never the value — instance config holds rcon and admin
+      # passwords, and a summary fans out to every transport the payload does.
+      local _key="${params[1]:-}"
+      if [[ -z "$_key" ]]; then
+        __logic_event_summary_out="config changed for $_instance"
+      else
+        __logic_event_summary_out="set config '$_key' for $_instance"
+      fi
+      ;;
+    "$EVENT_INSTANCE_INPUT_SENT")
+      # A console command is arbitrary text an operator typed, so the sentence
+      # takes a bounded slice of it. The payload keeps the command whole; this
+      # is the line a feed prints in a row of its own.
+      local _command="${params[1]:-}"
+      if [[ -z "$_command" ]]; then
+        __logic_event_summary_out="sent a console command to $_instance"
+      else
+        local _shown="$_command"
+        [[ ${#_command} -le 80 ]] || _shown="${_command:0:79}…"
+        __logic_event_summary_out="ran '$_shown' on $_instance"
+      fi
+      ;;
+    "$EVENT_INSTANCE_ANNOUNCEMENT_SENT")
+      # What a person wrote, bounded the same way console input is, for the same
+      # reason: it is prose somebody typed and a row has one line to give it.
+      local _message="${params[1]:-}"
+      if [[ -z "$_message" ]]; then
+        __logic_event_summary_out="announced to $_instance"
+      else
+        local _shown="$_message"
+        [[ ${#_message} -le 80 ]] || _shown="${_message:0:79}…"
+        __logic_event_summary_out="announced '$_shown' on $_instance"
+      fi
+      ;;
+    "$EVENT_BLUEPRINT_CREATED")
+      # Overriding a shipped blueprint and writing a brand-new one are two
+      # different pieces of news, so they get two different verbs.
+      local _blueprint="${params[0]:-}"
+      _blueprint="${_blueprint:-blueprint}"
+      if [[ "${params[2]:-}" == "true" ]]; then
+        __logic_event_summary_out="overrode blueprint $_blueprint"
+      else
+        __logic_event_summary_out="created blueprint $_blueprint"
+      fi
+      ;;
+    "$EVENT_BLUEPRINT_UPDATED")
+      local _blueprint="${params[0]:-}"
+      _blueprint="${_blueprint:-blueprint}"
+      __logic_event_summary_out="edited blueprint $_blueprint"
+      ;;
+    "$EVENT_BLUEPRINT_REMOVED")
+      # Three outcomes, because deleting a user file can uncover a shipped
+      # blueprint that takes over, remove the blueprint from the host entirely,
+      # or land somewhere the emitter could not determine.
+      local _blueprint="${params[0]:-}"
+      _blueprint="${_blueprint:-blueprint}"
+      case "${params[2]:-}" in
+        true)
+          __logic_event_summary_out="reverted blueprint $_blueprint to the shipped version"
+          ;;
+        false)
+          __logic_event_summary_out="removed blueprint $_blueprint"
+          ;;
+        *)
+          __logic_event_summary_out="removed the local copy of blueprint $_blueprint"
+          ;;
+      esac
+      ;;
+    "$EVENT_LIBRARY_ADDED")
+      local _library="${params[0]:-}"
+      _library="${_library:-(unnamed)}"
+      __logic_event_summary_out="registered library $_library"
+      ;;
+    "$EVENT_LIBRARY_REMOVED")
+      local _library="${params[0]:-}"
+      _library="${_library:-(unnamed)}"
+      __logic_event_summary_out="deregistered library $_library — its files are untouched"
+      ;;
+  esac
+
+  return $EC_SUCCESS
+}
+
+export -f __logic_event_summary
 
 function __logic_build_event_payload() {
   local event_type="$1"
@@ -720,9 +1020,23 @@ function __logic_build_event_payload() {
   local __event_id_out
   __event_id
 
+  # How much this event matters, how it went, and the one line of prose that
+  # says so. All three ride on the wire so a reader needs no table of its own;
+  # an event with nothing to say in prose (a phase bracket) carries no summary
+  # rather than an empty one, because an empty string is a third state on top of
+  # "known" and "unknown" that no reader handles.
+  local _severity="" _outcome=""
+  read -r _severity _outcome <<< "${EVENT_GRADES[$event_type]:-}"
+
+  local __logic_event_summary_out
+  __logic_event_summary "$event_type" "${params[@]}"
+
   local jq_args=("${param_names[@]}"
     --arg event_id "$__event_id_out"
     --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)"
+    --arg severity "$_severity"
+    --arg outcome "$_outcome"
+    --arg summary "$__logic_event_summary_out"
     --arg actor "$actor"
     --arg origin "$origin"
     --arg hostname "$(hostname 2>/dev/null || cat /etc/hostname 2>/dev/null || echo "${HOSTNAME:-localhost}")"
@@ -870,7 +1184,7 @@ function __logic_build_event_payload() {
       # structured array [{start,end,protocol}] — the same shape `instances
       # info --json` emits — never the opaque UFW string. Converted here and
       # passed via --argjson (the one non-string Data field in this builder).
-      # Shared by the firewall (instance_ports_*) and UPnP (instance_upnp_*)
+      # Shared by the firewall (network.ports.*) and UPnP (network.upnp.*)
       # events — all carry the same structured Ports payload; the event TYPE
       # distinguishes router NAT forward from host ufw rule downstream, and a
       # re-assert from a bring-up open.
@@ -974,9 +1288,12 @@ function __logic_build_event_payload() {
   # every consumer's cursor is a byte offset into it, so a pretty-printed
   # payload would break the one-event-per-line contract readers depend on.
   if ! payload=$(jq -c -n "${jq_args[@]}" "{
-    V: 1,
+    V: 2,
     Id: (\$event_id | if . == \"\" then null else . end),
     EventType: \"$event_type\",
+    Severity: (\$severity | if . == \"\" then null else . end),
+    Outcome: (\$outcome | if . == \"\" then null else . end),
+    Summary: (\$summary | if . == \"\" then null else . end),
     Data: $data_object,
     Timestamp: \$timestamp,
     Actor: (\$actor | if . == \"\" then null else . end),
@@ -1118,19 +1435,18 @@ export -f __logic_journal_append
 # dispatch in core/events.sh both route here, so the wire format has exactly
 # one definition.
 #
-# Args: $1 = event_name (dash- or underscore-separated), $2... = parameters
+# Args: $1 = event_type (the dotted name), $2... = parameters
 # Returns: EC_SUCCESS, or the failing stage's code
 function __logic_emit_event() {
-  local event_name="$1"
+  local event_type="$1"
   shift
   local params=("$@")
 
-  if [[ -z "$event_name" ]]; then
+  if [[ -z "$event_type" ]]; then
     return $EC_MISSING_ARG
   fi
 
-  local event_type
-  if ! event_type=$(__logic_event_name_to_type "$event_name"); then
+  if ! __logic_validate_event_type "$event_type"; then
     return $EC_EVENT_TYPE_INVALID
   fi
 

@@ -102,35 +102,35 @@ function __dispatch_event_from_exit_code() {
   # Map exit codes to event emissions
   case $exit_code in
     $EC_SUCCESS_DIRECTORIES_CREATED)
-      __emit_event instance-directories-created "$instance_name"
+      __emit_event server.install.directories_created "$instance_name"
       return $?
       ;;
     $EC_SUCCESS_DIRECTORIES_REMOVED)
-      __emit_event instance-directories-removed "$instance_name"
+      __emit_event server.uninstall.directories_removed "$instance_name"
       return $?
       ;;
     $EC_SUCCESS_INSTANCE_CREATED)
-      __emit_event instance-created "$instance_name" "${additional_params[@]}"
+      __emit_event server.install.created "$instance_name" "${additional_params[@]}"
       return $?
       ;;
     $EC_SUCCESS_INSTANCE_REMOVED)
-      __emit_event instance-removed "$instance_name"
+      __emit_event server.uninstall.removed "$instance_name"
       return $?
       ;;
     $EC_SUCCESS_INSTANCE_STARTED)
-      __emit_event instance-started "$instance_name" "${additional_params[@]}"
+      __emit_event server.started "$instance_name" "${additional_params[@]}"
       return $?
       ;;
     $EC_SUCCESS_INSTANCE_STOPPED)
-      __emit_event instance-stopped "$instance_name" "${additional_params[@]}"
+      __emit_event server.stopped "$instance_name" "${additional_params[@]}"
       return $?
       ;;
     $EC_SUCCESS_INSTANCE_RESTARTED)
-      __emit_event instance-restarted "$instance_name" "${additional_params[@]}"
+      __emit_event server.restarted "$instance_name" "${additional_params[@]}"
       return $?
       ;;
     $EC_SUCCESS_INSTANCE_READY)
-      __emit_event instance-ready "$instance_name"
+      __emit_event server.ready "$instance_name"
       return $?
       ;;
     $EC_SUCCESS_CONFIG_SET)

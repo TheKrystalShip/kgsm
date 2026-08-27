@@ -368,22 +368,22 @@ function _update() {
   # work: an update downloads and deploys exactly as an install does, and a
   # surface showing "Updating…" with no further word for a twenty-minute
   # download is the reason these are reported.
-  _emit_phase instance-download-started
+  _emit_phase server.download.started
   if ! _download "$latest_version"; then
-    _emit_phase instance-download-failed
+    _emit_phase server.download.failed
     __print_error "Failed to download latest version $latest_version"
     return $EC_ERROR
   fi
-  _emit_phase instance-download-finished
+  _emit_phase server.download.finished
 
   # Deploy the downloaded files
-  _emit_phase instance-deploy-started
+  _emit_phase server.deploy.started
   if ! _deploy; then
-    _emit_phase instance-deploy-failed
+    _emit_phase server.deploy.failed
     __print_error "Failed to deploy new files"
     return $EC_ERROR
   fi
-  _emit_phase instance-deploy-finished
+  _emit_phase server.deploy.finished
 
   # Save the new version to file
   if ! _save_version "$latest_version"; then

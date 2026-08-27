@@ -15,8 +15,8 @@
 #
 # Exit Code Conventions:
 # - 0: Success (no event needed)
-# - 232: Library added (emit library-added)
-# - 233: Library removed (emit library-removed)
+# - 232: Library added (emit library.added)
+# - 233: Library removed (emit library.removed)
 # - Standard error codes: EC_LIBRARY_NOT_FOUND, EC_LIBRARY_EXISTS,
 #   EC_LIBRARY_IN_USE, EC_INVALID_ARG, EC_PERMISSION, etc.
 

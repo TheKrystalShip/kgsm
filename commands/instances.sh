@@ -1619,7 +1619,7 @@ function _cmd_move() {
   fi
 
   __print_success "Moved '$instance' from library '$source_library' to '$target_library' (${target_working_dir})"
-  __emit_event instance-moved "$instance" "$source_library" "$target_library"
+  __emit_event server.moved "$instance" "$source_library" "$target_library"
 
   return 0
 }
@@ -1953,7 +1953,7 @@ function _cmd_input() {
     # command layer, not the management script (a standalone artifact without the
     # event helpers), and only on a successful send. Matches the config-set
     # convention.
-    __emit_event instance-input-sent "$instance" "$command"
+    __emit_event console.input.sent "$instance" "$command"
   fi
 
   exit $exit_code
@@ -2029,7 +2029,7 @@ function _cmd_announce() {
     # from the command layer (the management script is a standalone artifact
     # without the event helpers) and only on a successful send.
     local resolved="${instance_broadcast_command//\{message\}/$message}"
-    __emit_event instance-announcement-sent "$instance" "$message" "$resolved"
+    __emit_event announcement.sent "$instance" "$message" "$resolved"
   fi
 
   exit $exit_code
@@ -2124,9 +2124,9 @@ function _cmd_moderation() {
 
     local event_name
     case "$action" in
-      kick) event_name="instance-player-kicked" ;;
-      ban) event_name="instance-player-banned" ;;
-      unban) event_name="instance-player-unbanned" ;;
+      kick) event_name="player.kicked" ;;
+      ban) event_name="player.banned" ;;
+      unban) event_name="player.unbanned" ;;
     esac
     __emit_event "$event_name" "$instance" "$target" "$resolved"
   fi
@@ -2219,7 +2219,7 @@ function __maintenance_windows_shape_ok() {
 
 # Writes one instance-config assignment and records what it was.
 #
-# Every successful set emits instance-config-changed, carrying the instance and
+# Every successful set emits config.changed, carrying the instance and
 # the key only — never the value, because instance config holds secrets. A
 # display-name change also emits its own event carrying both labels: the generic
 # event deliberately withholds the value, so a surface that renders labels
@@ -2250,14 +2250,14 @@ function _set_instance_config_key() {
   local exit_code=$?
   [[ $exit_code -eq 0 ]] || return $exit_code
 
-  __emit_event instance-config-changed "$instance" "$key"
+  __emit_event config.changed "$instance" "$key"
 
   if [[ "$key" == "display_name" ]]; then
     # An emptied label reads as the id, which is the value the event reports —
     # the same answer every reader of the config gets.
     local new_display_name="$value"
     [[ -n "$new_display_name" ]] || new_display_name="$instance"
-    __emit_event instance-display-name-changed \
+    __emit_event server.renamed \
       "$instance" "$old_display_name" "$new_display_name"
   fi
 
@@ -2741,7 +2741,7 @@ ${UNDERLINE}Arguments:${END}
 
 ${UNDERLINE}Options:${END}
   --emit                      Record what the check found and emit
-                              'instance_update_available' when the version has
+                              'server.update.available' when the version has
                               not been reported before. Without it the check
                               records nothing and announces nothing.
   --help                      Display this help information
@@ -2900,7 +2900,7 @@ function _emit_backups_created_since() {
     manifest="${instance_backups_dir}/${id}/manifest.json"
     version=""
     [[ -f "$manifest" ]] && version="$(jq -r '.version // ""' "$manifest" 2> /dev/null)"
-    __emit_event instance-backup-created "$instance" "$id" "$version"
+    __emit_event backup.created "$instance" "$id" "$version"
   done < <(comm -13 <(printf '%s\n' "$before" | sed '/^$/d') <(_list_backup_ids))
 }
 
@@ -3150,9 +3150,9 @@ function _cmd_create_backup() {
   # Archiving a world is minutes of work on a large one, and a scheduler runs
   # this with nobody watching — so the run is bracketed like the lifecycle verbs
   # rather than being announced only once it has finished. Finished is emitted on
-  # every outcome: it says the run ENDED, while instance-backup-created says an
+  # every outcome: it says the run ENDED, while backup.created says an
   # archive exists.
-  __emit_event instance-backup-started "${instance}"
+  __emit_event backup.started "${instance}"
 
   # create-backup prints its progress lines and then the new backup's id as the
   # last line. Take the id from there rather than re-deriving "the newest entry
@@ -3175,13 +3175,13 @@ function _cmd_create_backup() {
     # Only announce a backup that exists. Emitting a progress line as a backup id
     # would fabricate an event, so the id is confirmed on disk first.
     if [[ -n "$backup_id" ]] && [[ -d "${instance_backups_dir}/${backup_id}" ]]; then
-      __emit_event instance-backup-created "$instance" "$backup_id" "$version"
+      __emit_event backup.created "$instance" "$backup_id" "$version"
     fi
   fi
 
   # Emitted LAST, after the archive is announced, so a consumer that re-reads on
   # "the run ended" finds it already listed.
-  __emit_event instance-backup-finished "${instance}"
+  __emit_event backup.finished "${instance}"
 
   exit $rc
 }
@@ -3243,7 +3243,7 @@ function _cmd_restore_backup() {
   # checksum verification and then the instance's data replaced — so the run is
   # bracketed for the same reason a backup's is, and a surface can show the
   # instance as busy for the whole of it.
-  __emit_event instance-restore-started "${instance}"
+  __emit_event backup.restore.started "${instance}"
 
   # The safety archive of the current state is taken from inside the management
   # script, which cannot emit; recording what is on disk beforehand is what lets
@@ -3263,11 +3263,11 @@ function _cmd_restore_backup() {
   if [[ $rc -eq 0 ]]; then
     local version
     version="$(cat "$instance_version_file" 2> /dev/null)"
-    __emit_event instance-backup-restored "$instance" "$backup" "$version"
+    __emit_event backup.restored "$instance" "$backup" "$version"
   fi
 
   # Emitted LAST, after the outcome, like every other bracket.
-  __emit_event instance-restore-finished "${instance}"
+  __emit_event backup.restore.finished "${instance}"
 
   exit $rc
 }
@@ -3358,7 +3358,7 @@ function _cmd_delete_backup() {
 
   # Emitted from the command layer, on a confirmed removal only — matching the
   # create/restore convention.
-  __emit_event instance-backup-deleted "$instance" "$backup"
+  __emit_event backup.deleted "$instance" "$backup"
 
   __print_success "Deleted backup: $backup"
   exit 0
@@ -3493,7 +3493,7 @@ function _cmd_prune_backups() {
   # sweep still emits — those backups are genuinely gone — and then exits with
   # the error, so the record and the exit code describe the same run.
   if [[ $deleted -gt 0 ]]; then
-    __emit_event instance-backups-pruned "$instance" "$deleted" "$keep" "$pinned"
+    __emit_event backup.pruned "$instance" "$deleted" "$keep" "$pinned"
   fi
 
   __print_info "Pruned $deleted backup(s) for '$instance' (kept: $keep${reserved})"
@@ -3580,7 +3580,7 @@ function _cmd_backup_retention() {
   # Emitted from the command layer on a confirmed change only, matching the
   # create/restore/delete convention.
   if [[ $rc -eq 0 ]]; then
-    __emit_event "instance-backup-${verb}ned" "$instance" "$backup"
+    __emit_event "backup.${verb}ned" "$instance" "$backup"
   fi
 
   exit $rc
@@ -3633,7 +3633,7 @@ function _cmd_update() {
   run_state="$(__resolve_run_state "$instance")"
 
   # `update` ships on every management file (no ops gate). Capture the version
-  # before and after so we can emit instance-version-updated ONLY when it
+  # before and after so we can emit server.updated ONLY when it
   # actually changed — an already-current instance is a successful no-op and
   # must not produce a spurious event.
   local old_version new_version
@@ -3645,8 +3645,8 @@ function _cmd_update() {
   # a surface can show the instance as updating while it happens, no matter
   # which entrypoint drove it. Finished is emitted on every outcome (including
   # a refusal or a failed download): it states that the run ENDED, not that it
-  # succeeded — instance-version-updated is what says the version moved.
-  __emit_event instance-update-started "${instance}"
+  # succeeded — server.updated is what says the version moved.
+  __emit_event server.update.started "${instance}"
 
   # An update captures the state it is about to overwrite, from inside the
   # management script, which has no way to emit. That archive is the rollback
@@ -3673,14 +3673,14 @@ function _cmd_update() {
   if [[ $rc -eq 0 ]]; then
     new_version="$(cat "$instance_version_file" 2> /dev/null)"
     if [[ -n "$new_version" && "$new_version" != "$old_version" ]]; then
-      __emit_event instance-version-updated "$instance" "$old_version" "$new_version"
+      __emit_event server.updated "$instance" "$old_version" "$new_version"
     fi
   else
     # The run ended and the version did not move, for a reason. The other way an
     # update leaves the version alone is finding nothing to do, and the bracket
     # cannot tell the two apart — so without this a refusal reads as a completed
     # update everywhere, including as a succeeded job on every surface.
-    __emit_event instance-update-failed "${instance}"
+    __emit_event server.update.failed "${instance}"
   fi
 
   _emit_backups_created_since "$instance" "$backups_before"
@@ -3688,7 +3688,7 @@ function _cmd_update() {
   # Emitted LAST, after the outcome: a consumer that reads "the run ended" and
   # re-reads the instance must find the outcome already recorded rather than the
   # state it was in before. Same ordering as the stop and restart brackets.
-  __emit_event instance-update-finished "${instance}"
+  __emit_event server.update.finished "${instance}"
 
   exit $rc
 }
@@ -3784,7 +3784,7 @@ function _check_update_and_emit() {
   fi
 
   __print_info "Update available for '$instance': ${installed} -> ${latest}"
-  __emit_event instance-update-available "$instance" "$installed" "$latest"
+  __emit_event server.update.available "$instance" "$installed" "$latest"
   echo "$latest"
 }
 

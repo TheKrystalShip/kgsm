@@ -152,7 +152,7 @@ function test_restart_nonexistent_instance() {
   assert_equals "$EC_FILE_NOT_FOUND" "$exit_code" "Should return EC_FILE_NOT_FOUND for nonexistent instance"
 }
 
-# The after-stop hook is what the command layer emits instance-restart-stopped from, so it is a
+# The after-stop hook is what the command layer emits server.restart.stopped from, so it is a
 # claim that the process is down. A restart that never got the instance down must not make it —
 # a consumer acting on it would report an instance stopped that is still running.
 function test_restart_after_stop_hook_not_called_when_the_stop_fails() {

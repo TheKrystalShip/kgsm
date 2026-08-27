@@ -253,7 +253,7 @@ function _cmd_add() {
       else
         __print_success "Registered library '$__library_add_name_out' at $__library_add_path_out"
       fi
-      __emit_event library-added "$__library_add_name_out" "$__library_add_path_out"
+      __emit_event library.added "$__library_add_name_out" "$__library_add_path_out"
       return 0
       ;;
     $EC_LIBRARY_EXISTS)
@@ -456,7 +456,7 @@ function _cmd_remove() {
           __print_warning "  $_instance"
         done <<< "$__library_remove_instances_out"
       fi
-      __emit_event library-removed "$name" "$__library_remove_path_out"
+      __emit_event library.removed "$name" "$__library_remove_path_out"
       return 0
       ;;
     $EC_LIBRARY_NOT_FOUND)

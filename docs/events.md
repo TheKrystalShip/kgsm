@@ -41,26 +41,26 @@ Events are **only** emitted when operations are performed through `kgsm.sh` or t
 
 ## 📝 Available Events
 
-Event types use **underscore-separated** names in JSON payloads and **dash-separated** names on the CLI (e.g., `instance_started` in JSON, `instance-started` on the command line).
+An event type is a **dotted lowercase name** and that name is its only identity — the same spelling on the wire, on the CLI and in a filter. The dots are load-bearing: the hierarchy in the name is what a reader groups and picks an icon from, so `network.upnp.opened` places itself under `network` with nothing downstream holding a list.
 
 ### 🛠️ Installation Events
 
 | Event Name | Description | Data Fields |
 |------------|-------------|-------------|
-| `instance_installation_started` | Installation process initiated | `InstanceName`, `Blueprint` |
-| `instance_created` | Instance record and files created | `InstanceName`, `Blueprint` |
-| `instance_directories_created` | Directory structure created | `InstanceName` |
-| `instance_files_created` | Configuration files generated | `InstanceName` |
-| `instance_download_started` | Download of server files initiated | `InstanceName` |
-| `instance_download_finished` | Download of server files completed | `InstanceName` |
-| `instance_downloaded` | All required files downloaded | `InstanceName` |
-| `instance_deploy_started` | Deployment of server files initiated | `InstanceName` |
-| `instance_deploy_finished` | Deployment of server files completed | `InstanceName` |
-| `instance_deployed` | Server files fully deployed | `InstanceName` |
-| `instance_installation_finished` | Installation process completed | `InstanceName`, `Blueprint` |
-| `instance_installed` | Server fully installed and ready | `InstanceName`, `Blueprint`, `Library` |
+| `server.install.started` | Installation process initiated | `InstanceName`, `Blueprint` |
+| `server.install.created` | Instance record and files created | `InstanceName`, `Blueprint` |
+| `server.install.directories_created` | Directory structure created | `InstanceName` |
+| `server.install.files_created` | Configuration files generated | `InstanceName` |
+| `server.download.started` | Download of server files initiated | `InstanceName` |
+| `server.download.finished` | Download of server files completed | `InstanceName` |
+| `server.download.completed` | All required files downloaded | `InstanceName` |
+| `server.deploy.started` | Deployment of server files initiated | `InstanceName` |
+| `server.deploy.finished` | Deployment of server files completed | `InstanceName` |
+| `server.deploy.completed` | Server files fully deployed | `InstanceName` |
+| `server.install.finished` | Installation process completed | `InstanceName`, `Blueprint` |
+| `server.installed` | Server fully installed and ready | `InstanceName`, `Blueprint`, `Library` |
 
-`instance_installed` is the one installation event that also says **where** the files landed:
+`server.installed` is the one installation event that also says **where** the files landed:
 `Library` is the name of the library the install was placed in. The placement is resolved before a
 single directory is created, so it is always known, and on a host with several disks it is what an
 audit row needs most.
@@ -69,7 +69,7 @@ audit row needs most.
 
 | Event Name | Description | Data Fields |
 |------------|-------------|-------------|
-| `instance_moved` | An instance's files now live in a different library | `InstanceName`, `FromLibrary`, `ToLibrary` |
+| `server.moved` | An instance's files now live in a different library | `InstanceName`, `FromLibrary`, `ToLibrary` |
 
 Both library names are carried because a reader that learns only the destination cannot say which
 disk just got its space back — and emptying a disk before it is unplugged is the whole reason
@@ -80,14 +80,14 @@ no library reports `unregistered`, which is a measurement rather than an absence
 
 | Event Name | Description | Data Fields |
 |------------|-------------|-------------|
-| `instance_update_started` | Server update initiated | `InstanceName` |
-| `instance_update_finished` | The update run ended, whatever its outcome | `InstanceName` |
-| `instance_update_failed` | An update run ended without the version moving, for a reason — a refusal, a failed download or deploy. What tells that outcome apart from finding nothing to do | `InstanceName` |
-| `instance_version_updated` | An installed server moved from one build to another | `InstanceName`, `OldVersion`, `NewVersion` |
-| `instance_updated` | Server fully updated | `InstanceName` |
-| `instance_update_available` | A newer build exists upstream and this server is not on it | `InstanceName`, `CurrentVersion`, `LatestVersion` |
+| `server.update.started` | Server update initiated | `InstanceName` |
+| `server.update.finished` | The update run ended, whatever its outcome | `InstanceName` |
+| `server.update.failed` | An update run ended without the version moving, for a reason — a refusal, a failed download or deploy. What tells that outcome apart from finding nothing to do | `InstanceName` |
+| `server.updated` | An installed server moved from one build to another | `InstanceName`, `OldVersion`, `NewVersion` |
+| `server.update.completed` | Server fully updated | `InstanceName` |
+| `server.update.available` | A newer build exists upstream and this server is not on it | `InstanceName`, `CurrentVersion`, `LatestVersion` |
 
-`instance_version_updated` reports a move between two builds, so it needs a
+`server.updated` reports a move between two builds, so it needs a
 build to move from: an update that finds the instance already current emits
 nothing, and an install emits nothing either — the version a fresh instance
 lands on is part of the instance the installation events announce. `OldVersion`
@@ -97,25 +97,25 @@ is therefore always a real previous version.
 
 | Event Name | Description | Data Fields |
 |------------|-------------|-------------|
-| `instance_started` | Server process started | `InstanceName` |
-| `instance_stop_started` | Shutdown initiated — the supervisor has asked the game to stop and is waiting for it to drain | `InstanceName` |
-| `instance_stop_finished` | The shutdown run ended, whatever its outcome | `InstanceName` |
-| `instance_stopped` | Server process stopped | `InstanceName` |
-| `instance_restart_started` | Restart initiated — the instance is going down and coming back | `InstanceName` |
-| `instance_restart_stopped` | The restart's old run is down — the process no longer exists, the new one has not been spawned yet | `InstanceName` |
-| `instance_restart_finished` | The restart run ended, whatever its outcome | `InstanceName` |
-| `instance_restarted` | Server restarted and is back up | `InstanceName` |
-| `instance_ready` | Server is accepting connections | `InstanceName` |
-| `instance_backup_started` | A backup run has begun — archiving is under way | `InstanceName` |
-| `instance_backup_finished` | The backup run ended, whatever its outcome | `InstanceName` |
-| `instance_restore_started` | A restore run has begun — safety archive, verification, then the data is replaced | `InstanceName` |
-| `instance_restore_finished` | The restore run ended, whatever its outcome | `InstanceName` |
-| `instance_backup_created` | Backup created | `InstanceName`, `Source`, `Version` |
-| `instance_backup_restored` | Backup restored | `InstanceName`, `Source`, `Version` |
-| `instance_backup_deleted` | One named backup removed | `InstanceName`, `Source` |
-| `instance_backup_pinned` | A backup put out of retention's reach | `InstanceName`, `Source` |
-| `instance_backup_unpinned` | A backup handed back to retention | `InstanceName`, `Source` |
-| `instance_backups_pruned` | Retention swept old backups | `InstanceName`, `Deleted`, `Kept`, `Pinned` |
+| `server.started` | Server process started | `InstanceName` |
+| `server.stop.started` | Shutdown initiated — the supervisor has asked the game to stop and is waiting for it to drain | `InstanceName` |
+| `server.stop.finished` | The shutdown run ended, whatever its outcome | `InstanceName` |
+| `server.stopped` | Server process stopped | `InstanceName` |
+| `server.restart.started` | Restart initiated — the instance is going down and coming back | `InstanceName` |
+| `server.restart.stopped` | The restart's old run is down — the process no longer exists, the new one has not been spawned yet | `InstanceName` |
+| `server.restart.finished` | The restart run ended, whatever its outcome | `InstanceName` |
+| `server.restarted` | Server restarted and is back up | `InstanceName` |
+| `server.ready` | Server is accepting connections | `InstanceName` |
+| `backup.started` | A backup run has begun — archiving is under way | `InstanceName` |
+| `backup.finished` | The backup run ended, whatever its outcome | `InstanceName` |
+| `backup.restore.started` | A restore run has begun — safety archive, verification, then the data is replaced | `InstanceName` |
+| `backup.restore.finished` | The restore run ended, whatever its outcome | `InstanceName` |
+| `backup.created` | Backup created | `InstanceName`, `Source`, `Version` |
+| `backup.restored` | Backup restored | `InstanceName`, `Source`, `Version` |
+| `backup.deleted` | One named backup removed | `InstanceName`, `Source` |
+| `backup.pinned` | A backup put out of retention's reach | `InstanceName`, `Source` |
+| `backup.unpinned` | A backup handed back to retention | `InstanceName`, `Source` |
+| `backup.pruned` | Retention swept old backups | `InstanceName`, `Deleted`, `Kept`, `Pinned` |
 
 `Source` is the backup id on every single-backup event. A delete, a pin and an
 unpin each name one backup; a prune reports the whole sweep, so it carries counts
@@ -127,12 +127,12 @@ are JSON numbers. A prune that removed nothing emits nothing.
 
 | Event Name | Description | Data Fields |
 |------------|-------------|-------------|
-| `instance_uninstall_started` | Uninstallation process initiated | `InstanceName` |
-| `instance_files_removed` | Server files removed | `InstanceName` |
-| `instance_directories_removed` | Server directories removed | `InstanceName` |
-| `instance_removed` | Instance record removed | `InstanceName` |
-| `instance_uninstall_finished` | Uninstallation process completed | `InstanceName` |
-| `instance_uninstalled` | Server fully uninstalled | `InstanceName` |
+| `server.uninstall.started` | Uninstallation process initiated | `InstanceName` |
+| `server.uninstall.files_removed` | Server files removed | `InstanceName` |
+| `server.uninstall.directories_removed` | Server directories removed | `InstanceName` |
+| `server.uninstall.removed` | Instance record removed | `InstanceName` |
+| `server.uninstall.finished` | Uninstallation process completed | `InstanceName` |
+| `server.uninstalled` | Server fully uninstalled | `InstanceName` |
 
 ### 👤 Player Moderation Events
 
@@ -140,9 +140,9 @@ Emitted when an operator removes a player from a running server, blocks them, or
 
 | Event Name | Description | Data Fields |
 |------------|-------------|-------------|
-| `instance_player_kicked` | A player was disconnected | `InstanceName`, `Target`, `Command` |
-| `instance_player_banned` | A player was disconnected and blocked | `InstanceName`, `Target`, `Command` |
-| `instance_player_unbanned` | A block was lifted | `InstanceName`, `Target`, `Command` |
+| `player.kicked` | A player was disconnected | `InstanceName`, `Target`, `Command` |
+| `player.banned` | A player was disconnected and blocked | `InstanceName`, `Target`, `Command` |
+| `player.unbanned` | A block was lifted | `InstanceName`, `Target`, `Command` |
 
 | Field | Type | Meaning |
 |-------|------|---------|
@@ -157,10 +157,10 @@ Emitted by the command layer when an instance's `.config.ini` is written through
 
 | Event Name | Description | Data Fields |
 |------------|-------------|-------------|
-| `instance_config_changed` | A key in the instance config was set | `InstanceName`, `Key` |
-| `instance_display_name_changed` | The instance's display name was changed | `InstanceName`, `OldDisplayName`, `NewDisplayName` |
+| `config.changed` | A key in the instance config was set | `InstanceName`, `Key` |
+| `server.renamed` | The instance's display name was changed | `InstanceName`, `OldDisplayName`, `NewDisplayName` |
 
-`instance_config_changed` carries the **key only, never the value**. Instance config holds secrets — RCON and admin passwords, tokens — and an event payload fans out to every enabled transport, so the record is "key X changed on instance Y" and nothing more.
+`config.changed` carries the **key only, never the value**. Instance config holds secrets — RCON and admin passwords, tokens — and an event payload fans out to every enabled transport, so the record is "key X changed on instance Y" and nothing more.
 
 A display-name change is the one exception, and it is not one: both labels are carried in full because a display name is the value in that file which exists to be shown. Withholding it would leave the event unable to say what it is about, and every surface reading it would have to go back to the engine for the label it was just told had changed. Both events fire on a display-name change — the generic record, and the specific one a surface re-renders off.
 
@@ -172,9 +172,9 @@ These are the only events whose subject is **not an instance**. They fire when a
 
 | Event Name | Description | Data Fields |
 |------------|-------------|-------------|
-| `blueprint_created` | A blueprint file appeared where none existed | `BlueprintName`, `Tier`, `OverridesSystem`, `Runtime` |
-| `blueprint_updated` | An existing blueprint file was overwritten | `BlueprintName`, `Tier`, `OverridesSystem`, `Runtime` |
-| `blueprint_removed` | A blueprint file was deleted | `BlueprintName`, `Tier`, `RevertedToSystem` |
+| `blueprint.created` | A blueprint file appeared where none existed | `BlueprintName`, `Tier`, `OverridesSystem`, `Runtime` |
+| `blueprint.updated` | An existing blueprint file was overwritten | `BlueprintName`, `Tier`, `OverridesSystem`, `Runtime` |
+| `blueprint.removed` | A blueprint file was deleted | `BlueprintName`, `Tier`, `RevertedToSystem` |
 
 | Field | Type | Meaning |
 |-------|------|---------|
@@ -192,8 +192,8 @@ The other events whose subject is **not an instance**. A library is a named root
 
 | Event Name | Description | Data Fields |
 |------------|-------------|-------------|
-| `library_added` | A library was registered | `LibraryName`, `Path` |
-| `library_removed` | A library was deregistered | `LibraryName`, `Path` |
+| `library.added` | A library was registered | `LibraryName`, `Path` |
+| `library.removed` | A library was deregistered | `LibraryName`, `Path` |
 
 | Field | Type | Meaning |
 |-------|------|---------|
@@ -208,8 +208,11 @@ Every event is a JSON object with the following top-level fields:
 
 ```json
 {
-    "V": 1,
-    "EventType": "<event_name>",
+    "V": 2,
+    "EventType": "<event_type>",
+    "Severity": "info",
+    "Outcome": "neutral",
+    "Summary": "started minecraft_survival",
     "Data": {
         "InstanceName": "<instance_name>",
         ...event-specific fields
@@ -225,7 +228,10 @@ Every event is a JSON object with the following top-level fields:
 | Field | Type | Description |
 |-------|------|-------------|
 | `V` | int | Envelope schema version. A reader treats an absent `V` as version 0 — the spelling used before the field existed, which retention keeps on disk for up to `event_journal_retention_days` |
-| `EventType` | string | Underscore-separated event type name |
+| `EventType` | string | The dotted event type — the event's whole identity |
+| `Severity` | string\|null | How much this matters: `info`, `warn` or `danger` |
+| `Outcome` | string\|null | How it went: `success`, `failure` or `neutral` |
+| `Summary` | string\|null | One line of prose, written when the event happened. `null` on a phase bracket, which no feed renders as a row |
 | `Data` | object | Event-specific payload. Instance events key it on `InstanceName`; the blueprint events key it on `BlueprintName` |
 | `Timestamp` | string | ISO 8601 UTC timestamp, millisecond precision |
 | `Actor` | string\|null | Who triggered it, `provider:name`. From `$KGSM_EVENT_ACTOR`; `null` when none was supplied, and when the supplied value is not `provider:name` — never a borrowed OS username |
@@ -250,12 +256,32 @@ other says which build wrote it, and a single field serving as both cannot answe
 Three further envelope fields — `OpId`, `RunId` and `During` — are **reserved** for correlating
 events that belong to one operation. KGSM writes none of them, and a reader sees them absent.
 
+**Every event describes itself.** `Severity`, `Outcome` and `Summary` are the engine's own
+judgement about what it just did, stamped at emit time, so a reader needs no table of its own. That
+is what lets a surface render an event it has never heard of: nothing downstream is keyed on an
+event's name, because a map keyed by identity has a missing arm for every event nobody has added to
+it yet.
+
+`Severity` is `info`, `warn` or `danger` — how much the event matters. `Outcome` is `success`,
+`failure` or `neutral` — how it went. They are separate axes: a backup created and a config key set
+are both routine and differ only in how they went, while an uninstall that succeeded is still the
+loudest line on the feed.
+
+**The summary is prose, and prose is content.** It is one line, written when the event happened,
+naming things as they were called at the time — the instance id the emitter passed, never a label
+looked up later, so a rename leaves every earlier line saying what the server was called then. A
+phase bracket carries `null` rather than an empty string: absent means "nothing to say", and an
+empty string is a third state no reader handles.
+
 ### Example: Instance Started
 
 ```json
 {
-    "V": 1,
-    "EventType": "instance_started",
+    "V": 2,
+    "EventType": "server.started",
+    "Severity": "info",
+    "Outcome": "neutral",
+    "Summary": "started minecraft_survival",
     "Data": {
         "InstanceName": "minecraft_survival"
     },
@@ -323,7 +349,7 @@ Commands:
 
 ### `events.sh emit` — Emit an event manually
 
-Events are specified using **dash-separated** names on the CLI:
+An event is named by its dotted type:
 
 ```
 events.sh emit <event-type> [parameters...]
@@ -331,54 +357,54 @@ events.sh emit <event-type> [parameters...]
 
 **Event types and their required parameters:**
 
-| CLI Event Name | Parameters |
+| Event Type | Parameters |
 |----------------|------------|
-| `instance-created` | `<instance>` `[blueprint]` |
-| `instance-started` | `<instance>` |
-| `instance-stopped` | `<instance>` |
-| `instance-ready` | `<instance>` |
-| `instance-removed` | `<instance>` |
-| `instance-directories-created` | `<instance>` |
-| `instance-files-created` | `<instance>` |
-| `instance-download-started` | `<instance>` |
-| `instance-download-finished` | `<instance>` |
-| `instance-downloaded` | `<instance>` |
-| `instance-deploy-started` | `<instance>` |
-| `instance-deploy-finished` | `<instance>` |
-| `instance-deployed` | `<instance>` |
-| `instance-installation-started` | `<instance>` `[blueprint]` |
-| `instance-installation-finished` | `<instance>` `[blueprint]` |
-| `instance-installed` | `<instance>` `[blueprint]` |
-| `instance-update-started` | `<instance>` |
-| `instance-update-finished` | `<instance>` |
-| `instance-updated` | `<instance>` |
-| `instance-version-updated` | `<instance>` `<old_version>` `<new_version>` |
-| `instance-backup-created` | `<instance>` `<source>` `<version>` |
-| `instance-backup-restored` | `<instance>` `<source>` `<version>` |
-| `instance-backup-deleted` | `<instance>` `<source>` |
-| `instance-backups-pruned` | `<instance>` `<deleted>` `<kept>` |
-| `instance-files-removed` | `<instance>` |
-| `instance-directories-removed` | `<instance>` |
-| `instance-uninstall-started` | `<instance>` |
-| `instance-uninstall-finished` | `<instance>` |
-| `instance-uninstalled` | `<instance>` |
-| `blueprint-created` | `<blueprint>` `<tier>` `<overrides_system>` `[runtime]` |
-| `blueprint-updated` | `<blueprint>` `<tier>` `<overrides_system>` `[runtime]` |
-| `blueprint-removed` | `<blueprint>` `<tier>` `<reverted_to_system>` |
-| `library-added` | `<name>` `<path>` |
-| `library-removed` | `<name>` `<path>` |
+| `server.install.created` | `<instance>` `[blueprint]` |
+| `server.started` | `<instance>` |
+| `server.stopped` | `<instance>` |
+| `server.ready` | `<instance>` |
+| `server.uninstall.removed` | `<instance>` |
+| `server.install.directories_created` | `<instance>` |
+| `server.install.files_created` | `<instance>` |
+| `server.download.started` | `<instance>` |
+| `server.download.finished` | `<instance>` |
+| `server.download.completed` | `<instance>` |
+| `server.deploy.started` | `<instance>` |
+| `server.deploy.finished` | `<instance>` |
+| `server.deploy.completed` | `<instance>` |
+| `server.install.started` | `<instance>` `[blueprint]` |
+| `server.install.finished` | `<instance>` `[blueprint]` |
+| `server.installed` | `<instance>` `[blueprint]` |
+| `server.update.started` | `<instance>` |
+| `server.update.finished` | `<instance>` |
+| `server.update.completed` | `<instance>` |
+| `server.updated` | `<instance>` `<old_version>` `<new_version>` |
+| `backup.created` | `<instance>` `<source>` `<version>` |
+| `backup.restored` | `<instance>` `<source>` `<version>` |
+| `backup.deleted` | `<instance>` `<source>` |
+| `backup.pruned` | `<instance>` `<deleted>` `<kept>` |
+| `server.uninstall.files_removed` | `<instance>` |
+| `server.uninstall.directories_removed` | `<instance>` |
+| `server.uninstall.started` | `<instance>` |
+| `server.uninstall.finished` | `<instance>` |
+| `server.uninstalled` | `<instance>` |
+| `blueprint.created` | `<blueprint>` `<tier>` `<overrides_system>` `[runtime]` |
+| `blueprint.updated` | `<blueprint>` `<tier>` `<overrides_system>` `[runtime]` |
+| `blueprint.removed` | `<blueprint>` `<tier>` `<reverted_to_system>` |
+| `library.added` | `<name>` `<path>` |
+| `library.removed` | `<name>` `<path>` |
 
 **Examples:**
 
 ```bash
-events.sh emit instance-created myserver factorio
-events.sh emit instance-started myserver
-events.sh emit instance-version-updated myserver 1.0.0 1.1.0
-events.sh emit instance-backup-created myserver auto 1.2.3
-events.sh emit instance-stopped myserver
-events.sh emit blueprint-updated terraria user true native
-events.sh emit blueprint-removed terraria user true
-events.sh emit library-added ssd /mnt/ssd/kgsm
+events.sh emit server.install.created myserver factorio
+events.sh emit server.started myserver
+events.sh emit server.updated myserver 1.0.0 1.1.0
+events.sh emit backup.created myserver auto 1.2.3
+events.sh emit server.stopped myserver
+events.sh emit blueprint.updated terraria user true native
+events.sh emit blueprint.removed terraria user true
+events.sh emit library.added ssd /mnt/ssd/kgsm
 ```
 
 ## ⚙️ Configuration

@@ -182,7 +182,7 @@ function test_test_missing_transport_fails() {
 function test_emit_always_validates_the_event_name() {
   log_test_step "Testing: events.sh emit validates the event name unconditionally"
 
-  assert_command_succeeds "$EVENTS_MODULE emit instance-created test-server factorio" \
+  assert_command_succeeds "$EVENTS_MODULE emit server.install.created test-server factorio" \
     "emit should succeed for a valid event"
 
   assert_command_fails "$EVENTS_MODULE emit completely-invalid-event-xyz" \
@@ -235,14 +235,14 @@ function test_emit_valid_event_succeeds_without_optional_transports() {
 
   _disable_webhook_events
 
-  assert_command_succeeds "$EVENTS_MODULE emit instance-created test-server factorio" \
+  assert_command_succeeds "$EVENTS_MODULE emit server.install.created test-server factorio" \
     "emit should succeed when the journal is the only transport"
 
   local segment
   segment=$(_newest_journal_segment)
   assert_not_null "$segment" \
     "the journal segment should exist after emitting"
-  assert_file_contains "$segment" '"EventType":"instance_created"' \
+  assert_file_contains "$segment" '"EventType":"server.install.created"' \
     "the journal should carry the emitted event"
 }
 
@@ -389,7 +389,7 @@ function test_emit_payload_includes_actor() {
   log_test_step "Testing: emitted payload includes Actor and honors KGSM_EVENT_ACTOR"
 
   # Emit a real lifecycle event with an explicit actor supplied via the env var.
-  KGSM_EVENT_ACTOR="discord:tester" "$EVENTS_MODULE" emit instance-started actor-test-server > /dev/null 2>&1 || true
+  KGSM_EVENT_ACTOR="discord:tester" "$EVENTS_MODULE" emit server.started actor-test-server > /dev/null 2>&1 || true
 
   local payload
   payload=$(_last_journal_event)
@@ -430,7 +430,7 @@ function test_emit_payload_honors_event_origin() {
 
   # Emit with both provenance fields supplied via env vars.
   KGSM_EVENT_ACTOR="discord:tester" KGSM_EVENT_ORIGIN="assistant" \
-    "$EVENTS_MODULE" emit instance-started origin-test-server > /dev/null 2>&1 || true
+    "$EVENTS_MODULE" emit server.started origin-test-server > /dev/null 2>&1 || true
 
   local payload
   payload=$(_last_journal_event)
@@ -445,7 +445,7 @@ function test_emit_payload_honors_event_origin() {
 
 # =============================================================================
 # TEST 26: watchdog crash event payload — structured fields + system provenance
-# The autonomous supervisor event instance_crashed carries the structured
+# The autonomous supervisor event server.crashed carries the structured
 # ExitCode/Restarts Data fields, and when the watchdog stamps
 # KGSM_EVENT_ACTOR/ORIGIN=system the payload reflects actor=system / origin=system.
 # Exercises the EVENT_CONFIGS param-spec -> jq-var mapping AND the env -> payload
@@ -454,13 +454,13 @@ function test_emit_payload_honors_event_origin() {
 # =============================================================================
 
 function test_emit_crashed_payload_carries_fields_and_system_provenance() {
-  log_test_step "Testing: instance_crashed payload carries ExitCode/Restarts + system provenance"
+  log_test_step "Testing: server.crashed payload carries ExitCode/Restarts + system provenance"
 
   # Emit the crash event exactly as the watchdog does: the autonomous producer names
   # itself as `system:<producer>` and the surface is `system`, with the instance, exit
   # code, and restart-attempt count as the three positional params.
   KGSM_EVENT_ACTOR="system:watchdog" KGSM_EVENT_ORIGIN="system" \
-    "$EVENTS_MODULE" emit instance-crashed crash-test-server 139 2 > /dev/null 2>&1 || true
+    "$EVENTS_MODULE" emit server.crashed crash-test-server 139 2 > /dev/null 2>&1 || true
 
   local payload
   payload=$(_last_journal_event)
@@ -469,8 +469,8 @@ function test_emit_crashed_payload_carries_fields_and_system_provenance() {
   # Event type round-trips to the underscore wire form.
   local event_type
   event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)
-  assert_equals "instance_crashed" "$event_type" \
-    "EventType should be instance_crashed"
+  assert_equals "server.crashed" "$event_type" \
+    "EventType should be server.crashed"
 
   # The structured Data fields: the EVENT_CONFIGS 'instance exit_code restarts' spec
   # maps positionally to jq $instance/$exit_code/$restarts -> Data
@@ -494,11 +494,11 @@ function test_emit_crashed_payload_carries_fields_and_system_provenance() {
 }
 
 function test_emit_ports_opened_payload_carries_structured_ports() {
-  log_test_step "Testing: instance_ports_opened payload carries structured [{start,end,protocol}] ports"
+  log_test_step "Testing: network.ports.opened payload carries structured [{start,end,protocol}] ports"
 
   # Emit exactly as the firewall command layer does: the instance, then the
   # UFW-format port spec as the single 'ports' positional param.
-  "$EVENTS_MODULE" emit instance-ports-opened ports-test-server '34197/udp|27015:27020/tcp' \
+  "$EVENTS_MODULE" emit network.ports.opened ports-test-server '34197/udp|27015:27020/tcp' \
     > /dev/null 2>&1 || true
 
   local payload
@@ -508,8 +508,8 @@ function test_emit_ports_opened_payload_carries_structured_ports() {
   local event_type instance
   event_type=$(echo "$payload" | jq -r '.EventType' 2> /dev/null)
   instance=$(echo "$payload" | jq -r '.Data.InstanceName' 2> /dev/null)
-  assert_equals "instance_ports_opened" "$event_type" \
-    "EventType should be instance_ports_opened"
+  assert_equals "network.ports.opened" "$event_type" \
+    "EventType should be network.ports.opened"
   assert_equals "ports-test-server" "$instance" \
     "Data.InstanceName should carry the instance"
 
@@ -531,18 +531,18 @@ function test_emit_ports_opened_payload_carries_structured_ports() {
 }
 
 # =============================================================================
-# TEST: instance_player_joined renders id AND name when both are supplied.
+# TEST: player.joined renders id AND name when both are supplied.
 # Reads the real _build_event_payload output back off the journal to prove the
 # PlayerId/PlayerName Data shape (the keys this repo DEFINES — only the param
 # names were frozen in the contract, not the Data keys).
 # =============================================================================
 
 function test_emit_player_joined_payload_carries_id_and_name() {
-  log_test_step "Testing: instance_player_joined payload carries PlayerId and PlayerName"
+  log_test_step "Testing: player.joined payload carries PlayerId and PlayerName"
 
   # Emit exactly as the watchdog forwarder does: instance, player_id, player_name
   # as the three positional params (the latter two are NOT in EVENT_CONFIGS).
-  "$EVENTS_MODULE" emit instance-player-joined player-test-server \
+  "$EVENTS_MODULE" emit player.joined player-test-server \
     "76561198000000000" "Alice" > /dev/null 2>&1 || true
 
   local payload
@@ -555,8 +555,8 @@ function test_emit_player_joined_payload_carries_id_and_name() {
   player_id=$(echo "$payload" | jq -r '.Data.PlayerId' 2> /dev/null)
   player_name=$(echo "$payload" | jq -r '.Data.PlayerName' 2> /dev/null)
 
-  assert_equals "instance_player_joined" "$event_type" \
-    "EventType should be instance_player_joined"
+  assert_equals "player.joined" "$event_type" \
+    "EventType should be player.joined"
   assert_equals "player-test-server" "$instance" \
     "Data.InstanceName should carry the instance"
   assert_equals "76561198000000000" "$player_id" \
@@ -573,11 +573,11 @@ function test_emit_player_joined_payload_carries_id_and_name() {
 # =============================================================================
 
 function test_emit_player_left_payload_renders_missing_id_as_json_null() {
-  log_test_step "Testing: instance_player_left renders an absent player_id as JSON null"
+  log_test_step "Testing: player.left renders an absent player_id as JSON null"
 
   # Only a name is known: pass an EMPTY player_id positional, then the name. The
   # empty id must surface as JSON null, never the string "".
-  "$EVENTS_MODULE" emit instance-player-left player-test-server \
+  "$EVENTS_MODULE" emit player.left player-test-server \
     "" "Bob" > /dev/null 2>&1 || true
 
   local payload
@@ -591,8 +591,8 @@ function test_emit_player_left_payload_renders_missing_id_as_json_null() {
   id_type=$(echo "$payload" | jq -r '.Data.PlayerId | type' 2> /dev/null)
   player_name_type=$(echo "$payload" | jq -r '.Data.PlayerName | type' 2> /dev/null)
 
-  assert_equals "instance_player_left" "$event_type" \
-    "EventType should be instance_player_left"
+  assert_equals "player.left" "$event_type" \
+    "EventType should be player.left"
   assert_equals "null" "$id_type" \
     "Data.PlayerId should be JSON null when no id is supplied (not an empty string)"
   assert_equals "string" "$player_name_type" \
@@ -602,17 +602,17 @@ function test_emit_player_left_payload_renders_missing_id_as_json_null() {
 }
 
 # =============================================================================
-# TEST: instance_player_joined renders PlayerAddr as JSON null when absent and
+# TEST: player.joined renders PlayerAddr as JSON null when absent and
 # always carries the SessionKey. Mirrors a Steam-relay-style game (Valheim):
 # no real network address, correlation rides an opaque session token instead.
 # =============================================================================
 
 function test_emit_player_joined_payload_carries_addr_and_session_key() {
-  log_test_step "Testing: instance_player_joined payload renders PlayerAddr null and carries SessionKey"
+  log_test_step "Testing: player.joined payload renders PlayerAddr null and carries SessionKey"
 
   # No real network address (empty addr positional), only an opaque session
   # token. Params: instance, player_id, player_name, player_addr, session_key.
-  "$EVENTS_MODULE" emit instance-player-joined player-test-server \
+  "$EVENTS_MODULE" emit player.joined player-test-server \
     "" "Carol" "" "651023867:1" > /dev/null 2>&1 || true
 
   local payload
@@ -630,16 +630,16 @@ function test_emit_player_joined_payload_carries_addr_and_session_key() {
 }
 
 # =============================================================================
-# TEST: instance_player_left carries a real Reason when the game logs one
+# TEST: player.left carries a real Reason when the game logs one
 # (e.g. Core Keeper's "App_Min"), and renders it as JSON null when absent —
 # the same honest-null rule as PlayerId/PlayerName/PlayerAddr.
 # =============================================================================
 
 function test_emit_player_left_payload_carries_reason() {
-  log_test_step "Testing: instance_player_left payload carries a real Reason"
+  log_test_step "Testing: player.left payload carries a real Reason"
 
   # Params: instance, player_id, player_name, player_addr, session_key, reason.
-  "$EVENTS_MODULE" emit instance-player-left player-test-server \
+  "$EVENTS_MODULE" emit player.left player-test-server \
     "" "" "" "userid:3801603394" "App_Min" > /dev/null 2>&1 || true
 
   local payload
@@ -654,10 +654,10 @@ function test_emit_player_left_payload_carries_reason() {
 }
 
 function test_emit_player_left_payload_renders_missing_reason_as_json_null() {
-  log_test_step "Testing: instance_player_left renders an absent Reason as JSON null"
+  log_test_step "Testing: player.left renders an absent Reason as JSON null"
 
   # Reason positional (6th) left empty — the game's quit path logged nothing.
-  "$EVENTS_MODULE" emit instance-player-left player-test-server \
+  "$EVENTS_MODULE" emit player.left player-test-server \
     "" "Bob" "" "sess-key-1" "" > /dev/null 2>&1 || true
 
   local payload
@@ -672,7 +672,7 @@ function test_emit_player_left_payload_renders_missing_reason_as_json_null() {
 }
 
 # =============================================================================
-# TEST: instance_config_changed carries the Key but NEVER the value.
+# TEST: config.changed carries the Key but NEVER the value.
 # This is the entire reason the event is key-only: instance config holds secrets
 # (RCON/admin passwords, tokens), so the value must never reach a transport. We
 # emit with a sentinel secret value and prove (a) Data.Key carries the key, and
@@ -681,7 +681,7 @@ function test_emit_player_left_payload_renders_missing_reason_as_json_null() {
 # =============================================================================
 
 function test_emit_config_changed_payload_carries_key_never_value() {
-  log_test_step "Testing: instance_config_changed payload carries Key but never the value"
+  log_test_step "Testing: config.changed payload carries Key but never the value"
 
   # Emit exactly as the config-set command layer does: instance, then the key.
   # The event interface itself takes ONLY instance + key — there is no value
@@ -690,7 +690,7 @@ function test_emit_config_changed_payload_carries_key_never_value() {
   # key-only. (The end-to-end "a secret config value never leaks" property is
   # proven by the live `config-set <key>=<secret>` path, where the value actually
   # exists — that path is outside this transport-level test.)
-  "$EVENTS_MODULE" emit instance-config-changed config-test-server rcon_password \
+  "$EVENTS_MODULE" emit config.changed config-test-server rcon_password \
     > /dev/null 2>&1 || true
 
   local payload
@@ -702,8 +702,8 @@ function test_emit_config_changed_payload_carries_key_never_value() {
   instance=$(echo "$payload" | jq -r '.Data.InstanceName' 2> /dev/null)
   key=$(echo "$payload" | jq -r '.Data.Key' 2> /dev/null)
 
-  assert_equals "instance_config_changed" "$event_type" \
-    "EventType should be instance_config_changed"
+  assert_equals "config.changed" "$event_type" \
+    "EventType should be config.changed"
   assert_equals "config-test-server" "$instance" \
     "Data.InstanceName should carry the instance"
   assert_equals "rcon_password" "$key" \
@@ -732,12 +732,12 @@ function test_emit_config_changed_payload_carries_key_never_value() {
 # =============================================================================
 
 function test_emit_blueprint_updated_payload_is_blueprint_scoped() {
-  log_test_step "Testing: blueprint_updated payload keys Data on BlueprintName with real booleans"
+  log_test_step "Testing: blueprint.updated payload keys Data on BlueprintName with real booleans"
 
   # Emit exactly as kgsm-lib does for a browser edit: the human's identity is
   # threaded through, NOT the hardcoded system stamp the watchdog uses.
   KGSM_EVENT_ACTOR="discord:123456789" KGSM_EVENT_ORIGIN="ui" \
-    "$EVENTS_MODULE" emit blueprint-updated terraria user true native > /dev/null 2>&1 || true
+    "$EVENTS_MODULE" emit blueprint.updated terraria user true native > /dev/null 2>&1 || true
 
   local payload
   payload=$(_last_journal_event)
@@ -749,8 +749,8 @@ function test_emit_blueprint_updated_payload_is_blueprint_scoped() {
   tier=$(echo "$payload" | jq -r '.Data.Tier' 2> /dev/null)
   runtime=$(echo "$payload" | jq -r '.Data.Runtime' 2> /dev/null)
 
-  assert_equals "blueprint_updated" "$event_type" \
-    "EventType should be blueprint_updated"
+  assert_equals "blueprint.updated" "$event_type" \
+    "EventType should be blueprint.updated"
   assert_equals "terraria" "$name" \
     "Data.BlueprintName should carry the blueprint name"
   assert_equals "user" "$tier" \
@@ -815,12 +815,12 @@ function test_emit_blueprint_updated_payload_is_blueprint_scoped() {
 # =============================================================================
 
 function test_emit_blueprint_removed_payload_renders_false_and_null_honestly() {
-  log_test_step "Testing: blueprint_removed carries boolean false; unknown runtime renders as null"
+  log_test_step "Testing: blueprint.removed carries boolean false; unknown runtime renders as null"
 
   # A custom blueprint with no shipped counterpart: deleting it removes the
   # blueprint from the host entirely, so nothing is reverted to.
   KGSM_EVENT_ACTOR="discord:123456789" KGSM_EVENT_ORIGIN="ui" \
-    "$EVENTS_MODULE" emit blueprint-removed mycustomgame user false > /dev/null 2>&1 || true
+    "$EVENTS_MODULE" emit blueprint.removed mycustomgame user false > /dev/null 2>&1 || true
 
   local payload
   payload=$(_last_journal_event)
@@ -832,8 +832,8 @@ function test_emit_blueprint_removed_payload_renders_false_and_null_honestly() {
   reverted=$(echo "$payload" | jq -r '.Data.RevertedToSystem' 2> /dev/null)
   reverted_type=$(echo "$payload" | jq -r '.Data.RevertedToSystem | type' 2> /dev/null)
 
-  assert_equals "blueprint_removed" "$event_type" \
-    "EventType should be blueprint_removed"
+  assert_equals "blueprint.removed" "$event_type" \
+    "EventType should be blueprint.removed"
   assert_equals "mycustomgame" "$name" \
     "Data.BlueprintName should carry the blueprint name"
   assert_equals "boolean" "$reverted_type" \
@@ -845,15 +845,15 @@ function test_emit_blueprint_removed_payload_renders_false_and_null_honestly() {
   local has_runtime
   has_runtime=$(echo "$payload" | jq -r '.Data | has("Runtime")' 2> /dev/null)
   assert_equals "false" "$has_runtime" \
-    "blueprint_removed must NOT carry a Runtime (the file is gone)"
+    "blueprint.removed must NOT carry a Runtime (the file is gone)"
 }
 
 function test_emit_blueprint_created_payload_renders_unknown_runtime_as_null() {
-  log_test_step "Testing: blueprint_created renders an omitted runtime as JSON null"
+  log_test_step "Testing: blueprint.created renders an omitted runtime as JSON null"
 
   # Runtime omitted: the emitter could not read one out of the file. KGSM must
   # report that as unknown, never guess a default.
-  "$EVENTS_MODULE" emit blueprint-created mycustomgame user false > /dev/null 2>&1 || true
+  "$EVENTS_MODULE" emit blueprint.created mycustomgame user false > /dev/null 2>&1 || true
 
   local payload
   payload=$(_last_journal_event)
@@ -864,8 +864,8 @@ function test_emit_blueprint_created_payload_renders_unknown_runtime_as_null() {
   runtime_type=$(echo "$payload" | jq -r '.Data.Runtime | type' 2> /dev/null)
   overrides=$(echo "$payload" | jq -r '.Data.OverridesSystem' 2> /dev/null)
 
-  assert_equals "blueprint_created" "$event_type" \
-    "EventType should be blueprint_created"
+  assert_equals "blueprint.created" "$event_type" \
+    "EventType should be blueprint.created"
   assert_equals "null" "$runtime_type" \
     "Data.Runtime should be JSON null when the runtime is unknown, never a guessed default"
   assert_equals "false" "$overrides" \
@@ -873,12 +873,12 @@ function test_emit_blueprint_created_payload_renders_unknown_runtime_as_null() {
 }
 
 function test_emit_backup_deleted_payload_carries_the_backup_id() {
-  log_test_step "Testing: instance_backup_deleted payload carries the backup id as Source"
+  log_test_step "Testing: backup.deleted payload carries the backup id as Source"
 
   # Emitted exactly as the delete-backup command layer does: instance, then the
   # backup id. `Source` is the id here, the same field the created/restored
   # events carry it in.
-  "$EVENTS_MODULE" emit instance-backup-deleted backup-test-server \
+  "$EVENTS_MODULE" emit backup.deleted backup-test-server \
     backup-test-server-20260731T142233Z-a3f9c1 > /dev/null 2>&1 || true
 
   local payload
@@ -890,8 +890,8 @@ function test_emit_backup_deleted_payload_carries_the_backup_id() {
   instance=$(echo "$payload" | jq -r '.Data.InstanceName' 2> /dev/null)
   source=$(echo "$payload" | jq -r '.Data.Source' 2> /dev/null)
 
-  assert_equals "instance_backup_deleted" "$event_type" \
-    "EventType should be instance_backup_deleted"
+  assert_equals "backup.deleted" "$event_type" \
+    "EventType should be backup.deleted"
   assert_equals "backup-test-server" "$instance" \
     "Data.InstanceName should carry the instance"
   assert_equals "backup-test-server-20260731T142233Z-a3f9c1" "$source" \
@@ -907,9 +907,9 @@ function test_emit_backup_deleted_payload_carries_the_backup_id() {
 }
 
 function test_emit_backups_pruned_payload_carries_numeric_counts() {
-  log_test_step "Testing: instance_backups_pruned payload carries Deleted/Kept/Pinned as JSON numbers"
+  log_test_step "Testing: backup.pruned payload carries Deleted/Kept/Pinned as JSON numbers"
 
-  "$EVENTS_MODULE" emit instance-backups-pruned backup-test-server 3 5 2 \
+  "$EVENTS_MODULE" emit backup.pruned backup-test-server 3 5 2 \
     > /dev/null 2>&1 || true
 
   local payload
@@ -923,8 +923,8 @@ function test_emit_backups_pruned_payload_carries_numeric_counts() {
   kept=$(echo "$payload" | jq -r '.Data.Kept' 2> /dev/null)
   pinned=$(echo "$payload" | jq -r '.Data.Pinned' 2> /dev/null)
 
-  assert_equals "instance_backups_pruned" "$event_type" \
-    "EventType should be instance_backups_pruned"
+  assert_equals "backup.pruned" "$event_type" \
+    "EventType should be backup.pruned"
   assert_equals "backup-test-server" "$instance" \
     "Data.InstanceName should carry the instance"
   assert_equals "3" "$deleted" "Data.Deleted should carry what was removed"
@@ -951,8 +951,9 @@ function test_emit_backups_pruned_payload_carries_numeric_counts() {
 }
 
 # =============================================================================
-# TEST: the emitted envelope is v1 — schema version, millisecond timestamp and
-# the producer's own version.
+# TEST: the emitted envelope is v2 — schema version, millisecond timestamp, the
+# producer's own version, and the three fields that let a reader render an event
+# it has never heard of.
 #
 # Read back off the journal the emit actually wrote to, so this pins
 # __logic_build_event_payload's output rather than a template. The envelope is a
@@ -960,10 +961,10 @@ function test_emit_backups_pruned_payload_carries_numeric_counts() {
 # shape, and a reader merging several of them depends on all three fields.
 # =============================================================================
 
-function test_emit_payload_is_a_v1_envelope() {
+function test_emit_payload_is_a_v2_envelope() {
   log_test_step "Testing: emitted payload carries V, ms timestamp and ProducerVersion"
 
-  "$EVENTS_MODULE" emit instance-started envelope-test-server > /dev/null 2>&1 || true
+  "$EVENTS_MODULE" emit server.started envelope-test-server > /dev/null 2>&1 || true
 
   local payload
   payload=$(_last_journal_event)
@@ -974,8 +975,20 @@ function test_emit_payload_is_a_v1_envelope() {
   local schema_version schema_type
   schema_version=$(echo "$payload" | jq -r '.V' 2> /dev/null)
   schema_type=$(echo "$payload" | jq -r '.V | type' 2> /dev/null)
-  assert_equals "1" "$schema_version" "Envelope should declare schema version 1"
+  assert_equals "2" "$schema_version" "Envelope should declare schema version 2"
   assert_equals "number" "$schema_type" "V must be a JSON number"
+
+  # Severity, outcome and one line of prose. They ride on every fact so that no
+  # reader downstream holds a table keyed on the event's name — the table with a
+  # missing arm for every event nobody has added yet.
+  local severity outcome summary
+  severity=$(echo "$payload" | jq -r '.Severity' 2> /dev/null)
+  outcome=$(echo "$payload" | jq -r '.Outcome' 2> /dev/null)
+  summary=$(echo "$payload" | jq -r '.Summary' 2> /dev/null)
+  assert_equals "info" "$severity" "server.started is an info-weight fact"
+  assert_equals "neutral" "$outcome" "server.started claims no outcome"
+  assert_equals "started envelope-test-server" "$summary" \
+    "The summary names the instance the emitter passed"
 
   # Milliseconds are load-bearing: the journal is read merged with every other
   # producer's, and second granularity orders arbitrarily inside each second —
@@ -1020,6 +1033,37 @@ function test_emit_payload_is_a_v1_envelope() {
 }
 
 # =============================================================================
+# TEST: a phase bracket carries no summary
+#
+# The `*_started`/`*_finished` pairs exist so a surface can show work in flight,
+# and no feed prints them as rows. Writing prose for them would be prose nobody
+# reads; writing an empty string for it would be a third state on top of "known"
+# and "unknown" that no reader handles.
+# =============================================================================
+
+function test_emit_phase_event_carries_no_summary() {
+  log_test_step "Testing: a phase event's Summary is null, never an empty string"
+
+  "$EVENTS_MODULE" emit server.stop.started phase-summary-test > /dev/null 2>&1 || true
+
+  local payload
+  payload=$(_last_journal_event)
+  assert_not_null "$payload" "Journaled event payload should not be empty"
+
+  local summary_type
+  summary_type=$(echo "$payload" | jq -r '.Summary | type' 2> /dev/null)
+  assert_equals "null" "$summary_type" \
+    "A phase event must carry a null Summary, never an empty string"
+
+  # The grading still rides along: severity and outcome are what a reader uses
+  # to place a line it does not otherwise recognise.
+  assert_equals "info" "$(echo "$payload" | jq -r '.Severity')" \
+    "A phase bracket is an info-weight line"
+  assert_equals "neutral" "$(echo "$payload" | jq -r '.Outcome')" \
+    "A phase bracket claims no outcome"
+}
+
+# =============================================================================
 # TEST 31: the envelope spells "not known" the way every other producer does
 #
 # The journal is read merged across five producers, so a reader meets these
@@ -1036,7 +1080,7 @@ function test_emit_envelope_never_writes_an_empty_string() {
   # Neither actor nor origin supplied — the case where an empty value would be
   # easiest to produce by accident.
   env -u KGSM_EVENT_ACTOR -u KGSM_EVENT_ORIGIN \
-    "$EVENTS_MODULE" emit instance-started envelope-empty-test > /dev/null 2>&1 || true
+    "$EVENTS_MODULE" emit server.started envelope-empty-test > /dev/null 2>&1 || true
 
   local payload
   payload=$(_last_journal_event)
@@ -1089,8 +1133,8 @@ function test_emit_with_a_missing_parameter_writes_nothing() {
   local before after
   before=$(cat "$journal_dir"/*.ndjson 2> /dev/null | wc -l)
 
-  # instance-started requires an instance name.
-  "$EVENTS_MODULE" emit instance-started > /dev/null 2>&1 || true
+  # server.started requires an instance name.
+  "$EVENTS_MODULE" emit server.started > /dev/null 2>&1 || true
 
   after=$(cat "$journal_dir"/*.ndjson 2> /dev/null | wc -l)
   assert_equals "$before" "$after" \
@@ -1160,7 +1204,7 @@ function test_journal_prune_ages_a_segment_by_its_name() {
 function test_emit_envelope_carries_a_uuid7_id() {
   log_test_step "Testing: emitted envelope carries its own UUIDv7 id"
 
-  "$EVENTS_MODULE" emit instance-started id-test-server > /dev/null 2>&1 || true
+  "$EVENTS_MODULE" emit server.started id-test-server > /dev/null 2>&1 || true
 
   local payload id
   payload=$(_last_journal_event)
@@ -1184,11 +1228,11 @@ function test_emit_gives_two_identical_events_different_ids() {
   # The reason the id is minted and never derived from the line. Two identical
   # events in the same second are two events; a digest folds them into one, which
   # is the defect the engine's own index has.
-  "$EVENTS_MODULE" emit instance-started dupe-id-server > /dev/null 2>&1 || true
+  "$EVENTS_MODULE" emit server.started dupe-id-server > /dev/null 2>&1 || true
   local first
   first=$(_last_journal_event | jq -r '.Id' 2> /dev/null)
 
-  "$EVENTS_MODULE" emit instance-started dupe-id-server > /dev/null 2>&1 || true
+  "$EVENTS_MODULE" emit server.started dupe-id-server > /dev/null 2>&1 || true
   local second
   second=$(_last_journal_event | jq -r '.Id' 2> /dev/null)
 
@@ -1199,11 +1243,11 @@ function test_emit_gives_two_identical_events_different_ids() {
 function test_emit_ids_sort_the_way_the_journal_does() {
   log_test_step "Testing: ids are time-ordered, so lexical order matches write order"
 
-  "$EVENTS_MODULE" emit instance-started order-a > /dev/null 2>&1 || true
+  "$EVENTS_MODULE" emit server.started order-a > /dev/null 2>&1 || true
   local first
   first=$(_last_journal_event | jq -r '.Id' 2> /dev/null)
 
-  "$EVENTS_MODULE" emit instance-started order-b > /dev/null 2>&1 || true
+  "$EVENTS_MODULE" emit server.started order-b > /dev/null 2>&1 || true
   local second
   second=$(_last_journal_event | jq -r '.Id' 2> /dev/null)
 
@@ -1229,7 +1273,7 @@ function test_emit_refuses_a_malformed_actor_and_still_records() {
   log_test_step "Testing: a bare-name actor is dropped to null and the event still records"
 
   KGSM_EVENT_ACTOR="heisen" \
-    "$EVENTS_MODULE" emit instance-started malformed-actor-test > /dev/null 2>&1 || true
+    "$EVENTS_MODULE" emit server.started malformed-actor-test > /dev/null 2>&1 || true
 
   local payload
   payload=$(_last_journal_event)
@@ -1253,7 +1297,7 @@ function test_emit_keeps_an_actor_whose_provider_the_engine_does_not_know() {
   # and must not invent one. A well-formed actor from a provider it has never met
   # is carried through for the reader to resolve.
   KGSM_EVENT_ACTOR="github:octocat" \
-    "$EVENTS_MODULE" emit instance-started unknown-provider-test > /dev/null 2>&1 || true
+    "$EVENTS_MODULE" emit server.started unknown-provider-test > /dev/null 2>&1 || true
 
   local payload actor
   payload=$(_last_journal_event)

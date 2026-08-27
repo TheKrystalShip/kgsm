@@ -49,15 +49,15 @@ ${UNDERLINE}Examples:${END}
   ${self} status
   ${self} test all
   ${self} webhook configure
-  ${self} emit instance-created myserver factorio
-  ${self} emit instance-version-updated myserver 1.0.0 1.1.0
+  ${self} emit server.install.created myserver factorio
+  ${self} emit server.updated myserver 1.0.0 1.1.0
   ${self} help emit
 
 ${UNDERLINE}Notes:${END}
   • Events are always appended to the journal; the webhook is an optional copy
   • Use 'status' to verify system health after configuration changes
   • Transport-specific help: ${self} webhook help
-  • Event types use dash-separated names (instance-created, instance-started, etc.)
+  • Event types are dotted names (server.installed, server.started, etc.)
   • All events include timestamp, actor, hostname, and KGSM version metadata
   • Actor (who triggered the event) comes from \$KGSM_EVENT_ACTOR as 'provider:name';
     an event nobody claimed is recorded with no actor
@@ -131,7 +131,7 @@ ${UNDERLINE}Usage:${END}
   ${self} emit <event-type> [parameters...]
 
 ${UNDERLINE}Arguments:${END}
-  event-type                  The type of event to emit (dash-separated)
+  event-type                  The type of event to emit (a dotted name)
   parameters                  Event-specific parameters (varies by type)
 
 ${UNDERLINE}Options:${END}
@@ -139,83 +139,145 @@ ${UNDERLINE}Options:${END}
 
 ${UNDERLINE}Event Types and Parameters:${END}
 
-${UNDERLINE}Instance Lifecycle:${END}
-  instance-created <instance> [blueprint]
-  instance-started <instance>
-  instance-stopped <instance>
-  instance-removed <instance>
-  instance-ready <instance>
+Names are grouped by their own first segment, and that hierarchy is what a
+reader keys on — a surface picks an icon from the namespace rather than from a
+list of every event there is.
 
-${UNDERLINE}Instance Configuration:${END}
-  instance-config-changed <instance> <key>
-  instance-display-name-changed <instance> <old_display_name> <new_display_name>
+${UNDERLINE}Server run state:${END}
+  server.started <instance>
+  server.ready <instance>
+  server.stopped <instance>
+  server.restarted <instance>
+  server.crashed <instance> <exit_code> <restarts>
+  server.crash.exhausted <instance> <exit_code> <restarts>
+  server.stop.started <instance>
+  server.stop.finished <instance>
+  server.restart.started <instance>
+  server.restart.stopped <instance>
+  server.restart.finished <instance>
 
-  A config change carries the key alone — never the value, which may be a
-  secret. A display-name change carries both labels, because a label exists to
-  be shown.
+  A crash is a run that ended by itself with a restart coming; crash.exhausted
+  is the supervisor giving up on it.
 
-${UNDERLINE}Instance Creation Process:${END}
-  instance-directories-created <instance>
-  instance-files-created <instance>
-  instance-download-started <instance>
-  instance-download-finished <instance>
-  instance-downloaded <instance>
-  instance-deploy-started <instance>
-  instance-deploy-finished <instance>
-  instance-deployed <instance>
-
-${UNDERLINE}Instance Installation:${END}
-  instance-installation-started <instance> [blueprint]
-  instance-installation-finished <instance> [blueprint]
-  instance-installed <instance> <blueprint> <library>
+${UNDERLINE}Server installation:${END}
+  server.installed <instance> <blueprint> <library>
+  server.install.started <instance> [blueprint]
+  server.install.finished <instance> [blueprint]
+  server.install.created <instance> [blueprint]
+  server.install.directories_created <instance>
+  server.install.files_created <instance>
+  server.download.started <instance>
+  server.download.finished <instance>
+  server.download.completed <instance>
+  server.download.failed <instance>
+  server.deploy.started <instance>
+  server.deploy.finished <instance>
+  server.deploy.completed <instance>
+  server.deploy.failed <instance>
 
   <library> is the name of the library the install landed in.
 
-${UNDERLINE}Instance Placement:${END}
-  instance-moved <instance> <from_library> <to_library>
+${UNDERLINE}Server updates:${END}
+  server.updated <instance> <old_version> <new_version>
+  server.update.available <instance> <current_version> <latest_version>
+  server.update.started <instance>
+  server.update.finished <instance>
+  server.update.completed <instance>
+  server.update.failed <instance>
 
-${UNDERLINE}Instance Updates:${END}
-  instance-update-started <instance>
-  instance-update-finished <instance>
-  instance-updated <instance>
-  instance-version-updated <instance> <old_version> <new_version>
+  An update run ends without the version moving in two ways — it found nothing
+  to do, or it could not do it — so server.update.failed is what separates a
+  refusal from a completed run.
 
-${UNDERLINE}Instance Backups:${END}
-  instance-backup-created <instance> <source> <version>
-  instance-backup-restored <instance> <source> <version>
-  instance-backup-deleted <instance> <source>
-  instance-backup-pinned <instance> <source>
-  instance-backup-unpinned <instance> <source>
-  instance-backups-pruned <instance> <deleted> <kept> <pinned>
+${UNDERLINE}Server placement and identity:${END}
+  server.moved <instance> <from_library> <to_library>
+  server.renamed <instance> <old_display_name> <new_display_name>
+
+  A rename carries both labels, because a label exists to be shown; the
+  instance id is unchanged by it and is what a consumer keys on.
+
+${UNDERLINE}Server removal:${END}
+  server.uninstalled <instance>
+  server.uninstall.started <instance>
+  server.uninstall.finished <instance>
+  server.uninstall.failed <instance>
+  server.uninstall.files_removed <instance>
+  server.uninstall.directories_removed <instance>
+  server.uninstall.removed <instance>
+
+${UNDERLINE}Backups:${END}
+  backup.created <instance> <source> <version>
+  backup.restored <instance> <source> <version>
+  backup.deleted <instance> <source>
+  backup.pinned <instance> <source>
+  backup.unpinned <instance> <source>
+  backup.pruned <instance> <deleted> <kept> <pinned>
+  backup.started <instance>
+  backup.finished <instance>
+  backup.restore.started <instance>
+  backup.restore.finished <instance>
 
   <source> is the backup id. A delete, a pin and an unpin each name one backup;
   a prune reports the whole sweep as counts — <deleted> is what was removed,
   <kept> the retention window it ran with, <pinned> how many it skipped because
   they were pinned.
 
-${UNDERLINE}Player Presence:${END}
-  instance-player-joined <instance> [player_id] [player_name]
-  instance-player-left <instance> [player_id] [player_name]
+${UNDERLINE}Networking:${END}
+  network.ports.opened <instance> <ports>
+  network.ports.closed <instance> <ports>
+  network.upnp.opened <instance> <ports>
+  network.upnp.closed <instance> <ports>
+  network.upnp.reasserted <instance> <ports>
 
-${UNDERLINE}Instance Removal:${END}
-  instance-files-removed <instance>
-  instance-directories-removed <instance>
-  instance-uninstall-started <instance>
-  instance-uninstall-finished <instance>
-  instance-uninstalled <instance>
+  <ports> is the instance's UFW-format spec and is carried as the canonical
+  structured array. A host firewall rule and a router NAT forward are separate
+  facts about separate machines, which is why they are separate names.
+
+${UNDERLINE}Players:${END}
+  player.joined <instance> [player_id] [player_name] [player_addr] [session_key]
+  player.left <instance> [player_id] [player_name] [player_addr] [session_key] [reason]
+  player.kicked <instance> <target> <command>
+  player.banned <instance> <target> <command>
+  player.unbanned <instance> <target> <command>
+
+  <target> is the identity token the operator supplied, carried verbatim —
+  which kind of token it is was declared by the game's blueprint.
+
+${UNDERLINE}Operator actions:${END}
+  config.changed <instance> <key>
+  console.input.sent <instance> <command>
+  announcement.sent <instance> <message> <command>
+
+  A config change carries the key alone — never the value, which may be a
+  secret. Console input carries the command in full on purpose: the trail's
+  value is recording exactly what was run. An announcement carries what a
+  person wrote alongside the console command that delivered it.
 
 ${UNDERLINE}Blueprints:${END}
-  blueprint-created <blueprint> <tier> <overrides_system> [runtime]
-  blueprint-updated <blueprint> <tier> <overrides_system> [runtime]
-  blueprint-removed <blueprint> <tier> <reverted_to_system>
+  blueprint.created <blueprint> <tier> <overrides_system> [runtime]
+  blueprint.updated <blueprint> <tier> <overrides_system> [runtime]
+  blueprint.removed <blueprint> <tier> <reverted_to_system>
 
   These take a blueprint name, not an instance name, and carry it as
   Data.BlueprintName. The file contents are never carried.
+
+${UNDERLINE}Libraries:${END}
+  library.added <name> <path>
+  library.removed <name> <path>
+
+  A library is a placement root — a named disk instances live on. No instance
+  is involved.
 
 ${UNDERLINE}Description:${END}
 Events are broadcast to all enabled transports in parallel. The JSON payload
 includes the event type, event-specific data, timestamp, actor, hostname, and
 KGSM version.
+
+It also carries how much the event matters ('info', 'warn' or 'danger'), how it
+went ('success', 'failure' or 'neutral') and one line of prose saying what
+happened. Those three are what lets a surface render an event it has never
+heard of; a phase bracket has no prose to give and carries none rather than an
+empty line.
 
 The actor (who triggered the event) is taken from the \$KGSM_EVENT_ACTOR
 environment variable, which the caller (bot/assistant/watchdog/API) sets to the
@@ -228,25 +290,25 @@ warning, because no reader could resolve it.
 Optional parameters (shown in brackets) can be omitted or left as empty strings.
 
 ${UNDERLINE}Examples:${END}
-  ${self} emit instance-created myserver factorio
-  ${self} emit instance-installed myserver factorio ssd
-  ${self} emit instance-moved myserver ssd archive
-  ${self} emit instance-started myserver
-  ${self} emit instance-version-updated myserver 1.0.0 1.1.1
-  ${self} emit instance-backup-created myserver auto 1.2.3
-  ${self} emit instance-backup-deleted myserver myserver-20260731T142233Z-a3f9c1
-  ${self} emit instance-backups-pruned myserver 3 5 1
-  ${self} emit instance-backup-pinned myserver myserver-20260731T142233Z-a3f9c1
-  ${self} emit instance-stopped myserver manual
-  ${self} emit instance-ports-opened myserver '34197/udp|27015:27020/tcp'
-  ${self} emit instance-ports-closed myserver '34197/udp|27015:27020/tcp'
-  ${self} emit instance-player-joined myserver 76561198000000000 Alice
-  ${self} emit instance-player-left myserver '' Bob
-  ${self} emit instance-config-changed myserver rcon_password
-  ${self} emit instance-display-name-changed myserver myserver 'Weekend Server'
-  ${self} emit blueprint-created mygame user false native
-  ${self} emit blueprint-updated terraria user true native
-  ${self} emit blueprint-removed terraria user true
+  ${self} emit server.install.created myserver factorio
+  ${self} emit server.installed myserver factorio ssd
+  ${self} emit server.moved myserver ssd archive
+  ${self} emit server.started myserver
+  ${self} emit server.updated myserver 1.0.0 1.1.1
+  ${self} emit backup.created myserver auto 1.2.3
+  ${self} emit backup.deleted myserver myserver-20260731T142233Z-a3f9c1
+  ${self} emit backup.pruned myserver 3 5 1
+  ${self} emit backup.pinned myserver myserver-20260731T142233Z-a3f9c1
+  ${self} emit server.stopped myserver manual
+  ${self} emit network.ports.opened myserver '34197/udp|27015:27020/tcp'
+  ${self} emit network.ports.closed myserver '34197/udp|27015:27020/tcp'
+  ${self} emit player.joined myserver 76561198000000000 Alice
+  ${self} emit player.left myserver '' Bob
+  ${self} emit config.changed myserver rcon_password
+  ${self} emit server.renamed myserver myserver 'Weekend Server'
+  ${self} emit blueprint.created mygame user false native
+  ${self} emit blueprint.updated terraria user true native
+  ${self} emit blueprint.removed terraria user true
 "
 }
 
@@ -344,37 +406,36 @@ function _cmd_journal() {
 # payload, journal append, optional transports — lives in the handler so this
 # path and core/events.sh's exit-code dispatch share one implementation.
 function _cmd_emit() {
-  local event_name="$1"
+  local event_type="$1"
   shift
   local params=("$@")
 
-  if [[ -z "$event_name" ]]; then
+  if [[ -z "$event_type" ]]; then
     __print_error "Event type is required"
     usage_emit
     return $EC_MISSING_ARG
   fi
 
-  if [[ "$event_name" == "-h" || "$event_name" == "--help" || "$event_name" == "help" ]]; then
+  if [[ "$event_type" == "-h" || "$event_type" == "--help" || "$event_type" == "help" ]]; then
     usage_emit
     return $EC_SUCCESS
   fi
 
   local _result=$EC_SUCCESS
-  __logic_emit_event "$event_name" "${params[@]}" || _result=$?
+  __logic_emit_event "$event_type" "${params[@]}" || _result=$?
 
   case $_result in
     $EC_SUCCESS)
       return $EC_SUCCESS
       ;;
     $EC_EVENT_TYPE_INVALID)
-      __print_error "Invalid event type: $event_name"
+      __print_error "Invalid event type: $event_type"
       __print_info "Use '${self} help emit' to see all available event types"
       ;;
     $EC_EVENT_PARAMS_INVALID)
       local param_spec
-      param_spec=$(__logic_get_event_param_spec \
-        "$(__logic_event_name_to_type "$event_name")")
-      __print_error "Invalid parameters for event '$event_name'"
+      param_spec=$(__logic_get_event_param_spec "$event_type")
+      __print_error "Invalid parameters for event '$event_type'"
       __print_info "Required parameters: $param_spec"
       ;;
     $EC_EVENT_JSON_FAILED)
@@ -384,7 +445,7 @@ function _cmd_emit() {
       __print_error "Failed to append the event to the journal at $(__logic_journal_dir)"
       ;;
     *)
-      __print_error "Failed to emit event '$event_name'"
+      __print_error "Failed to emit event '$event_type'"
       ;;
   esac
 

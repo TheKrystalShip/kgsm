@@ -94,7 +94,7 @@ function _deregister_offline_instance() {
 
   __print_info "Deregistering '$instance' from library '${__instance_library_name_out}'"
 
-  __emit_event instance-uninstall-started "${instance}"
+  __emit_event server.uninstall.started "${instance}"
 
   # Best-effort, and it matters most here: an instance the daemon still holds
   # desired-state for is one it keeps trying to spawn out of a directory that is
@@ -105,7 +105,7 @@ function _deregister_offline_instance() {
 
   if ! directories.sh unlink-instance "$__instance_blueprint_out" "$instance" --force; then
     __print_error "Failed to remove the registry entry for '$instance'"
-    __emit_event instance-uninstall-failed "${instance}"
+    __emit_event server.uninstall.failed "${instance}"
     return $EC_FAILED_RM
   fi
 
@@ -113,8 +113,8 @@ function _deregister_offline_instance() {
   __print_info "Its files were left untouched at ${__instance_working_dir_out}"
   __print_info "Firewall rules and command shortcuts it recorded could not be read and were not removed"
 
-  __emit_event instance-uninstalled "${instance}"
-  __emit_event instance-uninstall-finished "${instance}"
+  __emit_event server.uninstalled "${instance}"
+  __emit_event server.uninstall.finished "${instance}"
 
   return 0
 }
@@ -260,7 +260,7 @@ function _uninstall() {
 
   __print_info "Uninstalling instance '$instance'..."
 
-  __emit_event instance-uninstall-started "${instance}"
+  __emit_event server.uninstall.started "${instance}"
 
   # Deregister from the watchdog BEFORE any files are removed: the daemon stops the
   # instance as part of deregistering, and a graceful stop needs the instance's FIFO and
@@ -287,13 +287,13 @@ function _uninstall() {
         # one. Only when it was measurably up — an already-stopped instance
         # being uninstalled must not produce a stop that never happened.
         if [[ "$was_running" -eq 1 ]]; then
-          __emit_event instance-stopped "${instance}"
+          __emit_event server.stopped "${instance}"
         fi
         ;;
       2)
         __print_error "Instance '$instance' is still running; the watchdog could not stop it"
         __print_error "Uninstall aborted — stop it manually, then retry"
-        __emit_event instance-uninstall-failed "${instance}"
+        __emit_event server.uninstall.failed "${instance}"
         return $EC_ERROR
         ;;
       *)
@@ -312,7 +312,7 @@ function _uninstall() {
   directories.sh remove "$instance" || {
     exit_code=$?
     __print_error "Failed to remove instance directories"
-    __emit_event instance-uninstall-failed "${instance}"
+    __emit_event server.uninstall.failed "${instance}"
     return $exit_code
   }
 
@@ -337,12 +337,12 @@ function _uninstall() {
 
   __print_success "Instance '${instance}' uninstalled"
 
-  __emit_event instance-uninstalled "${instance}"
+  __emit_event server.uninstalled "${instance}"
 
-  # Emitted LAST, after instance-uninstalled: a consumer that reads "the run
+  # Emitted LAST, after server.uninstalled: a consumer that reads "the run
   # ended" and re-reads the roster must find the instance already gone rather
   # than still listed. Same ordering as every other bracket.
-  __emit_event instance-uninstall-finished "${instance}"
+  __emit_event server.uninstall.finished "${instance}"
 
   return 0
 }

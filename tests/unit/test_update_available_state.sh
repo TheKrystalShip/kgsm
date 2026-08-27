@@ -89,12 +89,12 @@ EOF
 # =============================================================================
 
 function test_update_available_event_type_exists() {
-  log_test_step "Testing that instance_update_available is a declared event type"
+  log_test_step "Testing that server.update.available is a declared event type"
 
   assert_not_null "$EVENT_INSTANCE_UPDATE_AVAILABLE" \
     "EVENT_INSTANCE_UPDATE_AVAILABLE should be declared"
-  assert_equals "instance_update_available" "$EVENT_INSTANCE_UPDATE_AVAILABLE" \
-    "The event type should be instance_update_available"
+  assert_equals "server.update.available" "$EVENT_INSTANCE_UPDATE_AVAILABLE" \
+    "The event type should be server.update.available"
 }
 
 function test_update_available_event_declares_both_versions() {
@@ -113,7 +113,7 @@ function test_update_available_event_validates() {
   log_test_step "Testing that the event type passes validation"
 
   __logic_validate_event_type "$EVENT_INSTANCE_UPDATE_AVAILABLE"
-  assert_equals "0" "$?" "instance_update_available should be a valid event type"
+  assert_equals "0" "$?" "server.update.available should be a valid event type"
 }
 
 # =============================================================================
@@ -189,7 +189,7 @@ function test_check_update_advertises_emit() {
   output=$("$MODULE" check-update --help 2>&1 || true)
 
   assert_contains "$output" "--emit" "check-update --help should document --emit"
-  assert_contains "$output" "instance_update_available" \
+  assert_contains "$output" "server.update.available" \
     "The help should name the event --emit produces"
 }
 

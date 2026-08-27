@@ -66,7 +66,7 @@ ${UNDERLINE}Timeout and Monitoring:${END}
   • Global timeout: ${config_watcher_global_timeout_seconds:-600} seconds (configurable)
   • Runs as detached background process when --detach is used
   • Automatically cleans up if server process terminates
-  • Emits instance-ready event when detection succeeds
+  • Emits server.ready event when detection succeeds
 
 ${UNDERLINE}Examples:${END}
   ${self} start valheim-server-01

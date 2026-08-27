@@ -427,11 +427,11 @@ function _cmd_stop() {
   # and up to the instance's whole stop timeout when the game ignores it. These bracket that wait so
   # a consumer can show the instance as stopping while it happens, whichever entrypoint drove it —
   # the same bracket `instances update` carries. Finished is emitted on every outcome: it says the
-  # run ENDED, while instance_stopped (emitted below, on success only) says the instance is down.
+  # run ENDED, while server.stopped (emitted below, on success only) says the instance is down.
   local before
   before="$(_run_state_before "$instance_name")"
 
-  __emit_event instance-stop-started "$instance_name"
+  __emit_event server.stop.started "$instance_name"
 
   local exit_code
   __logic_instance_stop "$instance_name"
@@ -460,10 +460,10 @@ function _cmd_stop() {
       ;;
   esac
 
-  # Emitted LAST, after instance-stopped on the success path: a consumer that reads "the run ended"
+  # Emitted LAST, after server.stopped on the success path: a consumer that reads "the run ended"
   # and re-reads the instance must find the outcome already recorded, or it briefly reports the state
   # the instance was in before the stop.
-  __emit_event instance-stop-finished "$instance_name"
+  __emit_event server.stop.finished "$instance_name"
 
   return $result
 }
@@ -480,7 +480,7 @@ function _cmd_stop() {
 # shellcheck disable=SC2329 # invoked by name, through __logic_instance_restart's hook
 function __emit_restart_stopped() {
   [[ "${KGSM_RESTART_WAS_ACTIVE:-}" == "active" ]] || return 0
-  __emit_event instance-restart-stopped "$1"
+  __emit_event server.restart.stopped "$1"
 }
 
 export -f __emit_restart_stopped
@@ -534,11 +534,11 @@ function _cmd_restart() {
   # plus the game's boot — the longest of the lifecycle verbs. It runs through the pure logic
   # functions rather than the stop and start COMMANDS, so none of their events fire along the way.
   # These bracket the whole thing, the same way stop and update are bracketed. Finished is emitted on
-  # every outcome: it says the run ENDED, while instance-restarted says the instance came back.
-  __emit_event instance-restart-started "$instance_name"
+  # every outcome: it says the run ENDED, while server.restarted says the instance came back.
+  __emit_event server.restart.started "$instance_name"
 
-  # …and the middle is reported as it happens: instance-restart-stopped when the old run is down,
-  # instance-restarted when the new one is up. Between them the process genuinely does not exist,
+  # …and the middle is reported as it happens: server.restart.stopped when the old run is down,
+  # server.restarted when the new one is up. Between them the process genuinely does not exist,
   # which is a thing consumers show and act on, and the bracket alone cannot say it — a consumer that
   # heard only "a restart is running" has to keep reporting the state from before the restart for the
   # whole shutdown. Emitted from here rather than from the logic layer, which stays pure.
@@ -571,10 +571,10 @@ function _cmd_restart() {
       ;;
   esac
 
-  # Emitted LAST, after instance-restarted on the success path, for the same reason the stop bracket
+  # Emitted LAST, after server.restarted on the success path, for the same reason the stop bracket
   # is: a consumer that reads "the run ended" and re-reads the instance must find the outcome already
   # recorded rather than the state it was in before.
-  __emit_event instance-restart-finished "$instance_name"
+  __emit_event server.restart.finished "$instance_name"
 
   return $result
 }

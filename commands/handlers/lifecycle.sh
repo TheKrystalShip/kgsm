@@ -7,9 +7,9 @@
 #
 # Exit Code Conventions:
 # - 0: Success (no event needed)
-# - 211: Instance started successfully (emit instance-started)
-# - 212: Instance stopped successfully (emit instance-stopped)
-# - 213: Instance restarted successfully (emit instance-restarted)
+# - 211: Instance started successfully (emit server.started)
+# - 212: Instance stopped successfully (emit server.stopped)
+# - 213: Instance restarted successfully (emit server.restarted)
 # - Standard error codes: EC_INVALID_ARG, EC_INVALID_CONFIG, etc.
 
 # Disabling SC2086 globally:
@@ -47,7 +47,7 @@ fi
 
 # Starts an instance
 # Args: $1 = _instance_name
-# Returns: 211 on success (triggers instance-started event), error codes on failure
+# Returns: 211 on success (triggers server.started event), error codes on failure
 function __logic_instance_start() {
   local _instance_name="$1"
   local _force="${2:-false}"
@@ -163,7 +163,7 @@ export -f __logic_start_standalone_instance
 
 # Stops an instance using the appropriate lifecycle manager
 # Args: $1 = _instance_name
-# Returns: 212 on success (triggers instance-stopped event), error codes on failure
+# Returns: 212 on success (triggers server.stopped event), error codes on failure
 function __logic_instance_stop() {
   local _instance_name="$1"
 
@@ -243,7 +243,7 @@ export -f __logic_stop_standalone_instance
 #            and the watchdog's. The check runs AFTER the stop, so a restart is measured against a
 #            node that has already had this instance's memory returned to it; an instance that was
 #            running a moment ago normally still fits without it.
-# Returns: 213 on success (triggers instance-restarted event), error codes on failure
+# Returns: 213 on success (triggers server.restarted event), error codes on failure
 function __logic_instance_restart() {
   local _instance_name="$1"
   local _after_stop="${2:-}"

@@ -183,7 +183,7 @@ function test_add_emits_library_added() {
   local segment
   segment="$(_newest_journal_segment "$journal_dir")"
   assert_not_null "$segment" "The journal segment should exist"
-  assert_file_contains "$segment" "library_added" "The event type should be recorded"
+  assert_file_contains "$segment" "library.added" "The event type should be recorded"
   assert_file_contains "$segment" "LibraryName" "The payload should be library-scoped"
 }
 
@@ -371,7 +371,7 @@ function test_remove_emits_library_removed() {
   local segment
   segment="$(_newest_journal_segment "$config_event_journal_dir")"
   assert_not_null "$segment" "The journal segment should exist"
-  assert_file_contains "$segment" "library_removed" "The event type should be recorded"
+  assert_file_contains "$segment" "library.removed" "The event type should be recorded"
 }
 
 function test_remove_of_an_unregistered_library_is_reported() {

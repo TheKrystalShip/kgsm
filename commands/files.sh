@@ -208,7 +208,7 @@ function _cmd_create() {
   fi
 
   # Emit event
-  __emit_event instance-files-created "${instance_name}"
+  __emit_event server.install.files_created "${instance_name}"
 
   __print_success "All files and integrations created successfully"
   return 0
@@ -293,7 +293,7 @@ function _cmd_remove() {
 
   # Emitted only when everything really is gone: the event says the instance's
   # files were removed, and a partial cleanup has not earned that sentence.
-  __emit_event instance-files-removed "${instance_name}"
+  __emit_event server.uninstall.files_removed "${instance_name}"
 
   __print_success "All files and integrations removed successfully"
   return 0

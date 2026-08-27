@@ -361,15 +361,15 @@ function _update() {
   # download, and a surface showing "Updating…" with no further word for the
   # whole of it is the reason these are here. Reporting only, never a new
   # decision — the outcome of the pull governs exactly what it did before.
-  _emit_phase instance-download-started
+  _emit_phase server.download.started
   if (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" pull); then
-    _emit_phase instance-download-finished
+    _emit_phase server.download.finished
   else
-    _emit_phase instance-download-failed
+    _emit_phase server.download.failed
   fi
 
   # If the container is running, stop it and recreate
-  _emit_phase instance-deploy-started
+  _emit_phase server.deploy.started
   local deployed=1
   if _is_active &>/dev/null; then
     (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" up -d --force-recreate) || deployed=0
@@ -379,9 +379,9 @@ function _update() {
     (cd "$instance_working_dir" && docker compose -f "$instance_compose_file" down) || deployed=0
   fi
   if [[ $deployed -eq 1 ]]; then
-    _emit_phase instance-deploy-finished
+    _emit_phase server.deploy.finished
   else
-    _emit_phase instance-deploy-failed
+    _emit_phase server.deploy.failed
   fi
 
   # Record what was actually pulled — the digest of the images now on this host,

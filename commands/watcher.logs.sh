@@ -57,7 +57,7 @@ ${UNDERLINE}Notes:${END}
   • Automatically stops when server process terminates
   • Exits with success when pattern is found
   • Supports regex patterns for flexible matching
-  • Emits instance-ready event when pattern matches
+  • Emits server.ready event when pattern matches
 "
 }
 
@@ -82,7 +82,7 @@ ${UNDERLINE}Options:${END}
 ${UNDERLINE}Description:${END}
   Watches the instance log file using 'tail -f' and waits for the configured
   startup_success_regex pattern to appear. When the pattern matches, emits an
-  instance-ready event and exits successfully.
+  server.ready event and exits successfully.
 
   The watcher automatically stops if:
     • The pattern is matched (success)
@@ -276,7 +276,7 @@ function _cmd_watch() {
   case $exit_code in
     $EC_SUCCESS_INSTANCE_READY)
       # Event already emitted by logic layer
-      __emit_event instance-ready "${instance%.ini}"
+      __emit_event server.ready "${instance%.ini}"
       return 0
       ;;
     $EC_WATCHER_TIMEOUT)

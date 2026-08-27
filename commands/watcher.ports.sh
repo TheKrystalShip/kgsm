@@ -58,7 +58,7 @@ ${UNDERLINE}Notes:${END}
   • Automatically stops when server process terminates
   • Exits with success when port becomes active
   • Supports multiple ports but monitors first one for readiness
-  • Emits instance-ready event when port becomes available
+  • Emits server.ready event when port becomes available
 "
 }
 
@@ -83,7 +83,7 @@ ${UNDERLINE}Options:${END}
 ${UNDERLINE}Description:${END}
   Monitors the first configured port using 'ss' command and waits for it to
   become active. When the port is bound by the server process, emits an
-  instance-ready event and exits successfully.
+  server.ready event and exits successfully.
 
   The watcher automatically stops if:
     • The port becomes active (success)
@@ -279,7 +279,7 @@ function _cmd_watch() {
   case $exit_code in
     $EC_SUCCESS_INSTANCE_READY)
       # Emit event
-      __emit_event instance-ready "${instance%.ini}"
+      __emit_event server.ready "${instance%.ini}"
       return 0
       ;;
     $EC_WATCHER_TIMEOUT)

@@ -215,7 +215,7 @@ kgsm.sh instances config-set factorio-01 "display_name=Weekend Server"
 `rename` reads `-h`, `--help` and `help` as a request for usage only in the first position. After
 the instance, every argument is label text.
 
-Both record `instance_config_changed` and `instance_display_name_changed`, the latter carrying the
+Both record `config.changed` and `server.renamed`, the latter carrying the
 old and new label so a surface can re-render without asking the engine anything. Nothing moves on
 disk: the id, every path and every downstream store are untouched.
 
@@ -274,7 +274,7 @@ The sequence:
 
 A failure at any point up to step 6 leaves the original authoritative: the instance is still
 registered where it was, its config is untouched, and re-running the move picks up from the partial
-copy at the target. A failure at step 7 puts the registry back the same way. `instance_moved` is
+copy at the target. A failure at step 7 puts the registry back the same way. `server.moved` is
 emitted once the move is done, carrying the library it came from and the one it is in.
 
 ## Managing instances

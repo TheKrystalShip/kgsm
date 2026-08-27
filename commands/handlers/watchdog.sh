@@ -123,7 +123,7 @@ export -f __watchdog_available
 #   any other status (incl. 409) -> EC_ERROR. The daemon uses 409 (ok:false) for a
 #     REAL failure — e.g. "unknown instance (kgsm-lib returned no info)" or a failed
 #     spawn — NOT "already in the desired state". Mapping 409 to success made kgsm
-#     report a successful start AND emit a fabricated instance_started event when the
+#     report a successful start AND emit a fabricated server.started event when the
 #     start actually failed (e.g. the daemon pointed at a kgsm that can't see the
 #     instance). Claim success only when the daemon confirms it. Availability was
 #     already confirmed by the caller, so any non-200 here is a real error: do NOT

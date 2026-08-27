@@ -47,6 +47,18 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **Every event describes itself.** An event's name is one dotted, lowercase word —
+  `server.uninstalled`, `network.upnp.reasserted`, `backup.pruned` — and that name is its whole
+  identity, on the wire and on the CLI alike. The envelope is `V: 2` and carries three more fields
+  beside it: `Severity` (`info`/`warn`/`danger`), `Outcome` (`success`/`failure`/`neutral`) and
+  `Summary`, one line of prose written at the moment the event happens. A reader therefore holds no
+  table keyed on an event's name, which is what lets a surface render an event it has never heard
+  of; the dots in the name are what it groups and picks an icon from. A phase bracket carries a
+  `null` summary rather than an empty one, because absent means "nothing to say" and an empty
+  string is a third state nothing handles. A summary names things as they are called when it is
+  written — the instance id the emitter passed, never a label resolved later — so a rename leaves
+  every earlier line saying what the server was called then.
+
 - **An event names its principal or names nobody.** `Actor` carries what the caller supplied in
   `$KGSM_EVENT_ACTOR`, written `provider:name`. An invocation that supplies nothing records the event
   with `Actor: null`: KGSM is a stateless CLI with no way to learn who asked for an action, and the OS

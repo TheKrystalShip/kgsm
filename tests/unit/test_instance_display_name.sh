@@ -392,10 +392,10 @@ function test_rename_emits_the_display_name_event() {
   local payload
   payload="$(_journal_since "$segment" "$segment_before" \
     | jq -c --arg id "$id" \
-      'select(.EventType == "instance_display_name_changed" and .Data.InstanceName == $id)' \
+      'select(.EventType == "server.renamed" and .Data.InstanceName == $id)' \
     | tail -n 1)"
 
-  assert_not_null "$payload" "A rename should emit instance_display_name_changed"
+  assert_not_null "$payload" "A rename should emit server.renamed"
   assert_equals "Before" "$(jq -r '.Data.OldDisplayName' <<< "$payload")" \
     "The event should carry the label the instance had"
   assert_equals "After" "$(jq -r '.Data.NewDisplayName' <<< "$payload")" \
@@ -423,9 +423,9 @@ function test_config_set_display_name_emits_the_same_event() {
   types="$(_journal_since "$segment" "$segment_before" \
     | jq -r --arg id "$id" 'select(.Data.InstanceName == $id) | .EventType' | sort -u)"
 
-  assert_contains "$types" "instance_config_changed" \
+  assert_contains "$types" "config.changed" \
     "A config-set should record the generic config change"
-  assert_contains "$types" "instance_display_name_changed" \
+  assert_contains "$types" "server.renamed" \
     "A config-set on display_name should also record the label change"
 }
 
@@ -562,8 +562,8 @@ function test_uninstall_by_display_name_acts_on_the_id() {
   # The uninstall-started event names the id, not the label it was called by.
   local started
   started="$(_journal_since "$segment" "$segment_before" \
-    | jq -c 'select(.EventType == "instance_uninstall_started")' | tail -n 1)"
-  assert_not_null "$started" "Uninstall should emit instance_uninstall_started"
+    | jq -c 'select(.EventType == "server.uninstall.started")' | tail -n 1)"
+  assert_not_null "$started" "Uninstall should emit server.uninstall.started"
   assert_equals "$id" "$(jq -r '.Data.InstanceName' <<< "$started")" \
     "The event should carry the id, never the display name it was called by"
 }

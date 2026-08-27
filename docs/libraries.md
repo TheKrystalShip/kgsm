@@ -202,7 +202,7 @@ libraries must be reachable; a backup is taken before anything is copied. See
 
 ## Events
 
-Registering and deregistering a library are recorded in the event journal as `library_added` and
-`library_removed`, each carrying `LibraryName` and `Path`. Moving an instance is recorded as
-`instance_moved`, carrying `InstanceName`, `FromLibrary` and `ToLibrary`, and an install records
-the library it landed in as `Library` on `instance_installed`. See [Event System](events.md).
+Registering and deregistering a library are recorded in the event journal as `library.added` and
+`library.removed`, each carrying `LibraryName` and `Path`. Moving an instance is recorded as
+`server.moved`, carrying `InstanceName`, `FromLibrary` and `ToLibrary`, and an install records
+the library it landed in as `Library` on `server.installed`. See [Event System](events.md).

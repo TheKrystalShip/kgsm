@@ -155,7 +155,7 @@ function test_dispatch_start_409_is_ec_error() {
   # instance (kgsm-lib returned no info)" or a failed spawn — NOT for "already in
   # the desired state" (a real idempotent no-op like "already running" returns 200
   # ok:true). Mapping 409 to success made kgsm report a successful start AND emit a
-  # fabricated instance_started event when the start had actually failed. 409 must
+  # fabricated server.started event when the start had actually failed. 409 must
   # surface as an error so the failure is honest, not masked.
   function __watchdog_curl() { echo "409"; return 0; }
 

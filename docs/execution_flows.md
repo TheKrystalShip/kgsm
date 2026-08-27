@@ -227,7 +227,7 @@ graph TD
     D["instances.sh generate-id BLUEPRINT [--id ID]<br/>→ unique instance identifier"] --> F["directories.sh ensure-created working_dir<br/>(library/instances/BLUEPRINT/INSTANCE)"]
     F --> G["directories.sh link-instance BLUEPRINT INSTANCE working_dir<br/>(symlink in KGSM_INSTANCES_DIR)"]
     G --> H["instances.sh create BLUEPRINT --library --id [--name]<br/>→ writes INSTANCE.config.ini"]
-    H --> EVT1["events.sh emit instance-installation-started"]
+    H --> EVT1["events.sh emit server.install.started"]
 
     EVT1 --> I["directories.sh create INSTANCE<br/>(install, saves, backups, temp, logs)"]
     I --> J["files.sh create INSTANCE<br/>(assemble management script from modules,<br/>config files, integrations)"]
@@ -238,18 +238,18 @@ graph TD
     L -->|"No"| M
     L1 --> M
 
-    M["events.sh emit instance-download-started"] --> N["instance_management_file --download VERSION"]
-    N -->|"Success"| O["events.sh emit instance-download-finished"]
-    N -->|"Failure"| Z1["❌ EC_FAILED_DOWNLOAD<br/>events.sh emit instance-download-failed"]
+    M["events.sh emit server.download.started"] --> N["instance_management_file --download VERSION"]
+    N -->|"Success"| O["events.sh emit server.download.finished"]
+    N -->|"Failure"| Z1["❌ EC_FAILED_DOWNLOAD<br/>events.sh emit server.download.failed"]
 
-    O --> P["events.sh emit instance-deploy-started"]
+    O --> P["events.sh emit server.deploy.started"]
     P --> Q["instance_management_file --deploy"]
-    Q -->|"Success"| R["events.sh emit instance-deploy-finished"]
-    Q -->|"Failure"| Z2["❌ EC_FAILED_DEPLOY<br/>events.sh emit instance-deploy-failed"]
+    Q -->|"Success"| R["events.sh emit server.deploy.finished"]
+    Q -->|"Failure"| Z2["❌ EC_FAILED_DEPLOY<br/>events.sh emit server.deploy.failed"]
 
     R --> S["instance_management_file --version --save VERSION"]
-    S --> T["events.sh emit instance-installation-finished"]
-    T --> U["✅ __print_success<br/>events.sh emit instance-installed"]
+    S --> T["events.sh emit server.install.finished"]
+    T --> U["✅ __print_success<br/>events.sh emit server.installed"]
 
     style A fill:#e3f2fd
     style U fill:#e8f5e8
@@ -269,7 +269,7 @@ graph TD
 6. **Download**: The generated management script is called with `--download` to fetch game files via the override's `_download()` function.
 7. **Deploy**: `--deploy` moves files from the temp directory to the install directory via `_deploy()`.
 8. **Version record**: The resolved version string is persisted to the instance config.
-9. **Events**: Named events are emitted at each stage (`instance-installation-started`, `instance-downloaded`, `instance-installed`, etc.), appended to the event journal for any consumer tailing it.
+9. **Events**: Named events are emitted at each stage (`server.install.started`, `server.download.completed`, `server.installed`, etc.), appended to the event journal for any consumer tailing it.
 
 ---
 
@@ -491,13 +491,13 @@ These codes are returned by handler functions to signal that a specific event sh
 
 | Code | Constant | Triggered Event |
 |------|----------|----------------|
-| 210 | `EC_SUCCESS_INSTANCE_CREATED` | `instance-created` |
-| 211 | `EC_SUCCESS_INSTANCE_STARTED` | `instance-started` |
-| 212 | `EC_SUCCESS_INSTANCE_STOPPED` | `instance-stopped` |
-| 213 | `EC_SUCCESS_INSTANCE_RESTARTED` | `instance-restarted` |
-| 214 | `EC_SUCCESS_INSTANCE_REMOVED` | `instance-removed` |
-| 220 | `EC_SUCCESS_DEPLOYMENT_STARTED` | `instance-deploy-started` |
-| 221 | `EC_SUCCESS_DEPLOYMENT_FINISHED` | `instance-deploy-finished` |
+| 210 | `EC_SUCCESS_INSTANCE_CREATED` | `server.install.created` |
+| 211 | `EC_SUCCESS_INSTANCE_STARTED` | `server.started` |
+| 212 | `EC_SUCCESS_INSTANCE_STOPPED` | `server.stopped` |
+| 213 | `EC_SUCCESS_INSTANCE_RESTARTED` | `server.restarted` |
+| 214 | `EC_SUCCESS_INSTANCE_REMOVED` | `server.uninstall.removed` |
+| 220 | `EC_SUCCESS_DEPLOYMENT_STARTED` | `server.deploy.started` |
+| 221 | `EC_SUCCESS_DEPLOYMENT_FINISHED` | `server.deploy.finished` |
 
 ---
 

@@ -461,7 +461,7 @@ function test_ensure_closed_surfaces_an_unreachable_authority() {
 function test_applied_edges_are_distinguishable_from_a_no_op() {
   log_test_step "the ports codes are distinct from EC_SUCCESS, so a no-op is not audited"
 
-  # The caller emits instance-ports-opened/-closed on these codes and nothing on
+  # The caller emits network.ports.opened/closed on these codes and nothing on
   # EC_SUCCESS. Collapsing them would make every start of an opted-out or port-less
   # instance claim ports it never opened — a fabricated rule in the audit trail.
   assert_not_equals "$EC_SUCCESS" "$EC_SUCCESS_FIREWALL_PORTS_OPENED" \

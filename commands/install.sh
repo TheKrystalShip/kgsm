@@ -341,7 +341,7 @@ function _cmd_install() {
 
 
   # Emit after the instance has been created, so we can use the identifier
-  __emit_event instance-installation-started "${instance}" "${blueprint}"
+  __emit_event server.install.started "${instance}" "${blueprint}"
 
   # Create directory structure
   directories.sh create "$instance" || {
@@ -372,26 +372,26 @@ function _cmd_install() {
   fi
 
   # Download game files
-  __emit_event instance-download-started "${instance}"
+  __emit_event server.download.started "${instance}"
   "$instance_management_file" download "${version}" || {
     __print_error "Failed to download game files"
-    __emit_event instance-download-failed "${instance}"
+    __emit_event server.download.failed "${instance}"
     return $EC_FAILED_DOWNLOAD
   }
-  __emit_event instance-download-finished "${instance}"
-  __emit_event instance-downloaded "${instance}"
+  __emit_event server.download.finished "${instance}"
+  __emit_event server.download.completed "${instance}"
 
   # Deploy the instance
-  __emit_event instance-deploy-started "${instance}"
+  __emit_event server.deploy.started "${instance}"
   "$instance_management_file" deploy || {
     __print_error "Failed to deploy instance"
-    __emit_event instance-deploy-failed "${instance}"
+    __emit_event server.deploy.failed "${instance}"
     return $EC_FAILED_DEPLOY
   }
-  __emit_event instance-deploy-finished "${instance}"
-  __emit_event instance-deployed "${instance}"
+  __emit_event server.deploy.finished "${instance}"
+  __emit_event server.deploy.completed "${instance}"
 
-  # Save version. No instance-version-updated here: that event states that an
+  # Save version. No server.updated here: that event states that an
   # existing instance moved from one build to another, and a fresh install has
   # no build to move from. The version an install lands on is part of the
   # instance the following events announce, readable from the instance itself.
@@ -401,12 +401,12 @@ function _cmd_install() {
   }
 
   __print_success "Instance '${instance}', version '${version}', has been created in '${working_dir}'"
-  __emit_event instance-installed "${instance}" "${blueprint}" "${library}"
+  __emit_event server.installed "${instance}" "${blueprint}" "${library}"
 
-  # Emitted LAST, after instance-installed: a consumer that reads "the run ended"
+  # Emitted LAST, after server.installed: a consumer that reads "the run ended"
   # and re-reads the roster must find the new instance already there rather than
   # the roster as it was before it. Same ordering as every other bracket.
-  __emit_event instance-installation-finished "${instance}" "${blueprint}"
+  __emit_event server.install.finished "${instance}" "${blueprint}"
 
   # Start immediately after install when --start was passed (one-shot start,
   # not watchdog boot-autostart). A failure to start does not invalidate the

@@ -270,8 +270,8 @@ function test_emit_help_flag() {
 
   local output
   output=$("$MODULE" help emit 2>&1)
-  assert_contains "$output" "instance-created" \
-    "emit help should list event types like instance-created"
+  assert_contains "$output" "server.install.created" \
+    "emit help should list event types like server.install.created"
 }
 
 function test_emit_without_arguments_fails() {
@@ -284,14 +284,14 @@ function test_emit_without_arguments_fails() {
 function test_emit_valid_events_succeed() {
   log_test_step "Testing: emit succeeds for valid event types"
 
-  assert_command_succeeds "$MODULE emit instance-created myserver factorio" \
-    "emit instance-created should succeed"
+  assert_command_succeeds "$MODULE emit server.install.created myserver factorio" \
+    "emit server.install.created should succeed"
 
-  assert_command_succeeds "$MODULE emit instance-started myserver" \
-    "emit instance-started should succeed"
+  assert_command_succeeds "$MODULE emit server.started myserver" \
+    "emit server.started should succeed"
 
-  assert_command_succeeds "$MODULE emit instance-version-updated myserver 1.0.0 2.0.0" \
-    "emit instance-version-updated should succeed"
+  assert_command_succeeds "$MODULE emit server.updated myserver 1.0.0 2.0.0" \
+    "emit server.updated should succeed"
 }
 
 function test_emit_invalid_event_type_fails() {
@@ -313,7 +313,7 @@ function test_emit_appends_one_line_to_the_journal() {
   local before after
   before=$(_journal_line_count "$journal_dir")
 
-  assert_command_succeeds "$MODULE emit instance-stopped journaltest" \
+  assert_command_succeeds "$MODULE emit server.stopped journaltest" \
     "emit should succeed"
 
   local segment
@@ -329,7 +329,7 @@ function test_emit_appends_one_line_to_the_journal() {
   # the last line must be complete, parseable JSON on its own.
   local last_line
   last_line=$(tail -n 1 "$segment")
-  assert_contains "$last_line" '"EventType":"instance_stopped"' \
+  assert_contains "$last_line" '"EventType":"server.stopped"' \
     "the appended line should carry the emitted event type"
   assert_contains "$last_line" '"InstanceName":"journaltest"' \
     "the appended line should carry the instance name"
@@ -384,16 +384,16 @@ function test_emit_invalid_event_error_message() {
 function test_emit_missing_params_fails() {
   log_test_step "Testing: emit with missing required parameters fails"
 
-  # instance-created requires: instance blueprint (2 params)
-  assert_command_fails "$MODULE emit instance-created" \
-    "emit instance-created with no params should fail"
+  # server.install.created requires: instance blueprint (2 params)
+  assert_command_fails "$MODULE emit server.install.created" \
+    "emit server.install.created with no params should fail"
 }
 
 function test_emit_missing_params_error_message() {
   log_test_step "Testing: emit with missing parameters explains why"
 
   local output
-  output=$("$MODULE" emit instance-created 2>&1 || true)
+  output=$("$MODULE" emit server.install.created 2>&1 || true)
 
   assert_contains "$output" "parameters" \
     "emit with missing params should show a parameters error"

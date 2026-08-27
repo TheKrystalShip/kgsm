@@ -480,13 +480,16 @@ function _cmd_test() {
   local test_payload
   test_payload=$(
     jq -n \
-      --arg event_type "test_event" \
+      --arg event_type "webhook.test" \
       --arg test_data "Webhook transport test" \
       --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%S.%3NZ)" \
       --arg hostname "$(hostname 2>/dev/null || echo 'localhost')" \
       '{
-        V: 1,
+        V: 2,
         EventType: $event_type,
+        Severity: "info",
+        Outcome: "neutral",
+        Summary: "webhook transport test",
         Data: { Test: $test_data },
         Timestamp: $timestamp,
         Hostname: $hostname,
