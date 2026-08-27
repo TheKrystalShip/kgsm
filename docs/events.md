@@ -228,7 +228,7 @@ Every event is a JSON object with the following top-level fields:
 | `EventType` | string | Underscore-separated event type name |
 | `Data` | object | Event-specific payload. Instance events key it on `InstanceName`; the blueprint events key it on `BlueprintName` |
 | `Timestamp` | string | ISO 8601 UTC timestamp, millisecond precision |
-| `Actor` | string | Who triggered it, `provider:name`. From `$KGSM_EVENT_ACTOR`, else the OS user |
+| `Actor` | string\|null | Who triggered it, `provider:name`. From `$KGSM_EVENT_ACTOR`; `null` when none was supplied, and when the supplied value is not `provider:name` — never a borrowed OS username |
 | `Origin` | string\|null | The surface that drove it. From `$KGSM_EVENT_ORIGIN`; `null` when none was declared — never fabricated |
 | `Hostname` | string | System hostname where the event originated |
 | `ProducerVersion` | string | The version of the component that emitted the event — here, KGSM's |

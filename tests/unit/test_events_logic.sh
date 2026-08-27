@@ -1141,3 +1141,61 @@ function test_all_emit_call_sites_are_registered() {
     "Every emitted event must be registered in EVENT_CONFIGS. Unregistered: ${unregistered[*]}"
 }
 
+
+# =============================================================================
+# ACTOR PROVENANCE
+# =============================================================================
+
+# An actor names the principal who asked for the action. The only actor the engine
+# will write is one a reader can parse back into a provider and a name; anything
+# else is refused, because attributing an audit record to something unresolvable is
+# worse than admitting the action was unattributed.
+function test_wellformed_actors_are_accepted() {
+  log_test_step "Testing 'provider:name' actors are accepted"
+
+  assert_command_succeeds "__logic_actor_is_wellformed 'discord:heisen9386'" \
+    "A discord identity should be accepted"
+  assert_command_succeeds "__logic_actor_is_wellformed 'local:claude'" \
+    "A local identity should be accepted"
+  assert_command_succeeds "__logic_actor_is_wellformed 'system:watchdog'" \
+    "An autonomous producer should be accepted"
+
+  # The provider set is a host's configuration, not this engine's knowledge, so a
+  # provider it has never heard of is still well-formed.
+  assert_command_succeeds "__logic_actor_is_wellformed 'github:someone'" \
+    "A provider the engine does not know should still be accepted"
+
+  # Only the FIRST colon separates: names carry their own punctuation.
+  assert_command_succeeds "__logic_actor_is_wellformed 'discord:name:with:colons'" \
+    "A name containing colons should be accepted"
+  assert_command_succeeds "__logic_actor_is_wellformed 'discord:Claude (agent)'" \
+    "A name containing spaces should be accepted"
+}
+
+# The OS user is who owns the process, not who asked for the action. It reached the
+# journal 1817 times as a bare name, and a bare name is exactly what must not pass.
+function test_bare_names_are_refused_as_actors() {
+  log_test_step "Testing a bare name is refused as an actor"
+
+  assert_command_fails "__logic_actor_is_wellformed 'heisen'" \
+    "An OS username should be refused"
+  assert_command_fails "__logic_actor_is_wellformed 'claude'" \
+    "A bare agent name should be refused"
+  assert_command_fails "__logic_actor_is_wellformed 'root'" \
+    "A bare privileged username should be refused"
+}
+
+function test_malformed_actors_are_refused() {
+  log_test_step "Testing half-written actors are refused"
+
+  assert_command_fails "__logic_actor_is_wellformed ''" \
+    "An empty actor should be refused"
+  assert_command_fails "__logic_actor_is_wellformed ':name'" \
+    "An actor with no provider should be refused"
+  assert_command_fails "__logic_actor_is_wellformed 'provider:'" \
+    "An actor with no name should be refused"
+  assert_command_fails "__logic_actor_is_wellformed 'Discord:heisen'" \
+    "A provider is a lowercase token, so a capitalised one should be refused"
+  assert_command_fails "__logic_actor_is_wellformed 'two words:name'" \
+    "A provider containing a space should be refused"
+}

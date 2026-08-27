@@ -59,7 +59,8 @@ ${UNDERLINE}Notes:${END}
   • Transport-specific help: ${self} webhook help
   • Event types use dash-separated names (instance-created, instance-started, etc.)
   • All events include timestamp, actor, hostname, and KGSM version metadata
-  • Actor (who triggered the event) comes from \$KGSM_EVENT_ACTOR, else the OS user
+  • Actor (who triggered the event) comes from \$KGSM_EVENT_ACTOR as 'provider:name';
+    an event nobody claimed is recorded with no actor
 "
 }
 
@@ -217,9 +218,12 @@ includes the event type, event-specific data, timestamp, actor, hostname, and
 KGSM version.
 
 The actor (who triggered the event) is taken from the \$KGSM_EVENT_ACTOR
-environment variable when set — the caller (bot/assistant/watchdog) supplies the
-principal — otherwise it falls back to the invoking OS user. KGSM never fabricates
-an identity.
+environment variable, which the caller (bot/assistant/watchdog/API) sets to the
+principal it is acting for, written 'provider:name'. An invocation that sets
+nothing has no actor and the event records without one: KGSM never fabricates an
+identity, and the OS user it runs as owns the process rather than asking for the
+action. A value that is not 'provider:name' is refused the same way, with a
+warning, because no reader could resolve it.
 
 Optional parameters (shown in brackets) can be omitted or left as empty strings.
 

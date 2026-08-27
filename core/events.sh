@@ -67,6 +67,15 @@ function __emit_event() {
     __print_warning "Event '${1:-}' was NOT recorded (code $_result)"
   fi
 
+  # An actor that no reader can parse is dropped rather than written, and saying so
+  # is the whole point: the event is on record with no actor, and only this line
+  # says the caller meant to name one. Silence here would read as an action nobody
+  # claimed, which is the same thing an unattributed event looks like.
+  if [[ -n "${__logic_emit_actor_warning_out:-}" ]]; then
+    __print_warning "KGSM_EVENT_ACTOR='${__logic_emit_actor_warning_out}' is not 'provider:name'; event '${1:-}' was recorded with no actor"
+    __logic_emit_actor_warning_out=""
+  fi
+
   return $_result
 }
 

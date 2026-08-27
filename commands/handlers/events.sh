@@ -682,15 +682,23 @@ function __logic_build_event_payload() {
 
   # Resolve the actor (who triggered this event) for audit/correlation downstream.
   # KGSM is a stateless, multi-entrypoint CLI: it cannot itself know the semantic
-  # principal, so the caller (bot/assistant/watchdog) supplies it via KGSM_EVENT_ACTOR.
-  # For a bare CLI invocation that sets nothing, fall back to the OS user — an honest
-  # "who ran this", never a fabricated identity.
+  # principal, so the caller (bot/assistant/watchdog/API) supplies it via
+  # KGSM_EVENT_ACTOR. An invocation that sets nothing has no actor, and the field is
+  # emitted as JSON null: the OS user owns the process, it does not ask for the
+  # action, and writing one where the other belongs puts the wrong name on an audit
+  # record. Unknown is the honest answer and the only one available here.
+  #
+  # A supplied actor must be `provider:name` — the form every reader parses back
+  # (KgsmActor). A malformed value is dropped to null and reported through
+  # __logic_emit_actor_warning_out rather than written through: it would attribute
+  # the action to something no reader can resolve. The event itself still records,
+  # for the same reason the journal failure below only warns — the operation already
+  # happened, and losing the record of a completed action is the worse outcome.
   local actor="${KGSM_EVENT_ACTOR:-}"
-  if [[ -z "$actor" ]]; then
-    actor="${SUDO_USER:-${USER:-}}"
-  fi
-  if [[ -z "$actor" ]]; then
-    actor="$(id -un 2>/dev/null || echo "system")"
+  __logic_emit_actor_warning_out=""
+  if [[ -n "$actor" ]] && ! __logic_actor_is_wellformed "$actor"; then
+    __logic_emit_actor_warning_out="$actor"
+    actor=""
   fi
 
   # Resolve the origin: the surface that drove this event
@@ -971,7 +979,7 @@ function __logic_build_event_payload() {
     EventType: \"$event_type\",
     Data: $data_object,
     Timestamp: \$timestamp,
-    Actor: \$actor,
+    Actor: (\$actor | if . == \"\" then null else . end),
     Origin: (\$origin | if . == \"\" then null else . end),
     Hostname: \$hostname,
     ProducerVersion: \$producer_version
@@ -1000,6 +1008,32 @@ export -f __logic_build_event_payload
 # Default journal directory when config supplies none.
 declare -g -r KGSM_DEFAULT_EVENT_JOURNAL_DIR="/var/lib/kgsm/events"
 export KGSM_DEFAULT_EVENT_JOURNAL_DIR
+
+# Whether an actor string is the `provider:name` form every reader parses back
+# into a structured actor (see KgsmActor in kgsm-auth).
+#
+# The provider half is a lowercase token and the name half is anything non-empty:
+# names carry spaces, dots and colons of their own, and only the FIRST colon
+# separates. Requiring a provider is what stops a bare OS username — which names a
+# process owner, not a principal — from being written as though it were one.
+#
+# The set of live providers is configuration, not code (a host wires its own via
+# KgsmAuth__Providers__<name>), so the engine checks the shape and leaves naming a
+# provider it has never heard of to the reader, which keeps it rather than coercing
+# it into one it knows.
+#
+# Args: $1 = candidate actor string
+# Returns: EC_SUCCESS when well-formed, EC_INVALID_ARG otherwise
+function __logic_actor_is_wellformed() {
+  [[ "${1:-}" =~ ^[a-z0-9][a-z0-9._-]*:.+$ ]] || return $EC_INVALID_ARG
+  return $EC_SUCCESS
+}
+
+export -f __logic_actor_is_wellformed
+
+# Set by __logic_emit_event to the actor it refused, so the caller in
+# core/events.sh can report it. This module does no user-facing I/O of its own.
+declare -g __logic_emit_actor_warning_out=""
 
 # Resolves the journal directory.
 # Returns: EC_SUCCESS and echoes the directory path, always.

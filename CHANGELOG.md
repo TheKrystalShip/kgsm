@@ -47,6 +47,16 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **An event names its principal or names nobody.** `Actor` carries what the caller supplied in
+  `$KGSM_EVENT_ACTOR`, written `provider:name`. An invocation that supplies nothing records the event
+  with `Actor: null`: KGSM is a stateless CLI with no way to learn who asked for an action, and the OS
+  user it runs as owns the process rather than asking. A supplied value that is not `provider:name` is
+  refused the same way and reported, because no reader can resolve it back into a principal. The
+  event still records in both cases — the operation it describes already happened, and losing the
+  record of a completed action is the worse outcome. The provider half is not checked against a list:
+  which providers a host has is its own configuration, so an unrecognised one is carried through for
+  the reader rather than coerced into one the engine knows.
+
 - **An instance says what it does on a clock in one key.** `maintenance_windows` holds a `;`-joined
   list of windows, each written `<schedule>/<tasks>` — a schedule is either an appointment
   (`daily@HH:MM`, `weekly.<sun..sat>@HH:MM`, `monthly.<1-31>@HH:MM`, read in the instance's

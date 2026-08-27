@@ -454,11 +454,12 @@ function test_emit_payload_honors_event_origin() {
 # =============================================================================
 
 function test_emit_crashed_payload_carries_fields_and_system_provenance() {
-  log_test_step "Testing: instance_crashed payload carries ExitCode/Restarts + actor/origin=system"
+  log_test_step "Testing: instance_crashed payload carries ExitCode/Restarts + system provenance"
 
-  # Emit the crash event exactly as the watchdog does: actor+origin=system, with the
-  # instance, exit code, and restart-attempt count as the three positional params.
-  KGSM_EVENT_ACTOR="system" KGSM_EVENT_ORIGIN="system" \
+  # Emit the crash event exactly as the watchdog does: the autonomous producer names
+  # itself as `system:<producer>` and the surface is `system`, with the instance, exit
+  # code, and restart-attempt count as the three positional params.
+  KGSM_EVENT_ACTOR="system:watchdog" KGSM_EVENT_ORIGIN="system" \
     "$EVENTS_MODULE" emit instance-crashed crash-test-server 139 2 > /dev/null 2>&1 || true
 
   local payload
@@ -483,12 +484,12 @@ function test_emit_crashed_payload_carries_fields_and_system_provenance() {
   assert_equals "139" "$exit_code" "Data.ExitCode should carry the exit code"
   assert_equals "2" "$restarts" "Data.Restarts should carry the restart count"
 
-  # Provenance: the env -> payload derivation must yield actor=system / origin=system
-  # (the autonomous-engine stamp the watchdog applies via EmitWithProvenance).
+  # Provenance: the env -> payload derivation must carry the producer's own stamp
+  # through (the one the watchdog applies via EmitWithProvenance).
   local actor origin
   actor=$(echo "$payload" | jq -r '.Actor' 2> /dev/null)
   origin=$(echo "$payload" | jq -r '.Origin' 2> /dev/null)
-  assert_equals "system" "$actor" "Actor should reflect KGSM_EVENT_ACTOR=system"
+  assert_equals "system:watchdog" "$actor" "Actor should reflect KGSM_EVENT_ACTOR"
   assert_equals "system" "$origin" "Origin should reflect KGSM_EVENT_ORIGIN=system"
 }
 
@@ -1041,13 +1042,14 @@ function test_emit_envelope_never_writes_an_empty_string() {
   payload=$(_last_journal_event)
   assert_not_null "$payload" "Journaled event payload should not be empty"
 
-  # Actor has a three-level fallback — the supplied value, then the OS user, then
-  # `id -un` — so it always resolves to something. An empty string here would mean
-  # every fallback produced nothing and the emit wrote the gap anyway.
-  local actor
-  actor=$(echo "$payload" | jq -r '.Actor' 2> /dev/null)
-  assert_not_equals "" "$actor" \
-    "Actor must never be an empty string, a third state the envelope does not define"
+  # Nobody supplied an actor, and the engine has no way to learn one: it is a
+  # stateless CLI, and the OS user it runs as owns the process rather than asking
+  # for the action. Null is what "not known" is spelled as — never an empty string,
+  # and never a name borrowed from somewhere it does not mean.
+  local actor_type
+  actor_type=$(echo "$payload" | jq -r '.Actor | type' 2> /dev/null)
+  assert_equals "null" "$actor_type" \
+    "Actor must be null when no principal was supplied, never a borrowed OS username"
 
   # Origin genuinely has no honest fallback, so null is correct here. What must
   # never appear is the empty string.
@@ -1211,4 +1213,51 @@ function test_emit_ids_sort_the_way_the_journal_does() {
   else
     fail_test "Ids are not time-ordered: '$first' should sort before '$second'"
   fi
+}
+
+# =============================================================================
+# TEST 32: a malformed actor is refused rather than written through
+#
+# The actor a caller supplies is the one thing about an event the engine cannot
+# check against anything it holds — so the shape is all there is to check, and a
+# value that no reader can split into a provider and a name gets dropped. The
+# event itself still records: the operation it describes already happened, and an
+# unattributed record of a real action beats no record at all.
+# =============================================================================
+
+function test_emit_refuses_a_malformed_actor_and_still_records() {
+  log_test_step "Testing: a bare-name actor is dropped to null and the event still records"
+
+  KGSM_EVENT_ACTOR="heisen" \
+    "$EVENTS_MODULE" emit instance-started malformed-actor-test > /dev/null 2>&1 || true
+
+  local payload
+  payload=$(_last_journal_event)
+  assert_not_null "$payload" "The event must still be journaled"
+
+  local instance
+  instance=$(echo "$payload" | jq -r '.Data.InstanceName' 2> /dev/null)
+  assert_equals "malformed-actor-test" "$instance" \
+    "The journaled event should be the one just emitted"
+
+  local actor_type
+  actor_type=$(echo "$payload" | jq -r '.Actor | type' 2> /dev/null)
+  assert_equals "null" "$actor_type" \
+    "An OS username supplied as an actor must be dropped, not written through"
+}
+
+function test_emit_keeps_an_actor_whose_provider_the_engine_does_not_know() {
+  log_test_step "Testing: an unrecognised provider is kept, not coerced"
+
+  # Which providers a host has is its own configuration; the engine holds no list
+  # and must not invent one. A well-formed actor from a provider it has never met
+  # is carried through for the reader to resolve.
+  KGSM_EVENT_ACTOR="github:octocat" \
+    "$EVENTS_MODULE" emit instance-started unknown-provider-test > /dev/null 2>&1 || true
+
+  local payload actor
+  payload=$(_last_journal_event)
+  actor=$(echo "$payload" | jq -r '.Actor' 2> /dev/null)
+  assert_equals "github:octocat" "$actor" \
+    "An actor from an unknown provider should be carried through unchanged"
 }
