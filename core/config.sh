@@ -8,11 +8,81 @@ export CONFIG_FILE="$KGSM_CONFIG_FILE"
 export DEFAULT_CONFIG_FILE="$KGSM_DEFAULT_CONFIG_FILE"
 export MERGED_CONFIG_FILE="${KGSM_CONFIG_DIR}/config.merged.ini"
 
+# Registers the instances directory as the library `default`, and names it as
+# the default in the config file that was just created.
+#
+# A host with no library registered cannot install anything: placement resolves
+# to EC_NOT_FOUND and every install refuses. Seeding one here is what makes a
+# fresh install able to host a game before anybody configures it, and the path
+# is not a new location — KGSM_INSTANCES_DIR is already where this engine says
+# instances live.
+#
+# Three things are written and they only make sense together:
+#
+#   the marker    on the root, which is what makes the library reachable rather
+#                 than merely recorded
+#   the registry  entry, which is what this host knows
+#   the config    key, holding the NAME the registry now answers to
+#
+# The name is validated against the registry on every placement, so a config key
+# naming a library nobody registered refuses installs while pointing at nothing
+# — a worse refusal than the one it replaces. And a registry entry with no
+# default named would demand --library the moment a second library exists.
+#
+# Seeded only when there is no registry at all, so removing the library keeps it
+# removed. The registry and marker are written directly rather than through
+# `kgsm libraries add`, for the same reason the v10 migration does it: the CLI
+# loads this config on every invocation, and this runs while it is being
+# created. That is also why the marker filename is a literal here — the constant
+# lives in the libraries handler, which is not loaded yet.
+#
+# Never fails the run, and writes nothing at all unless it can write everything.
+# A host that ends up without a seeded library is the behaviour of every host
+# before this existed, and `kgsm libraries add` is the remedy either way.
+function __seed_initial_library() {
+  local registry="${KGSM_DATA_DIR}/libraries.ini"
+
+  # A registry already here belongs to somebody: a host that kept its data and
+  # lost its config gets its libraries left alone.
+  [[ -e "$registry" ]] && return 0
+
+  # A default config that already names a library states an intent about
+  # placement. Seeding `default` beside it would leave that name pointing at
+  # nothing and refuse every install, so this seeds all three writes or none.
+  grep -q '^default_library=$' "$CONFIG_FILE" 2> /dev/null || return 0
+
+  local id
+  id="$(od -An -tx1 -N8 /dev/urandom 2> /dev/null | tr -d ' \n')"
+  [[ ${#id} -eq 16 ]] || return 0
+
+  # __init_user_directories has already created this, so this normally just
+  # resolves symlinks.
+  local canonical
+  canonical="$(realpath -e "$KGSM_INSTANCES_DIR" 2> /dev/null)" || return 0
+
+  # The marker first. A library whose root carries no marker is registered and
+  # permanently offline, and every install against it refuses as unreachable —
+  # so a root that cannot take one is left unregistered instead, which at least
+  # fails with the honest "no libraries" rather than a manufactured one.
+  printf 'id=%s\nname=default\n' "$id" > "${canonical}/.kgsm-library" 2> /dev/null || return 0
+
+  printf '[default]\nid=%s\npath=%s\n\n' "$id" "$canonical" >> "$registry" 2> /dev/null || {
+    rm -f "${canonical}/.kgsm-library" 2> /dev/null
+    return 0
+  }
+
+  sed -i 's|^default_library=$|default_library=default|' "$CONFIG_FILE" 2> /dev/null || return 0
+
+  echo "${0##*/} INFO: registered library 'default' at ${canonical}" >&2
+  return 0
+}
+
 # Avoid reloading config if it's already been loaded once
 if [[ -z "$KGSM_CONFIG_LOADED" ]]; then
   if [[ ! -f "$CONFIG_FILE" ]]; then
     if [ -f "$DEFAULT_CONFIG_FILE" ]; then
       cp "$DEFAULT_CONFIG_FILE" "$CONFIG_FILE"
+      __seed_initial_library
       echo "${0##*/} WARNING: config.ini not found, created new file" >&2
       echo "${0##*/} INFO: Please ensure configuration is correct before running the script again" >&2
       exit 0

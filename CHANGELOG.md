@@ -626,6 +626,34 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Added — a fresh install seeds its first library (`3.18.0-rc16`)
+
+The first run registers `default` at `KGSM_INSTANCES_DIR`, writes the `.kgsm-library` marker on that
+root, and names it as `default_library` in the config file it just created. A host that nobody has
+configured can install a game.
+
+Before it, placement on a fresh host resolved to `EC_NOT_FOUND` and every install refused. That is
+invisible until the first install: nothing about a freshly installed engine says the one thing it
+cannot do yet is the thing it is for.
+
+The three writes only make sense together. `default_library` holds a NAME validated against the
+registry, so seeding a registry entry without naming it leaves the second library anybody adds
+demanding `--library` on every install — and naming one without the registry entry refuses installs
+against a library that does not exist, which is a worse refusal than the one it replaces. The marker
+is what `__logic_library_is_online` reads: a registered root without one is permanently offline and
+every install against it refuses as unreachable, so a root that cannot take a marker is left
+unregistered instead, failing with the honest "no libraries registered".
+
+`config.default.ini` still ships `default_library=` empty. Shipped, the name would dangle on every
+host that already has a registry; written by the seeder, it names something that exists.
+
+Seeded only when there is no registry file at all, so `libraries remove` keeps it removed. A host
+that kept its data and lost its config gets its libraries left alone, as does one whose default
+config already names a library — that is somebody's intent about placement, and all three writes
+happen or none do. The registry and marker are written directly rather than through
+`kgsm libraries add`, for the reason the v10 migration does it: the CLI loads this config on every
+invocation, and this runs while it is being created.
+
 ### Fixed — the package declares every command the engine runs (`3.18.0-rc15`)
 
 `openssl`, `procps-ng` and `diffutils` join `depends` and `deploy/kgsm.requires.json`. The engine
