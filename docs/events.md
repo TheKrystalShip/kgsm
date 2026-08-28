@@ -1,8 +1,8 @@
-# 📡 KGSM Event System
+# KGSM Event System
 
 KGSM records every game-server lifecycle event in an append-only **journal** on disk. External applications (like [kgsm-bot](https://github.com/TheKrystalShip/kgsm-bot)) tail that journal to build monitoring dashboards, automated responses, or custom integrations without modifying KGSM's core.
 
-## 🔌 How It Works
+## How It Works
 
 When a KGSM operation completes (starting a server, creating a backup, installing an update, etc.), `core/events.sh` maps the operation's result code to a specific event type and emits it in-process: the payload is built and appended to the journal without leaving the running KGSM process.
 
@@ -35,15 +35,15 @@ One additional transport can be switched on. It is **additive** — it delivers 
 
 A local consumer needs none of this: it tails the journal directly.
 
-### ⚠️ Important Note on Event Emission
+### Important Note on Event Emission
 
 Events are **only** emitted when operations are performed through `kgsm.sh` or through one of the modules in the `commands/` directory. Invoking an instance management script directly (e.g., `factorio.manage.sh`) bypasses the event system. Always use `kgsm.sh` when event broadcasting is required.
 
-## 📝 Available Events
+## Available Events
 
 An event type is a **dotted lowercase name** and that name is its only identity — the same spelling on the wire, on the CLI and in a filter. The dots are load-bearing: the hierarchy in the name is what a reader groups and picks an icon from, so `network.upnp.opened` places itself under `network` with nothing downstream holding a list.
 
-### 🛠️ Installation Events
+### Installation Events
 
 | Event Name | Description | Data Fields |
 |------------|-------------|-------------|
@@ -65,7 +65,7 @@ An event type is a **dotted lowercase name** and that name is its only identity 
 single directory is created, so it is always known, and on a host with several disks it is what an
 audit row needs most.
 
-### 📦 Placement Events
+### Placement Events
 
 | Event Name | Description | Data Fields |
 |------------|-------------|-------------|
@@ -76,7 +76,7 @@ disk just got its space back — and emptying a disk before it is unplugged is t
 `kgsm instances move` and `kgsm libraries remove --drain` exist. An instance the registry places in
 no library reports `unregistered`, which is a measurement rather than an absence.
 
-### 🔄 Update Events
+### Update Events
 
 | Event Name | Description | Data Fields |
 |------------|-------------|-------------|
@@ -93,7 +93,7 @@ nothing, and an install emits nothing either — the version a fresh instance
 lands on is part of the instance the installation events announce. `OldVersion`
 is therefore always a real previous version.
 
-### 🚀 Lifecycle Events
+### Lifecycle Events
 
 | Event Name | Description | Data Fields |
 |------------|-------------|-------------|
@@ -123,7 +123,7 @@ instead: `Deleted` is how many were actually removed, `Kept` the retention windo
 it ran with, and `Pinned` how many it skipped because they were pinned. All three
 are JSON numbers. A prune that removed nothing emits nothing.
 
-### 🗑️ Removal Events
+### Removal Events
 
 | Event Name | Description | Data Fields |
 |------------|-------------|-------------|
@@ -134,7 +134,7 @@ are JSON numbers. A prune that removed nothing emits nothing.
 | `server.uninstall.finished` | Uninstallation process completed | `InstanceName` |
 | `server.uninstalled` | Server fully uninstalled | `InstanceName` |
 
-### 👤 Player Moderation Events
+### Player Moderation Events
 
 Emitted when an operator removes a player from a running server, blocks them, or lifts that block, and only once the command has been delivered.
 
@@ -151,7 +151,7 @@ Emitted when an operator removes a player from a running server, blocks them, or
 
 These are their own event types rather than a console-input record because the subject is a **player**, not a command: a consumer asking "who was banned on this server" filters on the type instead of pattern-matching command text — text a hand-typed `instances input` could produce with no moderation intent behind it.
 
-### ⚙️ Configuration Events
+### Configuration Events
 
 Emitted by the command layer when an instance's `.config.ini` is written through `instances config-set` or `instances rename`.
 
@@ -166,7 +166,7 @@ A display-name change is the one exception, and it is not one: both labels are c
 
 `InstanceName` is the **id**, which a rename does not touch. The id is what every consumer keys on; the label beside it is decoration.
 
-### 📘 Blueprint Events
+### Blueprint Events
 
 These are the only events whose subject is **not an instance**. They fire when a blueprint file in the catalog is written or deleted, so that no consumer serves a stale blueprint and the change lands in event history.
 
@@ -186,7 +186,7 @@ These are the only events whose subject is **not an instance**. They fire when a
 
 The file **contents are never carried**. A blueprint can hold credentials (SteamCMD arguments, passwords inside an embedded compose) and an event payload fans out to every enabled transport, so the record is "blueprint X changed" and nothing more. A consumer that needs the content reads the file.
 
-### 💽 Library Events
+### Library Events
 
 The other events whose subject is **not an instance**. A library is a named root that instances are placed in, and these fire when one is registered or deregistered — so a surface can keep its picture of where this host can place instances without polling the registry.
 
@@ -202,7 +202,7 @@ The other events whose subject is **not an instance**. A library is a named root
 
 The path rides along because the name alone is not enough to act on: a removal takes the name out of the registry, and a reader that only learns the name cannot say which disk left. No capacity or online figure is carried — both are measurements that are only true at the moment they are taken, and `kgsm libraries list` is where they are taken.
 
-## 🔄 Event Payload Structure
+## Event Payload Structure
 
 Every event is a JSON object with the following top-level fields:
 
@@ -293,7 +293,7 @@ empty string is a third state no reader handles.
 }
 ```
 
-## 🖥️ CLI Reference
+## CLI Reference
 
 The event system is managed via `events.sh` (or through `kgsm.sh events`).
 
@@ -407,7 +407,7 @@ events.sh emit blueprint.removed terraria user true
 events.sh emit library.added ssd /mnt/ssd/kgsm
 ```
 
-## ⚙️ Configuration
+## Configuration
 
 All event settings live in the `[events]` section of `config.ini`.
 
@@ -446,7 +446,7 @@ events.sh status
 events.sh test all
 ```
 
-## 📖 Journal — Integration Guide
+## Journal — Integration Guide
 
 A consumer tails the journal and remembers where it stopped. Nothing needs to be
 registered with KGSM, and any number of readers can tail the same segments
@@ -524,7 +524,7 @@ def run(segment=None, offset=0):
             time.sleep(1)
 ```
 
-## 🌐 Webhook Transport — Integration Guide
+## Webhook Transport — Integration Guide
 
 When webhook delivery is enabled, KGSM sends an HTTP POST request with a `Content-Type: application/json` body to each configured URL. Requests are sent in parallel. Failed requests are retried with exponential backoff up to `webhook_retry_count` times.
 
@@ -551,7 +551,7 @@ def verify_signature(payload: bytes, secret: str, signature_header: str) -> bool
     return hmac.compare_digest(expected, signature_header)
 ```
 
-## 🔍 Debugging
+## Debugging
 
 **Check the overall system status:**
 
@@ -575,7 +575,7 @@ events.sh test webhook
 | Webhook events missing | Confirm `enable_webhook_events=true`, `webhook_urls` is set, and `wget` is installed |
 | Webhook authentication errors | Confirm `webhook_secret` matches on both sides |
 
-## 💡 Best Practices
+## Best Practices
 
 1. **Idempotent handling** — Delivery is at-least-once, so key anything you persist by the event's own content and let a repeat be a no-op.
 2. **Selective handling** — Process only the event types relevant to your integration.

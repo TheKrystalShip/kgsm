@@ -184,7 +184,7 @@ This displays a color-coded diff showing:
 ./kgsm.sh config reset
 ```
 
-> ⚠️ **Warning:** This replaces your entire config with the defaults from `config.default.ini`. A timestamped backup (e.g. `config.ini.20250101_120000.bak`) is created automatically before the reset. Use with caution.
+> **Warning:** This replaces your entire config with the defaults from `config.default.ini`. A timestamped backup (e.g. `config.ini.20250101_120000.bak`) is created automatically before the reset. Use with caution.
 
 ## Configuration Migrations
 
@@ -392,7 +392,7 @@ cp config.default.ini config.ini
 
 ## Best Practices
 
-### ✅ Do
+### Do
 
 - **Review diffs after updates** - Know what changed
 - **Keep backups** - Don't delete `.bak` files manually
@@ -400,7 +400,7 @@ cp config.default.ini config.ini
 - **Validate after changes** - Catch errors early
 - **Document custom values** - Comment why you changed defaults
 
-### ❌ Don't
+### Don't
 
 - **Edit during updates** - Let the merge complete first
 - **Delete config.default.ini** - Used as merge source

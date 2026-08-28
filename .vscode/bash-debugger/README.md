@@ -204,19 +204,19 @@ A full example `launch.json` file can be found in the [.vscode](.vscode/) direct
 
 | Feature                        | rogalmic.bash-debug | This Extension |
 | ------------------------------ | :-----------------: | :------------: |
-| Watchpoints (data breakpoints) |          ❌          |       ✅        |
-| Conditional Breakpoints        |       Partial       |     ✅ Full     |
-| Function Breakpoints           |          ❌          |       ✅        |
-| Hit Count Breakpoints          |          ❌          |       ✅        |
-| Log Points                     |          ❌          |       ✅        |
-| Variable Modification          |          ❌          |       ✅        |
-| Exception Breakpoints          |          ❌          |       ✅        |
-| Debug Console Completions      |          ❌          |       ✅        |
-| Loaded Sources                 |          ❌          |       ✅        |
-| Restart                        |          ❌          |       ✅        |
-| Prerequisite Detection         |        Basic        |     ✅ Full     |
+| Watchpoints (data breakpoints) | ✗ | ✓ |
+| Conditional Breakpoints        |       Partial       | ✓ Full |
+| Function Breakpoints           | ✗ | ✓ |
+| Hit Count Breakpoints          | ✗ | ✓ |
+| Log Points                     | ✗ | ✓ |
+| Variable Modification          | ✗ | ✓ |
+| Exception Breakpoints          | ✗ | ✓ |
+| Debug Console Completions      | ✗ | ✓ |
+| Loaded Sources                 | ✗ | ✓ |
+| Restart                        | ✗ | ✓ |
+| Prerequisite Detection         |        Basic        | ✓ Full |
 | DAP SDK                        |     Deprecated      |    Current     |
-| Actively maintained            |   ❌ (since 2021)    |       ✅        |
+| Actively maintained            | ✗ (since 2021) | ✓ |
 
 ---
 

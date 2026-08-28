@@ -238,8 +238,8 @@ function _deploy() {
 ### Behavioral Uncertainty Principle
 
 **Never write code with uncertain outcomes**. See `docs/behavioral_uncertainty_quick_reference.md`:
-- ❌ Commands that "may succeed or fail depending on implementation"
-- ✅ Commands with **defined, testable behavior**
+- Commands that "may succeed or fail depending on implementation"
+- Commands with **defined, testable behavior**
 - When encountering uncertain patterns, document expected behavior first, then implement consistently
 
 Example: ID generation should either ALWAYS validate blueprints or NEVER validate—not sometimes.

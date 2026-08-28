@@ -47,6 +47,10 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **No emoji in prose or output.** Docs, comments and command output carry no emoji — the
+  information lives in the words, and output reads the same in a plain terminal as in a rich one.
+  Marks that are typography rather than pictures (`✓`, `✗`, arrows, `§`) stay.
+
 - **Every event describes itself.** An event's name is one dotted, lowercase word —
   `server.uninstalled`, `network.upnp.reasserted`, `backup.pruned` — and that name is its whole
   identity, on the wire and on the CLI alike. The envelope is `V: 2` and carries three more fields
@@ -336,7 +340,7 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   Mounting the library back is the whole of the recovery: nothing is re-registered, re-linked or
   repaired.
 
-- **⚠ BREAKING: `--install-dir` is gone. An instance is placed with `--library <name>`.**
+- **BREAKING: `--install-dir` is gone. An instance is placed with `--library <name>`.**
   `kgsm install` and `kgsm instances create` take the library to place a new instance in from
   `--library`, else the `default_library` config key, else the sole registered library when the
   host has exactly one. A host with several libraries and no default is asked rather than guessed
@@ -407,7 +411,7 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   unmounted disk is still a library this host knows about. A host with the key empty gets an empty
   `default_library` and no library; nothing is invented to fill the gap.
 
-  ⚠ `kgsm install` and `kgsm instances create` take their root from `--install-dir` only. With the
+  `kgsm install` and `kgsm instances create` take their root from `--install-dir` only. With the
   config key gone there is no default to fall back on, so an invocation that omits the flag is
   refused the way it already was on a host that left the key empty.
 
@@ -538,7 +542,7 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   `instance_started` only when a run began, `instance_stopped` only when one ended, and a restart's
   `instance_restart_stopped` only when there was an old run to bring down. The verbs themselves are
   unchanged and still succeed — an idempotent command is not an error, it just is not news.
-  ⚠ `unknown` counts as a transition: suppressing on ignorance would lose a real one, while emitting
+  `unknown` counts as a transition: suppressing on ignorance would lose a real one, while emitting
   on ignorance at worst repeats what the consumer already knows.
 
 - **Every long operation now reports its outcome and its steps.** From an audit of all 56 events, the
@@ -561,7 +565,7 @@ Features that I'd like to consider implementing in order to make KGSM more versa
     two long backup verbs, like every other long verb.
   - **An update reports its download and deploy**, with the same events an install emits for the same
     work, through an `--emit-cmd` the caller hands the management script. Silent when not given one,
-    so the script still runs standalone. ⚠ Existing instances pick this up on
+    so the script still runs standalone. Existing instances pick this up on
     `kgsm files management create <instance>`.
   - **`*_finished` is emitted after the fact it brackets**, in install, uninstall and update — stop
     and restart already did, and the reason is theirs: a consumer that re-reads on "the run ended"
@@ -748,7 +752,7 @@ YAML were corrupt.
   process really is running. The blueprint now passes `-adminusername admin -adminpassword
   CHANGE_ME_ON_FIRST_START`, which creates the account outright and skips the prompt.
 
-  ⚠ **That password is a placeholder, identical on every KGSM install, and a Project Zomboid admin
+  **That password is a placeholder, identical on every KGSM install, and a Project Zomboid admin
   can do anything in-game.** Change it before the server is reachable by anyone untrusted. The
   argument only ever *creates* the account, so once one exists it is changed from the console with
   `setpassword`, not by editing the argument.

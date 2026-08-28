@@ -17,7 +17,7 @@
 # stay restorable — the manifest records each backup's own `compressed` flag, so
 # the two forms coexist and restore reads the flag rather than the config.
 #
-# ⚠ Existing instances are NOT covered by this. Each instance baked
+# Existing instances are NOT covered by this. Each instance baked
 # compress_backups into its own .config.ini at creation time, and that copy is
 # what its management script reads. Flip an existing instance with:
 #   kgsm instances config-set <instance> compress_backups=true

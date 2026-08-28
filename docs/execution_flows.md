@@ -216,11 +216,11 @@ graph TD
     A["kgsm.sh install BLUEPRINT [options]"] --> AA["Bootstrap environment"]
     AA --> B["Parse arguments<br/>(blueprint, library, version, display name, id)"]
     B --> C{"Resolve library:<br/>--library → default_library<br/>→ sole registered"}
-    C -->|"None"| C1["❌ EC_LIBRARY_NOT_FOUND<br/>or EC_MISSING_ARG (several, none chosen)"]
-    C -->|"Offline"| C2["❌ EC_LIBRARY_OFFLINE"]
+    C -->|"None"| C1["EC_LIBRARY_NOT_FOUND<br/>or EC_MISSING_ARG (several, none chosen)"]
+    C -->|"Offline"| C2["EC_LIBRARY_OFFLINE"]
     C -->|"Online"| SG
 
-    SG{"Free space ≥<br/>base_disk_mb + margin?"} -->|"No"| SG1["❌ EC_INSUFFICIENT_DISK<br/>(nothing created)"]
+    SG{"Free space ≥<br/>base_disk_mb + margin?"} -->|"No"| SG1["EC_INSUFFICIENT_DISK<br/>(nothing created)"]
     SG -->|"Undeclared"| D
     SG -->|"Yes"| D
 
@@ -240,16 +240,16 @@ graph TD
 
     M["events.sh emit server.download.started"] --> N["instance_management_file --download VERSION"]
     N -->|"Success"| O["events.sh emit server.download.finished"]
-    N -->|"Failure"| Z1["❌ EC_FAILED_DOWNLOAD<br/>events.sh emit server.download.failed"]
+    N -->|"Failure"| Z1["EC_FAILED_DOWNLOAD<br/>events.sh emit server.download.failed"]
 
     O --> P["events.sh emit server.deploy.started"]
     P --> Q["instance_management_file --deploy"]
     Q -->|"Success"| R["events.sh emit server.deploy.finished"]
-    Q -->|"Failure"| Z2["❌ EC_FAILED_DEPLOY<br/>events.sh emit server.deploy.failed"]
+    Q -->|"Failure"| Z2["EC_FAILED_DEPLOY<br/>events.sh emit server.deploy.failed"]
 
     R --> S["instance_management_file --version --save VERSION"]
     S --> T["events.sh emit server.install.finished"]
-    T --> U["✅ __print_success<br/>events.sh emit server.installed"]
+    T --> U["__print_success<br/>events.sh emit server.installed"]
 
     style A fill:#e3f2fd
     style U fill:#e8f5e8
@@ -283,7 +283,7 @@ graph TD
 graph TD
     A["kgsm.sh uninstall INSTANCE"] --> AA["Bootstrap environment"]
     AA --> B["Validate instance exists<br/>(__find_instance_config)"]
-    B -->|"Not found"| Z1["❌ EC_FILE_NOT_FOUND"]
+    B -->|"Not found"| Z1["EC_FILE_NOT_FOUND"]
     B -->|"Found"| C["events.sh emit instance-uninstallation-started"]
 
     C -->     D["files.sh remove INSTANCE<br/>(management script, UFW, symlinks)"]
@@ -291,7 +291,7 @@ graph TD
     E --> F["directories.sh unlink-instance BLUEPRINT INSTANCE<br/>(remove symlink from KGSM_INSTANCES_DIR)"]
     F --> G["instances.sh remove INSTANCE<br/>(remove config file and blueprint dir if empty)"]
     G --> H["events.sh emit instance-uninstallation-finished"]
-    H --> I["✅ Instance fully removed"]
+    H --> I["Instance fully removed"]
 
     style A fill:#e3f2fd
     style I fill:#e8f5e8
@@ -340,15 +340,15 @@ graph TD
 
     S --> S1{"EC_SUCCESS_INSTANCE_STARTED (211)?"}
     S1 -->|"Yes"| S2["__print_success<br/>__dispatch_event_from_exit_code<br/>watcher.sh start --detach"]
-    S1 -->|"No"| SE["❌ __print_error + return exit_code"]
+    S1 -->|"No"| SE["__print_error + return exit_code"]
 
     T --> T1{"EC_SUCCESS_INSTANCE_STOPPED (212)?"}
     T1 -->|"Yes"| T2["__print_success<br/>__dispatch_event_from_exit_code"]
-    T1 -->|"No"| TE["❌ __print_error + return exit_code"]
+    T1 -->|"No"| TE["__print_error + return exit_code"]
 
     R --> R1{"EC_SUCCESS_INSTANCE_RESTARTED (213)?"}
     R1 -->|"Yes"| R2["__print_success<br/>__dispatch_event_from_exit_code"]
-    R1 -->|"No"| RE["❌ __print_error + return exit_code"]
+    R1 -->|"No"| RE["__print_error + return exit_code"]
 
     style A fill:#e3f2fd
     style S2 fill:#e8f5e8
@@ -390,12 +390,12 @@ This order is implemented in `__find_blueprint()` (in `core/loader.sh`) and appl
 graph TD
     A["kgsm.sh blueprints &lt;subcommand&gt;"] --> B{Subcommand?}
 
-    B --> C["list [--json]<br/>📋 All available blueprints"]
-    B --> D["list --native [--json]<br/>📋 Native blueprints only"]
-    B --> E["list --container [--json]<br/>📋 Container blueprints only"]
-    B --> F["info BLUEPRINT<br/>📄 Blueprint file contents"]
-    B --> G["find BLUEPRINT<br/>📍 Absolute path to blueprint file"]
-    B --> H["validate BLUEPRINT<br/>✅ Check blueprint fields"]
+    B --> C["list [--json]<br/>All available blueprints"]
+    B --> D["list --native [--json]<br/>Native blueprints only"]
+    B --> E["list --container [--json]<br/>Container blueprints only"]
+    B --> F["info BLUEPRINT<br/>Blueprint file contents"]
+    B --> G["find BLUEPRINT<br/>Absolute path to blueprint file"]
+    B --> H["validate BLUEPRINT<br/>Check blueprint fields"]
 
     C & D & E --> J["Merge user + system directories<br/>Return names (or JSON)"]
     F --> K["__find_blueprint BLUEPRINT<br/>cat the resolved file"]
@@ -416,12 +416,12 @@ graph TD
 graph TD
     A["kgsm.sh instances &lt;subcommand&gt;"] --> B{Subcommand?}
 
-    B --> C["list [--json]<br/>📋 All instances"]
-    B --> D["list BLUEPRINT [--json]<br/>📋 Instances of given blueprint"]
-    B --> E["info INSTANCE [--json]<br/>📄 Single instance details"]
-    B --> F["generate-id BLUEPRINT [--id ID]<br/>🔑 Generate unique instance ID"]
-    B --> G["create BLUEPRINT [options]<br/>📝 Write instance config file"]
-    B --> H["remove INSTANCE<br/>🗑️ Remove instance config"]
+    B --> C["list [--json]<br/>All instances"]
+    B --> D["list BLUEPRINT [--json]<br/>Instances of given blueprint"]
+    B --> E["info INSTANCE [--json]<br/>Single instance details"]
+    B --> F["generate-id BLUEPRINT [--id ID]<br/>Generate unique instance ID"]
+    B --> G["create BLUEPRINT [options]<br/>Write instance config file"]
+    B --> H["remove INSTANCE<br/>Remove instance config"]
 
     C & D --> I["Scan KGSM_INSTANCES_DIR<br/>Follow symlinks (-L flag)"]
     I --> J["Read each *.config.ini<br/>Return instance names"]

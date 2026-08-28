@@ -471,14 +471,14 @@ function _cmd_ports_conflicts() {
             port_proto=$(echo "$line" | cut -d: -f2)
             instance1=$(echo "$line" | cut -d: -f3)
             instance2=$(echo "$line" | cut -d: -f4)
-            echo "  ⚠️  Port $port_proto: '$instance1' ↔ '$instance2'"
+            echo "  Port $port_proto: '$instance1' ↔ '$instance2'"
           elif [[ "$line" == external_conflict:* ]]; then
             # Format: external_conflict:port/protocol:instance:process
             local port_proto instance process
             port_proto=$(echo "$line" | cut -d: -f2)
             instance=$(echo "$line" | cut -d: -f3)
             process=$(echo "$line" | cut -d: -f4-)
-            echo "  ⚠️  Port $port_proto: '$instance' conflicts with external process: $process"
+            echo "  Port $port_proto: '$instance' conflicts with external process: $process"
           fi
         done
         echo ""

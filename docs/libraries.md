@@ -1,4 +1,4 @@
-# 💽 Libraries
+# Libraries
 
 A **library** is a named root that game server instances are placed in. Registering several of
 them lets a host's instances live across several disks, and makes placement an enumerable fact:

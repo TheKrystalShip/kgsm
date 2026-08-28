@@ -173,7 +173,7 @@ This creates the `<instance>.manage.sh` management script. Depending on `config.
 - UFW firewall rules (if `enable_firewall_management=true`)
 - Command shortcuts/symlinks (if `enable_command_shortcuts=true`)
 
-> ⚠️ **Note**: Root permissions are required for UFW integration. KGSM will prompt for a password when needed.
+> **Note**: Root permissions are required for UFW integration. KGSM will prompt for a password when needed.
 
 ---
 

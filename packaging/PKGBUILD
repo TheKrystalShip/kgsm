@@ -11,7 +11,7 @@
 pkgname=kgsm
 # A placeholder: pkgver() below replaces it with what deploy/version.sh reports, so the number is
 # declared in exactly one place and this file never carries a copy that can fall behind.
-pkgver=3.18.0rc6
+pkgver=3.18.0rc14
 pkgrel=1
 pkgdesc="Krystal Game Server Manager — multi-entrypoint game-server manager for Linux"
 arch=('any')
