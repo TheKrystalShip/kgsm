@@ -23,6 +23,9 @@
     { "name": "ss",        "package": "iproute2",        "required": true,  "probe": "ss -V",           "why": "listening-port checks for instance status" },
     { "name": "lsof",      "package": "lsof",            "required": true,  "probe": "lsof -v",         "why": "resolving which process holds an instance port" },
     { "name": "systemctl", "package": "systemd",         "required": true,  "probe": "systemctl --version", "why": "lifecycle for systemd-managed instances" },
+    { "name": "openssl",   "package": "openssl",         "required": true,  "probe": "openssl version", "why": "HMAC-signs the payload of an outgoing event webhook" },
+    { "name": "pgrep",     "package": "procps-ng",       "required": true,  "probe": "pgrep --version", "why": "walks a native instance's child processes when stopping it" },
+    { "name": "diff",      "package": "diffutils",       "required": true,  "probe": "diff --version",  "why": "config diff against a configuration backup" },
 
     { "name": "steamcmd",       "package": "steamcmd",       "required": false, "probe": "command -v steamcmd", "why": "install and update Steam-distributed game servers", "without": "non-Steam games install normally; Steam blueprints fail at install" },
     { "name": "docker",         "package": "docker",         "required": false, "probe": "docker --version",   "why": "container-kind instances", "without": "the container templates refuse to load; native instances are unaffected" },
@@ -37,9 +40,9 @@
     { "feature": "cgroup-v2", "required": false, "probe": "test -f /sys/fs/cgroup/cgroup.controls", "why": "native instances are supervised in cgroups by kgsm-watchdog", "without": "container and systemd instance kinds still work" }
   ],
   "units": {
-    "user": ["kgsm-journal-prune.service", "kgsm-journal-prune.timer"],
-    "system": [],
-    "note": "The retention pair is a USER unit enabled with `systemctl --user`, so it needs no privilege. A package cannot enable it — there is no user for a scriptlet to act for. Packaged, it installs to /usr/lib/systemd/user/ and the node bootstrap enables it for the service account."
+    "user": [],
+    "system": ["kgsm-journal-prune.service", "kgsm-journal-prune.timer"],
+    "note": "The retention pair are system units running as the KGSM account. setup.sh installs them to /etc/systemd/system/ and enables the timer; the package installs them to /usr/lib/systemd/system/ and presets the timer in post_install, so a node runs retention with nobody enabling it."
   },
   "paths": {
     "prefix": "/opt/kgsm",

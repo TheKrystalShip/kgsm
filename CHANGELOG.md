@@ -626,6 +626,19 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Fixed — the package declares every command the engine runs (`3.18.0-rc15`)
+
+`openssl`, `procps-ng` and `diffutils` join `depends` and `deploy/kgsm.requires.json`. The engine
+HMAC-signs an outgoing event webhook with `openssl`, walks a native instance's children with `pgrep`
+when stopping it, and renders `config diff` with `diff`.
+
+`diffutils` is the one that could actually be absent: `openssl` arrives with `coreutils` and
+`procps-ng` with the `base` meta-package, but nothing the engine declared pulled in `diff`, so on a
+minimal root that subcommand failed on a host the package called satisfied.
+
+`units` in the requires manifest names the journal-prune pair as the system units they are, running
+as the KGSM account.
+
 ### Changed — a packaged install enables the journal-prune timer (`3.18.0-rc6`)
 
 `packaging/kgsm.install` applies kgsm-base's `50-kgsm.preset` to `kgsm-journal-prune.timer` in
