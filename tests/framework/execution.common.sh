@@ -66,10 +66,11 @@ function __setup_test_environment() {
   export XDG_DATA_HOME="${sandbox_path}/.local/share"
   export XDG_CONFIG_HOME="${sandbox_path}/.config"
 
-  # Pre-create the XDG config directory and place the test config there
-  # BEFORE sourcing bootstrap.sh. This is critical because core/config.sh
-  # calls `exit 0` if CONFIG_FILE doesn't exist at the XDG path, which
-  # would kill the test runner.
+  # Pre-create the XDG config directory and place the test config there BEFORE
+  # sourcing bootstrap.sh. A sandbox without one is a valid state — core/config.sh
+  # seeds the shipped defaults and carries on — but then the test would run against
+  # those rather than against tests/config.test.ini, and the settings that make a
+  # run a test run (TEST_PARALLEL among them) would not be in effect.
   mkdir -p "${sandbox_path}/.config/kgsm"
   if [[ -f "${sandbox_path}/config.ini" ]]; then
     cp "${sandbox_path}/config.ini" "${sandbox_path}/.config/kgsm/config.ini"

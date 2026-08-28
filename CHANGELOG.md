@@ -626,6 +626,30 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Changed — the first run does what it was asked (`3.18.0-rc17`)
+
+A host with no config of its own gets one, seeds its library, and carries on with the command that
+triggered it. `kgsm install factorio` on a machine that has never run the engine installs factorio.
+
+It used to create the config, print "Please ensure configuration is correct before running the script
+again", and `exit 0` — reporting success for a command it did not run. A person reads that and runs
+it again; a script reads the exit code and moves on, and every step after it is built on something
+that never happened.
+
+There is nothing to look at before continuing. The shipped defaults are conservative — every
+integration off, every timeout modest — and a freshly created config passes `config validate`, so the
+command runs against exactly the configuration a second invocation would have seen.
+
+`cp` is checked now. Everything below that line reads the file it writes, so a copy that failed
+silently would leave every `config_*` value unset and carry on with a configuration nobody wrote;
+it exits 1 naming the path instead.
+
+`tests/integration/test_first_run_bootstrap.sh` covers the branch. Every other test runs in a sandbox
+that already carries a config, so nothing reached this path: the tests drive the engine as a
+subprocess with every `KGSM_*` scrubbed from its environment, which is what a first run actually is.
+`KGSM_PATHS_LOADED` is the one that matters — `core/paths.sh` returns on it before it reads
+`XDG_CONFIG_HOME`, so a child that inherits it resolves its config somewhere else entirely.
+
 ### Added — a fresh install seeds its first library (`3.18.0-rc16`)
 
 The first run registers `default` at `KGSM_INSTANCES_DIR`, writes the `.kgsm-library` marker on that

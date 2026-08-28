@@ -79,17 +79,26 @@ function __seed_initial_library() {
 
 # Avoid reloading config if it's already been loaded once
 if [[ -z "$KGSM_CONFIG_LOADED" ]]; then
+  # A host with no config of its own gets one and carries on with whatever it was
+  # asked to do. The defaults are the shipped ones and they are conservative —
+  # every integration off, every timeout modest — so the command that triggered
+  # this runs against the same configuration a second invocation would have seen.
   if [[ ! -f "$CONFIG_FILE" ]]; then
-    if [ -f "$DEFAULT_CONFIG_FILE" ]; then
-      cp "$DEFAULT_CONFIG_FILE" "$CONFIG_FILE"
-      __seed_initial_library
-      echo "${0##*/} WARNING: config.ini not found, created new file" >&2
-      echo "${0##*/} INFO: Please ensure configuration is correct before running the script again" >&2
-      exit 0
-    else
+    if [[ ! -f "$DEFAULT_CONFIG_FILE" ]]; then
       echo "${0##*/} ERROR: Could not find config.default.ini, install might be broken" >&2
       exit 1
     fi
+
+    # Checked, because everything below reads the file this writes: a copy that
+    # silently failed would leave every config_* value unset and the run would
+    # carry on with a configuration nobody wrote.
+    if ! cp "$DEFAULT_CONFIG_FILE" "$CONFIG_FILE"; then
+      echo "${0##*/} ERROR: Could not create ${CONFIG_FILE}" >&2
+      exit 1
+    fi
+
+    echo "${0##*/} INFO: created ${CONFIG_FILE}" >&2
+    __seed_initial_library
   fi
 
   # Use grep to pre-filter config file, extracting only non-comment, non-whitespace lines containing '='
