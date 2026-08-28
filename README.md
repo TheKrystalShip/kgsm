@@ -16,11 +16,18 @@ KGSM simplifies setting up and managing game servers on Linux. Whether you're ho
 
 ## Installation
 
-### Arch Linux (AUR)
+### Arch Linux
+
+KGSM is published as a signed pacman package in the KGSM repository. Point pacman at the
+repository and its signing key once — the block is in
+[`kgsm-meta`](https://github.com/TheKrystalShip/kgsm-meta#installing-a-node) — then:
 
 ```sh
-yay -S kgsm
+pacman -S kgsm
 ```
+
+The package installs the engine to `/opt/kgsm` and symlinks it onto `PATH` as
+`/usr/bin/kgsm`, and pulls in everything it needs. Upgrades are `pacman -Syu`.
 
 ### From Source
 
