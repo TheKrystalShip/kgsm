@@ -47,6 +47,14 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **A node seeds exactly one library, however many units start at once.** The initial-library seed
+  claims the registry before writing to it, so one first invocation registers `default` and the rest
+  find a registry that belongs to somebody. Several units reaching their first `kgsm` call together
+  used to each append a `[default]` section; the marker on the library root kept only the last id, so
+  the id the engine compared it against matched nothing and the library reported **offline** — on a
+  host that had just been provisioned, refusing every install. A failure to seed cleans the claim up,
+  so a later run still gets its chance.
+
 - **No emoji in prose or output.** Docs, comments and command output carry no emoji — the
   information lives in the words, and output reads the same in a plain terminal as in a rich one.
   Marks that are typography rather than pictures (`✓`, `✗`, arrows, `§`) stay.

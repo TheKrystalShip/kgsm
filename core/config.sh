@@ -51,23 +51,42 @@ function __seed_initial_library() {
   # nothing and refuse every install, so this seeds all three writes or none.
   grep -q '^default_library=$' "$CONFIG_FILE" 2> /dev/null || return 0
 
+  # Claim the registry before writing anything into it. A node starts several
+  # units at once and each one's first kgsm call arrives here together, so the
+  # check above is read by all of them before any of them writes: without a
+  # claim they each append a [default] section, the marker keeps only the last
+  # id, and the engine reports a library whose id matches no section — offline,
+  # and refusing every install on a host that looks freshly provisioned.
+  # `set -C` will not create a file that exists, so exactly one caller continues
+  # and the rest return to the same "a registry belongs to somebody" path above.
+  ( set -C; : > "$registry" ) 2> /dev/null || return 0
+
+  # Past the claim, an empty registry is this function's to clean up: leaving one
+  # behind would make every later invocation take the fast path above and never
+  # seed at all.
   local id
   id="$(od -An -tx1 -N8 /dev/urandom 2> /dev/null | tr -d ' \n')"
-  [[ ${#id} -eq 16 ]] || return 0
+  [[ ${#id} -eq 16 ]] || { rm -f "$registry" 2> /dev/null; return 0; }
 
   # __init_user_directories has already created this, so this normally just
   # resolves symlinks.
   local canonical
-  canonical="$(realpath -e "$KGSM_INSTANCES_DIR" 2> /dev/null)" || return 0
+  canonical="$(realpath -e "$KGSM_INSTANCES_DIR" 2> /dev/null)" || {
+    rm -f "$registry" 2> /dev/null
+    return 0
+  }
 
   # The marker first. A library whose root carries no marker is registered and
   # permanently offline, and every install against it refuses as unreachable —
   # so a root that cannot take one is left unregistered instead, which at least
   # fails with the honest "no libraries" rather than a manufactured one.
-  printf 'id=%s\nname=default\n' "$id" > "${canonical}/.kgsm-library" 2> /dev/null || return 0
+  printf 'id=%s\nname=default\n' "$id" > "${canonical}/.kgsm-library" 2> /dev/null || {
+    rm -f "$registry" 2> /dev/null
+    return 0
+  }
 
   printf '[default]\nid=%s\npath=%s\n\n' "$id" "$canonical" >> "$registry" 2> /dev/null || {
-    rm -f "${canonical}/.kgsm-library" 2> /dev/null
+    rm -f "${canonical}/.kgsm-library" "$registry" 2> /dev/null
     return 0
   }
 
