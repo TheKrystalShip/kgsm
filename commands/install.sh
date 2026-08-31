@@ -205,13 +205,18 @@ function _space_gate() {
 # somebody else: the install lands in a home the service account cannot enter,
 # while the journal it must append to belongs to an account this one is not.
 #
-# The journal is the check because it is the shared thing. A directory that
-# exists and is not writable here says the events this install would emit belong
-# to another account, and therefore so does everything the install is about to
-# create: the watchdog, the monitor and the API read that account's tree and
-# would never see the instance. Failing at the first event instead leaves a
-# half-built instance behind and reports a permission error about a file the
-# operator did not ask to write.
+# The journal is the check because it is the shared thing, and its OWNER is what
+# the check reads. Every account has its own instance registry under its own XDG
+# paths, so a unit running as the journal's owner enumerates that account's
+# registry and no other: an install by anybody else is invisible to it however
+# the permissions are set. Writability cannot answer this — granting write on the
+# journal by ACL, which is the narrowest and most careful way to unblock a
+# person, lets the events through while leaving the instance in a registry the
+# services never read. Ownership is the property that identifies whose registry
+# this host's services actually enumerate.
+#
+# Writability is still asked, but only for the account that already owns the
+# journal, where nothing is misdirected and a failed write is what it looks like.
 #
 # Absent journal directory is not a failure: a host that has never emitted an
 # event, and a sandbox pointing event_journal_dir somewhere temporary, both
@@ -229,25 +234,29 @@ function _ownership_gate() {
   journal_dir="$(__logic_journal_dir)" || return 0
 
   [[ -d "$journal_dir" ]] || return 0
-  [[ -w "$journal_dir" ]] && return 0
 
   local owner me
   owner="$(stat -c '%U' "$journal_dir" 2> /dev/null)" || owner=""
   me="$(id -un)"
 
+  # Another account owns the shared journal, so this host's units run as that
+  # account and enumerate its registry. Nothing this install creates lands
+  # there. Decided before writability is looked at, because being able to write
+  # the journal says only that the events would be recorded — never that the
+  # instance they describe would be visible to anything that reads them.
   if [[ -n "$owner" ]] && [[ "$owner" != "$me" ]]; then
-    # The account mismatch: this host's units run as the journal's owner and
-    # read that account's instances, so an install here would be invisible to
-    # every one of them even if the files were created.
-    __print_error "The event journal at ${journal_dir} belongs to '${owner}', and '${me}' cannot write to it"
-    __print_error "This host's KGSM services run as '${owner}' and read that account's instances — an install run as '${me}' would be invisible to all of them"
+    __print_error "The event journal at ${journal_dir} belongs to '${owner}', and this install is running as '${me}'"
+    __print_error "This host's KGSM services run as '${owner}' and enumerate that account's instances — an install run as '${me}' is recorded in a different registry and is invisible to all of them"
     __print_error "Run the engine as that account: sudo -u ${owner} -H kgsm install ${1:-<blueprint>}"
-  else
-    # Same account, so nothing is misdirected: the directory's own permissions
-    # are what stop the install being recorded.
-    __print_error "The event journal at ${journal_dir} is not writable by '${me}'"
-    __print_error "Restore write permission on it, or point event_journal_dir at a directory this account can write"
+    return $EC_PERMISSION
   fi
+
+  # The owning account, or a host with no owner to read: only the directory's
+  # own permissions can stop the install being recorded.
+  [[ -w "$journal_dir" ]] && return 0
+
+  __print_error "The event journal at ${journal_dir} is not writable by '${me}'"
+  __print_error "Restore write permission on it, or point event_journal_dir at a directory this account can write"
 
   return $EC_PERMISSION
 }

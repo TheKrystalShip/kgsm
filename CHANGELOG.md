@@ -56,13 +56,16 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   separation is what makes a diagnostic safe to emit from anywhere, including from inside a command
   substitution.
 
-- **An install refuses when this account cannot record it.** The engine derives its world from the
-  invoking account — instances, blueprints, the library registry and the config all hang off that
-  account's XDG paths — while the event journal is one host-wide directory shared by every producer.
-  On a host whose units run as a service account, an install by anybody else lands in a home that
-  account cannot enter, and the watchdog, monitor and API read the service account's tree, so the
-  instance exists for nobody. A journal directory that exists and is not writable is what says so,
-  and it is checked before anything is created: the install stops with `EC_PERMISSION`, naming the
+- **An install refuses when it would be recorded in a registry this host's services do not read.**
+  The engine derives its world from the invoking account — instances, blueprints, the library
+  registry and the config all hang off that account's XDG paths — while the event journal is one
+  host-wide directory shared by every producer. The journal's **owner** is what identifies the
+  account whose registry this host's units enumerate, so an install by anybody else is invisible to
+  the watchdog, the monitor and the API however the permissions are set: write granted on the
+  journal without ownership, which an ACL does and is the narrowest way to unblock a person, carries
+  the events through while leaving the instance somewhere nothing reads. Ownership therefore decides,
+  and writability is asked only of the account that already owns the journal, where nothing is
+  misdirected. Checked before anything is created: the install stops with `EC_PERMISSION`, naming the
   owning account and the `sudo -u <account> -H kgsm` invocation that works, instead of building a
   half-instance and failing at its first event.
 
