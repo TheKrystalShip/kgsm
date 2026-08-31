@@ -95,9 +95,12 @@ function __logic_enable_symlink_integration() {
     mkdir -p "$config_command_shortcuts_directory" 2>/dev/null || true
   fi
 
-  # Check if the symlink directory exists
+  # Check if the symlink directory exists. Distinct from the missing management
+  # file above: the caller reports a missing shortcuts directory as a
+  # configuration problem the operator can fix, and a missing management file as
+  # a broken instance.
   if [[ ! -d "$config_command_shortcuts_directory" ]]; then
-    return $EC_FILE_NOT_FOUND
+    return $EC_DIRECTORY_NOT_FOUND
   fi
 
   # KGSM never escalates to create shortcuts: a non-writable directory is a

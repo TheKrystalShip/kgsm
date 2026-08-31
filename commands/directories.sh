@@ -237,17 +237,15 @@ function _cmd_create() {
     exit $EC_MISSING_ARG
   fi
 
-  # Validate instance name and get config file
+  # Validate instance name and get config file.
+  # The failure code is taken with || so it survives: inside an `if ! cmd`
+  # branch $? is the negated status, which is always 0.
   local instance_config_file
-  if ! instance_config_file=$(validate_instance_name "$instance_name"); then
-    exit $?
-  fi
+  instance_config_file=$(validate_instance_name "$instance_name") || exit $?
 
   # Validate working directory configuration
   local instance_working_dir
-  if ! instance_working_dir=$(validate_working_directory "$instance_config_file"); then
-    exit $?
-  fi
+  instance_working_dir=$(validate_working_directory "$instance_config_file") || exit $?
 
   # Call pure logic function
   __print_info "Creating directories for instance $instance_name"
@@ -365,7 +363,7 @@ function _cmd_ensure_created() {
 
   # Handle result based on exit code
   case $exit_code in
-    $EC_SUCCESS_DIRECTORY_EXISTS | $EC_SUCCESS)
+    $EC_SUCCESS)
       exit 0
       ;;
     *)

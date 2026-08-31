@@ -2269,8 +2269,8 @@ function _cmd_wizard() {
       exit $?
       ;;
     configure)
-      __print_info "Configuration wizard not yet implemented"
-      exit $EC_NOT_IMPLEMENTED
+      __print_error "There is no configuration wizard; set values with 'kgsm config set'"
+      exit $EC_ERROR
       ;;
     modify)
       __wizard_modify_server

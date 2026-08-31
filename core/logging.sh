@@ -145,18 +145,21 @@ function __log_message() {
     fi
   fi
 
-  # Output to console (skip for DEBUG level)
+  # Output to console (skip for DEBUG level).
+  #
+  # Every level goes to stderr, because stdout is reserved for the value a
+  # command returns. A module that yields data — an instance id, a path, a
+  # version, a listing — echoes it to stdout and its caller reads it with
+  # $(...), which captures stdout and nothing else. A diagnostic sharing that
+  # stream is indistinguishable from the value: a warning printed while an id is
+  # being generated becomes part of the id, and the caller then builds
+  # directories, symlinks and config file names out of a multi-line string. The
+  # separation is what makes a diagnostic safe to emit from anywhere, including
+  # from inside a command substitution.
   if [[ "$log_level" != "$LOG_LEVEL_DEBUG" ]]; then
-    if [[ "$log_level" = "$LOG_LEVEL_ERROR" ]]; then
-      if ! echo -e "$printable_log_entry" >&2; then
-        # Fallback without colors if echo -e fails
-        echo "[$log_level] $full_message" >&2
-      fi
-    else
-      if ! echo -e "$printable_log_entry"; then
-        # Fallback without colors if echo -e fails
-        echo "[$log_level] $full_message"
-      fi
+    if ! echo -e "$printable_log_entry" >&2; then
+      # Fallback without colors if echo -e fails
+      echo "[$log_level] $full_message" >&2
     fi
   fi
 }

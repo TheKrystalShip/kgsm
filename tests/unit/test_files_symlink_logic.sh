@@ -272,8 +272,11 @@ function test_enable_symlink_shortcuts_dir_not_exist() {
 
   __restore_test_shortcuts_dir
 
-  assert_equals "$EC_FILE_NOT_FOUND" "$exit_code" \
-    "Should return EC_FILE_NOT_FOUND when shortcuts directory does not exist"
+  # Distinct from the missing management file above: a missing shortcuts
+  # directory is a configuration problem the operator can fix, and the command
+  # layer says so only because the two arrive as different codes.
+  assert_equals "$EC_DIRECTORY_NOT_FOUND" "$exit_code" \
+    "Should return EC_DIRECTORY_NOT_FOUND when shortcuts directory does not exist"
 
   rm -rf "$test_dir"
 }

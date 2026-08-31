@@ -8,8 +8,8 @@
 #
 # Exit Code Conventions:
 # - 0: Success
-# - Standard error codes: EC_INVALID_ARG, EC_MISSING_ARG, etc.
-# - Custom wizard codes: EC_WIZARD_CANCELLED, EC_WIZARD_NO_SELECTION
+# - EC_CANCELLED when the operator declines a prompt or selects nothing
+# - Otherwise the standard codes from core/errors.sh (EC_INVALID_ARG, ...)
 
 # Disabling SC2086 globally:
 # Exit code variables are guaranteed to be numeric and safe for unquoted use.

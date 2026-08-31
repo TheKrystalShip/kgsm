@@ -1507,7 +1507,7 @@ function _cmd_move() {
   # directory like every other backup, so it survives the move whichever way the
   # move goes.
   __print_info "Backing up '$instance' before the move..."
-  if ! instances.sh create-backup "$instance" > /dev/null; then
+  if ! instances.sh create-backup "$instance" > /dev/null 2>&1; then
     __print_error "Failed to back up '$instance'; nothing has been moved"
     return $EC_ERROR
   fi
@@ -2931,7 +2931,7 @@ function _repoint_backups_dir() {
 
   local canonical
   canonical="$(__logic_resolve_backups_dir "$instance")" || {
-    __print_warning "Could not resolve a backups directory for '$instance'" >&2
+    __print_warning "Could not resolve a backups directory for '$instance'"
     return 0
   }
 
@@ -2939,18 +2939,18 @@ function _repoint_backups_dir() {
   local config_file
   config_file="$(__find_instance_config "$instance")"
   if [[ -z "$config_file" ]] || [[ ! -f "$config_file" ]]; then
-    __print_warning "Could not locate the config file for '$instance'" >&2
+    __print_warning "Could not locate the config file for '$instance'"
     return 0
   fi
 
   if ! __add_or_update_config "$config_file" "backups_dir" "\"$canonical\"" >/dev/null 2>&1; then
-    __print_warning "Could not repoint the backups directory for '$instance'" >&2
+    __print_warning "Could not repoint the backups directory for '$instance'"
     return 0
   fi
 
   mkdir -p "$canonical" 2>/dev/null
 
-  __print_info "Backups for '$instance' now live in $canonical (outside the instance directory)" >&2
+  __print_info "Backups for '$instance' now live in $canonical (outside the instance directory)"
   export instance_backups_dir="$canonical"
   return 0
 }
@@ -3034,9 +3034,7 @@ function _cmd_backups() {
   # made-up listing.
   # shellcheck disable=SC2154
   if [[ -z "$instance_backups_dir" ]]; then
-    # Warning to stderr only — stdout is the machine-parsed listing (kgsm-api),
-    # and __print_warning routes to stdout by convention, so redirect it.
-    __print_warning "Instance '$instance' has no configured backups directory; reporting no backups" >&2
+    __print_warning "Instance '$instance' has no configured backups directory; reporting no backups"
     if [[ "$json" == "true" ]]; then echo "[]"; fi
     exit 0
   fi
@@ -3137,8 +3135,8 @@ function _cmd_create_backup() {
   elif [[ -n "$reason" ]] &&
     ! _management_supports_backup_retention "$instance_management_file"; then
     # stderr only: stdout is the new backup's id, which callers parse.
-    __print_warning "Instance '$instance' uses a management file that cannot record why a backup was taken; backing up without a reason" >&2
-    __print_warning "Regenerate it with: kgsm files management create $instance" >&2
+    __print_warning "Instance '$instance' uses a management file that cannot record why a backup was taken; backing up without a reason"
+    __print_warning "Regenerate it with: kgsm files management create $instance"
     reason=""
   fi
 

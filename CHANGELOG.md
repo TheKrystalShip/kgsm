@@ -47,6 +47,41 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **A diagnostic goes to stderr; stdout is the value a command returns.** Every `__print_*` helper
+  writes to stderr, so a module that yields data — an instance id, a path, a version, a listing —
+  puts that and nothing else on stdout. A caller reading a module with `$(...)` captures stdout
+  alone, and a message printed while the value was being produced is no longer part of it: a journal
+  that could not be written turned an instance id into `terraria` followed by the warning text, and
+  the working directory, registry symlink and config file name were all built from the result. The
+  separation is what makes a diagnostic safe to emit from anywhere, including from inside a command
+  substitution.
+
+- **An install refuses when this account cannot record it.** The engine derives its world from the
+  invoking account — instances, blueprints, the library registry and the config all hang off that
+  account's XDG paths — while the event journal is one host-wide directory shared by every producer.
+  On a host whose units run as a service account, an install by anybody else lands in a home that
+  account cannot enter, and the watchdog, monitor and API read the service account's tree, so the
+  instance exists for nobody. A journal directory that exists and is not writable is what says so,
+  and it is checked before anything is created: the install stops with `EC_PERMISSION`, naming the
+  owning account and the `sudo -u <account> -H kgsm` invocation that works, instead of building a
+  half-instance and failing at its first event.
+
+- **A step that reports a failure returns one.** An install, an uninstall or a directory creation
+  that could not do what it was asked exits non-zero. Three shapes each turned a reported failure
+  into a `0`: `return $?` after an error print hands back the *printer's* status, and a printer
+  succeeds; `$?` read inside an `if ! cmd` branch is the status of the negation, which is always 0;
+  and a `return` naming an exit-code constant that does not exist is a bare `return`, which yields
+  whatever ran last. Each failed silently in the same direction — `kgsm-api` marks a job succeeded on
+  a `0`, so a failed install reached a person as a server that exists.
+
+- **Every error code a module names is one that exists.** The `EC_*` vocabulary in `core/errors.sh`
+  is the whole of it, and a name used anywhere in `commands/` or `core/` is defined there. A name
+  that was not defined expanded to nothing, which made a `return` bare and a `case` branch match only
+  the empty string — so a branch written to report a specific failure returned success, and a branch
+  written to explain one could never be reached. A missing shortcuts directory is now
+  `EC_DIRECTORY_NOT_FOUND`, distinct from the `EC_FILE_NOT_FOUND` of a missing management file, so
+  each is reported as itself.
+
 - **A node seeds exactly one library, however many units start at once.** The initial-library seed
   claims the registry before writing to it, so one first invocation registers `default` and the rest
   find a registry that belongs to somebody. Several units reaching their first `kgsm` call together

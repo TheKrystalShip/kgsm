@@ -225,7 +225,7 @@ function __logic_list_templates() {
   local templates_dir="${KGSM_ROOT}/templates"
 
   if [[ ! -d "$templates_dir" ]]; then
-    return $EC_DIR_NOT_FOUND
+    return $EC_DIRECTORY_NOT_FOUND
   fi
 
   find "$templates_dir" -name "*.tp" -type f -exec basename {} .tp \; 2> /dev/null | sort

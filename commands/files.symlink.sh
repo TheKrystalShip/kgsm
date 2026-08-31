@@ -164,11 +164,11 @@ function _cmd_enable() {
       __print_error "Invalid instance configuration - missing required fields"
       return $exit_code
       ;;
-    $EC_ERROR)
-      __print_error "Symlink already exists for this instance"
+    $EC_FAILED_RM)
+      __print_error "Failed to replace the existing symlink for this instance"
       return $exit_code
       ;;
-    $EC_DIR_NOT_FOUND)
+    $EC_DIRECTORY_NOT_FOUND)
       __print_error "Command shortcuts directory not found"
       return $exit_code
       ;;
@@ -177,7 +177,7 @@ function _cmd_enable() {
       __print_info "KGSM does not use sudo for shortcuts. Set 'command_shortcuts_directory' to a writable directory on your PATH (e.g. ~/.local/bin), or make the current one writable by this user."
       return $exit_code
       ;;
-    $EC_FAILED_SYMLINK)
+    $EC_FAILED_LN)
       __print_error "Failed to create symlink"
       return $exit_code
       ;;

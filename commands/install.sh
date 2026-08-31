@@ -194,6 +194,64 @@ function _space_gate() {
   esac
 }
 
+# Refuses an install this account cannot complete or that no unit on the host
+# would see.
+#
+# The engine derives its entire world from the invoking account: instances,
+# blueprints, the library registry and the config all hang off that account's
+# XDG paths. The event journal does not — it is one host-wide directory every
+# producer appends to and every consumer tails. On a host where units run as a
+# service account, those two facts are what disagree when the engine is run by
+# somebody else: the install lands in a home the service account cannot enter,
+# while the journal it must append to belongs to an account this one is not.
+#
+# The journal is the check because it is the shared thing. A directory that
+# exists and is not writable here says the events this install would emit belong
+# to another account, and therefore so does everything the install is about to
+# create: the watchdog, the monitor and the API read that account's tree and
+# would never see the instance. Failing at the first event instead leaves a
+# half-built instance behind and reports a permission error about a file the
+# operator did not ask to write.
+#
+# Absent journal directory is not a failure: a host that has never emitted an
+# event, and a sandbox pointing event_journal_dir somewhere temporary, both
+# arrive here legitimately.
+function _ownership_gate() {
+  # The journal dir is resolved by the events handler, which is otherwise loaded
+  # lazily on the first emit — later than this gate, which has to run before
+  # anything is created.
+  if ! declare -F __logic_journal_dir > /dev/null; then
+    # shellcheck source=handlers/events.sh
+    source "$(__find_command_handler events.sh)" || return 0
+  fi
+
+  local journal_dir
+  journal_dir="$(__logic_journal_dir)" || return 0
+
+  [[ -d "$journal_dir" ]] || return 0
+  [[ -w "$journal_dir" ]] && return 0
+
+  local owner me
+  owner="$(stat -c '%U' "$journal_dir" 2> /dev/null)" || owner=""
+  me="$(id -un)"
+
+  if [[ -n "$owner" ]] && [[ "$owner" != "$me" ]]; then
+    # The account mismatch: this host's units run as the journal's owner and
+    # read that account's instances, so an install here would be invisible to
+    # every one of them even if the files were created.
+    __print_error "The event journal at ${journal_dir} belongs to '${owner}', and '${me}' cannot write to it"
+    __print_error "This host's KGSM services run as '${owner}' and read that account's instances — an install run as '${me}' would be invisible to all of them"
+    __print_error "Run the engine as that account: sudo -u ${owner} -H kgsm install ${1:-<blueprint>}"
+  else
+    # Same account, so nothing is misdirected: the directory's own permissions
+    # are what stop the install being recorded.
+    __print_error "The event journal at ${journal_dir} is not writable by '${me}'"
+    __print_error "Restore write permission on it, or point event_journal_dir at a directory this account can write"
+  fi
+
+  return $EC_PERMISSION
+}
+
 # =============================================================================
 # MAIN INSTALL FUNCTION
 # =============================================================================
@@ -213,6 +271,9 @@ function _cmd_install() {
   local instance_id=""
   local display_name=""
   local port=""
+  # Every failure below is reported by its own status, captured before anything else runs: a printer
+  # succeeds, so reading $? after one reports that the step it was complaining about worked.
+  local exit_code=0
   local start_after=false
   local skip_space_check=false
 
@@ -282,6 +343,11 @@ function _cmd_install() {
     shift
   done
 
+  # Before the library is resolved and before anything is created: an account
+  # that cannot record this install is an account whose instances no unit on
+  # this host reads.
+  _ownership_gate "$blueprint" || return $?
+
   library="$(_resolve_placement_library "$library")" || return $?
 
   local library_dir
@@ -305,22 +371,33 @@ function _cmd_install() {
     return $exit_code
   }
 
+  # The id is settled but not yet trusted. Everything below turns it into a
+  # directory, a symlink and a config file name, so a value that is not a legal
+  # id must stop here rather than become a path.
+  validate_instance_id_format "$instance" || {
+    exit_code=$?
+    __print_error "Refusing to install: the instance identifier is not usable"
+    return $exit_code
+  }
+
   # Calculate working directory path inside the library
   local working_dir
   working_dir="$(__library_instances_subdir "$library_dir")/${blueprint}/${instance}"
 
   # Create the working directory first (symlink target must exist)
   directories.sh ensure-created "$working_dir" || {
+    exit_code=$?
     __print_error "Failed to create instance working directory: $working_dir"
-    return $?
+    return $exit_code
   }
 
   # Create symlink from KGSM instances directory to working directory
   # This must happen before instance config creation so the config can be
   # written through the symlink into the actual working directory
   directories.sh link-instance "$blueprint" "$instance" "$working_dir" || {
+    exit_code=$?
     __print_error "Failed to create instance symlink"
-    return $?
+    return $exit_code
   }
 
   # Create instance configuration (name is now pre-determined)
@@ -345,14 +422,16 @@ function _cmd_install() {
 
   # Create directory structure
   directories.sh create "$instance" || {
+    exit_code=$?
     __print_error "Failed to create directory structure"
-    return $?
+    return $exit_code
   }
 
   # Create instance files
   files.sh create "$instance" || {
+    exit_code=$?
     __print_error "Failed to create instance files"
-    return $?
+    return $exit_code
   }
 
   # Load instance config to access variables

@@ -327,9 +327,16 @@ export -f validate_directory_writable
 # The id is a path component, a file basename, a registry symlink name and a
 # cgroup directory name all at once, so it is restricted to what every one of
 # those accepts: it opens with a letter or digit and carries only letters,
-# digits, '.', '_' and '-', up to 64 characters. This is checked on every id a
-# caller supplies and on none that KGSM generates — a generated id is drawn from
-# the blueprint name and digits, which is already inside this set.
+# digits, '.', '_' and '-', up to 64 characters.
+#
+# Every id is checked, whoever produced it. A generated id is assembled from the
+# blueprint name and digits and so is inside the set by construction, but it
+# reaches its caller over stdout, and what arrives is only the id if nothing else
+# wrote to that stream. Trusting the generator means trusting every line of code
+# it passes through not to print, and a value that fails this check is one no
+# path, symlink or cgroup name may be built from regardless of where it came
+# from. Checking it here costs one regex and holds whether or not that
+# assumption survives.
 #
 # Usage: validate_instance_id_format <instance_id>
 # Returns: 0 when the id is usable, EC_INVALID_ARG otherwise

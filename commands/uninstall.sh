@@ -123,6 +123,10 @@ function _uninstall() {
   local instance=""
   local force=0
   local purge_backups=0
+  # Every failure below is reported by its own status, captured before anything
+  # else runs: a printer succeeds, so reading $? after one reports that the step
+  # it was complaining about worked.
+  local exit_code=0
 
   while [[ "$#" -gt 0 ]]; do
     case $1 in
@@ -186,19 +190,20 @@ function _uninstall() {
     return $?
   fi
 
-  # Validate instance exists before proceeding and resolve blueprint name
+  # Validate instance exists before proceeding and resolve blueprint name.
+  # The failure code is taken with || so it survives: inside an `if ! cmd`
+  # branch $? is the negated status, which is always 0. validate_instance_name
+  # names what it could not find, so there is nothing to add here.
   local instance_config_file
-  if ! instance_config_file=$(validate_instance_name "$instance"); then
-    __print_error "Instance '$instance' not found"
-    return $EC_INSTANCE_NOT_FOUND
-  fi
+  instance_config_file=$(validate_instance_name "$instance") || return $?
 
   # Extract blueprint name from config file path before any destructive operations
   # Path structure: $KGSM_INSTANCES_DIR/<blueprint>/<instance>/<instance>.config.ini
   local blueprint_name
   blueprint_name="$(basename "$(dirname "$(dirname "$instance_config_file")")")" || {
+    exit_code=$?
     __print_error "Failed to determine blueprint name for instance '$instance'"
-    return $EC_GENERAL
+    return $exit_code
   }
 
   # Whether the game is up is sampled here, before anything is asked or removed,
