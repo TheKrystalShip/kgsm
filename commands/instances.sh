@@ -202,14 +202,15 @@ ${UNDERLINE}Options:${END}
   --help                      Display this help information
 
 ${UNDERLINE}Description:${END}
-The instance must be stopped, and both libraries must be reachable. A backup is
-taken before anything is copied.
+The instance must be stopped, and both libraries must be reachable.
 
-The move lands at <library>/instances/<blueprint>/<instance>, rewrites every
-path the instance holds, regenerates its management file, re-points its registry
-entry and starts it once on the new path to confirm it runs there. Only then is
-the old tree removed, so a failure at any point up to the re-point leaves the
-original authoritative and re-running the move picks up where it stopped.
+The move lands at <library>/instances/<blueprint>/<instance>. Inside one
+filesystem the tree is renamed there, which is instant whatever its size. Across
+filesystems it is copied, and the source is kept until the copy has been
+committed to. Either way the move rewrites every path the instance holds,
+regenerates its management file, re-points its registry entry and starts it once
+on the new path to confirm it runs there. A failure puts the instance back where
+it was; an interrupted copy is picked up where it stopped by re-running the move.
 
 Backups are unaffected: they live outside the instance's directory and stay
 where they are.
@@ -1356,6 +1357,57 @@ function _verify_start_on_new_path() {
   return $exit_code
 }
 
+# Puts a failed move back to where it started and says where the instance is.
+#
+# A copy never touched the source, so pointing the registry at it is the whole
+# of it, and the partial copy stays for a re-run to converge on. A rename took
+# the source with it: the tree is renamed back, its config restored from the
+# copy set aside before the rename, and the management file rebuilt from that
+# config. If any of that fails the tree is left where it is and the snapshot is
+# kept, and both locations are named so nothing has to be guessed.
+#
+# Args: $1 = method (rename|copy), $2 = instance, $3 = blueprint,
+#       $4 = source working directory, $5 = target working directory,
+#       $6 = config snapshot (rename only)
+function _abandon_move() {
+  local method="$1"
+  local instance="$2"
+  local blueprint="$3"
+  local source_working_dir="$4"
+  local target_working_dir="$5"
+  local config_snapshot="$6"
+
+  if [[ "$method" != "rename" ]]; then
+    __logic_create_instance_symlink "$blueprint" "$instance" \
+      "$source_working_dir" > /dev/null 2>&1 || true
+    __print_error "It has been left where it was, at ${source_working_dir}; re-run the move to retry"
+    return 0
+  fi
+
+  local source_config_file="${source_working_dir}/${instance}.config.ini"
+
+  if __logic_instance_rename_tree "$target_working_dir" "$source_working_dir" &&
+    cp -p "$config_snapshot" "$source_config_file" 2> /dev/null; then
+    __logic_create_instance_symlink "$blueprint" "$instance" \
+      "$source_working_dir" > /dev/null 2>&1 || true
+    rm -f "$config_snapshot"
+
+    __logic_create_management_file "$source_config_file" > /dev/null 2>&1
+    if [[ $? -ne $EC_SUCCESS_MANAGEMENT_FILE_CREATED ]]; then
+      __print_error "It has been moved back to ${source_working_dir}, but its management file could not be rebuilt"
+      __print_error "Rebuild it with: kgsm files management create $instance"
+      return 0
+    fi
+
+    __print_error "It has been moved back to ${source_working_dir}"
+    return 0
+  fi
+
+  __print_error "It could not be moved back: its files are at ${target_working_dir}"
+  __print_error "Its config from before the move is at ${config_snapshot}"
+  return 0
+}
+
 function _cmd_move() {
   local instance=""
   local target_library=""
@@ -1470,10 +1522,21 @@ function _cmd_move() {
     return $EC_INSTANCE_RUNNING
   fi
 
+  local method
+  method="$(__logic_instance_move_method "$source_working_dir" "$target_working_dir")"
+  local method_code=$?
+
+  if [[ $method_code -ne $EC_SUCCESS ]]; then
+    __print_error "Failed to prepare ${target_working_dir} for '$instance'; nothing has been moved"
+    return $method_code
+  fi
+
   # What the instance has grown to, not what its blueprint says a fresh install
-  # needs. Only the first figure is about to be written to the target.
+  # needs, and only for a copy: a rename writes no data and needs no room.
   local size_mb
-  if size_mb="$(__logic_instance_tree_size_mb "$source_working_dir")"; then
+  if [[ "$method" == "rename" ]]; then
+    :
+  elif size_mb="$(__logic_instance_tree_size_mb "$source_working_dir")"; then
     # shellcheck disable=SC2154
     local margin_mb="${config_install_free_space_margin_mb:-1024}"
     [[ "$margin_mb" =~ ^[0-9]+$ ]] || margin_mb=1024
@@ -1509,47 +1572,10 @@ function _cmd_move() {
     has_run=true
   fi
 
-  # Taken before a single file is copied, and kept outside the instance's
-  # directory like every other backup, so it survives the move whichever way the
-  # move goes.
-  __print_info "Backing up '$instance' before the move..."
-  if ! instances.sh create-backup "$instance" > /dev/null 2>&1; then
-    __print_error "Failed to back up '$instance'; nothing has been moved"
-    return $EC_ERROR
-  fi
-
-  __print_info "Copying '$instance' to ${target_working_dir}..."
-  __logic_instance_copy_tree "$source_working_dir" "$target_working_dir"
-  local copy_code=$?
-
-  case $copy_code in
-    $EC_SUCCESS) ;;
-    $EC_MISSING_DEPENDENCY)
-      __print_error "Moving an instance requires rsync, which is not installed"
-      return $copy_code
-      ;;
-    *)
-      __print_error "Failed to copy '$instance' to ${target_working_dir}"
-      __print_error "The instance is untouched at ${source_working_dir}; re-run the move to retry"
-      return $copy_code
-      ;;
-  esac
-
-  # The copy's own config, addressed by path: the registry still points at the
-  # source, so resolving the instance by name here would rewrite the tree that
-  # is still authoritative.
-  local target_config_file="${target_working_dir}/${instance}.config.ini"
-
-  if ! __logic_instance_rewrite_paths "$target_config_file" \
-    "$source_working_dir" "$target_working_dir" "$target_root"; then
-    __print_error "Failed to rewrite the paths in ${target_config_file}"
-    __print_error "The instance is untouched at ${source_working_dir}; re-run the move to retry"
-    return $EC_FAILED_UPDATE_CONFIG
-  fi
-
   # The management file is generated from the config, and a container's compose
   # file bakes the working directory into its bind mounts, so both are rebuilt
-  # from the rewritten config rather than carried over by the copy.
+  # from the rewritten config rather than carried over with the tree. Loaded
+  # before the tree is touched, because undoing a rename rebuilds them too.
   if [[ -z "${KGSM_LOGIC_FILES_MANAGEMENT_LOADED:-}" ]]; then
     # shellcheck source=handlers/files.management.sh
     source "$(__find_command_handler files.management.sh)" || {
@@ -1568,33 +1594,81 @@ function _cmd_move() {
     }
   fi
 
+  # A rename leaves no source behind to fall back on, so the one file the move
+  # edits in place is kept aside first; every failure after the rename puts the
+  # tree back and restores it.
+  local config_snapshot=""
+
+  if [[ "$method" == "rename" ]]; then
+    if ! config_snapshot="$(mktemp "${TMPDIR:-/tmp}/kgsm-move-${instance}.XXXXXX" 2> /dev/null)" ||
+      ! cp -p "${source_working_dir}/${instance}.config.ini" "$config_snapshot" 2> /dev/null; then
+      rm -f "$config_snapshot"
+      __print_error "Failed to set aside the config of '$instance'; nothing has been moved"
+      return $EC_FAILED_CP
+    fi
+
+    __print_info "Moving '$instance' to ${target_working_dir}..."
+    if ! __logic_instance_rename_tree "$source_working_dir" "$target_working_dir"; then
+      rm -f "$config_snapshot"
+      __print_error "Failed to move '$instance' to ${target_working_dir}"
+      __print_error "The instance is untouched at ${source_working_dir}"
+      return $EC_FAILED_MV
+    fi
+  else
+    __print_info "Copying '$instance' to ${target_working_dir}..."
+    __logic_instance_copy_tree "$source_working_dir" "$target_working_dir"
+    local copy_code=$?
+
+    case $copy_code in
+      $EC_SUCCESS) ;;
+      $EC_MISSING_DEPENDENCY)
+        __print_error "Moving an instance to another filesystem requires rsync, which is not installed"
+        return $copy_code
+        ;;
+      *)
+        __print_error "Failed to copy '$instance' to ${target_working_dir}"
+        __print_error "The instance is untouched at ${source_working_dir}; re-run the move to retry"
+        return $copy_code
+        ;;
+    esac
+  fi
+
+  local -a undo=("$method" "$instance" "$blueprint" "$source_working_dir"
+    "$target_working_dir" "$config_snapshot")
+
+  # The config at the target, addressed by path: the registry still points at
+  # the source, so resolving the instance by name here would read the tree the
+  # move has not committed to.
+  local target_config_file="${target_working_dir}/${instance}.config.ini"
+
+  if ! __logic_instance_rewrite_paths "$target_config_file" \
+    "$source_working_dir" "$target_working_dir" "$target_root"; then
+    __print_error "Failed to rewrite the paths in ${target_config_file}"
+    _abandon_move "${undo[@]}"
+    return $EC_FAILED_UPDATE_CONFIG
+  fi
+
   __logic_create_management_file "$target_config_file"
   local management_code=$?
 
   if [[ $management_code -ne $EC_SUCCESS_MANAGEMENT_FILE_CREATED ]]; then
     __print_error "Failed to regenerate the management file at ${target_working_dir}"
-    __print_error "The instance is untouched at ${source_working_dir}; re-run the move to retry"
+    _abandon_move "${undo[@]}"
     return $management_code
   fi
 
-  # The commit. Everything above is recoverable by re-running; from here the
-  # host looks for the instance at its new home.
+  # The commit. From here the host looks for the instance at its new home.
   if ! __logic_create_instance_symlink "$blueprint" "$instance" "$target_working_dir"; then
     __print_error "Failed to point the registry entry for '$instance' at ${target_working_dir}"
-    __print_error "The instance is untouched at ${source_working_dir}; re-run the move to retry"
+    _abandon_move "${undo[@]}"
     return $EC_FAILED_LN
   fi
 
   if [[ "$has_run" == true ]]; then
     __print_info "Starting '$instance' once to confirm it runs from its new path..."
     if ! _verify_start_on_new_path "$instance"; then
-      # Put the registry back before saying so: the source tree is still intact
-      # and complete, so the instance the host knows about is the one that
-      # works. The copy is left where it is for the re-run to converge on.
-      __logic_create_instance_symlink "$blueprint" "$instance" "$source_working_dir" || true
-
       __print_error "Instance '$instance' did not start from ${target_working_dir}"
-      __print_error "It has been left where it was, at ${source_working_dir}; the copy at ${target_working_dir} is not in use"
+      _abandon_move "${undo[@]}"
       return $EC_ERROR
     fi
   else
@@ -1614,14 +1688,19 @@ function _cmd_move() {
     fi
   fi
 
-  __logic_remove_directories "$instance" "$source_working_dir"
-  if [[ $? -ne $EC_SUCCESS_DIRECTORIES_REMOVED ]]; then
-    __print_warning "Moved '$instance', but could not remove the old tree at ${source_working_dir}"
-  else
-    # The blueprint directory the instance was the last resident of is left
-    # behind by the removal above; taking it too keeps the source library as
-    # tidy as the move found it.
+  if [[ "$method" == "rename" ]]; then
+    rm -f "$config_snapshot"
+    # The blueprint directory the instance was the last resident of stays
+    # behind the rename; taking it keeps the source library as tidy as the move
+    # found it.
     rmdir "$(dirname "$source_working_dir")" 2> /dev/null || true
+  else
+    __logic_remove_directories "$instance" "$source_working_dir"
+    if [[ $? -ne $EC_SUCCESS_DIRECTORIES_REMOVED ]]; then
+      __print_warning "Moved '$instance', but could not remove the old tree at ${source_working_dir}"
+    else
+      rmdir "$(dirname "$source_working_dir")" 2> /dev/null || true
+    fi
   fi
 
   __print_success "Moved '$instance' from library '$source_library' to '$target_library' (${target_working_dir})"

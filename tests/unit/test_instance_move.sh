@@ -42,6 +42,10 @@ function setup_file() {
     "__logic_instance_copy_tree should be exported"
   assert_function_exists "__logic_instance_has_run" \
     "__logic_instance_has_run should be exported"
+  assert_function_exists "__logic_instance_move_method" \
+    "__logic_instance_move_method should be exported"
+  assert_function_exists "__logic_instance_rename_tree" \
+    "__logic_instance_rename_tree should be exported"
 }
 
 function setup() {
@@ -352,6 +356,104 @@ function test_copy_refuses_a_missing_source() {
 
   __logic_instance_copy_tree "${MOVE_TEST_DIR}/absent" "${MOVE_TEST_DIR}/target"
   assert_equals "$?" "$EC_DIRECTORY_NOT_FOUND" "A missing source should be reported as missing"
+}
+
+# =============================================================================
+# RENAME OR COPY
+# =============================================================================
+
+function test_method_is_a_rename_inside_one_filesystem() {
+  log_test_step "Testing a move whose target shares the source's mount"
+
+  local source="${MOVE_TEST_DIR}/lib-a/instances/factorio/factorio-01"
+  local target="${MOVE_TEST_DIR}/lib-b/instances/factorio/factorio-01"
+  mkdir -p "$source"
+
+  local method
+  method="$(__logic_instance_move_method "$source" "$target")"
+  assert_equals "$?" "$EC_SUCCESS" "Choosing a method should succeed"
+  assert_equals "rename" "$method" "A target on the same mount should be renamed to"
+  assert_dir_exists "$(dirname "$target")" \
+    "The directory the target lands in should exist to be measured"
+}
+
+function test_method_is_a_copy_onto_an_existing_target() {
+  log_test_step "Testing a move whose target an interrupted copy left behind"
+
+  local source="${MOVE_TEST_DIR}/source"
+  local target="${MOVE_TEST_DIR}/target"
+  mkdir -p "$source" "$target"
+
+  assert_equals "copy" "$(__logic_instance_move_method "$source" "$target")" \
+    "Only a copy converges on a partial target, so one should be chosen"
+}
+
+function test_method_is_a_copy_across_mounts() {
+  log_test_step "Testing a move whose target is on another mount"
+
+  local other_root=""
+  local candidate
+  for candidate in /dev/shm /run/user/"$(id -u)"; do
+    [[ -d "$candidate" && -w "$candidate" ]] || continue
+    if [[ "$(stat -c '%d %m' "$candidate")" != "$(stat -c '%d %m' "$MOVE_TEST_DIR")" ]]; then
+      other_root="$candidate"
+      break
+    fi
+  done
+
+  if [[ -z "$other_root" ]]; then
+    skip_test "No writable directory on a different mount than the sandbox" && return
+  fi
+
+  local source="${MOVE_TEST_DIR}/source"
+  local target_parent
+  target_parent="$(mktemp -d "${other_root}/kgsm-move-test.XXXXXX")"
+  mkdir -p "$source"
+
+  local method
+  method="$(__logic_instance_move_method "$source" "${target_parent}/factorio-01")"
+  rm -rf "${target_parent:?}"
+
+  assert_equals "copy" "$method" "A target on another mount should be copied to"
+}
+
+function test_method_refuses_a_missing_source() {
+  log_test_step "Testing a method for a tree that is not there"
+
+  __logic_instance_move_method "${MOVE_TEST_DIR}/absent" "${MOVE_TEST_DIR}/target" \
+    > /dev/null
+  assert_equals "$?" "$EC_DIRECTORY_NOT_FOUND" "A missing source should be reported as missing"
+}
+
+function test_rename_moves_the_tree_in_place() {
+  log_test_step "Testing the rename an instance is moved with"
+
+  local source="${MOVE_TEST_DIR}/source"
+  local target="${MOVE_TEST_DIR}/target"
+  mkdir -p "${source}/install"
+  echo "binary" > "${source}/install/game"
+  local inode_before
+  inode_before="$(stat -c '%i' "${source}/install/game")"
+
+  __logic_instance_rename_tree "$source" "$target"
+  assert_equals "$?" "$EC_SUCCESS" "The rename should succeed"
+
+  assert_dir_not_exists "$source" "Nothing should stay behind at the source"
+  assert_equals "$inode_before" "$(stat -c '%i' "${target}/install/game")" \
+    "The same file should be at the target, not a copy of it"
+}
+
+function test_rename_refuses_an_existing_target() {
+  log_test_step "Testing a rename onto a directory that already exists"
+
+  local source="${MOVE_TEST_DIR}/source"
+  local target="${MOVE_TEST_DIR}/target"
+  mkdir -p "$source" "$target"
+
+  __logic_instance_rename_tree "$source" "$target"
+  assert_equals "$?" "$EC_FAILED_MV" "A rename must never nest the tree inside the target"
+  assert_dir_exists "$source" "The source should be untouched"
+  assert_dir_not_exists "${target}/source" "Nothing should be nested inside the target"
 }
 
 # =============================================================================

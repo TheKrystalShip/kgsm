@@ -1295,6 +1295,94 @@ function __logic_instance_copy_tree() {
 
 export -f __logic_instance_copy_tree
 
+# Echoes how an instance's tree reaches its target: `rename` or `copy`.
+#
+# A rename is one atomic metadata operation, so a move inside one filesystem
+# costs nothing however large the install is, and needs no free space. It is
+# chosen only when it is certain to be a rename: the source and the directory
+# the target is created in share both a device and a mount point. The mount
+# point matters as much as the device, because rename(2) refuses to cross a
+# bind mount of the same filesystem, and `mv` answers that refusal by copying
+# and deleting — which is the copy, without the copy's guarantee that the
+# source survives an interruption.
+#
+# A target that already exists is what an interrupted copy leaves behind, and
+# only the copy converges on it, so it is copied onto.
+#
+# Args: $1 = source working directory, $2 = target working directory
+# Returns: EC_SUCCESS, EC_INVALID_ARG, EC_DIRECTORY_NOT_FOUND or
+#          EC_FAILED_MKDIR (the target's parent could not be created)
+function __logic_instance_move_method() {
+  local _source="${1%/}"
+  local _target="${2%/}"
+
+  if [[ -z "$_source" ]] || [[ -z "$_target" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  if [[ ! -d "$_source" ]]; then
+    return $EC_DIRECTORY_NOT_FOUND
+  fi
+
+  if [[ -e "$_target" ]]; then
+    echo "copy"
+    return $EC_SUCCESS
+  fi
+
+  local _parent
+  _parent="$(dirname "$_target")"
+  if ! __create_dir "$_parent" > /dev/null 2>&1; then
+    return $EC_FAILED_MKDIR
+  fi
+
+  local _source_fs _target_fs
+  _source_fs="$(stat -c '%d %m' "$_source" 2> /dev/null)"
+  _target_fs="$(stat -c '%d %m' "$_parent" 2> /dev/null)"
+
+  if [[ -n "$_source_fs" ]] && [[ "$_source_fs" == "$_target_fs" ]]; then
+    echo "rename"
+  else
+    echo "copy"
+  fi
+
+  return $EC_SUCCESS
+}
+
+export -f __logic_instance_move_method
+
+# Renames an instance's tree to its target inside one filesystem.
+#
+# `mv -T` so an existing target is never entered and the tree nested inside it,
+# and only ever called once __logic_instance_move_method has settled that this
+# is a rename rather than a copy.
+#
+# Args: $1 = source directory, $2 = target directory
+# Returns: EC_SUCCESS, EC_INVALID_ARG, EC_DIRECTORY_NOT_FOUND or EC_FAILED_MV
+function __logic_instance_rename_tree() {
+  local _source="${1%/}"
+  local _target="${2%/}"
+
+  if [[ -z "$_source" ]] || [[ -z "$_target" ]]; then
+    return $EC_INVALID_ARG
+  fi
+
+  if [[ ! -d "$_source" ]]; then
+    return $EC_DIRECTORY_NOT_FOUND
+  fi
+
+  if [[ -e "$_target" ]]; then
+    return $EC_FAILED_MV
+  fi
+
+  if ! mv -T "$_source" "$_target" > /dev/null 2>&1; then
+    return $EC_FAILED_MV
+  fi
+
+  return $EC_SUCCESS
+}
+
+export -f __logic_instance_rename_tree
+
 # Reports whether an instance has ever been started.
 #
 # The signal is its log file: both runtimes write one on the way up and rotate

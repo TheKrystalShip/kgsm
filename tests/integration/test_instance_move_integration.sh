@@ -15,8 +15,9 @@
 #   at the tree that now exists
 # - The refusals: a running instance, an unknown or offline target, the same
 #   library, a target with no room
-# - A failure before the registry is re-pointed leaves the source authoritative,
-#   and re-running the move converges
+# - Inside one filesystem the tree is renamed, not copied, and no backup is taken
+# - A failure before the registry is re-pointed leaves the source authoritative:
+#   a copy converges when re-run, a rename is put back
 # - `libraries remove --drain` empties a library and then deregisters it
 
 # =============================================================================
@@ -36,8 +37,8 @@ TARGET_LIBRARY=""
 # HELPERS
 # =============================================================================
 
-# Creates an instance in the source library with enough content on disk for a
-# backup to have something to capture, and echoes its name.
+# Creates an instance in the source library with some content on disk, and
+# echoes its name.
 #
 # Called in a command substitution, so nothing it records survives it — the
 # teardown finds this test's instances by looking at where the registry points
@@ -232,8 +233,8 @@ function test_move_leaves_the_backups_directory_alone() {
     "backups_dir lives outside the instance and should not move with it"
 }
 
-function test_move_takes_a_backup_first() {
-  log_test_step "Testing that a move backs the instance up before copying it"
+function test_move_takes_no_backup() {
+  log_test_step "Testing that a move leaves the backups as it found them"
 
   local instance
   instance="$(_make_instance factorio)"
@@ -246,8 +247,72 @@ function test_move_takes_a_backup_first() {
   local backups_after
   backups_after="$("$KGSM_ROOT/kgsm.sh" instances backups "$instance" | grep -c . || true)"
 
-  assert_greater_than "$backups_after" "$backups_before" \
-    "The move should leave one more backup than it found"
+  assert_equals "$backups_before" "$backups_after" \
+    "Neither a rename nor a copy destroys the source before the target is proven"
+}
+
+# Both sandbox libraries live on one filesystem, so this move is a rename.
+function test_move_within_one_filesystem_renames_the_tree() {
+  log_test_step "Testing that a same-filesystem move keeps the files themselves"
+
+  local instance
+  instance="$(_make_instance factorio)"
+
+  local source_working_dir="${SOURCE_ROOT}/instances/factorio/${instance}"
+  local target_working_dir="${TARGET_ROOT}/instances/factorio/${instance}"
+
+  if [[ "$(stat -c '%d %m' "$SOURCE_ROOT")" != "$(stat -c '%d %m' "$TARGET_ROOT")" ]]; then
+    skip_test "The sandbox libraries are not on one mount" && return
+  fi
+
+  local inode_before
+  inode_before="$(stat -c '%i' "${source_working_dir}/install/marker")"
+
+  assert_command_succeeds \
+    "$KGSM_ROOT/kgsm.sh instances move $instance --library $TARGET_LIBRARY" \
+    "The move should succeed"
+
+  assert_equals "$inode_before" "$(stat -c '%i' "${target_working_dir}/install/marker")" \
+    "A rename should land the same file at the target, not a copy of it"
+  assert_dir_not_exists "$source_working_dir" "Nothing should stay behind at the source"
+}
+
+function test_move_puts_a_renamed_tree_back_when_the_repoint_fails() {
+  log_test_step "Testing that a failed commit undoes a rename"
+
+  local instance
+  instance="$(_make_instance factorio)"
+
+  local source_working_dir="${SOURCE_ROOT}/instances/factorio/${instance}"
+  local target_working_dir="${TARGET_ROOT}/instances/factorio/${instance}"
+
+  if [[ "$(stat -c '%d %m' "$SOURCE_ROOT")" != "$(stat -c '%d %m' "$TARGET_ROOT")" ]]; then
+    skip_test "The sandbox libraries are not on one mount" && return
+  fi
+
+  # The tree renames and its config is rewritten, but the registry entry cannot
+  # be replaced — the one step left that commits the move.
+  chmod u-w "${KGSM_INSTANCES_DIR}/factorio"
+
+  "$KGSM_ROOT/kgsm.sh" instances move "$instance" --library "$TARGET_LIBRARY" > /dev/null 2>&1
+  local exit_code=$?
+
+  chmod u+w "${KGSM_INSTANCES_DIR}/factorio"
+
+  assert_not_equals "$exit_code" "0" "A move that cannot commit should fail"
+  assert_file_exists "${source_working_dir}/install/marker" \
+    "The tree should be back at the source"
+  assert_dir_not_exists "$target_working_dir" "Nothing should be left at the target"
+  assert_equals "$source_working_dir" "$(_registry_target factorio "$instance")" \
+    "The registry entry should still point at the source"
+
+  local config_file="${source_working_dir}/${instance}.config.ini"
+  assert_file_contains "$config_file" "working_dir=\"${source_working_dir}\"" \
+    "The config should be restored to the source paths"
+  assert_file_contains "$config_file" "library_dir=\"${SOURCE_ROOT}\"" \
+    "The config should name the source library again"
+  assert_command_succeeds "$KGSM_ROOT/kgsm.sh instances info $instance --json" \
+    "The instance should resolve where it is"
 }
 
 function test_move_regenerates_the_management_file() {
@@ -372,6 +437,10 @@ function test_move_refuses_a_target_with_no_room() {
   local instance
   instance="$(_make_instance factorio)"
 
+  # An existing target is always copied onto, and only a copy is gated.
+  local target_working_dir="${TARGET_ROOT}/instances/factorio/${instance}"
+  mkdir -p "$target_working_dir"
+
   # A margin no filesystem can satisfy, so the gate refuses on a real
   # measurement rather than on a doctored one.
   export config_install_free_space_margin_mb=999999999
@@ -379,12 +448,34 @@ function test_move_refuses_a_target_with_no_room() {
   "$KGSM_ROOT/kgsm.sh" instances move "$instance" --library "$TARGET_LIBRARY" > /dev/null 2>&1
   local exit_code=$?
 
+  unset config_install_free_space_margin_mb
+
   assert_equals "$exit_code" "$EC_INSUFFICIENT_DISK" \
     "A target without room should be refused with EC_INSUFFICIENT_DISK"
-  assert_dir_not_exists "${TARGET_ROOT}/instances/factorio/${instance}" \
+  assert_file_not_exists "${target_working_dir}/install/marker" \
     "Nothing should have been copied when the gate refused"
+}
+
+function test_move_by_rename_is_not_gated_on_free_space() {
+  log_test_step "Testing that a rename needs no room in the target"
+
+  local instance
+  instance="$(_make_instance factorio)"
+
+  if [[ "$(stat -c '%d %m' "$SOURCE_ROOT")" != "$(stat -c '%d %m' "$TARGET_ROOT")" ]]; then
+    skip_test "The sandbox libraries are not on one mount" && return
+  fi
+
+  export config_install_free_space_margin_mb=999999999
+
+  "$KGSM_ROOT/kgsm.sh" instances move "$instance" --library "$TARGET_LIBRARY" > /dev/null 2>&1
+  local exit_code=$?
 
   unset config_install_free_space_margin_mb
+
+  assert_equals "$exit_code" "0" "A rename writes no data, so free space should not refuse it"
+  assert_file_exists "${TARGET_ROOT}/instances/factorio/${instance}/install/marker" \
+    "The instance should have landed in the target library"
 }
 
 function test_move_honors_skip_space_check() {
@@ -393,6 +484,7 @@ function test_move_honors_skip_space_check() {
   local instance
   instance="$(_make_instance factorio)"
 
+  mkdir -p "${TARGET_ROOT}/instances/factorio/${instance}"
   export config_install_free_space_margin_mb=999999999
 
   "$KGSM_ROOT/kgsm.sh" instances move "$instance" --library "$TARGET_LIBRARY" \

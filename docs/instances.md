@@ -252,30 +252,42 @@ than stopping the server, because there are players on the other end of that dec
 
 The sequence:
 
-1. **A backup** is taken, before a single file is copied. It lands in the shared backups root like
-   every other backup, outside the instance, so it survives whichever way the move goes.
-2. **The target is gated on free space** — measured from what the instance currently occupies
-   (`du`), not from what its blueprint says a fresh install needs, plus the same
+1. **The move picks how the tree travels.** When the instance's working directory and the directory
+   it lands in share a device and a mount point, the tree is **renamed** — one atomic operation,
+   instant whatever the install weighs. Anything else is **copied**. The mount point is compared as
+   well as the device because a rename cannot cross a bind mount even of the same filesystem, and
+   `mv` would quietly turn that into a copy that deletes as it goes. A target directory that already
+   exists is what an interrupted copy leaves, so it is always copied onto.
+2. **A copy is gated on free space** — measured from what the instance currently occupies (`du`),
+   not from what its blueprint says a fresh install needs, plus the same
    `install_free_space_margin_mb` an install uses. `--skip-space-check` moves anyway and still
-   prints the shortfall.
-3. **The tree is copied** to `<library-root>/instances/<blueprint>/<instance>`.
+   prints the shortfall. A rename writes no data and is not gated.
+3. **The tree reaches** `<library-root>/instances/<blueprint>/<instance>`. A rename first sets the
+   instance's config aside in a temporary file, because it is the one file the move edits and the
+   rename leaves no source to fall back on. A copy uses `rsync --delete`, so it converges on an exact
+   replica when re-run over an interrupted one, and it never touches the source.
 4. **Every path the instance holds is rewritten.** The keys are enumerated from the config rather
    than listed, because they all derive from the working directory — and the ones that deliberately
    live outside it (`backups_dir`, `blueprint_file`, `command_shortcut_file`) are left exactly as
    they were. `library_dir` is set to the new root.
 5. **The management file is regenerated**, and for a container instance so is its
-   `docker-compose.yml`: bind mounts bake the working directory in, and a mount pointing at the tree
-   the move removed would never start.
+   `docker-compose.yml`: bind mounts bake the working directory in, and a mount pointing at the old
+   tree would never start.
 6. **The registry entry is re-pointed** at the new working directory. This is the commit.
 7. **The instance is started once and stopped again**, to confirm it runs from where it now lives.
    An instance that has never been started is not started here either — nothing about it says it
    ever ran, so a failure would say nothing about the move — and the move says so.
-8. **The old tree is removed.**
+8. **A copy's old tree is removed.** A rename has none.
 
-A failure at any point up to step 6 leaves the original authoritative: the instance is still
-registered where it was, its config is untouched, and re-running the move picks up from the partial
-copy at the target. A failure at step 7 puts the registry back the same way. `server.moved` is
-emitted once the move is done, carrying the library it came from and the one it is in.
+No backup is taken: neither method destroys data before the new location is proven. A failure at
+any step puts the instance back where it was. After a copy that is only the registry entry, since
+the source was never touched, and the partial copy stays for a re-run to converge on. After a rename
+the tree is renamed back, its config restored from the copy set aside and its management file
+rebuilt; if that itself fails, the move names where the files are and where the saved config is.
+Killing the process between the rename and the re-point leaves the registry pointing at the old
+path while the files sit at the new one — a window of the few seconds those steps take.
+`server.moved` is emitted once the move is done, carrying the library it came from and the one it
+is in.
 
 ## Managing instances
 

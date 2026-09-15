@@ -209,7 +209,8 @@ kgsm instances move <instance> --library <name> [--skip-space-check]
 ```
 
 Moves a stopped instance's files into another library. The instance must be stopped and both
-libraries must be reachable; a backup is taken before anything is copied. See
+libraries must be reachable. A target on the same filesystem is reached by renaming the tree; any
+other target by copying it and removing the source once the copy is committed to. See
 [Instances](instances.md#moving-an-instance-between-libraries) for the whole sequence.
 
 ## Events

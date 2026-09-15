@@ -123,7 +123,7 @@ function test_first_invocation_seeds_a_reachable_library() {
   __run_on "$root" --version > /dev/null
 
   local registry="${root}/data/kgsm/libraries.ini"
-  local marker="${root}/data/kgsm/instances/.kgsm-library"
+  local marker="${root}/data/kgsm/library/.kgsm-library"
   local created="${root}/config/kgsm/config.ini"
 
   assert_file_exists "$registry" "The library registry should be created"
@@ -225,7 +225,7 @@ function test_default_config_naming_a_library_seeds_nothing() {
 
   assert_file_not_exists "${root}/data/kgsm/libraries.ini" \
     "No registry should be written when the default config names a library"
-  assert_file_not_exists "${root}/data/kgsm/instances/.kgsm-library" \
+  assert_file_not_exists "${root}/data/kgsm/library/.kgsm-library" \
     "No marker should be written when the default config names a library"
 
   rm -rf "$root"

@@ -47,6 +47,15 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **A move inside one filesystem is a rename, and no move takes a backup (`3.18.0-rc22`).** When the
+  instance's working directory and the directory it lands in share a device and a mount point, the
+  tree is renamed — instant and free of disk space however large the install. Any other target is
+  copied with `rsync`, and the source is removed only after the registry points at the copy and the
+  instance has started from it. Neither destroys anything before the new location is proven, so the
+  pre-move backup is gone: it cost a full compressed archive of the install (12 GB and 18 minutes
+  for one ARK server) to protect against a failure both methods already survive. A rename that
+  fails partway is renamed back, with its config restored from a copy set aside before the rename.
+
 - **A library never places servers inside the instance registry (`3.18.0-rc21`).** The first run
   seeds `default` at `~/.local/share/kgsm/library`, beside the registry. Seeded at the registry
   itself, placement wrote each server to `instances/instances/<blueprint>/<instance>`, and the
