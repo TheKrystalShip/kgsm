@@ -293,6 +293,11 @@ function _cmd_add() {
       __print_error "Library root is not writable: $path"
       return $exit_code
       ;;
+    $EC_LIBRARY_OVERLAPS_REGISTRY)
+      __print_error "A library at $path would place servers inside the instance registry ($KGSM_INSTANCES_DIR)"
+      __print_error "Choose a root that neither is, contains as 'instances', nor lies inside that directory"
+      return $exit_code
+      ;;
     *)
       __print_error "Failed to register library at $path"
       return $exit_code

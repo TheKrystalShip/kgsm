@@ -1419,6 +1419,12 @@ function _cmd_move() {
     return $EC_LIBRARY_OFFLINE
   fi
 
+  if __library_overlaps_registry "$target_root"; then
+    __print_error "Library '$target_library' at $target_root places servers inside the instance registry ($KGSM_INSTANCES_DIR)"
+    __print_error "Move the instance into a library registered elsewhere"
+    return $EC_LIBRARY_OVERLAPS_REGISTRY
+  fi
+
   # Called without a command substitution so its globals survive; the source
   # library's name is what the refusals and the event below report.
   __logic_instance_library_state "$instance" > /dev/null

@@ -199,6 +199,57 @@ function test_add_refuses_an_unwritable_root() {
   assert_equals "$(__logic_library_list)" "" "Nothing should be registered"
 }
 
+# A library places <root>/instances/<blueprint>/<instance>; rooted at the
+# registry, that is a real `instances/<blueprint>` directory among the
+# registry's entries, read as an instance named after the blueprint.
+function test_add_refuses_the_instance_registry_itself() {
+  log_test_step "Testing __logic_library_add on the instance registry"
+
+  __logic_library_add "$KGSM_INSTANCES_DIR" "registry"
+  local exit_code=$?
+
+  assert_equals "$exit_code" "$EC_LIBRARY_OVERLAPS_REGISTRY" \
+    "Should return EC_LIBRARY_OVERLAPS_REGISTRY"
+  assert_equals "$(__logic_library_list)" "" "Nothing should be registered"
+  assert_file_not_exists "${KGSM_INSTANCES_DIR}/.kgsm-library" \
+    "No marker should be written into the registry"
+}
+
+function test_add_refuses_a_root_inside_the_instance_registry() {
+  log_test_step "Testing __logic_library_add below the instance registry"
+
+  __logic_library_add "${KGSM_INSTANCES_DIR}/nested" "nested"
+  local exit_code=$?
+
+  assert_equals "$exit_code" "$EC_LIBRARY_OVERLAPS_REGISTRY" \
+    "Should return EC_LIBRARY_OVERLAPS_REGISTRY"
+  assert_equals "$(__logic_library_list)" "" "Nothing should be registered"
+}
+
+function test_add_refuses_a_root_whose_placement_is_the_registry() {
+  log_test_step "Testing __logic_library_add on the registry's parent"
+
+  __logic_library_add "$(dirname "$KGSM_INSTANCES_DIR")" "parent"
+  local exit_code=$?
+
+  assert_equals "$exit_code" "$EC_LIBRARY_OVERLAPS_REGISTRY" \
+    "Should return EC_LIBRARY_OVERLAPS_REGISTRY"
+  assert_equals "$(__logic_library_list)" "" "Nothing should be registered"
+}
+
+function test_add_accepts_a_root_beside_the_instance_registry() {
+  log_test_step "Testing __logic_library_add on a sibling of the registry"
+
+  local root
+  root="$(dirname "$KGSM_INSTANCES_DIR")/library-beside"
+  __logic_library_add "$root" "beside"
+  local exit_code=$?
+
+  assert_equals "$exit_code" "$EC_SUCCESS_LIBRARY_ADDED" \
+    "A root beside the registry should register"
+  rm -rf "${root:?}"
+}
+
 function test_list_reports_every_registered_library() {
   log_test_step "Testing __logic_library_list with several libraries"
 

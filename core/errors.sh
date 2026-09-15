@@ -204,6 +204,13 @@ export EC_INSUFFICIENT_DISK
 declare -g -r EC_INSTANCE_RUNNING=57
 export EC_INSTANCE_RUNNING
 
+# The library root would place working directories inside the instance
+# registry: it is the registry, lies inside it, or holds it as its own
+# `instances/` directory. A registry entry is <blueprint>/<instance>, so a real
+# directory there is read as an instance by everything that enumerates it.
+declare -g -r EC_LIBRARY_OVERLAPS_REGISTRY=58
+export EC_LIBRARY_OVERLAPS_REGISTRY
+
 # =============================================================================
 # EVENT SUCCESS CODES (200-255 range)
 # =============================================================================
@@ -432,6 +439,7 @@ declare -A EXIT_CODES=(
    [$EC_LIBRARY_OFFLINE]="Library root is not reachable"
    [$EC_INSUFFICIENT_DISK]="Not enough free space in the library"
    [$EC_INSTANCE_RUNNING]="This instance must be stopped first"
+   [$EC_LIBRARY_OVERLAPS_REGISTRY]="Library root overlaps the instance registry"
 )
 
 declare -g KGSM_ERRORS_LOADED=1

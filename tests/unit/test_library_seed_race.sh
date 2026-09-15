@@ -47,7 +47,7 @@ function _first_calls() {
 }
 
 function _registry_of() { printf '%s' "${1}/.local/share/kgsm/libraries.ini"; }
-function _marker_of()   { printf '%s' "${1}/.local/share/kgsm/instances/.kgsm-library"; }
+function _marker_of()   { printf '%s' "${1}/.local/share/kgsm/library/.kgsm-library"; }
 
 function _sections_in() { grep -c '^\[default\]$' "$1" 2> /dev/null || echo 0; }
 
@@ -117,6 +117,27 @@ function test_the_seeded_library_is_reachable() {
   # Registered is not reachable: a duplicate seed leaves a library listed and
   # permanently offline, and every install against it refuses.
   assert_equals "online" "$state" "The seeded library should be reachable"
+}
+
+function test_the_seeded_library_is_not_the_instance_registry() {
+  log_test_step "Testing the seeded root sits beside the instance registry"
+
+  local home; home="$(_fresh_home)"
+  _first_calls "$home" 1
+
+  local registered registry
+  registered="$(grep -m1 '^path=' "$(_registry_of "$home")" 2> /dev/null | cut -d= -f2)"
+  registry="$(realpath -m "${home}/.local/share/kgsm/instances")"
+
+  assert_not_null "$registered" "The registry should carry a library path"
+  # Placement is <root>/instances/<blueprint>/<instance>. Rooted at the registry
+  # it lands inside it, where each blueprint folder reads as an instance.
+  assert_not_equals "$registry" "$registered" \
+    "The seeded library should not be rooted at the instance registry"
+  assert_not_equals "$registry" "${registered}/instances" \
+    "The seeded library should not place servers into the instance registry"
+  assert_file_not_exists "${registry}/.kgsm-library" \
+    "The instance registry should carry no library marker"
 }
 
 function test_a_registry_that_exists_is_left_alone() {

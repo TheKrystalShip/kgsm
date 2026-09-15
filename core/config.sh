@@ -8,14 +8,19 @@ export CONFIG_FILE="$KGSM_CONFIG_FILE"
 export DEFAULT_CONFIG_FILE="$KGSM_DEFAULT_CONFIG_FILE"
 export MERGED_CONFIG_FILE="${KGSM_CONFIG_DIR}/config.merged.ini"
 
-# Registers the instances directory as the library `default`, and names it as
+# Registers KGSM_DEFAULT_LIBRARY_DIR as the library `default`, and names it as
 # the default in the config file that was just created.
 #
 # A host with no library registered cannot install anything: placement resolves
 # to EC_NOT_FOUND and every install refuses. Seeding one here is what makes a
-# fresh install able to host a game before anybody configures it, and the path
-# is not a new location — KGSM_INSTANCES_DIR is already where this engine says
-# instances live.
+# fresh install able to host a game before anybody configures it.
+#
+# The root sits beside the instance registry, never at it. A library places a
+# working directory at <root>/instances/<blueprint>/<instance>, and the registry
+# is KGSM_INSTANCES_DIR/<blueprint>/<instance> — so a library rooted at the
+# registry puts a real `instances/<blueprint>` directory where every consumer
+# expects a blueprint of instance entries, and each blueprint's folder reads as
+# an instance named after the blueprint.
 #
 # Three things are written and they only make sense together:
 #
@@ -68,10 +73,9 @@ function __seed_initial_library() {
   id="$(od -An -tx1 -N8 /dev/urandom 2> /dev/null | tr -d ' \n')"
   [[ ${#id} -eq 16 ]] || { rm -f "$registry" 2> /dev/null; return 0; }
 
-  # __init_user_directories has already created this, so this normally just
-  # resolves symlinks.
   local canonical
-  canonical="$(realpath -e "$KGSM_INSTANCES_DIR" 2> /dev/null)" || {
+  mkdir -p "$KGSM_DEFAULT_LIBRARY_DIR" 2> /dev/null
+  canonical="$(realpath -e "$KGSM_DEFAULT_LIBRARY_DIR" 2> /dev/null)" || {
     rm -f "$registry" 2> /dev/null
     return 0
   }

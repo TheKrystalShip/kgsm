@@ -38,6 +38,11 @@ export KGSM_CONFIG_FILE="${KGSM_CONFIG_DIR}/config.ini"
 export KGSM_INSTANCES_DIR="${KGSM_DATA_DIR}/instances"
 export KGSM_LOGS_DIR="${KGSM_DATA_DIR}/logs"
 
+# Where a fresh install's first library is rooted. Beside the instance registry
+# and never at it: a library's own `instances/` directory inside the registry is
+# read as a blueprint whose entries are the library's blueprint folders.
+export KGSM_DEFAULT_LIBRARY_DIR="${KGSM_DATA_DIR}/library"
+
 # Backups live OUTSIDE every instance's working directory, under their own root
 # with a per-instance subdirectory. Uninstalling an instance removes its working
 # directory wholesale, so a store kept inside it would be destroyed along with

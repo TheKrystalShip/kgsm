@@ -47,6 +47,17 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **A library never places servers inside the instance registry (`3.18.0-rc21`).** The first run
+  seeds `default` at `~/.local/share/kgsm/library`, beside the registry. Seeded at the registry
+  itself, placement wrote each server to `instances/instances/<blueprint>/<instance>`, and the
+  registry's `<blueprint>/<instance>` shape made `instances/<blueprint>` read as an instance named
+  after the blueprint: the watchdog asked `instances info ark` once a second for an instance that
+  never existed. `libraries add` refuses a root that is the registry, lies inside it or is its
+  parent (`EC_LIBRARY_OVERLAPS_REGISTRY`, 58), and `install` and `instances move` refuse to place
+  into a registered library that does. A host seeded by `3.18.0-rc16` through `rc20` keeps working
+  and is repaired by registering a library elsewhere, moving its instances there, and removing
+  `default`.
+
 - **A diagnostic goes to stderr; stdout is the value a command returns.** Every `__print_*` helper
   writes to stderr, so a module that yields data — an instance id, a path, a version, a listing —
   puts that and nothing else on stdout. A caller reading a module with `$(...)` captures stdout

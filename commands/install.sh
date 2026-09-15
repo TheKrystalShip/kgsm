@@ -133,6 +133,14 @@ function _resolve_placement_library() {
     return $EC_LIBRARY_OFFLINE
   fi
 
+  local resolved_root
+  resolved_root="$(__logic_library_path "$resolved")"
+  if __library_overlaps_registry "$resolved_root"; then
+    __print_error "Library '$resolved' at $resolved_root places servers inside the instance registry ($KGSM_INSTANCES_DIR)"
+    __print_error "Register a library elsewhere, move this library's instances into it, and remove '$resolved'"
+    return $EC_LIBRARY_OVERLAPS_REGISTRY
+  fi
+
   return $EC_SUCCESS
 }
 

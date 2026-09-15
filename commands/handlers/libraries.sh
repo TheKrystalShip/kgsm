@@ -1005,6 +1005,34 @@ function __logic_stamp_instance_library_dir() {
 
 export -f __logic_stamp_instance_library_dir
 
+# Succeeds when a canonical library root would place working directories inside
+# the instance registry.
+#
+# Placement is <root>/instances/<blueprint>/<instance> and the registry is
+# $KGSM_INSTANCES_DIR/<blueprint>/<instance>. A root that is the registry, lies
+# inside it, or whose placement directory IS the registry puts real directories
+# where the registry's entries are expected, and every consumer that enumerates
+# the registry reads a blueprint's folder as an instance named after it. The
+# comparison uses the canonical registry so a symlinked data directory cannot
+# spell its way past it.
+#
+# Args: $1 = canonical library root
+function __library_overlaps_registry() {
+  local _root="${1%/}"
+  local _registry
+
+  _registry="$(realpath -m "$KGSM_INSTANCES_DIR" 2> /dev/null)" || return 1
+  _registry="${_registry%/}"
+
+  [[ "$_root" == "$_registry" ]] && return 0
+  [[ "$_root" == "$_registry"/* ]] && return 0
+  [[ "${_root}/instances" == "$_registry" ]] && return 0
+
+  return 1
+}
+
+export -f __library_overlaps_registry
+
 # =============================================================================
 # VERBS
 # =============================================================================
@@ -1057,6 +1085,10 @@ function __logic_library_add() {
 
   if [[ ! -w "$_canonical" ]]; then
     return $EC_PERMISSION
+  fi
+
+  if __library_overlaps_registry "$_canonical"; then
+    return $EC_LIBRARY_OVERLAPS_REGISTRY
   fi
 
   local _conflict

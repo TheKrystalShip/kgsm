@@ -117,6 +117,14 @@ Three things are refused, each naming what is already registered:
 - the marker's id is registered at another path;
 - the name is taken by another library.
 
+A root that overlaps the instance registry is refused with `EC_LIBRARY_OVERLAPS_REGISTRY` (58):
+`$KGSM_INSTANCES_DIR` itself, anything inside it, or its parent, whose `instances/` directory is the
+registry. Placement writes real directories at `<root>/instances/<blueprint>/<instance>`, and inside
+the registry those sit where its `<blueprint>/<instance>` entries are expected — every consumer that
+enumerates the registry then reads each blueprint's folder as an instance named after the blueprint.
+`install` and `instances move` refuse to place into a registered library that overlaps it, for the
+same reason.
+
 ### `remove`
 
 Deregisters the library and takes the marker off the root when the root is reachable. **No file
@@ -181,6 +189,10 @@ the refusals that protect them.
 
 `[instance_defaults] default_library` names this host's default library. Empty is legal; with
 exactly one library registered, that one is the default regardless.
+
+A first run that creates the config file also registers `default` at `$KGSM_DEFAULT_LIBRARY_DIR`
+(`~/.local/share/kgsm/library` for the invoking account) and names it as `default_library`, so a
+host nobody has configured can install a game. It is seeded only when no registry file exists.
 
 `[instance_defaults] install_free_space_margin_mb` (default 1024) is the room an install
 requires beyond the blueprint's declared `metadata.base_disk_mb` before it proceeds.
