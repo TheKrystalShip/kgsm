@@ -47,6 +47,13 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **The engine leaves a working directory it cannot enter (`3.18.0-rc24`).** Run as the service
+  account from a login shell — `sudo -u kgsm -H kgsm ...` — it starts in the person's home, which is
+  usually `0700`. Every `find` it runs then failed to restore that directory and printed
+  `Failed to restore initial working directory` once per lookup, around the command's real output.
+  Every entrypoint now moves to the running account's home, or `/`, when its working directory is
+  not enterable; a relative path could not have been resolved from there anyway.
+
 - **A move inside one filesystem is a rename, and no move takes a backup (`3.18.0-rc22`).** When the
   instance's working directory and the directory it lands in share a device and a mount point, the
   tree is renamed — instant and free of disk space however large the install. Any other target is

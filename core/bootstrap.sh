@@ -53,8 +53,21 @@ fi
 # multi-entrypoint CLI: a module under commands/ can be invoked directly, and
 # anything that stamps a version (event payloads, the webhook User-Agent) must
 # report the same value no matter which entrypoint reached it.
-declare -g KGSM_VERSION="3.18.0-rc23"
+declare -g KGSM_VERSION="3.18.0-rc24"
 export KGSM_VERSION
+
+# --- Working directory ---
+# Run as the service account from a login shell (`sudo -u kgsm -H kgsm ...`),
+# the engine starts in the invoking person's home, which is typically 0700 and
+# closed to that account. Every `find` then fails to restore its starting
+# directory and says so on stderr, once per lookup. A relative path cannot be
+# resolved from a directory this account cannot enter, so nothing is lost by
+# leaving it for the account's own home. Checked on every entry, ahead of the
+# load guard: the working directory belongs to the process, and a process that
+# inherited a completed load did not inherit the move.
+if [[ ! -x "$PWD" ]]; then
+  cd -- "$HOME" 2> /dev/null || cd /
+fi
 
 if [[ -n "${KGSM_BOOTSTRAP_LOADED:-}" ]]; then
   return 0
