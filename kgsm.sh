@@ -205,6 +205,14 @@ User Paths (Writable):
 command="${1:-}"
 shift 2> /dev/null || true
 
+# Every command past the meta ones reads or writes the invoking account's
+# registry, so an account whose registry this host's services do not read is
+# refused before any of them runs.
+case "$command" in
+  "" | -h | --help | help | -v | --version | --paths) ;;
+  *) __assert_registry_account "$command" "$@" || exit $? ;;
+esac
+
 case "$command" in
   "")
     show_usage

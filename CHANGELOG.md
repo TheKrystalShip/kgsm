@@ -76,18 +76,19 @@ Features that I'd like to consider implementing in order to make KGSM more versa
   separation is what makes a diagnostic safe to emit from anywhere, including from inside a command
   substitution.
 
-- **An install refuses when it would be recorded in a registry this host's services do not read.**
-  The engine derives its world from the invoking account — instances, blueprints, the library
-  registry and the config all hang off that account's XDG paths — while the event journal is one
-  host-wide directory shared by every producer. The journal's **owner** is what identifies the
-  account whose registry this host's units enumerate, so an install by anybody else is invisible to
-  the watchdog, the monitor and the API however the permissions are set: write granted on the
-  journal without ownership, which an ACL does and is the narrowest way to unblock a person, carries
-  the events through while leaving the instance somewhere nothing reads. Ownership therefore decides,
-  and writability is asked only of the account that already owns the journal, where nothing is
-  misdirected. Checked before anything is created: the install stops with `EC_PERMISSION`, naming the
-  owning account and the `sudo -u <account> -H kgsm` invocation that works, instead of building a
-  half-instance and failing at its first event.
+- **Every command refuses an account whose registry this host's services do not read
+  (`3.18.0-rc23`).** The engine derives its world from the invoking account — instances,
+  blueprints, the library registry and the config all hang off that account's XDG paths — while the
+  event journal is one host-wide directory shared by every producer. The journal's **owner** is the
+  account this host's units run as, so any other account works on a registry nothing reads: an
+  install lands where the watchdog, the monitor and the API never look, and a read answers from an
+  empty registry — `kgsm instances list` run by a login account prints nothing and exits 0 on a node
+  running servers. The dispatcher checks before any command other than help, version and `--paths`
+  runs, stopping with `EC_PERMISSION` and naming the owning account and the
+  `sudo -u <account> -H kgsm <command>` invocation that works. Ownership decides, not writability:
+  write granted on the journal by ACL carries events through while the registry stays the wrong
+  one. An install additionally refuses a journal its owner cannot write, before anything is
+  created.
 
 - **A step that reports a failure returns one.** An install, an uninstall or a directory creation
   that could not do what it was asked exits non-zero. Three shapes each turned a reported failure

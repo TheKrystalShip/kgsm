@@ -202,34 +202,19 @@ function _space_gate() {
   esac
 }
 
-# Refuses an install this account cannot complete or that no unit on the host
-# would see.
+# Refuses an install whose events this account cannot record.
 #
-# The engine derives its entire world from the invoking account: instances,
-# blueprints, the library registry and the config all hang off that account's
-# XDG paths. The event journal does not — it is one host-wide directory every
-# producer appends to and every consumer tails. On a host where units run as a
-# service account, those two facts are what disagree when the engine is run by
-# somebody else: the install lands in a home the service account cannot enter,
-# while the journal it must append to belongs to an account this one is not.
-#
-# The journal is the check because it is the shared thing, and its OWNER is what
-# the check reads. Every account has its own instance registry under its own XDG
-# paths, so a unit running as the journal's owner enumerates that account's
-# registry and no other: an install by anybody else is invisible to it however
-# the permissions are set. Writability cannot answer this — granting write on the
-# journal by ACL, which is the narrowest and most careful way to unblock a
-# person, lets the events through while leaving the instance in a registry the
-# services never read. Ownership is the property that identifies whose registry
-# this host's services actually enumerate.
-#
-# Writability is still asked, but only for the account that already owns the
-# journal, where nothing is misdirected and a failed write is what it looks like.
+# Which account may run the engine at all is decided by the dispatcher
+# (__assert_registry_account) before any command runs, so this is reached only by
+# the journal's owner or on a host with no owner to read. There nothing is
+# misdirected, and only the directory's own permissions can stop the install
+# being recorded — checked before anything is created, so a refusal leaves no
+# half-built instance behind.
 #
 # Absent journal directory is not a failure: a host that has never emitted an
 # event, and a sandbox pointing event_journal_dir somewhere temporary, both
 # arrive here legitimately.
-function _ownership_gate() {
+function _journal_gate() {
   # The journal dir is resolved by the events handler, which is otherwise loaded
   # lazily on the first emit — later than this gate, which has to run before
   # anything is created.
@@ -242,28 +227,9 @@ function _ownership_gate() {
   journal_dir="$(__logic_journal_dir)" || return 0
 
   [[ -d "$journal_dir" ]] || return 0
-
-  local owner me
-  owner="$(stat -c '%U' "$journal_dir" 2> /dev/null)" || owner=""
-  me="$(id -un)"
-
-  # Another account owns the shared journal, so this host's units run as that
-  # account and enumerate its registry. Nothing this install creates lands
-  # there. Decided before writability is looked at, because being able to write
-  # the journal says only that the events would be recorded — never that the
-  # instance they describe would be visible to anything that reads them.
-  if [[ -n "$owner" ]] && [[ "$owner" != "$me" ]]; then
-    __print_error "The event journal at ${journal_dir} belongs to '${owner}', and this install is running as '${me}'"
-    __print_error "This host's KGSM services run as '${owner}' and enumerate that account's instances — an install run as '${me}' is recorded in a different registry and is invisible to all of them"
-    __print_error "Run the engine as that account: sudo -u ${owner} -H kgsm install ${1:-<blueprint>}"
-    return $EC_PERMISSION
-  fi
-
-  # The owning account, or a host with no owner to read: only the directory's
-  # own permissions can stop the install being recorded.
   [[ -w "$journal_dir" ]] && return 0
 
-  __print_error "The event journal at ${journal_dir} is not writable by '${me}'"
+  __print_error "The event journal at ${journal_dir} is not writable by '$(id -un)'"
   __print_error "Restore write permission on it, or point event_journal_dir at a directory this account can write"
 
   return $EC_PERMISSION
@@ -360,10 +326,9 @@ function _cmd_install() {
     shift
   done
 
-  # Before the library is resolved and before anything is created: an account
-  # that cannot record this install is an account whose instances no unit on
-  # this host reads.
-  _ownership_gate "$blueprint" || return $?
+  # Before the library is resolved and before anything is created: an install
+  # that cannot record itself is refused rather than left half-built.
+  _journal_gate || return $?
 
   library="$(_resolve_placement_library "$library")" || return $?
 

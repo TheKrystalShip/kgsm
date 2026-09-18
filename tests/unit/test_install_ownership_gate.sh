@@ -139,6 +139,33 @@ function test_install_refuses_a_journal_owned_by_another_account_even_when_writa
     "The refusal should name the account whose registry this host's services enumerate"
 }
 
+function test_a_listing_refuses_a_journal_owned_by_another_account() {
+  log_test_step "Testing that a read is refused under another account's journal, not answered empty"
+
+  # A read from the wrong account does not fail on its own: it enumerates that
+  # account's registry, finds nothing, and exits 0 — an empty listing on a host
+  # whose services are running servers.
+  local owner
+  owner="$(stat -c '%U' /tmp 2> /dev/null)"
+  assert_not_equals "$(id -un)" "$owner" \
+    "/tmp should be owned by another account for this test to mean anything"
+
+  local home="$GATE_TEST_DIR/xdg" output exit_code
+  mkdir -p "$home/.config" "$home/.local/share"
+  output="$(
+    env XDG_CONFIG_HOME="$home/.config" \
+      XDG_DATA_HOME="$home/.local/share" \
+      config_event_journal_dir=/tmp \
+      "$KGSM_ROOT/kgsm.sh" instances list 2>&1
+  )"
+  exit_code=$?
+
+  assert_equals "$EC_PERMISSION" "$exit_code" \
+    "A listing from an account other than the journal's owner should be refused, not answered empty"
+  assert_contains "$output" "sudo -u ${owner} -H kgsm instances list" \
+    "The refusal should name the invocation that reads the right registry"
+}
+
 function test_the_refusal_happens_before_anything_is_created() {
   log_test_step "Testing that the refused install leaves nothing on disk"
 
