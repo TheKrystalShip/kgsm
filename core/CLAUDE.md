@@ -11,7 +11,10 @@ Every entry point sources `bootstrap.sh` first. Bootstrap, in order:
    enables `set -x` with a colorized `PS4` — this propagates into all subshells).
 2. Resolves and exports **`KGSM_ROOT`** from its own location (`core/`'s parent)
    if not already set — this is what makes the library path-independent.
-3. Sources `paths.sh`, runs `__init_user_directories`, then sources
+3. Moves to `$HOME` (or `/`) when the working directory is not enterable by
+   the running account — every `find` otherwise errors returning to it. This
+   runs on every entry, ahead of the `KGSM_BOOTSTRAP_LOADED` guard.
+4. Sources `paths.sh`, runs `__init_user_directories`, then sources
    `common.sh`, which pulls in the rest of the library.
 
 After bootstrap, modules are reached via the `__find_*` locators in `loader.sh`
