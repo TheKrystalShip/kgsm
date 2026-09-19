@@ -47,6 +47,14 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **Valheim reads a signed ZDOID and ignores the none-ZDOID (`3.18.0-rc26`).** A ZDOID is a signed
+  32-bit id, so roughly half the players a server sees carry a negative one on both the join line
+  and the leave line, and the sign is part of the correlation token. The `0:0` the server sends
+  when a character is destroyed is not an arrival — the player is still connected — so it is
+  excluded. An existing instance takes the corrected patterns with
+  `kgsm instances config-set <instance> player_joined_regex=...` and the same for
+  `player_left_regex`; a created instance materializes them from the blueprint.
+
 - **Renaming or removing the configured default library keeps `default_library` honest
   (`3.18.0-rc25`).** Renaming the library `default_library` names rewrites the config to the new
   name in the same operation, and deregistering that library clears it — both used to leave the key

@@ -12,10 +12,15 @@ metadata:
   base_disk_mb: 5120
 # Player-presence detection, authored from real server output (field
 # contract: templates/blueprint.tp). Scattered identity (SteamID and name never
-# co-located) — correlate on the ZDOID (`key`); `id` stays null (bridging it
-# to the character would be a cross-layer guess).
-player_joined_regex: 'Got character ZDOID from (?<name>.+?) : (?<key>\d+):\d+'
-player_left_regex: 'Destroying abandoned non persistent zdo \d+:\d+ owner (?<key>\d+)'
+# co-located) — correlate on the ZDOID's owner half (`key`), which the leave
+# line repeats verbatim and which survives a death-and-respawn within the same
+# connection; `id` stays null (bridging it to the character would be a
+# cross-layer guess). A ZDOID is a SIGNED 32-bit id, so roughly half of them
+# are negative and the sign is part of the token on both lines. `0:0` is the
+# none-ZDOID the server sends when a character is destroyed — the player is
+# still connected, so it is excluded rather than read as an arrival.
+player_joined_regex: 'Got character ZDOID from (?<name>.+?) : (?!0:0)(?<key>-?\d+):\d+'
+player_left_regex: 'Destroying abandoned non persistent zdo -?\d+:\d+ owner (?<key>-?\d+)'
 # RCON polling — an optional second source of player presence, for a game whose
 # console does not announce joins and leaves in its log, or announces only one of
 # the two. Empty rcon_port leaves it off, which is what every unset field here
