@@ -97,7 +97,9 @@ ${UNDERLINE}Options:${END}
 ${UNDERLINE}Description:${END}
 No file inside the library is removed, including the instances placed there.
 A library holding instances is refused: an entry that goes while its instances
-stay would leave them in a root this host no longer knows about.
+stay would leave them in a root this host no longer knows about. Deregistering
+the configured default_library clears it, so the config never keeps naming a
+library that no longer exists.
 
 --drain is the way a disk is emptied before it is taken out. Every instance is
 moved into the target library, one at a time, and the library is deregistered
@@ -160,7 +162,9 @@ ${UNDERLINE}Arguments:${END}
 ${UNDERLINE}Description:${END}
 Instances are unaffected: they record the library's path, and the name lives
 only in the registry. An offline library is renamed in the registry alone; its
-marker catches up the next time the root is reachable.
+marker catches up the next time the root is reachable. When the renamed
+library is the configured default_library, the config is rewritten to the new
+name in the same operation.
 
 ${UNDERLINE}Examples:${END}
   ${self} rename ssd fast
@@ -461,6 +465,9 @@ function _cmd_remove() {
           __print_warning "  $_instance"
         done <<< "$__library_remove_instances_out"
       fi
+      if [[ "$__library_remove_default_out" == "true" ]]; then
+        __print_warning "'$name' was the configured default_library; it is now unset"
+      fi
       __emit_event library.removed "$name" "$__library_remove_path_out"
       return 0
       ;;
@@ -635,6 +642,9 @@ function _cmd_rename() {
       __print_success "Renamed library '$old' to '$new'"
       if [[ "$__library_rename_marker_out" != "true" ]]; then
         __print_warning "Library '$new' is offline; its marker keeps the old name until the root is reachable"
+      fi
+      if [[ "$__library_rename_default_out" == "true" ]]; then
+        __print_info "'$new' is the configured default_library; the config now carries the new name"
       fi
       return 0
       ;;

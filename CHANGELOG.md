@@ -47,6 +47,14 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **Renaming or removing the configured default library keeps `default_library` honest
+  (`3.18.0-rc25`).** Renaming the library `default_library` names rewrites the config to the new
+  name in the same operation, and deregistering that library clears it — both used to leave the key
+  naming a library that no longer existed, so an install with no `--library` misresolved or failed.
+  The check reads `default_library` from the config file directly rather than the flattened
+  `config_default_library` variable, which a rename or remove earlier in the same process can leave
+  stale.
+
 - **The engine leaves a working directory it cannot enter (`3.18.0-rc24`).** Run as the service
   account from a login shell — `sudo -u kgsm -H kgsm ...` — it starts in the person's home, which is
   usually `0700`. Every `find` it runs then failed to restore that directory and printed

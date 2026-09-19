@@ -14,6 +14,7 @@
 readonly TEST_NAME="libraries_commands"
 readonly MODULE="$KGSM_ROOT/commands/libraries.sh"
 readonly HANDLER="$KGSM_ROOT/commands/handlers/libraries.sh"
+readonly CONFIG_MODULE="$KGSM_ROOT/commands/config.sh"
 
 # =============================================================================
 # TEST FUNCTIONS
@@ -53,6 +54,7 @@ function teardown() {
   rm -f "$(__library_registry_file)"
   rm -rf "${KGSM_INSTANCES_DIR:?}"/*
   rm -rf "${LIBRARY_TEST_DIR:?}"
+  "$CONFIG_MODULE" set default_library= > /dev/null 2>&1
 }
 
 # Places a fake instance in a library: the registry symlink KGSM enumerates,
@@ -312,6 +314,49 @@ function test_rename_of_an_unregistered_library_is_reported() {
   assert_contains "$output" "not registered" "Should say the library is unknown"
 }
 
+function test_rename_of_the_default_library_updates_default_library() {
+  log_test_step "Testing 'libraries rename' rewrites a renamed default_library"
+
+  "$MODULE" add "${LIBRARY_TEST_DIR}/legacy" --name legacy-default > /dev/null 2>&1
+  "$MODULE" add "${LIBRARY_TEST_DIR}/main" --name main > /dev/null 2>&1
+  "$CONFIG_MODULE" set default_library=main > /dev/null 2>&1
+
+  # Removing an unrelated library must not disturb the configured default —
+  # this stands in for freeing up the name the default is about to be renamed to.
+  "$MODULE" remove legacy-default > /dev/null 2>&1
+  local after_remove
+  after_remove="$("$CONFIG_MODULE" get default_library 2>&1)"
+  assert_equals "$after_remove" "main" \
+    "Removing an unrelated library should leave default_library untouched"
+
+  local output
+  output="$("$MODULE" rename main default 2>&1)"
+  assert_equals "$?" "0" "Rename should succeed"
+  assert_contains "$output" "default_library" "Should mention the rewritten default"
+
+  local after_rename
+  after_rename="$("$CONFIG_MODULE" get default_library 2>&1)"
+  assert_equals "$after_rename" "default" \
+    "default_library should follow the rename, not name a library that no longer exists"
+}
+
+function test_rename_of_a_non_default_library_leaves_default_library_untouched() {
+  log_test_step "Testing 'libraries rename' with a library that is not the default"
+
+  "$MODULE" add "${LIBRARY_TEST_DIR}/ssd" --name ssd > /dev/null 2>&1
+  "$MODULE" add "${LIBRARY_TEST_DIR}/main" --name main > /dev/null 2>&1
+  "$CONFIG_MODULE" set default_library=main > /dev/null 2>&1
+
+  local output
+  output="$("$MODULE" rename ssd fast 2>&1)"
+  assert_equals "$?" "0" "Rename should succeed"
+  assert_not_contains "$output" "default_library" "Should not mention the default"
+
+  local value
+  value="$("$CONFIG_MODULE" get default_library 2>&1)"
+  assert_equals "$value" "main" "default_library should be unchanged"
+}
+
 # =============================================================================
 # REMOVE
 # =============================================================================
@@ -383,4 +428,19 @@ function test_remove_of_an_unregistered_library_is_reported() {
 
   assert_equals "$exit_code" "$EC_LIBRARY_NOT_FOUND" "Should return EC_LIBRARY_NOT_FOUND"
   assert_contains "$output" "not registered" "Should say the library is unknown"
+}
+
+function test_remove_of_the_default_library_clears_default_library() {
+  log_test_step "Testing 'libraries remove' clears a removed default_library"
+
+  "$MODULE" add "${LIBRARY_TEST_DIR}/main" --name main > /dev/null 2>&1
+  "$CONFIG_MODULE" set default_library=main > /dev/null 2>&1
+
+  local output
+  output="$("$MODULE" remove main 2>&1)"
+  assert_equals "$?" "0" "Should succeed"
+  assert_contains "$output" "default_library" "Should mention the cleared default"
+
+  assert_command_succeeds "grep -qE '^default_library=\$' '$CONFIG_FILE'" \
+    "default_library should be cleared rather than naming a library that no longer exists"
 }

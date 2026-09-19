@@ -259,6 +259,19 @@ function __library_registry_rename() {
 
 export -f __library_registry_rename
 
+# Echoes the persisted default_library, reading it straight from the config
+# file rather than the flattened `config_default_library` variable: that
+# variable is set once per process from whatever the config held at load
+# time, so a caller acting on the current file's contents — rename and
+# remove both do — reads the file directly instead of trusting a value that
+# may predate a change made earlier in the same process. Echoes nothing,
+# never an error, when the key is unset.
+function __library_configured_default() {
+  __get_config_value "$CONFIG_FILE" "default_library" 2> /dev/null || true
+}
+
+export -f __library_configured_default
+
 # Echoes the name of the library registered at a path, if any.
 # Args: $1 = canonical path
 # Returns: EC_SUCCESS when found, EC_NOT_FOUND otherwise
@@ -1147,12 +1160,15 @@ export -f __logic_library_add
 # Files are never touched: removal takes the library out of the registry and
 # takes the marker off the root when the root is reachable. A library holding
 # instances is refused unless forced — deregistering it would leave them placed
-# in a root this host no longer knows about.
+# in a root this host no longer knows about. Deregistering the configured
+# default clears `default_library`, so the config never keeps naming a library
+# that no longer exists.
 #
 # Args: $1 = library name, $2 = force ("true" to deregister anyway)
 # Outputs (globals, always assigned):
 #   __library_remove_path_out       the root that was deregistered
 #   __library_remove_instances_out  the blocking instance names, newline-separated
+#   __library_remove_default_out    true when default_library was cleared
 # Returns: EC_SUCCESS_LIBRARY_REMOVED, or an error code
 function __logic_library_remove() {
   local _name="$1"
@@ -1160,6 +1176,7 @@ function __logic_library_remove() {
 
   __library_remove_path_out=""
   __library_remove_instances_out=""
+  __library_remove_default_out=false
 
   if [[ -z "$_name" ]]; then
     return $EC_INVALID_ARG
@@ -1193,6 +1210,14 @@ function __logic_library_remove() {
     return $EC_FAILED_UPDATE_CONFIG
   fi
 
+  if [[ "$(__library_configured_default)" == "$_name" ]]; then
+    if ! __add_or_update_config "$CONFIG_FILE" "default_library" ""; then
+      return $EC_FAILED_UPDATE_CONFIG
+    fi
+    config_default_library=""
+    __library_remove_default_out=true
+  fi
+
   __library_remove_path_out="$_path"
   __library_remove_instances_out="$_instances"
   return $EC_SUCCESS_LIBRARY_REMOVED
@@ -1205,17 +1230,22 @@ export -f __logic_library_remove
 # Instances are unaffected: they record the library's path, and the registry is
 # the only place a name lives. A library that is offline is renamed in the
 # registry alone — its marker carries the old name until the root is reachable,
-# which changes nothing, because online is decided by the id.
+# which changes nothing, because online is decided by the id. When the renamed
+# library is the configured default, `default_library` is rewritten to the new
+# name in the same operation, so the config never keeps naming a library that
+# no longer exists under that name.
 #
 # Args: $1 = current name, $2 = new name
 # Outputs (globals, always assigned):
-#   __library_rename_marker_out  true when the marker was rewritten too
+#   __library_rename_marker_out   true when the marker was rewritten too
+#   __library_rename_default_out  true when default_library was rewritten too
 # Returns: EC_SUCCESS, or an error code
 function __logic_library_rename() {
   local _old="$1"
   local _new="$2"
 
   __library_rename_marker_out=false
+  __library_rename_default_out=false
 
   if [[ -z "$_old" ]] || [[ -z "$_new" ]]; then
     return $EC_INVALID_ARG
@@ -1246,6 +1276,14 @@ function __logic_library_rename() {
       return $EC_FAILED_TOUCH
     fi
     __library_rename_marker_out=true
+  fi
+
+  if [[ "$_old" != "$_new" ]] && [[ "$(__library_configured_default)" == "$_old" ]]; then
+    if ! __add_or_update_config "$CONFIG_FILE" "default_library" "$_new"; then
+      return $EC_FAILED_UPDATE_CONFIG
+    fi
+    config_default_library="$_new"
+    __library_rename_default_out=true
   fi
 
   return $EC_SUCCESS

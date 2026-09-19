@@ -55,6 +55,8 @@ function teardown() {
   rm -f "$(__library_registry_file)"
   rm -rf "${KGSM_INSTANCES_DIR:?}"/*
   rm -rf "${LIBRARY_TEST_DIR:?}"
+  __add_or_update_config "$CONFIG_FILE" "default_library" "" > /dev/null 2>&1
+  declare -g config_default_library=""
 }
 
 # Registers a library root under the per-test scratch directory.
@@ -379,6 +381,41 @@ function test_rename_rejects_an_invalid_new_name() {
   assert_equals "$?" "$EC_SUCCESS" "The library should keep its name"
 }
 
+function test_rename_updates_default_library_when_the_default_is_renamed() {
+  log_test_step "Testing __logic_library_rename rewrites a renamed default_library"
+
+  _add_library "main" "main"
+  __add_or_update_config "$CONFIG_FILE" "default_library" "main"
+
+  # A stale in-process flattened var must not matter: the check reads the
+  # config file itself, not this variable.
+  declare -g config_default_library="stale-value"
+
+  __logic_library_rename "main" "default"
+  assert_equals "$?" "$EC_SUCCESS" "Rename should succeed"
+  assert_equals "$__library_rename_default_out" "true" \
+    "The default should be reported as rewritten"
+  assert_equals "$config_default_library" "default" \
+    "The in-process default should follow the rename"
+  assert_file_contains "$CONFIG_FILE" "default_library=default" \
+    "The persisted default should follow the rename"
+}
+
+function test_rename_leaves_default_library_untouched_when_the_default_is_not_renamed() {
+  log_test_step "Testing __logic_library_rename with a library that is not the default"
+
+  _add_library "ssd" "ssd"
+  _add_library "main" "main"
+  __add_or_update_config "$CONFIG_FILE" "default_library" "main"
+
+  __logic_library_rename "ssd" "fast"
+  assert_equals "$?" "$EC_SUCCESS" "Rename should succeed"
+  assert_equals "$__library_rename_default_out" "false" \
+    "The default should be reported as untouched"
+  assert_file_contains "$CONFIG_FILE" "default_library=main" \
+    "The persisted default should be unchanged"
+}
+
 # =============================================================================
 # MARKER ADOPTION
 # =============================================================================
@@ -645,4 +682,39 @@ function test_remove_of_an_offline_library_leaves_its_marker_on_the_disk() {
 
   assert_file_exists "${LIBRARY_TEST_DIR}/ssd.away/.kgsm-library" \
     "The identity stays on the disk so re-adding it adopts rather than re-creates"
+}
+
+function test_remove_clears_default_library_when_the_default_is_removed() {
+  log_test_step "Testing __logic_library_remove clears a removed default_library"
+
+  _add_library "main" "main"
+  __add_or_update_config "$CONFIG_FILE" "default_library" "main"
+
+  # A stale in-process flattened var must not matter: the check reads the
+  # config file itself, not this variable.
+  declare -g config_default_library="stale-value"
+
+  __logic_library_remove "main"
+  assert_equals "$?" "$EC_SUCCESS_LIBRARY_REMOVED" "Should deregister"
+  assert_equals "$__library_remove_default_out" "true" \
+    "The default should be reported as cleared"
+  assert_equals "$config_default_library" "" \
+    "The in-process default should be cleared"
+  assert_command_succeeds "grep -qE '^default_library=\$' '$CONFIG_FILE'" \
+    "The persisted default should be cleared"
+}
+
+function test_remove_leaves_default_library_untouched_when_a_different_library_is_removed() {
+  log_test_step "Testing __logic_library_remove with a library that is not the default"
+
+  _add_library "ssd" "ssd"
+  _add_library "main" "main"
+  __add_or_update_config "$CONFIG_FILE" "default_library" "main"
+
+  __logic_library_remove "ssd"
+  assert_equals "$?" "$EC_SUCCESS_LIBRARY_REMOVED" "Should deregister"
+  assert_equals "$__library_remove_default_out" "false" \
+    "The default should be reported as untouched"
+  assert_file_contains "$CONFIG_FILE" "default_library=main" \
+    "The persisted default should be unchanged"
 }

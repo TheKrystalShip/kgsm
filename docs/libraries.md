@@ -146,6 +146,9 @@ Removing an **offline** library leaves its marker behind: the identity stays on 
 re-adding it later adopts the library it already holds instead of minting a second one over the
 same instances.
 
+Deregistering the library named by `default_library` clears it, so the config never keeps naming a
+library that no longer exists.
+
 ### `list`
 
 Reports each library's name, state, free and total bytes, instance count, and root. `--json`
@@ -172,7 +175,9 @@ null, never a number nothing measured.
 Rewrites the name in the registry and in the marker. Instances are unaffected: they record the
 library's **path**, and the name lives only in the registry, so a rename costs nothing. An offline
 library is renamed in the registry alone; its marker catches up the next time the root is
-reachable, and nothing depends on it in the meantime because online is decided by the id.
+reachable, and nothing depends on it in the meantime because online is decided by the id. Renaming
+the configured `default_library` rewrites it to the new name in the same operation, so the config
+never keeps naming a library that no longer exists under that name.
 
 ## Which library an instance is in
 
