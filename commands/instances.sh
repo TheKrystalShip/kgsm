@@ -859,6 +859,7 @@ function _print_info() {
 
   local instance_config_file
   instance_config_file=$(__find_instance_config "$instance")
+  __logic_stamp_instance_install_nonce "$instance_config_file" || true
 
   # A config written before instances carried a label has no display_name key,
   # and the value it reads as is the instance's id. Stated here so that every
@@ -881,6 +882,7 @@ function _print_info_json() {
 
   local instance_config_file
   instance_config_file=$(__find_instance_config "$instance")
+  __logic_stamp_instance_install_nonce "$instance_config_file" || true
 
   # Derive the per-instance native cgroup path (e.g. kgsm.slice/<name>) and surface it
   # as a `cgroup_path` field. Path layout authority: core/cgroup.sh:__cgroup_path;

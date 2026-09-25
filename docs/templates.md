@@ -165,6 +165,7 @@ The following `$instance_*` variables are available in templates that are expand
 | `$instance_display_name` | Human-readable label, stripped of control characters and escaped for the `key="value"` form. Defaults to the identifier |
 | `$instance_blueprint_file` | Absolute path to the blueprint file |
 | `$instance_install_datetime` | Timestamp of when the instance was installed |
+| `$instance_install_nonce` | 16 hex digits telling this install apart from any other under the same name; never changes |
 
 ### Directory and File Paths
 

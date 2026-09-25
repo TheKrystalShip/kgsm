@@ -237,6 +237,15 @@ function _uninstall() {
   backups_dir="${backups_dir%\"}"
   backups_dir="${backups_dir#\"}"
 
+  # Read now for the same reason: server.uninstalled carries it, so whoever holds
+  # grants on this install can drop exactly those, and not a later install under
+  # the same name.
+  local install_nonce
+  __logic_stamp_instance_install_nonce "$instance_config_file" || true
+  install_nonce="$(__get_config_value "$instance_config_file" "install_nonce" 2>/dev/null)"
+  install_nonce="${install_nonce%\"}"
+  install_nonce="${install_nonce#\"}"
+
   if [[ "$force" -ne 1 ]]; then
     __print_warning "This operation is destructive and irreversible."
     echo ""
@@ -342,7 +351,7 @@ function _uninstall() {
 
   __print_success "Instance '${instance}' uninstalled"
 
-  __emit_event server.uninstalled "${instance}"
+  __emit_event server.uninstalled "${instance}" "${install_nonce}"
 
   # Emitted LAST, after server.uninstalled: a consumer that reads "the run
   # ended" and re-reads the roster must find the instance already gone rather

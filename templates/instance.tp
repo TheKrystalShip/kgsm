@@ -26,6 +26,12 @@ blueprint_file="${instance_blueprint_file}"
 # Timestamp when the instance was installed
 install_datetime="${instance_install_datetime}"
 
+# What tells this install apart from any other under the same name. A grant of
+# access names the instance by its node, its name and this nonce, so a server
+# removed and installed again under the same name inherits nothing. Never
+# changes for the instance's life, and cannot be set.
+install_nonce="${instance_install_nonce}"
+
 #=============================================================================
 # DIRECTORY AND FILE PATHS
 # All file system paths used by this instance

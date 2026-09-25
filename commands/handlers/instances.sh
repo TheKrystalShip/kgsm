@@ -251,6 +251,8 @@ function __logic_create_base_instance() {
 
   # shellcheck disable=SC2155
   export instance_install_datetime="$(date +"%Y-%m-%dT%H:%M:%S")"
+  # shellcheck disable=SC2155
+  export instance_install_nonce="$(__new_install_nonce)"
   export instance_version_file="${instance_working_dir}/.${_instance_name}.version"
   export instance_latest_version_file="${instance_working_dir}/.${_instance_name}.latest"
   export instance_manage_file="${instance_working_dir}/${_instance_name}.manage.sh"
@@ -708,7 +710,7 @@ export -f __logic_get_instance_paths
     local key="$1"
 
     case "$key" in
-      name | blueprint_file | runtime | platform | install_datetime | \
+      name | blueprint_file | runtime | platform | install_datetime | install_nonce | \
         is_steam_account_required | steam_app_id | \
         client_steam_app_id | ports)
         return 0
@@ -873,6 +875,61 @@ function __set_instance_config_value() {
 }
 
 export -f __set_instance_config_value
+
+# A fresh install nonce: 64 bits from the kernel's generator, as 16 hex digits.
+#
+# The nonce is what tells two installs under one name apart. A grant of access
+# names an instance by its node, its name and this nonce, so an instance removed
+# and installed again under the same name is a different instance to whoever
+# holds grants — nothing given on the first carries to the second.
+function __new_install_nonce() {
+  od -An -N8 -tx1 /dev/urandom | tr -d ' \n'
+}
+
+export -f __new_install_nonce
+
+# Gives an instance its install nonce, if it has none.
+#
+# Called wherever an instance's config is read for a consumer, so an instance
+# installed before nonces existed gets one the first time anything looks at it,
+# and nothing outside the engine ever sees an instance without one. An instance
+# that carries a nonce is left exactly as it is: the nonce never changes for the
+# instance's life, and it is protected from `instances config-set` for the same
+# reason. Written directly rather than through __set_instance_config_value, which
+# refuses a protected key.
+#
+# Args: $1 = the instance's config file
+# Returns: EC_SUCCESS once the file carries a nonce, EC_* when it cannot
+function __logic_stamp_instance_install_nonce() {
+  local _config_file="$1"
+
+  if [[ -z "$_config_file" ]] || [[ ! -f "$_config_file" ]]; then
+    return $EC_FILE_NOT_FOUND
+  fi
+
+  if grep -qE '^install_nonce[[:space:]]*=[[:space:]]*"?[0-9a-f]+' "$_config_file"; then
+    return $EC_SUCCESS
+  fi
+
+  local _nonce
+  _nonce="$(__new_install_nonce)"
+  if [[ ! "$_nonce" =~ ^[0-9a-f]{16}$ ]]; then
+    return $EC_FAILED_UPDATE_CONFIG
+  fi
+
+  # A key with an empty value is replaced; an absent one is appended.
+  if grep -qE '^install_nonce[[:space:]]*=' "$_config_file"; then
+    sed -i -E "s/^install_nonce[[:space:]]*=.*/install_nonce=\"${_nonce}\"/" "$_config_file" ||
+      return $EC_FAILED_UPDATE_CONFIG
+  else
+    printf '\n# What tells this install apart from any other under the same name. Never changes.\ninstall_nonce="%s"\n' \
+      "$_nonce" >> "$_config_file" || return $EC_FAILED_UPDATE_CONFIG
+  fi
+
+  return $EC_SUCCESS
+}
+
+export -f __logic_stamp_instance_install_nonce
 
 # Records what an instance does on a clock as one maintenance-window list.
 #

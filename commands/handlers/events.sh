@@ -486,6 +486,9 @@ declare -g -A EVENT_CONFIGS=(
   ["$EVENT_INSTANCE_UNINSTALL_STARTED"]="instance"
   ["$EVENT_INSTANCE_UNINSTALL_FINISHED"]="instance"
   ["$EVENT_INSTANCE_UNINSTALL_FAILED"]="instance"
+  # Also carries the install nonce as an optional second parameter, written as
+  # `InstallNonce`: present when the uninstall could read the instance's config,
+  # null when its library was offline and nothing of it could be read.
   ["$EVENT_INSTANCE_UNINSTALLED"]="instance"
   ["$EVENT_INSTANCE_PORTS_OPENED"]="instance ports"
   ["$EVENT_INSTANCE_PORTS_CLOSED"]="instance ports"
@@ -1119,6 +1122,13 @@ function __logic_build_event_payload() {
     "$EVENT_INSTANCE_STARTED" | "$EVENT_INSTANCE_STOPPED" | "$EVENT_INSTANCE_RESTARTED")
       data_object='{
         InstanceName: $instance
+      }'
+      ;;
+    "$EVENT_INSTANCE_UNINSTALLED")
+      jq_args+=(--arg install_nonce "${params[1]:-}")
+      data_object='{
+        InstanceName: $instance,
+        InstallNonce: ($install_nonce | if . == "" then null else . end)
       }'
       ;;
     "$EVENT_INSTANCE_CONFIG_CHANGED")

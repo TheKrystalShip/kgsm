@@ -722,6 +722,21 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Added — every install carries a nonce (`3.18.0-rc28`)
+
+An instance's config carries `install_nonce`: 16 hex digits written when it is created, which never
+change for its life and cannot be set with `instances config-set`. An instance created before the key
+existed gets one the first time its info is read (`instances info`, `instances list --detailed`), so
+nothing outside the engine sees an instance without one.
+
+A grant of access names an instance by its node, its name and this nonce
+(`kgsm-docs/plans/permissions.md` §4·e), which is what makes a server removed and installed again under
+the same name a different server to whoever holds grants.
+
+`server.uninstalled` carries it as `InstallNonce`, read before anything is removed, so the auth anchor
+drops exactly the grants on the install that went. It is null when an instance on an offline library
+is deregistered, since nothing of that instance can be read then.
+
 ### Added — the engine's action manifest
 
 `deploy/kgsm.actions.json` names every action the engine performs — starting, stopping and updating
