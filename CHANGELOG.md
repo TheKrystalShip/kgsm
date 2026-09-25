@@ -47,6 +47,12 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **Valheim's moderation is documented as the ban list, applied live (`3.18.0-rc27`).** Valheim's
+  `kick`, `ban` and `unban` exist only in a connected admin's F5 console, and the dedicated server
+  reads nothing from stdin, so the blueprint declares its moderation and broadcast commands empty
+  and says why. The server re-reads `bannedlist.txt` and `permittedlist.txt` while running and kicks
+  anyone they exclude within about 15 seconds; the operator guides describe that, with no restart.
+
 - **Valheim reads a signed ZDOID and ignores the none-ZDOID (`3.18.0-rc26`).** A ZDOID is a signed
   32-bit id, so roughly half the players a server sees carry a negative one on both the join line
   and the leave line, and the sign is part of the correlation token. The `0:0` the server sends

@@ -97,12 +97,16 @@ kgsm instances info my-valheim
 
 ## Admins, bans and allow-lists
 
-Valheim has no console, so moderation is these three files plus a restart. Each takes one platform
-user ID per line, written `[Platform]_[UserID]` and case-sensitive. The server creates all three on
-first start with a comment line explaining the format.
+Valheim has no server console, so moderation from the host is these three files. Each takes one
+platform user ID per line, written `[Platform]_[UserID]` and case-sensitive. The server creates all
+three on first start with a comment line explaining the format.
+
+The running server picks up changes to `bannedlist.txt` and `permittedlist.txt` within about 15
+seconds and kicks anyone they exclude, with no restart.
 
 `kgsm instances kick|ban|unban` do not work here, and the blueprint declares no moderation commands,
-because there is no command for KGSM to send.
+because there is no command for KGSM to send. An admin who is connected to the server can use `kick`,
+`ban`, `unban` and `banned` in the game's F5 console; `ban` and `unban` edit `bannedlist.txt`.
 
 Be careful with `permittedlist.txt`: adding one person converts the server to an allow-list and
 refuses everyone else. Leave it empty unless that is what you want.

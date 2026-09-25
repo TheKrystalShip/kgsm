@@ -130,12 +130,9 @@ Valheim's dedicated server reads no console input, so there is nothing for `kgsm
 talk to, and the blueprint declares no moderation commands — `kgsm instances kick|ban|unban` answer
 that the instance does not support them.
 
-Moderation is the list files in `saves/`, applied by restarting:
-
-```bash
-# add the platform user ID to bannedlist.txt, then
-kgsm restart my-valheim
-```
+Moderation is the list files in `saves/`, which the running server re-reads on its own. Add the
+player's platform user ID or character name to `bannedlist.txt` and they are kicked within about 15
+seconds; delete the line to unban them. No restart is involved.
 
 ## Settings changes have no effect
 

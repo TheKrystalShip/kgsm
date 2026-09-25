@@ -36,6 +36,21 @@ rcon_poll_interval_seconds: 10
 # poller read any of them without knowing which game it is talking to.
 rcon_players_command: ""
 rcon_players_regex: ''
+# Moderation. Valheim's kick, ban and unban exist only as admin commands in a connected
+# client's F5 console, which reach the server as RPCs from a player listed in adminlist.txt.
+# The dedicated server reads nothing from stdin (a line written to its console is still
+# unread in the FIFO long after), so a template here would be delivered to nobody and
+# reported as done. They stay empty, as does broadcast_command for the same reason, and
+# KGSM refuses the actions.
+#
+# The server does act on bannedlist.txt (beside the world, under -savedir) while running:
+# every 5s it re-reads the file if its mtime changed and kicks every connected player the
+# file names, by character name or platform id (`Steam_<id>`, or a bare SteamID64). Adding
+# a line is a ban that takes effect within ~15s; removing it is the unban.
+kick_command: ''
+ban_command: ''
+unban_command: ''
+broadcast_command: ''
 native:
   # UDP only. A ready server binds both 2456 and 2457; 2456 appears late, once the world is
   # generated, so a server checked mid-generation looks like it uses only port+1. The vendor's

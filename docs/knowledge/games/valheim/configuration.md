@@ -84,11 +84,19 @@ One platform user ID per line, written `[Platform]_[UserID]` and case-sensitive.
 allow-list and locks out everyone else, including people already playing. An empty file means "no
 allow-list", which is not the same as "nobody is permitted".
 
+The running server applies `bannedlist.txt` and `permittedlist.txt` without a restart. Every 5 seconds
+it re-reads either file whose modification time changed and kicks every connected player the ban list
+names, or the allow-list leaves out. Adding a line to `bannedlist.txt` removes that player within about
+15 seconds, and deleting the line lets them back in. A ban line may be a platform user ID
+(`Steam_76561198000000000`, or the bare SteamID64) or a character name.
+
 ## What Valheim does not have
 
 - **No console commands.** The server reads nothing on its console, so there is no in-band way to
   save, kick, or list players. `kgsm instances input` has nothing to talk to, and KGSM's
-  `kick`/`ban`/`unban` verbs are unavailable — moderation is the list files plus a restart.
+  `kick`/`ban`/`unban` verbs are unavailable. `kick`, `ban`, `unban` and `banned` exist only in the
+  in-game F5 console of a player listed in `adminlist.txt`; from the host, moderation is editing
+  `bannedlist.txt`, which takes effect while the server runs.
 - **No configuration file.** Anything you want changed is a launch argument.
 - **No save command.** The server autosaves on its own schedule and writes the world when it shuts
   down.
