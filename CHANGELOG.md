@@ -722,6 +722,15 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Added — the engine's action manifest
+
+`deploy/kgsm.actions.json` names every action the engine performs — starting, stopping and updating
+servers, their consoles, files, backups, players and settings, installing, the node's libraries,
+blueprints and engine settings, and reading the blueprint catalog — each with its effect and the
+narrowest scope granting it means something at. The auth anchor's catalog is built from it and from
+every component's generated manifest (`kgsm-docs/reference/action-manifest.md`). Nothing installs it
+yet, and the engine's behaviour is unchanged.
+
 ### Changed — the first run does what it was asked (`3.18.0-rc17`)
 
 A host with no config of its own gets one, seeds its library, and carries on with the command that

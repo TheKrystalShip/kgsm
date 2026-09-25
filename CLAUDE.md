@@ -107,6 +107,12 @@ After changing engine code, run `./deploy/deploy.sh` so the deployed copy stays 
 The sync prunes, so a deleted command or override never lingers on the deployed engine;
 instances/config/logs live under XDG paths in your home and are never touched.
 
+`deploy/kgsm.actions.json` is the engine's **action manifest**: every action the engine performs, by
+id, effect and scope, for the auth anchor's catalog. The engine checks none of them itself — whoever
+calls it does — and it is written by hand because there is no compiled code to generate it from.
+kgsm-lib's `KgsmActions` mirrors it and a kgsm-lib test fails when the two disagree, so an operation
+added here is added there in the same change. Format: `kgsm-docs/reference/action-manifest.md`.
+
 `deploy/deploy-common.sh` holds the paths and helpers both scripts share. The three files are
 self-contained — a standalone clone deploys with nothing else checked out — and every `kgsm-*`
 sibling repo carries the same `setup.sh`-once / `deploy.sh`-forever pattern.
