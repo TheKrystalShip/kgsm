@@ -722,6 +722,20 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Added — maintenance windows record their author (`3.18.0-rc29`)
+
+`instances config-set <instance> maintenance_windows=<windows> --author <account>` records the account
+that wrote an instance's windows as `maintenance_windows_author`, beside them. Every write of
+`maintenance_windows` writes the author too — the account named, or nobody — so a list written by a
+caller that names nobody has no author, never the previous writer's. The author is cleared before the
+windows change and named after, so a write that fails part-way leaves windows with nobody to run them.
+`maintenance_windows_author` is protected from `config-set`, `--author` goes with that one key alone,
+and it must be an account id.
+
+A window runs only while both the scheduler's service account and its author may do what it does
+(`kgsm-docs/plans/permissions.md` §5·d), which is what keeps writing a schedule from lending anybody the
+scheduler's reach.
+
 ### Added — every install carries a nonce (`3.18.0-rc28`)
 
 An instance's config carries `install_nonce`: 16 hex digits written when it is created, which never

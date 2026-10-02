@@ -640,6 +640,7 @@ Set a single runtime value in an instance's configuration file.
 
 ${UNDERLINE}Usage:${END}
   $self config-set <instance> <key>=<value>
+  $self config-set <instance> maintenance_windows=<windows> [--author <account>]
 
 ${UNDERLINE}Arguments:${END}
   instance                    Instance name
@@ -648,6 +649,10 @@ ${UNDERLINE}Arguments:${END}
                               (quote the whole token in your shell)
 
 ${UNDERLINE}Options:${END}
+  --author <account>          The account writing maintenance_windows, recorded
+                              as maintenance_windows_author. A window runs only
+                              while its author may do what it does; windows
+                              written without one have no author and run nothing
   --help                      Display this help information
 
 ${UNDERLINE}Description:${END}
@@ -2316,12 +2321,27 @@ function __maintenance_windows_shape_ok() {
 # Emitted from the command layer, not the handler, so internal default-writes
 # stay event-free (matches the create/backup convention).
 #
-# Args: $1 = instance, $2 = key, $3 = value (may be the empty string)
+# Writing maintenance_windows always writes maintenance_windows_author beside it:
+# the account named by $4, or nobody. A window runs only while its author may do
+# what it does, so a list written by anyone who does not name themselves is left
+# with no author and runs nothing, rather than keeping the last writer's name on
+# a schedule they never saw.
+#
+# Args: $1 = instance, $2 = key, $3 = value (may be the empty string),
+#       $4 = the account authoring a maintenance_windows write (optional)
 # Returns: 0 on success, the setter's EC_* code otherwise
 function _set_instance_config_key() {
   local instance="$1"
   local key="$2"
   local value="$3"
+  local author="${4:-}"
+
+  if [[ -n "$author" ]]; then
+    # An account id, never free text: it is written into a sourced file.
+    if [[ "$key" != "maintenance_windows" || ! "$author" =~ ^[A-Za-z0-9_.:@-]+$ ]]; then
+      return $EC_INVALID_ARG
+    fi
+  fi
 
   if [[ "$key" == "maintenance_windows" ]] && ! __maintenance_windows_shape_ok "$value"; then
     return $EC_INVALID_CONFIG
@@ -2333,9 +2353,25 @@ function _set_instance_config_key() {
     [[ -n "$old_display_name" ]] || old_display_name="$instance"
   fi
 
+  # The author is cleared before the windows change and named after they have,
+  # so a write that fails part-way leaves windows with nobody to run them rather
+  # than windows credited to somebody who did not write them.
+  local exit_code
+  if [[ "$key" == "maintenance_windows" ]]; then
+    __write_instance_config_value "$instance" maintenance_windows_author ""
+    exit_code=$?
+    [[ $exit_code -eq 0 ]] || return $exit_code
+  fi
+
   __set_instance_config_value "$instance" "$key" "$value"
-  local exit_code=$?
+  exit_code=$?
   [[ $exit_code -eq 0 ]] || return $exit_code
+
+  if [[ "$key" == "maintenance_windows" && -n "$author" ]]; then
+    __write_instance_config_value "$instance" maintenance_windows_author "$author"
+    exit_code=$?
+    [[ $exit_code -eq 0 ]] || return $exit_code
+  fi
 
   __emit_event config.changed "$instance" "$key"
 
@@ -2354,12 +2390,21 @@ function _set_instance_config_key() {
 function _cmd_config_set() {
   local instance=""
   local assignment=""
+  local author=""
 
   while [[ $# -gt 0 ]]; do
     case "$1" in
       -h | --help | help)
         show_usage_config_set
         return 0
+        ;;
+      --author)
+        shift
+        if [[ -z "${1:-}" ]]; then
+          __print_error "--author needs the account that wrote the maintenance windows"
+          return $EC_MISSING_ARG
+        fi
+        author="$1"
         ;;
       -*)
         __print_error "Invalid option for config-set command: $1"
@@ -2402,7 +2447,7 @@ function _cmd_config_set() {
   local key="${assignment%%=*}"
   local value="${assignment#*=}"
 
-  _set_instance_config_key "$instance" "$key" "$value"
+  _set_instance_config_key "$instance" "$key" "$value" "$author"
   local exit_code=$?
 
   case $exit_code in
@@ -2432,10 +2477,15 @@ function _cmd_config_set() {
           enable_command_shortcuts)
             __print_error "Use: $self files symlink enable|disable $instance"
             ;;
+          maintenance_windows_author)
+            __print_error "Use: $self config-set $instance maintenance_windows=<windows> --author <account>"
+            ;;
           *)
             __print_error "Identity and path keys are managed by KGSM and must not be edited directly"
             ;;
         esac
+      elif [[ -n "$author" ]]; then
+        __print_error "--author names who wrote maintenance_windows, as an account id, and goes with that key alone"
       else
         __print_error "Invalid key '$key' (must match ^[a-zA-Z_][a-zA-Z0-9_]*\$)"
       fi

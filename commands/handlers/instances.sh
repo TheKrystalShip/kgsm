@@ -694,7 +694,10 @@ export -f __logic_get_instance_paths
 # Returns: 0 if the key is protected (must not be set), 1 otherwise.
 #
   # Three classes are refused:
-  #   - identity/structural keys, where a raw edit corrupts the instance;
+  #   - identity/structural keys, where a raw edit corrupts the instance, and
+  #     maintenance_windows_author, which the engine writes alongside the windows
+  #     themselves (config-set maintenance_windows=… --author …) so a schedule can
+  #     never be credited to somebody who did not write it;
   #   - the filesystem paths KGSM owns and manages (every *_dir / *_file, plus
   #     executable_subdirectory);
   #   - the side-effecting toggles, which have dedicated enable/disable flows
@@ -712,7 +715,7 @@ export -f __logic_get_instance_paths
     case "$key" in
       name | blueprint_file | runtime | platform | install_datetime | install_nonce | \
         is_steam_account_required | steam_app_id | \
-        client_steam_app_id | ports)
+        client_steam_app_id | ports | maintenance_windows_author)
         return 0
         ;;
       *_dir | *_file | executable_subdirectory)
@@ -827,6 +830,23 @@ function __set_instance_config_value() {
     value="$(__normalize_instance_display_name "$value")"
   fi
 
+  __write_instance_config_value "$_instance_name" "$key" "$value"
+}
+
+export -f __set_instance_config_value
+
+# Write a single key=value into an instance's .config.ini, with no judgement of
+# whether the key may be set. The engine's own writes of a protected key go
+# through here; everything a caller names goes through __set_instance_config_value,
+# which judges it first.
+#
+# Args: $1 = instance_name, $2 = key, $3 = value (may be the empty string)
+# Returns: 0 on success (no event), EC_* on failure.
+function __write_instance_config_value() {
+  local _instance_name="$1"
+  local key="$2"
+  local value="$3"
+
   local config_file
   config_file="$(__find_instance_config "$_instance_name")"
   if [[ -z "$config_file" ]]; then
@@ -874,7 +894,7 @@ function __set_instance_config_value() {
   return 0
 }
 
-export -f __set_instance_config_value
+export -f __write_instance_config_value
 
 # A fresh install nonce: 64 bits from the kernel's generator, as 16 hex digits.
 #
