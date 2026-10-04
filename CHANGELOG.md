@@ -722,6 +722,13 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Fixed — the install delivers the engine's action manifest (`3.18.0-rc30`)
+
+`deploy/deploy.sh` and the package install `deploy/kgsm.actions.json` as
+`/var/lib/kgsm/leaves/actions/kgsm.json`, stamped with the engine's version, where kgsm-api reads a
+node's manifests and reports them to the auth anchor's catalog. Without it a node reports no `kgsm:*`
+action, and no role can hold one.
+
 ### Added — maintenance windows record their author (`3.18.0-rc29`)
 
 `instances config-set <instance> maintenance_windows=<windows> --author <account>` records the account

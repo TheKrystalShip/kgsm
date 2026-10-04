@@ -42,6 +42,11 @@ ENTRYPOINT="kgsm.sh"
 # `event_journal_dir` in config.default.ini.
 JOURNAL_DIR="/var/lib/kgsm/events"
 
+# Where the engine's action manifest is installed: the node's actions directory, every file of which
+# kgsm-api reports to the auth anchor's catalog. The installed copy carries the engine's version, which
+# the committed deploy/kgsm.actions.json leaves out so the number is never typed twice.
+ACTIONS_FILE="/var/lib/kgsm/leaves/actions/kgsm.json"
+
 # Everything that is checkout-only and must never reach the deployed copy. Anything present in
 # PREFIX but not in the checkout (and not excluded here) is pruned on deploy, so the deployed
 # tree always matches the source exactly.

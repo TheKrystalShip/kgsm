@@ -69,6 +69,13 @@ package() {
     install -dm755 "${pkgdir}/usr/bin"
     ln -s "/opt/${pkgname}/kgsm.sh" "${pkgdir}/usr/bin/${pkgname}"
 
+    # The engine's action manifest, in the node's actions directory where kgsm-api reports it to the
+    # auth anchor's catalog, stamped with the version this package is built from.
+    install -dm755 "${pkgdir}/var/lib/kgsm/leaves/actions"
+    jq --arg v "$("${repo}/deploy/version.sh")" '.version = $v' "${repo}/deploy/kgsm.actions.json" \
+        > "${pkgdir}/var/lib/kgsm/leaves/actions/kgsm.json"
+    chmod 644 "${pkgdir}/var/lib/kgsm/leaves/actions/kgsm.json"
+
     # The service account and the /var/lib/kgsm tree belong to kgsm-base, which every kgsm package
     # depends on: they are written by several components and owned by none of them, so declaring
     # them here would make the engine's presence a precondition for a leaf's state directory.

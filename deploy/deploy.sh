@@ -36,7 +36,19 @@ rsync -a --delete "${RSYNC_EXCLUDES[@]}" "$REPO_DIR/" "$PREFIX/"
 chmod +x "$PREFIX/$ENTRYPOINT"
 find "$PREFIX/scripts" -type f -name '*.sh' -exec chmod +x {} + 2>/dev/null || true
 
-# ── 3. Verify (the deployed entrypoint actually runs) ─────────────────────────
+# ── 3. The action manifest ────────────────────────────────────────────────────
+# Stamped with the version being deployed and written only when it differs, so the node reports a
+# changed catalog only when something in it changed.
+manifest="$(mktemp)"
+jq --arg v "$("$REPO_DIR/deploy/version.sh")" '.version = $v' "$REPO_DIR/deploy/kgsm.actions.json" > "$manifest"
+install -d -m 0755 "$(dirname "$ACTIONS_FILE")"
+if ! cmp -s "$manifest" "$ACTIONS_FILE"; then
+    log "action manifest changed → ${ACTIONS_FILE}"
+    install -m 0644 "$manifest" "$ACTIONS_FILE"
+fi
+rm -f "$manifest"
+
+# ── 4. Verify (the deployed entrypoint actually runs) ─────────────────────────
 # Success is the deployed copy answering, not just files having landed.
 if ! "$PREFIX/$ENTRYPOINT" --version >/dev/null 2>&1; then
     err "${PREFIX}/${ENTRYPOINT} did not run cleanly after the sync."
