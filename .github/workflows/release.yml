@@ -69,7 +69,7 @@ jobs:
       # The container has neither git nor node, and every JavaScript action needs node present in
       # the container it runs in — so this plain shell step has to come before any `uses:`.
       - name: Provision the container
-        run: pacman -Sy --noconfirm --needed git nodejs rsync gnupg github-cli
+        run: pacman -Sy --noconfirm --needed git nodejs rsync jq gnupg github-cli
 
       - uses: actions/checkout@v7
       # makepkg refuses to run as root, and root-owned sources are unreadable to the build user.

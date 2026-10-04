@@ -722,6 +722,11 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Fixed — the release container carries jq (`3.18.0-rc31`)
+
+The package stamps the engine's version into its action manifest with `jq`, so the release workflow
+installs it in the build container beside `rsync`.
+
 ### Fixed — the install delivers the engine's action manifest (`3.18.0-rc30`)
 
 `deploy/deploy.sh` and the package install `deploy/kgsm.actions.json` as
