@@ -1337,7 +1337,7 @@ declare -g -r KGSM_DEFAULT_EVENT_JOURNAL_DIR="/var/lib/kgsm/events"
 export KGSM_DEFAULT_EVENT_JOURNAL_DIR
 
 # Whether an actor string is the `provider:name` form every reader parses back
-# into a structured actor (see KgsmActor in kgsm-auth).
+# into a structured actor (see KgsmActor in tks-auth).
 #
 # The provider half is a lowercase token and the name half is anything non-empty:
 # names carry spaces, dots and colons of their own, and only the FIRST colon
