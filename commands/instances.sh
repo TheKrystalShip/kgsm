@@ -2774,11 +2774,11 @@ ${UNDERLINE}Arguments:${END}
 
 ${UNDERLINE}Options:${END}
   --keep=N                    Number of most-recent backups to keep
-                              (default: 5; minimum: 1)
+                              (default: 3; minimum: 1)
   --help                      Display this help information
 
 ${UNDERLINE}Examples:${END}
-  $self prune-backups factorio-01 --keep=5
+  $self prune-backups factorio-01 --keep=3
   $self prune-backups factorio-01 --keep=10
 "
 }
@@ -3501,7 +3501,7 @@ function _cmd_delete_backup() {
 
 function _cmd_prune_backups() {
   local instance=""
-  local keep=5
+  local keep=3
 
   while [[ $# -gt 0 ]]; do
     case "$1" in

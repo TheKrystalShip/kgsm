@@ -722,6 +722,12 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Changed — an instance keeps three backups by default (`3.18.0-rc32`)
+
+A created instance materializes `backup_retention=3`, and `instances prune-backups` without `--keep`
+keeps the three most recent prunable backups. Pinned backups and the newest pre-update rollback point
+are held back on the same terms as before. An existing instance keeps whatever its config says.
+
 ### Fixed — the release container carries jq (`3.18.0-rc31`)
 
 The package stamps the engine's version into its action manifest with `jq`, so the release workflow

@@ -156,7 +156,7 @@ timezone="${instance_timezone:-}"
 
 # Number of backups to keep after each scheduled backup prunes (1-100).
 # 0 = keep all (no pruning).
-backup_retention="${instance_backup_retention:-5}"
+backup_retention="${instance_backup_retention:-3}"
 
 # Announcement lead times before a maintenance window, in minutes, comma-separated
 # and largest-first by convention (e.g. "15,5,1"). Empty announces nothing, which
