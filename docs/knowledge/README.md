@@ -1,9 +1,8 @@
 # KGSM knowledge base
 
 Reference knowledge about how native Linux dedicated game servers are set up, how KGSM blueprints
-express that, and how to run each game once its blueprint exists. It is written for two readers: a
-person hand-authoring a blueprint or operating a server, and the assistant's retrieval index (every
-`.md` here is indexed for RAG).
+express that, and how to run each game once its blueprint exists. It is written for a person
+hand-authoring a blueprint or operating a server.
 
 Two axes live here. The documents listed below explain how to **author a blueprint**;
 [`games/`](games/) holds per-game **operator** guides, which assume the blueprint already exists.

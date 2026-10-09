@@ -1,8 +1,7 @@
 # Per-game operator guides
 
 One directory per game, holding the knowledge an operator needs to **run** that server on KGSM.
-Written for two readers: a person setting up or debugging a server by hand, and the assistant's
-retrieval index.
+Written for a person setting up or debugging a server by hand.
 
 This is a different axis from the rest of `docs/knowledge/`, which explains how to **author a
 blueprint**. These documents assume the blueprint exists and the server is installed.
@@ -28,24 +27,19 @@ complete the set.
 - **Measured, or not stated.** Every claim here should come from a server that was actually run and
   observed. An error message is quoted from a real log, not paraphrased from memory. This is the
   same rule the blueprints follow.
-- **Headings are the retrieval key.** Each chunk is indexed with its heading breadcrumb, so a
-  heading phrased the way a person asks the question ("Nobody outside my network can join") is found
-  far more reliably than a structural one ("Network configuration").
+- **Headings are the question.** A heading phrased the way a person asks it ("Nobody outside my
+  network can join") is found far more reliably than a structural one ("Network configuration").
 - **Say what the guides do not cover.** Every game's `setup.md` opens with a scope section naming
-  what is out of scope and where the answer actually lies. Similarity alone cannot tell "this
-  document answers the question" from "this document is about the same game", so a question a guide
-  does not cover still retrieves it — and without a scope section the reader is handed a confident
-  answer to something else. Name the excluded topic explicitly, because a sentence that never
-  mentions modpacks is not found by someone asking about modpacks.
+  what is out of scope and where the answer actually lies, so a reader whose question a guide does not
+  cover is not handed a confident answer to something else. Name the excluded topic explicitly,
+  because a sentence that never mentions modpacks is not found by someone asking about modpacks.
 - **Cite the upstream source and its licence** at the top of each document when it is derived from a
   community wiki or vendor documentation.
 - **Record the verified version outside the guides.** The build a guide was written against goes in
-  the game's `SOURCES.txt`, never in a `.md`. A version number sitting in indexed prose is retrieved
-  by someone asking "what's the latest version of this game?" and answered as though it were the
-  current release — a confident wrong fact, and one that also suppresses the web lookup that would
-  have been right. The indexer walks `*.md` only, so a plain-text sibling keeps the information for
-  a reader and out of the assistant's reach. Attribution stays in the document; only the build
-  number moves.
+  the game's `SOURCES.txt`, never in a `.md`. A version number sitting in prose reads as the current
+  release to someone asking "what's the latest version of this game?" — a confident wrong fact. A
+  plain-text sibling keeps the information for a reader and out of the guides. Attribution stays in the
+  document; only the build number moves.
 
 ## Games covered
 
