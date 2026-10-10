@@ -1,161 +1,101 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
-KGSM (Krystal Game Server Manager) is a bash-based game server orchestration system for Linux. It deploys and manages diverse game servers — both native Linux processes and Docker containers — through a single CLI, using a blueprint-driven architecture.
+KGSM (Krystal Game Server Manager) is a bash game-server manager for Linux: native processes and
+containers, installed and run from declarative blueprints through one CLI. It is the engine's stateless
+half; `kgsm-watchdog` is the resident half. Role, contracts and peers: `../kgsm-docs/components/kgsm.md`.
+The engine model: `../kgsm-docs/systems/engine/`.
 
 ## Commands
 
 ```bash
-# Run KGSM
 ./kgsm.sh --help
 ./kgsm.sh --debug <command>          # trace output; also: export KGSM_DEBUG=true
 
-# Lint (must pass clean; SC2086 is globally disabled for unquoted exit codes)
-shellcheck path/to/script.sh
+shellcheck path/to/script.sh         # must pass clean; SC2086 is disabled globally for unquoted exit codes
 
-# Tests
 ./tests/run.sh                                   # all (unit + integration + e2e)
 ./tests/run.sh unit                              # one type (unit | integration | e2e)
 ./tests/run.sh --pattern 'test_config_*.sh'      # filename glob (or a fragment: 'config')
 ./tests/run.sh --pattern 'test_config_merge_logic.sh' --function 'test_merge_preserves_user_values'
-./tests/run.sh --debug-run tests/unit/test_x.sh  # inline run of one file, full trace, for debugging
+./tests/run.sh --debug-run tests/unit/test_x.sh  # inline run of one file, full trace
 ```
 
-`tests/run.sh` emits TAP v14 (it's the VS Code Test Adapter entry point), but the CLI invocations above are the supported way to run tests by hand.
+`tests/run.sh` emits TAP v14 (the VS Code Test Adapter entry point).
 
-## Architecture
+## Code map
 
-### Entry point and dispatch
-`kgsm.sh` parses the first argument and passes through to a top-level command module in `commands/` (e.g. `install`/`create` → `install.sh`, `config` → `config.sh`, `blueprints` → `blueprints.sh`). Every module sources `core/bootstrap.sh` first, which detects and exports `KGSM_ROOT`, then loads `core/common.sh` and the rest of the library.
-
-### Module loading (`core/bootstrap.sh`, `core/loader.sh`, `core/delegator.sh`)
-- Files are located dynamically via `__find_command()`, `__find_core_module()`, `__find_or_fail()` — don't hardcode paths.
-- Modules are lazy-loaded behind guards (`if [[ ! $KGSM_COMMON_LOADED ]]`).
-- Any function called from a subshell **must** be exported with `export -f function_name`, or it won't exist in the child process. This is the most common silent breakage.
-- `--debug` / `KGSM_DEBUG=true` propagates into all sub-shells.
-
-### Command / Handler split
-`commands/*.sh` are the I/O layer: argument parsing, user-facing messages, calling `__print_error`/`__print_warning`/`__print_info`. The actual business logic lives in `commands/handlers/*.sh` as pure functions that take inputs and return exit codes with no I/O. Put logic in handlers so it stays testable and reusable; keep `commands/` thin. The two layers are paired by name (`commands/instances.sh` ↔ `commands/handlers/instances.sh`).
-
-### Blueprint → Instance → Override (the core data model)
-- **Blueprints** (`blueprints/*.bp.yaml`) are **unified YAML** templates — one file per game in a single flat directory — that are a game server's complete identity: `schema_version`, `name`, `runtime` (`native`|`container`), a nullable `metadata:` block (display name + resource requirements, for UIs), and a runtime-tagged body (`native:` fields or `container.compose`). Parsed with **mikefarah/yq** (Arch `go-yq`), a **hard dependency**. Native `ports` is single-quoted, pipe-separated (`'1111:2222/tcp|3333/udp'`); container ports are **derived** from the embedded compose. Metadata values are nullable — `null` means unknown, **never a fabricated `0`**. These are the system (read-only) blueprints; user blueprints live under `~/.local/share/kgsm/blueprints/*.bp.yaml` and shadow same-named system ones. See `blueprints/CLAUDE.md`.
-- **Instances** are deployed servers created from a blueprint, each with isolated `server/ saves/ backups/ logs/` directories and a generated management script.
-- **Overrides** (`overrides/<name>/NN-*.sh`) supply game-specific install/update/lifecycle logic as module-based files. See `overrides/CLAUDE.md`.
-
-**Critical gotcha:** a blueprint binds to an override directory by its logical *name*, *not* its filename — the `name` field, for **both** runtimes. `terraria-modded.bp.yaml` with `name: terraria` uses `overrides/terraria/`. This lets multiple blueprint variants share one override directory.
-
-The override system is **module-based**: a game's override directory (`overrides/<name>/`) holds complete copies of the default management-script modules from `templates/manage.{native,container}.d/`, with only the game-specific functions changed. Only modules `03`–`08`, `10`, `11` may be overridden. Override functions follow fixed signatures documented in `templates/overrides.tp` (the authoritative API reference) — e.g. `_get_latest_version()` echoes a version or `exit 1`; `_download()`/`_deploy()` return 0/1. They operate on `instance_*` variables (`instance_install_dir`, `instance_temp_dir`, `instance_working_dir`, etc.). Read `templates/overrides.tp` before writing an override; copy `overrides/factorio/` or `overrides/terraria/` as a working example.
-
-### Error codes (`core/errors.sh`)
-All exit codes are named `EC_*` constants (`EC_SUCCESS=0`, `EC_BLUEPRINT_NOT_FOUND=27`, `EC_MIGRATION_FAILED=245`, …). Return these, not magic numbers. Exit codes are written unquoted (`return $EC_GENERAL`) — this is why SC2086 is disabled globally in `.shellcheckrc`.
-
-### Configuration (`core/config.sh`, `config.default.ini`, `migrations/config/`)
-Sectioned INI (`[system]`, `[network]`, `[steam]`, `[services]`, `[instance_defaults]`, `[events]`, `[watchers]`, `[accessibility]`) with a `config_schema_version`. At runtime keys are flattened to `config_*` exported variables. User config lives at `~/.config/kgsm/config.ini` and is merged with `config.default.ini` on update — the merge preserves user values, adds new keys, comments out deprecated ones, and keeps 10 numbered backups.
-
-Schema changes go through sequential idempotent migrations in `migrations/config/` (`001_*`, `002_*`, …) that run automatically when the schema version bumps. To change config schema: add the migration script, bump `config_schema_version` in `config.default.ini`, and add a case to `tests/unit/test_config_migrations.sh`. User-facing config CLI: `config merge | rollback [0-9] | diff [0-9] | validate`.
-
-Paths follow the XDG base directory spec (`~/.local/share/kgsm/` for instances/blueprints/overrides/logs). See `core/paths.sh`.
+- `kgsm.sh` dispatches the first argument to a command module in `commands/`. Every module sources
+  `core/bootstrap.sh` first, which exports `KGSM_ROOT` and loads `core/common.sh` and the library.
+- Locate files with `__find_command()`, `__find_core_module()`, `__find_or_fail()`; never hardcode paths.
+  Modules lazy-load behind guards (`if [[ ! $KGSM_COMMON_LOADED ]]`).
+- **A function called from a subshell must be exported with `export -f`**, or it does not exist in the
+  child. This is the most common silent breakage. `--debug` / `KGSM_DEBUG=true` propagates to sub-shells.
+- `commands/*.sh` are the I/O layer (argument parsing, `__print_*` messages). Logic lives in
+  `commands/handlers/*.sh` as pure functions returning exit codes, paired by name
+  (`commands/instances.sh` and `commands/handlers/instances.sh`). Keep `commands/` thin.
+- Exit codes are `EC_*` constants in `core/errors.sh`, written unquoted (`return $EC_GENERAL`); return
+  those, never magic numbers.
+- Config is sectioned INI (`core/config.sh`, `config.default.ini`), flattened to `config_*` variables at
+  runtime. A schema change is a sequential idempotent migration in `migrations/config/`, a bumped
+  `config_schema_version` in `config.default.ini`, and a case in `tests/unit/test_config_migrations.sh`.
+  Paths follow XDG (`core/paths.sh`).
+- Blueprints (`blueprints/*.bp.yaml`, parsed with mikefarah/yq, a hard dependency) and overrides
+  (`overrides/<name>/NN-*.sh`) are governed by `blueprints/CLAUDE.md` and `overrides/CLAUDE.md`. A blueprint
+  binds to an override directory by its `name` field, not its filename, for both runtimes. Blueprint
+  metadata is nullable: `null` is unknown, never a fabricated `0`. Only override modules `03`-`08`, `10`
+  and `11` exist to be overridden; `templates/overrides.tp` is the API reference.
+- Native lifecycle routes to the watchdog (`commands/handlers/watchdog.sh`); `autostart` controls boot
+  start through the watchdog's desired-state.
+- Events are always appended to the on-disk journal (`commands/events.journal.sh`); `docs/events.md`
+  holds the engine's event reference.
 
 ## Conventions
 
-- **Style:** Google Shell Style Guide, 2-space indent, lines ≤80 chars (never >120), `#!/usr/bin/env bash` shebang, always use the `function` keyword, prefer `[[` over `[`, quote all variable expansions (exit codes excepted, per above).
-- **Naming:** private functions `_name()`, internal library helpers `__name()`, public command logic plain. Variable prefixes: `config_*` for config, `instance_*` for instance state, `_var` for locals/internal.
-- **Avoid `eval`**; sanitize any user input that reaches a command.
-- **Behavioral certainty:** every code path must have a single defined, testable outcome — no "may succeed or fail depending on implementation." A check either always runs or never runs; don't make it conditional on incidental state. (E.g. ID generation either always validates the blueprint or never does — never "sometimes.")
+- Google Shell Style Guide, 2-space indent, lines at most 80 characters (never over 120),
+  `#!/usr/bin/env bash`, the `function` keyword, `[[` over `[`, every expansion quoted (exit codes excepted).
+- Private functions `_name()`, internal library helpers `__name()`. Prefixes: `config_*`, `instance_*`,
+  `_var` for locals.
+- Avoid `eval`; sanitize user input that reaches a command.
+- Every code path has one defined, testable outcome. A check either always runs or never runs; it is
+  never conditional on incidental state.
 
 ## Testing
 
-Tests run against full sandboxed copies of KGSM under `/tmp/kgsm-test-sandbox-*/` with **no mocking** — they exercise real KGSM code. Sandboxing also isolates XDG paths so tests don't touch the real `~/.config` / `~/.local/share`.
-
-The testing framework has its own substantial conventions (per-test setup/teardown hooks, the assertion library, the test template, TAP output, discovery). Before writing or modifying anything under `tests/`, read `docs/specs/testing-framework/testing_specification.md` and `tests/templates/test.template.sh`, and model new tests on an existing file of the same type. This area is treated as its own specialized domain — `.github/agents/testing.agent.md` and `.github/skills/create-test/` describe the workflow the project uses for test work; the key transferable rule is to follow the documented spec rather than improvising test structure.
-
-## Integration points
-
-UFW firewall rules (`enable_firewall_management`) and the optional webhook event transport (`commands/events.webhook.sh`). Events themselves are always appended to the on-disk journal (`commands/events.journal.sh`, `docs/events.md`) — that is the transport and the audit record, and it is not optional. Log/port watchers live in `commands/watcher.*.sh`.
-
-Native instances are supervised by the resident **kgsm-watchdog** daemon (cgroup-v2 spawn + crash-restart). `kgsm start/stop` route to it when present (`commands/handlers/watchdog.sh`), and `kgsm autostart enable|disable|status|list` controls boot auto-start via the watchdog's persisted desired-state. The watchdog owns native instance lifecycle; systemd manages only the daemon itself.
-
-## Key references
-
-- `templates/overrides.tp` — complete override API
-- `docs/` — `execution_flows.md`, `blueprints.md`, `overrides.md`, `instances.md`, `libraries.md`, `configuration_management.md`
-- `docs/specs/testing-framework/testing_specification.md` — required before touching tests
-- Examples: `blueprints/factorio.bp.yaml` (native), `blueprints/vrising.bp.yaml` (container), `overrides/factorio/`, `migrations/config/001_v0_to_v1_flat_to_sectioned.sh`
+Tests run against full sandboxed copies of KGSM under `/tmp/kgsm-test-sandbox-*/` with no mocking; the
+sandbox isolates XDG paths from the real `~/.config` and `~/.local/share`. Before writing or modifying
+anything under `tests/`, read `docs/specs/testing-framework/testing_specification.md` and
+`tests/templates/test.template.sh`, and model a new test on an existing file of the same type.
+`.github/agents/testing.agent.md` and `.github/skills/create-test/` describe the workflow.
 
 ## Deployment
 
-The canonical install lives at `/opt/kgsm` — a byte-identical copy of this checkout
-(minus `.git`, `node_modules`, `.dev-instances`). The `kgsm` on `PATH`
-(`/usr/bin/kgsm` → `/opt/kgsm/kgsm.sh`) resolves there.
+`/opt/kgsm` is a byte-identical copy of this checkout, published by `./deploy/deploy.sh` (rsync, no sudo,
+no prompts, prunes deleted files; instances, config and logs under XDG are untouched). `./deploy/setup.sh`
+runs once per host: it creates `/opt/kgsm` owned by you, the `kgsm` symlink on `PATH`, and the
+`kgsm-journal-prune` timer, so no polkit grant is needed. Run `deploy.sh` after changing engine code.
+`deploy/deploy-common.sh` holds the shared paths; the scripts are self-contained.
 
-Two scripts in `deploy/`:
-
-```bash
-./deploy/setup.sh    # ONCE per host — asks for sudo; creates /opt/kgsm owned by you + the PATH symlink
-./deploy/deploy.sh   # every time — rsync the checkout to /opt/kgsm. NO sudo, NO prompts
-```
-
-`setup.sh` is the only part that needs privilege, and it is idempotent — re-run it freely. Because
-it makes `/opt/kgsm` **yours**, the deploy itself is an ordinary file write, so **`deploy.sh` never
-asks for a password and never prompts.** It refuses up front, with *"run `deploy/setup.sh`"*, when
-the host is not provisioned. The one unit here is the `kgsm-journal-prune` timer, which `setup.sh`
-installs and enables outright — `deploy.sh` never touches it, so unlike the .NET projects this one
-needs no polkit grant at all.
-
-After changing engine code, run `./deploy/deploy.sh` so the deployed copy stays identical.
-The sync prunes, so a deleted command or override never lingers on the deployed engine;
-instances/config/logs live under XDG paths in your home and are never touched.
-
-`deploy/kgsm.actions.json` is the engine's **action manifest**: every action the engine performs, by
-id, effect and scope, for the auth anchor's catalog. The engine checks none of them itself — whoever
-calls it does — and it is written by hand because there is no compiled code to generate it from.
-kgsm-lib's `KgsmActions` mirrors it and a kgsm-lib test fails when the two disagree, so an operation
-added here is added there in the same change. Format: `kgsm-docs/reference/action-manifest.md`.
-
-`deploy/deploy-common.sh` holds the paths and helpers both scripts share. The three files are
-self-contained — a standalone clone deploys with nothing else checked out — and every `kgsm-*`
-sibling repo carries the same `setup.sh`-once / `deploy.sh`-forever pattern.
+`deploy/kgsm.actions.json` is the engine's action manifest, written by hand. kgsm-lib's `KgsmActions`
+mirrors it and a kgsm-lib test fails when the two disagree, so an action added here is added there in the
+same change. Format: `../kgsm-docs/reference/action-manifest.md`.
 
 ## Version tracking
 
-- **Version source:** the `KGSM_VERSION` declaration in `core/bootstrap.sh` (which `kgsm.sh` sources, so every entrypoint agrees)
-- **Packaging reads it via `deploy/version.sh`** — `./deploy/version.sh` prints the declared version, `--pkgver` prints the pacman-safe form. A package never restates a version number; it asks for one.
-- Bump the version whenever you make a user-facing change (new feature, bug fix, behaviour change). Patch for fixes, minor for new features, major for breaking changes.
-- Update `CHANGELOG.md` under `## [Unreleased]` with a brief entry for every meaningful change.
-- A git tag matching the new version should be created on release: `git tag v<version>`.
+- The version is `KGSM_VERSION` in `core/bootstrap.sh`; `./deploy/version.sh` prints it (`--pkgver` for the
+  pacman form) and packaging asks for it.
+- Bump it for every user-facing change: patch for fixes, minor for features, major for breaking changes.
+- Add a `CHANGELOG.md` entry under `## [Unreleased]` for every meaningful change.
+- Tag the bump commit `git tag -a v<version> -m "kgsm v<version>"`.
 
-## Documentation & comments: present-tense canon only
+## Read before changing
 
-Prose in this repo — every doc, `README`/`CLAUDE.md` section, and in-code comment — describes
-**how the thing works right now**, nothing else. History lives in the `CHANGELOG` and git
-history; never duplicate it into docs or code.
+- `templates/overrides.tp`: the override API.
+- `docs/`: `execution_flows.md`, `blueprints.md`, `overrides.md`, `instances.md`, `libraries.md`,
+  `configuration_management.md`, `events.md`.
+- `../kgsm-docs/reference/event-envelope.md`, `event-journal.md`, `event-vocabulary.md`: the journal
+  line the engine writes.
+- `../kgsm-docs/reference/maintenance-windows.md` and `../kgsm-docs/systems/operations/`: windows and
+  announcements.
 
-- **No transitions.** Never "was X, now Y", "used to…", "changed from…", "no longer…", or any
-  before/after framing. State the current rule flat: a sentence that only makes sense to a reader
-  who knows what the code *used to* do is dead weight, because that "before" no longer exists
-  anywhere in the code.
-- **Tombstones leave no marker.** When something is removed — dying naturally as part of the work,
-  or explicitly asked to be deleted — the removal is silent: no *"removed X"*, no *"X is gone"*,
-  no *"deprecated, use Y instead"* pointing at a corpse. The prose reads as if it never was. Code
-  kept while the thing that justified it was deleted gets a live present-tense reason to exist —
-  or goes too.
-- **No residue of the active work.** References only meaningful *during* a piece of work don't
-  survive it: *"temporary shim for the rework"*, *"added to satisfy the new requirement"*,
-  milestone/phase labels (*"per M2"*, *"the Phase 1 step"*). If a line's justification is the work
-  that produced it rather than the system as it now stands, it goes.
-- **No volatile numbers.** Counts and versions that drift — how many projects/files/tests/
-  partials exist, a dependency's pinned version, a file's line count — never go in prose: they are
-  stale the moment anything changes, and nothing fails to remind anyone. Name the authoritative
-  source instead (the csproj, the directory, the barrel file). A number belongs in prose only when
-  it *is* the contract (a port, a timeout, a cap) or a measured fact that is itself the reason a
-  design exists.
-- **Edits are replacements, not appends.** When changing an existing feature, rewrite the affected
-  doc/comment fresh as if writing it for the first time — never append a correction under the
-  stale version, and never leave the stale version standing beside the new. The current revision
-  does not converse with prior revisions.
-
-A reader six months from now should learn the system from the doc without knowing what it
-replaced. If you catch yourself explaining a change, stop — that sentence belongs in the commit
-message. When touching prose that already violates this, rewrite it to present-tense canon in
-passing.
+Docs and comments describe the system as it is now: present tense, no history, no emoji, no volatile
+numbers (workspace `../CLAUDE.md`).

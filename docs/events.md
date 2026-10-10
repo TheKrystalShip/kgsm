@@ -54,9 +54,11 @@ An event type is a **dotted lowercase name** and that name is its only identity 
 | `server.download.started` | Download of server files initiated | `InstanceName` |
 | `server.download.finished` | Download of server files completed | `InstanceName` |
 | `server.download.completed` | All required files downloaded | `InstanceName` |
+| `server.download.failed` | The download ended in failure | `InstanceName` |
 | `server.deploy.started` | Deployment of server files initiated | `InstanceName` |
 | `server.deploy.finished` | Deployment of server files completed | `InstanceName` |
 | `server.deploy.completed` | Server files fully deployed | `InstanceName` |
+| `server.deploy.failed` | The deployment ended in failure | `InstanceName` |
 | `server.install.finished` | Installation process completed | `InstanceName`, `Blueprint` |
 | `server.installed` | Server fully installed and ready | `InstanceName`, `Blueprint`, `Library` |
 
@@ -132,6 +134,7 @@ are JSON numbers. A prune that removed nothing emits nothing.
 | `server.uninstall.directories_removed` | Server directories removed | `InstanceName` |
 | `server.uninstall.removed` | Instance record removed | `InstanceName` |
 | `server.uninstall.finished` | Uninstallation process completed | `InstanceName` |
+| `server.uninstall.failed` | The uninstallation ended in failure | `InstanceName` |
 | `server.uninstalled` | Server fully uninstalled | `InstanceName` |
 
 ### Player Moderation Events
@@ -209,6 +212,7 @@ Every event is a JSON object with the following top-level fields:
 ```json
 {
     "V": 2,
+    "Id": "0192e8a4-7c11-7a3e-9b52-3f5d4c0a1e77",
     "EventType": "<event_type>",
     "Severity": "info",
     "Outcome": "neutral",
@@ -228,6 +232,7 @@ Every event is a JSON object with the following top-level fields:
 | Field | Type | Description |
 |-------|------|-------------|
 | `V` | int | Envelope schema version. A reader treats an absent `V` as version 0 — the spelling used before the field existed, which retention keeps on disk for up to `event_journal_retention_days` |
+| `Id` | string\|null | The line's own name: a lowercase, hyphenated UUIDv7 minted at write time and never derived from content. `null` where the shell lacks the builtins that mint it (bash 5.1) |
 | `EventType` | string | The dotted event type — the event's whole identity |
 | `Severity` | string\|null | How much this matters: `info`, `warn` or `danger` |
 | `Outcome` | string\|null | How it went: `success`, `failure` or `neutral` |
@@ -278,6 +283,7 @@ empty string is a third state no reader handles.
 ```json
 {
     "V": 2,
+    "Id": "0192e8a4-7c11-7a3e-9b52-3f5d4c0a1e77",
     "EventType": "server.started",
     "Severity": "info",
     "Outcome": "neutral",
@@ -369,6 +375,9 @@ events.sh emit <event-type> [parameters...]
 | `server.download.started` | `<instance>` |
 | `server.download.finished` | `<instance>` |
 | `server.download.completed` | `<instance>` |
+| `server.download.failed` | `<instance>` |
+| `server.deploy.failed` | `<instance>` |
+| `server.uninstall.failed` | `<instance>` |
 | `server.deploy.started` | `<instance>` |
 | `server.deploy.finished` | `<instance>` |
 | `server.deploy.completed` | `<instance>` |

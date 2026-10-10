@@ -688,7 +688,7 @@ export -f __logic_get_event_param_spec
 # Build JSON event payload
 # Args: $1 = event_type, $2... = parameters
 # Returns: echoes JSON payload or returns error code
-# Mints the id that names one journal line (conformance §2·m).
+# Mints the id that names one journal line (reference/event-envelope.md, "Identity and position").
 #
 # UUIDv7: 48 bits of unix milliseconds, then the version nibble, the variant
 # bits and randomness. Time-ordered, so an id sorts the way the journal does —
@@ -701,7 +701,7 @@ export -f __logic_get_event_param_spec
 #
 # EPOCHREALTIME is bash 5.0 and SRANDOM is 5.1. Where either is missing the id
 # is left EMPTY and the envelope carries null — absent is a spelling every
-# reader already handles (§2·e), and a v4 fallback would satisfy "is a uuid"
+# reader already handles, and a v4 fallback would satisfy "is a uuid"
 # while quietly breaking the ordering the format was chosen for.
 function __event_id() {
   __event_id_out=""
