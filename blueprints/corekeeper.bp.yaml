@@ -40,7 +40,7 @@ native:
   level_name: default
   executable_subdirectory: ""
   executable_file: _launch.sh
-  executable_arguments: ""
+  executable_arguments: -datapath $instance_saves_dir -worldname $instance_level_name
   stop_command: ""
   save_command: ""
   startup_success_regex: Game ID

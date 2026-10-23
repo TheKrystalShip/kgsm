@@ -47,6 +47,14 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **Core Keeper instances each keep their own world (`3.18.0-rc33`).** The server saves under
+  `~/.config/unity3d/Pugstorm/Core Keeper/DedicatedServer` unless told otherwise, so every instance on
+  a host loaded the same `worlds/0.world.gzip`, the same `ServerConfig.json` and the same Game ID. The
+  blueprint now passes `-datapath $instance_saves_dir -worldname $instance_level_name`, which puts
+  the world, config, admin and ban lists inside the instance. An existing instance takes it with
+  `kgsm instances config-set <instance> 'executable_arguments=-datapath $instance_saves_dir -worldname $instance_level_name'`
+  and starts a fresh world; the old one stays in the shared directory.
+
 - **Valheim's moderation is documented as the ban list, applied live (`3.18.0-rc27`).** Valheim's
   `kick`, `ban` and `unban` exist only in a connected admin's F5 console, and the dedicated server
   reads nothing from stdin, so the blueprint declares its moderation and broadcast commands empty

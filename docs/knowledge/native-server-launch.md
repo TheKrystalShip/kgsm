@@ -80,8 +80,10 @@ Two rules keep arguments correct across installs:
   on a fresh install. Use a `$instance_*` path or omit the optional flag.
 
 Keep the argument list minimal: only the flags needed to launch and listen. Some wrapper scripts read
-their own config file and need *no* arguments at all (Core Keeper, Barotrauma ship with empty
-`executable_arguments`).
+their own config file and need *no* arguments at all (Barotrauma ships with empty
+`executable_arguments`). A server that saves under the user's home by default needs a save-location
+flag pointing at `$instance_saves_dir`, or every instance on the host shares one world (Core Keeper
+takes `-datapath`).
 
 ## Readiness: how KGSM knows the server started
 
