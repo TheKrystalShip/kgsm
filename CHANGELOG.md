@@ -47,6 +47,10 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **An import keeps an id equal to its source's (`3.18.0-rc36`).** `import finish` renames the
+  arriving config from the source's id to the minted one; when the target mints the same id, as a
+  server returning to a node that no longer holds it does, the rename is skipped instead of failing.
+
 - **The release lint checks one script at a time (`3.18.0-rc35`).** Handed every script in one call,
   ShellCheck follows each `source` into the other scripts of that call, so every file is analysed with
   the whole graph it sources; the graph outgrew the runner's memory and the lint never finished. Each

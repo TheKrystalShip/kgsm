@@ -322,6 +322,33 @@ function test_round_trip_builds_a_new_instance_in_the_target_library() {
   assert_file_exists "${new_working_dir}/install/marker" "The new instance should be untouched"
 }
 
+function test_import_keeps_an_id_equal_to_the_source() {
+  log_test_step "Testing an import whose minted id is the source's own"
+
+  local instance
+  instance="$(_make_instance factorio)"
+
+  local manifest import_id
+  manifest="$(_manifest_without_ports "$instance" T1)"
+  import_id="$("$KGSM_ROOT/kgsm.sh" instances import begin --library "$TARGET_LIBRARY" --json \
+    <<< "$manifest" 2> /dev/null | jq -r '.import_id')"
+  "$KGSM_ROOT/kgsm.sh" instances export "$instance" --part tree --lock T1 2> /dev/null |
+    "$KGSM_ROOT/kgsm.sh" instances import part "$import_id" tree > /dev/null 2>&1
+
+  # Another node's source holds the id there, not here: release it on this one
+  # so the target mints the same id it came from.
+  "$KGSM_ROOT/kgsm.sh" instances export "$instance" --commit --lock T1 > /dev/null 2>&1
+
+  local new_instance
+  new_instance="$("$KGSM_ROOT/kgsm.sh" instances import finish "$import_id" --json 2> /dev/null |
+    jq -r '.instance')"
+  assert_equals "$instance" "$new_instance" "The target mints the id the source had"
+
+  local new_working_dir="${TARGET_ROOT}/instances/factorio/${new_instance}"
+  assert_file_exists "${new_working_dir}/${new_instance}.config.ini" "The config keeps its name"
+  assert_file_exists "${new_working_dir}/saves/world" "The saves should have arrived"
+}
+
 function test_round_trip_carries_the_backups() {
   log_test_step "Testing that a backup travels into the target's backup location"
 

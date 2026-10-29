@@ -1235,10 +1235,13 @@ function __logic_transfer_import_finish() {
 
   local _config="${_new_wd}/${_new}.config.ini"
   __tf_config="$_config"
-  mv "${_new_wd}/${_old}.config.ini" "$_config" || {
-    __transfer_finish_unwind "$_new"
-    return $EC_FAILED_MV
-  }
+  # The minted id can equal the source's, and mv refuses a file onto itself.
+  if [[ "$_old" != "$_new" ]]; then
+    mv "${_new_wd}/${_old}.config.ini" "$_config" || {
+      __transfer_finish_unwind "$_new"
+      return $EC_FAILED_MV
+    }
+  fi
 
   # Paths first, so the files that carry the old id in their names can be found
   # at the new working directory and renamed to carry the new one.
