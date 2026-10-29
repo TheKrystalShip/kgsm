@@ -47,6 +47,11 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **The release lint checks one script at a time (`3.18.0-rc35`).** Handed every script in one call,
+  ShellCheck follows each `source` into the other scripts of that call, so every file is analysed with
+  the whole graph it sources; the graph outgrew the runner's memory and the lint never finished. Each
+  script is checked on its own, four at a time, with SC1091 (a sourced file not followed) excluded.
+
 - **Core Keeper instances each keep their own world (`3.18.0-rc33`).** The server saves under
   `~/.config/unity3d/Pugstorm/Core Keeper/DedicatedServer` unless told otherwise, so every instance on
   a host loaded the same `worlds/0.world.gzip`, the same `ServerConfig.json` and the same Game ID. The

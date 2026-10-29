@@ -60,7 +60,7 @@ jobs:
             | sudo tar -xJf - --strip-components=1 -C /usr/local/bin "shellcheck-${v}/shellcheck"
           shellcheck --version
           find . -name '*.sh' -not -path './tests/*' -print0 \
-            | xargs -0 -r shellcheck -e SC2086,SC2254,SC2154,SC2148,SC2317,SC2034
+            | xargs -0 -r -n1 -P4 shellcheck -e SC2086,SC2254,SC2154,SC2148,SC2317,SC2034,SC1091
   package:
     needs: build
     runs-on: ubuntu-latest
