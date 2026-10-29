@@ -345,6 +345,7 @@ function _cmd_start() {
 
   # Call pure logic function
   _refuse_when_library_offline "$instance_name" || return $?
+  __refuse_if_instance_locked "$instance_name" || return $?
   _stamp_library_dir "$instance_name"
   _stamp_maintenance_windows "$instance_name"
 
@@ -525,6 +526,7 @@ function _cmd_restart() {
 
   # Call pure logic function
   _refuse_when_library_offline "$instance_name" || return $?
+  __refuse_if_instance_locked "$instance_name" || return $?
   _stamp_library_dir "$instance_name"
   _stamp_maintenance_windows "$instance_name"
 

@@ -25,6 +25,7 @@ ${UNDERLINE}Commands:${END}
   info <blueprint>            Display blueprint contents
   find <blueprint>            Get blueprint file path
   validate <blueprint|path>   Check a blueprint's format
+  requirements <blueprint>    List what a blueprint needs this host to have
   help [command]              Show help information
 
 ${UNDERLINE}Options:${END}
@@ -43,6 +44,7 @@ ${UNDERLINE}Examples:${END}
   $self find minecraft --all
   $self validate factorio
   $self validate /tmp/draft.bp.yaml --json
+  $self requirements terraria
   $self help list
 
 ${UNDERLINE}Notes:${END}
@@ -495,6 +497,76 @@ function _cmd_validate() {
   return 0
 }
 
+function show_usage_requirements() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Blueprint Requirements${END}
+
+List what a blueprint needs this host to have, and whether it has it.
+
+${UNDERLINE}Usage:${END}
+  $self requirements <blueprint> [--json]
+
+${UNDERLINE}Description:${END}
+A container blueprint needs the container runtime. A blueprint with a Steam app
+id needs steamcmd. One that requires a Steam account needs Steam credentials.
+Exits with the requirement-missing code when any is absent.
+"
+}
+
+function _cmd_requirements() {
+  local target="" json_opt=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_requirements
+        return 0
+        ;;
+      --json) json_opt=1 ;;
+      -*)
+        __print_error "Invalid option: $1"
+        return $EC_INVALID_ARG
+        ;;
+      *) target="$1" ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$target" ]]; then
+    __print_error "Missing required argument: <blueprint>"
+    return $EC_MISSING_ARG
+  fi
+
+  local blueprint_path
+  if ! blueprint_path="$(__find_blueprint "$target")"; then
+    __print_error "Blueprint not found: $target"
+    return $EC_BLUEPRINT_NOT_FOUND
+  fi
+
+  local name result rc
+  name="$(__extract_blueprint_name "$blueprint_path")"
+  result="$(__logic_blueprint_requirements_json "$blueprint_path" "$name")"
+  rc=$?
+
+  if [[ -n "$json_opt" ]] || [[ -n "${json_format:-}" ]]; then
+    echo "$result"
+  else
+    local id present
+    while IFS=$'\t' read -r id present; do
+      [[ -n "$id" ]] || continue
+      if [[ "$present" == "true" ]]; then
+        __print_success "$id: present"
+      else
+        __print_error "$id: missing"
+      fi
+    done < <(jq -r '.requirements[] | "\(.id)\t\(.present)"' <<< "$result")
+  fi
+
+  return $rc
+}
+
 function _cmd_help() {
   local command="$1"
 
@@ -515,6 +587,9 @@ function _cmd_help() {
       ;;
     validate)
       show_usage_validate
+      ;;
+    requirements)
+      show_usage_requirements
       ;;
     *)
       __print_error "Unknown command: $command"
@@ -559,6 +634,11 @@ case "$command" in
   validate)
     __require_yq || exit $EC_MISSING_DEPENDENCY
     _cmd_validate "$@"
+    exit $?
+    ;;
+  requirements)
+    __require_yq || exit $EC_MISSING_DEPENDENCY
+    _cmd_requirements "$@"
     exit $?
     ;;
   *)

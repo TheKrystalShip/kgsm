@@ -715,7 +715,8 @@ export -f __logic_get_instance_paths
     case "$key" in
       name | blueprint_file | runtime | platform | install_datetime | install_nonce | \
         is_steam_account_required | steam_app_id | \
-        client_steam_app_id | ports | maintenance_windows_author)
+        client_steam_app_id | ports | maintenance_windows_author | \
+        transfer_lock | transfer_lock_autostart)
         return 0
         ;;
       *_dir | *_file | executable_subdirectory)
@@ -1487,6 +1488,45 @@ function __logic_instance_has_run() {
 }
 
 export -f __logic_instance_has_run
+
+# How long an instance may take to report itself active after a start-once
+# proof, and how often that is asked.
+readonly START_ONCE_TIMEOUT_SECONDS=120
+readonly START_ONCE_INTERVAL_SECONDS=2
+
+# Starts an instance, waits for it to run, and stops it again.
+#
+# The proof that an instance runs from where it now lives: every path in its
+# config, its regenerated management file and, for a container, the bind mounts
+# in its compose file are exercised by one real start. The instance is stopped
+# whether or not it came up, because it was stopped when the proof began.
+#
+# Args: $1 = instance name
+# Returns: EC_SUCCESS when the instance ran, EC_ERROR when it would not start,
+#          EC_TIMEOUT when it never reported itself active
+function __logic_instance_start_once() {
+  local _instance="$1"
+
+  if ! lifecycle.sh start "$_instance" > /dev/null 2>&1; then
+    return $EC_ERROR
+  fi
+
+  local _rc=$EC_TIMEOUT _waited=0
+  while [[ $_waited -lt $START_ONCE_TIMEOUT_SECONDS ]]; do
+    if lifecycle.sh is-active "$_instance" > /dev/null 2>&1; then
+      _rc=$EC_SUCCESS
+      break
+    fi
+    sleep "$START_ONCE_INTERVAL_SECONDS"
+    _waited=$((_waited + START_ONCE_INTERVAL_SECONDS))
+  done
+
+  lifecycle.sh stop "$_instance" > /dev/null 2>&1
+
+  return $_rc
+}
+
+export -f __logic_instance_start_once
 
 # Mark module as loaded
 declare -g KGSM_LOGIC_INSTANCES_LOADED=1

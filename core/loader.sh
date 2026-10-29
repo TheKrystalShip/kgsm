@@ -674,6 +674,54 @@ function __get_instance_config_value() {
 
 export -f __get_instance_config_value
 
+# Echoes the token holding an instance's transfer lock, or nothing when it is not
+# locked. Read as text from the config file, so it costs one grep and works for
+# an instance whose management file is not loaded.
+#
+# Usage: __instance_lock_holder <instance_name>
+function __instance_lock_holder() {
+  local _instance_name="$1"
+
+  local _config_file
+  _config_file="$(__find_instance_config "$_instance_name" 2> /dev/null)" || return 0
+  [[ -f "$_config_file" ]] || return 0
+
+  local _value
+  _value="$(grep -E '^transfer_lock[[:space:]]*=' "$_config_file" 2> /dev/null |
+    head -n1 | cut -d'=' -f2-)"
+  _value="${_value#"${_value%%[![:space:]]*}"}"
+  _value="${_value%"${_value##*[![:space:]]}"}"
+  _value="${_value#\"}"
+  _value="${_value%\"}"
+
+  printf '%s' "$_value"
+}
+
+export -f __instance_lock_holder
+
+# Refuses a verb that would start, change or remove an instance a transfer holds.
+# Silent when the instance is unlocked or the caller presents the holding token.
+#
+# Usage: __refuse_if_instance_locked <instance_name> [token]
+# Returns: EC_SUCCESS to carry on, EC_INSTANCE_LOCKED otherwise
+function __refuse_if_instance_locked() {
+  local _instance_name="$1"
+  local _token="${2:-}"
+
+  local _holder
+  _holder="$(__instance_lock_holder "$_instance_name")"
+
+  if [[ -z "$_holder" ]] || [[ -n "$_token" && "$_holder" == "$_token" ]]; then
+    return $EC_SUCCESS
+  fi
+
+  __print_error "Instance '$_instance_name' is locked by a transfer"
+  __print_error "It stays stopped until the transfer commits or is released ('kgsm instances unlock')"
+  return $EC_INSTANCE_LOCKED
+}
+
+export -f __refuse_if_instance_locked
+
 function __source_with_prefix() {
   local file_path="$1"
   local prefix="${2:-}"

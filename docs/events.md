@@ -72,6 +72,8 @@ audit row needs most.
 | Event Name | Description | Data Fields |
 |------------|-------------|-------------|
 | `server.moved` | An instance's files now live in a different library | `InstanceName`, `FromLibrary`, `ToLibrary` |
+| `server.exported` | An instance left this host: another machine holds it and its files, backups and registry entry here are gone | `InstanceName` |
+| `server.imported` | An instance arrived from another host under a fresh id | `InstanceName`, `Blueprint`, `Library` |
 
 Both library names are carried because a reader that learns only the destination cannot say which
 disk just got its space back — and emptying a disk before it is unplugged is the whole reason

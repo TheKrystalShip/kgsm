@@ -730,6 +730,38 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## [Unreleased] - 3.0.0 (Major Version)
 
+### Added — instances export and import between machines (`3.18.0-rc34`)
+
+A stopped instance moves to another machine as an export on the source and an import on the target, so a
+transfer is a `move` across hosts.
+
+- `instances export <instance> --manifest [--lock <token>]` prints a JSON manifest: the instance, its
+  blueprint, the requirements its blueprint declares, and its parts (`tree`, and one `image-N` per
+  container image). `--part <id> --lock <token>` streams one part to standard output (the tree as a tar
+  of the working directory, the backups and a custom blueprint; an image as `docker save` writes it).
+  `--commit --lock <token>` removes the instance as `uninstall` does, with its backups and the images no
+  other instance uses, and emits `server.exported`.
+- The lock is the instance-config key `transfer_lock`, holding the caller's token, with the boot
+  autostart flag it found in `transfer_lock_autostart`. Taking it disables autostart and releasing it
+  (`instances unlock <instance> --lock <token> | --force`) restores the flag, so the watchdog needs no
+  change. A locked instance refuses `start`, `restart`, `uninstall`, `move`, `update`, the backup
+  verbs that change backups, `autostart enable` and a second token, all with `EC_INSTANCE_LOCKED`.
+- `instances import check | begin | part | finish | abort | list` rebuilds an instance from a manifest read
+  on standard input. `check` lists every refusal (engine version, requirements, disk, ports, library,
+  blueprint); `begin` stages the import in `<library>/.kgsm-import/`; `finish` verifies the parts against
+  the manifest, gives the instance a fresh id, rewrites its paths as `move` does, regenerates the
+  management and compose files, proves it starts when it had run on the source, places the backups and
+  restores the boot autostart flag, and emits `server.imported`. A custom blueprint travels with its
+  instance; one that collides with a different blueprint of the same name is installed under
+  `--blueprint-suffix`.
+- `blueprints requirements <blueprint> [--json]` lists what a blueprint needs this host to have
+  (`container-runtime`, `steamcmd`, `steam-credentials`) and exits `EC_REQUIREMENT_MISSING` when any is
+  absent.
+- New exit codes `EC_INSTANCE_LOCKED`, `EC_ENGINE_VERSION_MISMATCH`, `EC_REQUIREMENT_MISSING`,
+  `EC_PORT_CONFLICT`, `EC_TRANSFER_INTEGRITY` and `EC_IMPORT_NOT_FOUND`; events `server.exported` and
+  `server.imported`; actions `server.export` and `server.import` in `deploy/kgsm.actions.json`.
+- The start-once proof the move runs is `__logic_instance_start_once`, shared with the import.
+
 ### Changed — an instance keeps three backups by default (`3.18.0-rc32`)
 
 A created instance materializes `backup_retention=3`, and `instances prune-backups` without `--keep`

@@ -55,6 +55,8 @@ ${UNDERLINE}Options:${END}
                               instead of being refused. When the instance's library
                               is offline, this instead deregisters the instance and
                               leaves its files alone
+  --lock <token>              The transfer lock the caller holds on the instance;
+                              without it a locked instance is refused
   --purge-backups             Also delete the instance's backups. Without this,
                               backups are kept (they live outside the instance)
 
@@ -123,6 +125,7 @@ function _uninstall() {
   local instance=""
   local force=0
   local purge_backups=0
+  local lock_token=""
   # Every failure below is reported by its own status, captured before anything
   # else runs: a printer succeeds, so reading $? after one reports that the step
   # it was complaining about worked.
@@ -133,6 +136,17 @@ function _uninstall() {
       -h | --help | help)
         show_usage
         return 0
+        ;;
+      --lock)
+        # The token of the transfer lock the caller holds. An export commit
+        # removes the instance it locked; any other uninstall of a locked
+        # instance is refused.
+        shift
+        if [[ -z "${1:-}" ]]; then
+          __print_error "Missing argument for --lock"
+          return $EC_MISSING_ARG
+        fi
+        lock_token="$1"
         ;;
       --purge-backups)
         # Backups live outside the instance's working directory, so removing the
@@ -172,6 +186,8 @@ function _uninstall() {
   # journal with a name nothing else uses. An id resolves to itself; an argument
   # that matches nothing is left as it is for the not-found error below to name.
   instance="$(__resolve_instance_id "$instance")" || return $?
+
+  __refuse_if_instance_locked "$instance" "$lock_token" || return $?
 
   # An uninstall is defined by the files it deletes, and while the library is
   # not mounted there are none to delete — only a registry entry that is the

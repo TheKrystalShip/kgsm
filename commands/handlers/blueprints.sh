@@ -414,5 +414,97 @@ function __logic_get_blueprint_candidates_json() {
 
 export -f __logic_get_blueprint_candidates_json
 
+# Echoes the requirements a blueprint file declares, one id per line:
+# container-runtime, steamcmd, steam-credentials.
+#
+# Blueprints carry no host-dependency field, so the list is derived from what
+# they do say: a container blueprint needs the container runtime, a blueprint
+# with a Steam app id needs steamcmd, one that requires a Steam account needs
+# credentials.
+#
+# Args: $1 = blueprint file
+function __logic_blueprint_requirement_ids() {
+  local _file="$1"
+  [[ -f "$_file" ]] || return $EC_FILE_NOT_FOUND
+
+  local _runtime
+  _runtime="$(__bp_yaml_field "$_file" '.runtime')"
+
+  if [[ "$_runtime" == "container" ]]; then
+    echo "container-runtime"
+    return $EC_SUCCESS
+  fi
+
+  local _app_id _account
+  _app_id="$(__bp_yaml_field "$_file" '.native.steam_app_id')"
+  _account="$(__bp_yaml_field "$_file" '.native.is_steam_account_required')"
+
+  [[ "$_app_id" =~ ^[0-9]+$ ]] && [[ "$_app_id" -gt 0 ]] && echo "steamcmd"
+  [[ "$_account" == "true" ]] && echo "steam-credentials"
+
+  return $EC_SUCCESS
+}
+
+export -f __logic_blueprint_requirement_ids
+
+# Reports whether this host has a requirement.
+#
+# Args: $1 = requirement id
+# Returns: 0 present, 1 absent
+function __logic_blueprint_requirement_present() {
+  case "$1" in
+    container-runtime)
+      command -v docker > /dev/null 2>&1 && docker compose version > /dev/null 2>&1
+      ;;
+    steamcmd)
+      command -v steamcmd > /dev/null 2>&1
+      ;;
+    steam-credentials)
+      [[ -n "${STEAM_USERNAME:-}" ]] || [[ -n "${config_STEAM_USERNAME:-}" ]]
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+export -f __logic_blueprint_requirement_present
+
+# Echoes a blueprint's requirements as JSON.
+#
+# Args: $1 = blueprint file, $2 = blueprint name
+# Returns: EC_SUCCESS when every one is present, EC_REQUIREMENT_MISSING otherwise
+function __logic_blueprint_requirements_json() {
+  local _file="$1"
+  local _name="$2"
+
+  local _ids _id _missing=0
+  local -a _rows=()
+  _ids="$(__logic_blueprint_requirement_ids "$_file")" || return $?
+
+  while IFS= read -r _id; do
+    [[ -n "$_id" ]] || continue
+    if __logic_blueprint_requirement_present "$_id"; then
+      _rows+=("$(jq -nc --arg id "$_id" '{id: $id, present: true}')")
+    else
+      _rows+=("$(jq -nc --arg id "$_id" '{id: $id, present: false}')")
+      _missing=1
+    fi
+  done <<< "$_ids"
+
+  local _list="[]"
+  if [[ ${#_rows[@]} -gt 0 ]]; then
+    _list="$(printf '%s\n' "${_rows[@]}" | jq -sc .)"
+  fi
+
+  jq -nc --arg blueprint "$_name" --argjson requirements "$_list" \
+    '{blueprint: $blueprint, requirements: $requirements}'
+
+  [[ $_missing -eq 0 ]] || return $EC_REQUIREMENT_MISSING
+  return $EC_SUCCESS
+}
+
+export -f __logic_blueprint_requirements_json
+
 # Mark module as loaded
 export KGSM_LOGIC_BLUEPRINTS_LOADED=1

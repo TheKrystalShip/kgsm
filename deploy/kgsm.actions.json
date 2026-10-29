@@ -18,6 +18,8 @@
     { "id": "server.console.write", "title": "Send console commands", "effect": "execute", "scope": "instance" },
     { "id": "server.files.read", "title": "Read server files", "effect": "read", "scope": "instance" },
     { "id": "server.files.write", "title": "Change server files", "effect": "write", "scope": "instance" },
+    { "id": "server.export", "title": "Transfer servers out", "effect": "write", "scope": "instance" },
+    { "id": "server.import", "title": "Transfer servers in", "effect": "write", "scope": "node" },
     { "id": "server.install", "title": "Install servers", "effect": "write", "scope": "node" },
     { "id": "server.move", "title": "Move servers between libraries", "effect": "write", "scope": "instance" },
     { "id": "server.players.ban", "title": "Ban and unban players", "effect": "execute", "scope": "instance" },

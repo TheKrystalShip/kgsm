@@ -191,6 +191,8 @@ ${UNDERLINE}Server updates:${END}
 
 ${UNDERLINE}Server placement and identity:${END}
   server.moved <instance> <from_library> <to_library>
+  server.exported <instance>
+  server.imported <instance> <blueprint> <library>
   server.renamed <instance> <old_display_name> <new_display_name>
 
   A rename carries both labels, because a label exists to be shown; the

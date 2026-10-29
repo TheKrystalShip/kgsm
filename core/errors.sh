@@ -211,6 +211,39 @@ export EC_INSTANCE_RUNNING
 declare -g -r EC_LIBRARY_OVERLAPS_REGISTRY=58
 export EC_LIBRARY_OVERLAPS_REGISTRY
 
+# The instance is held by a transfer lock. Taking it keeps a stopped server
+# stopped from the moment its files start to leave until the transfer commits or
+# is released, so every verb that would start it, change its files or remove it
+# is refused. A refusal, not a fault: the holder's token is what lifts it.
+declare -g -r EC_INSTANCE_LOCKED=59
+export EC_INSTANCE_LOCKED
+
+# The two engines are not the same version. An instance moves between hosts as
+# files plus a regenerated management file, and only identical engines agree on
+# what those mean.
+declare -g -r EC_ENGINE_VERSION_MISMATCH=60
+export EC_ENGINE_VERSION_MISMATCH
+
+# A blueprint declares something this host lacks: the container runtime, steamcmd
+# or Steam credentials. Reported by `blueprints requirements` and by the import
+# preflight.
+declare -g -r EC_REQUIREMENT_MISSING=61
+export EC_REQUIREMENT_MISSING
+
+# A port the arriving instance declares overlaps one another instance on this
+# host declares, on the same protocol.
+declare -g -r EC_PORT_CONFLICT=62
+export EC_PORT_CONFLICT
+
+# What arrived is not what the manifest described: an image whose id differs, a
+# part that never arrived, or a tree whose file count or bytes differ.
+declare -g -r EC_TRANSFER_INTEGRITY=63
+export EC_TRANSFER_INTEGRITY
+
+# No staged import carries this id.
+declare -g -r EC_IMPORT_NOT_FOUND=64
+export EC_IMPORT_NOT_FOUND
+
 # =============================================================================
 # EVENT SUCCESS CODES (200-255 range)
 # =============================================================================
@@ -440,6 +473,12 @@ declare -A EXIT_CODES=(
    [$EC_INSUFFICIENT_DISK]="Not enough free space in the library"
    [$EC_INSTANCE_RUNNING]="This instance must be stopped first"
    [$EC_LIBRARY_OVERLAPS_REGISTRY]="Library root overlaps the instance registry"
+   [$EC_INSTANCE_LOCKED]="This instance is locked by a transfer"
+   [$EC_ENGINE_VERSION_MISMATCH]="Engine versions differ"
+   [$EC_REQUIREMENT_MISSING]="A requirement of the blueprint is missing on this host"
+   [$EC_PORT_CONFLICT]="A declared port overlaps another instance's port"
+   [$EC_TRANSFER_INTEGRITY]="What arrived differs from the manifest"
+   [$EC_IMPORT_NOT_FOUND]="No staged import with this id"
 )
 
 declare -g KGSM_ERRORS_LOADED=1

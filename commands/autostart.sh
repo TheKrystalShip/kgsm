@@ -68,6 +68,8 @@ function _cmd_enable() {
     return $EC_MISSING_ARG
   fi
 
+  __refuse_if_instance_locked "$instance_name" || return $?
+
   _require_watchdog || return $?
 
   __logic_autostart_enable "$instance_name"

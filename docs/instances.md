@@ -289,6 +289,139 @@ path while the files sit at the new one — a window of the few seconds those st
 `server.moved` is emitted once the move is done, carrying the library it came from and the one it
 is in.
 
+## Moving an instance to another machine
+
+A transfer is a `move` across hosts: an export on the source and an import on the target. The engine
+knows no other node; it describes a stopped instance, streams its parts, and builds an instance from
+them. Whatever carries the bytes between two machines is the caller's.
+
+```sh
+kgsm instances export <instance> --manifest [--lock <token>]
+kgsm instances export <instance> --part <part-id> --lock <token>
+kgsm instances export <instance> --commit --lock <token>
+kgsm instances unlock <instance> (--lock <token> | --force)
+
+kgsm instances import check  [--library <name>] [--blueprint-suffix <label>] [--json]   # manifest on stdin
+kgsm instances import begin  [--library <name>] [--blueprint-suffix <label>] [--json]   # manifest on stdin
+kgsm instances import part   <import-id> <part-id>                                      # part on stdin
+kgsm instances import finish <import-id> [--json]
+kgsm instances import abort  <import-id>
+kgsm instances import list   [--json]
+
+kgsm blueprints requirements <blueprint> [--json]
+```
+
+### The lock
+
+`export --lock <token>` takes the transfer lock, or confirms that it already holds that token. The lock is
+the instance-config key `transfer_lock`, which holds the token. Taking it records the boot autostart flag
+the instance had in `transfer_lock_autostart` and disables autostart; releasing it with `unlock` restores
+the flag. The watchdog starts only what its desired state enables, so the instance stays stopped without
+the watchdog knowing about the lock. Neither key can be set with `config-set`.
+
+A locked instance refuses `start`, `restart`, `uninstall`, `move`, `update`, `create-backup`,
+`restore-backup`, `delete-backup`, `prune-backups` and `autostart enable` with `EC_INSTANCE_LOCKED`. The
+refusal belongs to the engine's verbs: a caller that asks the watchdog's control socket to start or restart
+the instance does not pass through it. A second token cannot
+take the lock, read a part or release it; `unlock --force` releases it whoever holds it. Unlocking an
+instance that is not locked succeeds.
+
+A running instance is refused with `EC_INSTANCE_RUNNING`. A server with players on it is stopped as its own
+decision, never as a side effect of an export.
+
+### The manifest
+
+`export --manifest` prints JSON:
+
+```json
+{
+  "format": 1,
+  "engine_version": "<KGSM_VERSION>",
+  "instance": {
+    "id": "factorio-7f3a", "blueprint": "factorio", "runtime": "native",
+    "display_name": null, "autostart": true, "has_run": true, "library": "default",
+    "working_dir": "/opt/instances/factorio/factorio-7f3a",
+    "ports": [{ "start": 34197, "end": 34197, "protocol": "udp" }]
+  },
+  "blueprint": { "name": "factorio", "custom": false, "sha256": "..." },
+  "requirements": ["steamcmd"],
+  "parts": [
+    { "id": "tree", "bytes": 4823011328, "files": 1873 },
+    { "id": "image-1", "ref": "ghcr.io/x/y:latest", "image_id": "sha256:...", "bytes": 912345678 }
+  ]
+}
+```
+
+- `display_name` is `null` when the label is the id. `autostart` is the flag as found before the lock
+  disabled it, and is `false` on a host that runs no watchdog. `has_run` is `false` for an instance
+  that never started; the import does not start such an instance either.
+- The `tree` part is a POSIX tar holding `instance/` (the working directory), `backups/` (the contents of
+  `backups_dir`, when it lies outside the working directory) and, for a custom blueprint,
+  `blueprint/<name>.bp.yaml` and `overrides/<name>/`. Its `bytes` is the sum of the sizes of the regular
+  files in those members and `files` the number of entries that are not directories; directory sizes
+  are left out because they differ from one filesystem to the next. The import measures what it extracted
+  the same way and refuses a tree that differs.
+- A container instance has one `image-N` part per image its compose file resolves to, written by
+  `docker save` and loaded by `docker load`. `bytes` is the room the image takes once loaded. The target
+  runs the identical image whether or not any registry still serves it.
+- A blueprint is `custom` when the instance uses a file from the user blueprints directory. Its file and
+  its overrides then travel in the tree part.
+
+### The requirements check
+
+`blueprints requirements` derives its list from what a blueprint declares, since blueprints carry no
+host-dependency field: a container blueprint needs `container-runtime`, one with a Steam app id needs
+`steamcmd`, and one that requires a Steam account needs `steam-credentials` (a username in the environment
+or in the `[steam]` section of the engine config). `--json` prints
+`{"blueprint": "...", "requirements": [{"id": "steamcmd", "present": true}]}`; the exit code is
+`EC_REQUIREMENT_MISSING` when any is absent. Anything else a game needs, such as a Java runtime, is caught
+by the import's start-once proof.
+
+### Importing
+
+Every verb that reads a manifest reads it on standard input.
+
+- **`check`** lists every refusal and writes nothing. `--json` prints
+  `{"ok": false, "refusals": [{"exit_code": 62, "code": "port_conflict", "detail": "..."}], "library": "default", "blueprint": "factorio"}`;
+  the exit code is the first refusal's. The refusals are `EC_ENGINE_VERSION_MISMATCH` (engines must be the
+  same version), `EC_REQUIREMENT_MISSING`, `EC_INSUFFICIENT_DISK` (the tree plus the free-space margin
+  against the library, and the images against the container runtime's root directory),
+  `EC_PORT_CONFLICT` (a declared port overlapping another instance's, same protocol),
+  `EC_LIBRARY_NOT_FOUND`, `EC_LIBRARY_OFFLINE`, `EC_LIBRARY_OVERLAPS_REGISTRY`, `EC_BLUEPRINT_NOT_FOUND`
+  (a bundled blueprint this host lacks) and `EC_INVALID_BLUEPRINT` (a custom blueprint that collides with a
+  different one and no `--blueprint-suffix` was given).
+- **`begin`** runs the check, creates `<library>/.kgsm-import/<import-id>/` holding the manifest and
+  prints `{"import_id": "..."}`. `--library` defaults as `install` does.
+- **`part`** reads one part: the tree is extracted into the staging directory, an image is loaded and its
+  image id compared with the manifest's (`EC_TRANSFER_INTEGRITY` when it differs). A part sent again
+  starts from nothing.
+- **`finish`** verifies every part arrived and that the tree has the file count and bytes the manifest
+  states, then builds the instance:
+  1. a custom blueprint is installed under its own name when the host has none, used when the host
+     holds the same content, and installed as `<name>-<label>` (with its overrides) when the host holds
+     a different one;
+  2. the instance gets a fresh id and its tree is renamed into `<library>/instances/<blueprint>/<id>`;
+  3. the paths are rewritten as `move` rewrites them, the files whose names carry the id are renamed, and
+     the management file and compose file are regenerated;
+  4. the display name, settings and maintenance schedule arrive as they left, while the firewall,
+     command shortcut and port forwarding settings follow the target's own configuration;
+  5. the registry entry is created and the instance is started once and stopped again, unless it had
+     never run;
+  6. the backups are placed in the new id's backups directory and the autostart flag is set.
+
+  It prints `{"instance": "...", "blueprint": "...", "library": "..."}` and emits `server.imported`. A
+  failure undoes what it did and leaves the staged import for `abort`.
+- **`abort`** removes the staging directory and every image the import loaded that the host did not hold
+  before `begin`. An unknown id succeeds.
+- **`list`** prints every staged import: id, library, the instance and blueprint of its manifest, and when
+  it began.
+
+### Committing
+
+`export --commit --lock <token>` removes the instance as `kgsm uninstall` does (files, backups, ports,
+registry entry, and the images no other instance uses) and emits `server.exported`. It is the last step,
+taken once the other machine holds the instance.
+
 ## Managing instances
 
 Once you've created instances, you'll need to manage them throughout their lifecycle. KGSM provides comprehensive tools for this purpose.

@@ -26,6 +26,10 @@ ${UNDERLINE}Commands:${END}
   remove <instance>           Remove an instance configuration
   move <instance> --library <name>
                               Move a stopped instance into another library
+  export <instance>           Describe and stream a stopped instance for a transfer
+  unlock <instance>           Release the lock a transfer holds on an instance
+  import <verb>               Build an instance from an export (check, begin,
+                              part, finish, abort, list)
   list [blueprint]            List all instances or filter by blueprint
   info <instance>             Display instance configuration
   status <instance>           Show instance runtime status
@@ -218,6 +222,87 @@ where they are.
 ${UNDERLINE}Examples:${END}
   $self move factorio-01 --library ssd
   $self move terraria-main --library archive --skip-space-check
+"
+}
+
+function show_usage_export() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Export Instance${END}
+
+Describe a stopped instance as a manifest and stream its parts, so another
+machine can rebuild it with 'import'.
+
+${UNDERLINE}Usage:${END}
+  $self export <instance> --manifest [--lock <token>]
+  $self export <instance> --part <part-id> --lock <token>
+  $self export <instance> --commit --lock <token>
+
+${UNDERLINE}Options:${END}
+  --manifest                  Print the manifest as JSON
+  --part <part-id>            Write one part to standard output: 'tree' is a tar
+                              of the working directory, the backups and a custom
+                              blueprint; 'image-N' is what 'docker save' writes
+  --commit                    Remove the instance as 'uninstall' does, once the
+                              other machine holds it
+  --lock <token>              Take the transfer lock, or confirm this token holds
+                              it. The instance stays stopped, with boot autostart
+                              off, until the lock is released ('unlock') or the
+                              export is committed
+
+${UNDERLINE}Description:${END}
+A running instance is refused. A locked instance refuses start, restart,
+uninstall, move, update and backup changes until its lock is released.
+"
+}
+
+function show_usage_unlock() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Unlock Instance${END}
+
+Release the lock a transfer holds on an instance and restore its boot autostart
+flag.
+
+${UNDERLINE}Usage:${END}
+  $self unlock <instance> --lock <token>
+  $self unlock <instance> --force
+
+${UNDERLINE}Options:${END}
+  --lock <token>              The token that took the lock
+  --force                     Release the lock whoever holds it
+"
+}
+
+function show_usage_import() {
+  local UNDERLINE="\e[4m"
+  local END="\e[0m"
+
+  echo -e "${UNDERLINE}Import Instance${END}
+
+Build an instance from an export. The manifest is read on standard input where
+a verb takes one, and a part on standard input where 'part' takes one.
+
+${UNDERLINE}Usage:${END}
+  $self import check [--library <name>] [--blueprint-suffix <label>] [--json]
+  $self import begin [--library <name>] [--blueprint-suffix <label>] [--json]
+  $self import part <import-id> <part-id>
+  $self import finish <import-id> [--json]
+  $self import abort <import-id>
+  $self import list [--json]
+
+${UNDERLINE}Description:${END}
+check lists every reason this machine would refuse the manifest and writes
+nothing. begin runs the check and stages the import in the library. part loads
+one part into the staging. finish verifies the parts, gives the instance a new
+id, places it in the library, proves it starts and registers it. abort removes
+the staging and any image the import loaded.
+
+--library defaults as 'install' does. --blueprint-suffix names the copy of a
+travelling custom blueprint when this machine holds a different blueprint of the
+same name.
 "
 }
 
@@ -1311,59 +1396,6 @@ function _cmd_remove() {
   esac
 }
 
-# How long a start-verify waits for the instance to come up on its new path,
-# and how often it looks. A game server that has not reported itself running
-# within this has not shown that it runs from the new location, which is the
-# only question the verify asks.
-readonly MOVE_START_VERIFY_TIMEOUT_SECONDS=120
-readonly MOVE_START_VERIFY_INTERVAL_SECONDS=2
-
-# Waits for an instance to report itself active.
-# Args: $1 = instance name
-# Returns: EC_SUCCESS once it is active, EC_TIMEOUT when it never was
-function _wait_until_active() {
-  local instance="$1"
-
-  local waited=0
-  while [[ $waited -lt $MOVE_START_VERIFY_TIMEOUT_SECONDS ]]; do
-    if lifecycle.sh is-active "$instance" > /dev/null 2>&1; then
-      return $EC_SUCCESS
-    fi
-    sleep "$MOVE_START_VERIFY_INTERVAL_SECONDS"
-    waited=$((waited + MOVE_START_VERIFY_INTERVAL_SECONDS))
-  done
-
-  return $EC_TIMEOUT
-}
-
-# Starts an instance, waits for it to run, and stops it again.
-#
-# The move has already re-pointed the registry when this runs, so this is the
-# step that decides whether the instance is usable where it now lives — every
-# path in its config, its regenerated management file and, for a container, the
-# bind mounts in its compose file are exercised by one real start.
-#
-# Args: $1 = instance name
-# Returns: EC_SUCCESS when the instance ran, an error code otherwise
-function _verify_start_on_new_path() {
-  local instance="$1"
-
-  if ! lifecycle.sh start "$instance" > /dev/null 2>&1; then
-    return $EC_ERROR
-  fi
-
-  local exit_code=$EC_SUCCESS
-  if ! _wait_until_active "$instance"; then
-    exit_code=$EC_TIMEOUT
-  fi
-
-  # Stopped whether or not it came up: the instance was stopped when the move
-  # started and the move does not hand it back running.
-  lifecycle.sh stop "$instance" > /dev/null 2>&1 || true
-
-  return $exit_code
-}
-
 # Puts a failed move back to where it started and says where the instance is.
 #
 # A copy never touched the source, so pointing the registry at it is the whole
@@ -1673,7 +1705,7 @@ function _cmd_move() {
 
   if [[ "$has_run" == true ]]; then
     __print_info "Starting '$instance' once to confirm it runs from its new path..."
-    if ! _verify_start_on_new_path "$instance"; then
+    if ! __logic_instance_start_once "$instance"; then
       __print_error "Instance '$instance' did not start from ${target_working_dir}"
       _abandon_move "${undo[@]}"
       return $EC_ERROR
@@ -1712,6 +1744,322 @@ function _cmd_move() {
 
   __print_success "Moved '$instance' from library '$source_library' to '$target_library' (${target_working_dir})"
   __emit_event server.moved "$instance" "$source_library" "$target_library"
+
+  return 0
+}
+
+# Loads the transfer logic on first use.
+function _load_transfer() {
+  [[ -z "${KGSM_LOGIC_TRANSFER_LOADED:-}" ]] || return 0
+  # shellcheck source=handlers/transfer.sh
+  source "$(__find_command_handler transfer.sh)" || {
+    __print_error "Failed to load transfer logic library"
+    return $EC_FAILED_SOURCE
+  }
+}
+
+# Says why a transfer verb failed, in the engine's own words.
+# Args: $1 = exit code
+function _print_transfer_failure() {
+  case "$1" in
+    $EC_INSTANCE_LOCKED) __print_error "The instance is locked by a transfer (or by another token)" ;;
+    $EC_INSTANCE_RUNNING) __print_error "The instance is running; stop it first" ;;
+    $EC_IMPORT_NOT_FOUND) __print_error "No staged import with that id" ;;
+    $EC_NOT_FOUND) __print_error "Not found" ;;
+    $EC_TRANSFER_INTEGRITY) __print_error "${__transfer_error_out:-What arrived differs from the manifest}" ;;
+    *) __print_error "${__transfer_error_out:-Failed ($1)}" ;;
+  esac
+}
+
+function _cmd_export() {
+  local instance="" mode="" part="" token=""
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_export
+        return 0
+        ;;
+      --manifest) mode="manifest" ;;
+      --commit) mode="commit" ;;
+      --part)
+        shift
+        [[ -z "${1:-}" ]] && __print_error "Missing argument for --part" && return $EC_MISSING_ARG
+        mode="part"
+        part="$1"
+        ;;
+      --lock)
+        shift
+        [[ -z "${1:-}" ]] && __print_error "Missing argument for --lock" && return $EC_MISSING_ARG
+        token="$1"
+        ;;
+      -*)
+        __print_error "Invalid option for export command: $1"
+        return $EC_INVALID_ARG
+        ;;
+      *) instance="$1" ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$instance" ]] || [[ -z "$mode" ]]; then
+    __print_error "Usage: $self export <instance> (--manifest | --part <id> | --commit)"
+    return $EC_MISSING_ARG
+  fi
+
+  if [[ "$mode" != "manifest" ]] && [[ -z "$token" ]]; then
+    __print_error "Missing required argument: --lock <token>"
+    return $EC_MISSING_ARG
+  fi
+
+  _load_transfer || return $?
+  _refuse_when_library_offline "$instance" || return $?
+
+  local rc
+  case "$mode" in
+    manifest)
+      local holder
+      holder="$(__instance_lock_holder "$instance")"
+      if [[ -n "$holder" ]] && [[ "$holder" != "$token" ]]; then
+        __refuse_if_instance_locked "$instance" "$token"
+        return $?
+      fi
+
+      if lifecycle.sh is-active "$instance" > /dev/null 2>&1; then
+        _print_transfer_failure $EC_INSTANCE_RUNNING
+        return $EC_INSTANCE_RUNNING
+      fi
+
+      if [[ -n "$token" ]]; then
+        __logic_transfer_lock_take "$instance" "$token"
+        rc=$?
+        if [[ $rc -ne 0 ]]; then
+          _print_transfer_failure $rc
+          return $rc
+        fi
+      fi
+
+      __logic_transfer_manifest "$instance"
+      rc=$?
+      if [[ $rc -ne 0 ]]; then
+        _print_transfer_failure $rc
+        return $rc
+      fi
+      ;;
+    part)
+      __logic_transfer_export_part "$instance" "$part" "$token"
+      rc=$?
+      if [[ $rc -ne 0 ]]; then
+        _print_transfer_failure $rc
+        return $rc
+      fi
+      ;;
+    commit)
+      __logic_transfer_export_commit "$instance" "$token"
+      rc=$?
+      if [[ $rc -ne 0 ]]; then
+        _print_transfer_failure $rc
+        return $rc
+      fi
+      __print_success "Exported '$instance'"
+      __emit_event server.exported "$instance"
+      ;;
+  esac
+
+  return 0
+}
+
+function _cmd_unlock() {
+  local instance="" token="" force=false
+
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      -h | --help | help)
+        show_usage_unlock
+        return 0
+        ;;
+      --force) force=true ;;
+      --lock)
+        shift
+        [[ -z "${1:-}" ]] && __print_error "Missing argument for --lock" && return $EC_MISSING_ARG
+        token="$1"
+        ;;
+      -*)
+        __print_error "Invalid option for unlock command: $1"
+        return $EC_INVALID_ARG
+        ;;
+      *) instance="$1" ;;
+    esac
+    shift
+  done
+
+  if [[ -z "$instance" ]] || { [[ -z "$token" ]] && [[ "$force" != true ]]; }; then
+    __print_error "Usage: $self unlock <instance> (--lock <token> | --force)"
+    return $EC_MISSING_ARG
+  fi
+
+  _load_transfer || return $?
+  _refuse_when_library_offline "$instance" || return $?
+
+  __logic_transfer_lock_release "$instance" "$token" "$force"
+  local rc=$?
+  if [[ $rc -ne 0 ]]; then
+    _print_transfer_failure $rc
+    return $rc
+  fi
+
+  __print_success "Instance '$instance' is not locked"
+  return 0
+}
+
+# The transfer logic reports through globals it sets.
+# shellcheck disable=SC2154
+function _cmd_import() {
+  local verb="${1:-}"
+  shift 2> /dev/null || true
+
+  case "$verb" in
+    "" | -h | --help | help)
+      show_usage_import
+      [[ -z "$verb" ]] && return $EC_MISSING_ARG
+      return 0
+      ;;
+    check | begin | part | finish | abort | list) ;;
+    *)
+      __print_error "Unknown import verb: $verb"
+      __print_error "Use '$self help import' for usage information"
+      return $EC_INVALID_ARG
+      ;;
+  esac
+
+  local library="" suffix="" import_id="" part_id=""
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --library)
+        shift
+        [[ -z "${1:-}" ]] && __print_error "Missing argument for --library" && return $EC_MISSING_ARG
+        library="$1"
+        ;;
+      --blueprint-suffix)
+        shift
+        [[ -z "${1:-}" ]] && __print_error "Missing argument for --blueprint-suffix" && return $EC_MISSING_ARG
+        suffix="$1"
+        ;;
+      -*)
+        __print_error "Invalid option for import $verb: $1"
+        return $EC_INVALID_ARG
+        ;;
+      *)
+        if [[ -z "$import_id" ]]; then
+          import_id="$1"
+        else
+          part_id="$1"
+        fi
+        ;;
+    esac
+    shift
+  done
+
+  _load_transfer || return $?
+
+  local rc manifest_file=""
+  case "$verb" in
+    check | begin)
+      manifest_file="$(mktemp "${TMPDIR:-/tmp}/kgsm-manifest.XXXXXX")" || return $EC_FAILED_TOUCH
+      # shellcheck disable=SC2064
+      trap "rm -f '$manifest_file'" RETURN
+      cat > "$manifest_file"
+
+      if [[ "$verb" == "check" ]]; then
+        __logic_transfer_check "$manifest_file" "$library" "$suffix"
+        rc=$?
+      else
+        __logic_transfer_import_begin "$manifest_file" "$library" "$suffix"
+        rc=$?
+        local new_id="$__transfer_import_id_out"
+      fi
+
+      if [[ $rc -ne 0 ]]; then
+        if [[ -n "${json_format:-}" ]]; then
+          __logic_transfer_verdict_json
+        else
+          local row
+          for row in "${__transfer_refusals[@]}"; do
+            __print_error "$(cut -f3 <<< "$row")"
+          done
+        fi
+        return $rc
+      fi
+
+      if [[ "$verb" == "check" ]]; then
+        if [[ -n "${json_format:-}" ]]; then
+          __logic_transfer_verdict_json
+        else
+          __print_success "This machine accepts the instance"
+        fi
+      elif [[ -n "${json_format:-}" ]]; then
+        jq -nc --arg id "$new_id" '{import_id: $id}'
+      else
+        echo "$new_id"
+      fi
+      ;;
+    part)
+      if [[ -z "$import_id" ]] || [[ -z "$part_id" ]]; then
+        __print_error "Usage: $self import part <import-id> <part-id>"
+        return $EC_MISSING_ARG
+      fi
+      __logic_transfer_import_part "$import_id" "$part_id"
+      rc=$?
+      if [[ $rc -ne 0 ]]; then
+        _print_transfer_failure $rc
+        return $rc
+      fi
+      ;;
+    finish)
+      if [[ -z "$import_id" ]]; then
+        __print_error "Usage: $self import finish <import-id>"
+        return $EC_MISSING_ARG
+      fi
+      __logic_transfer_import_finish "$import_id"
+      rc=$?
+      if [[ $rc -ne 0 ]]; then
+        _print_transfer_failure $rc
+        return $rc
+      fi
+
+      local imported_instance imported_blueprint imported_library
+      imported_instance="$(jq -r '.instance' <<< "$__transfer_finish_json")"
+      imported_blueprint="$(jq -r '.blueprint' <<< "$__transfer_finish_json")"
+      imported_library="$(jq -r '.library' <<< "$__transfer_finish_json")"
+
+      if [[ -n "${json_format:-}" ]]; then
+        echo "$__transfer_finish_json"
+      else
+        __print_success "Imported '$imported_instance' into library '$imported_library'"
+      fi
+      __emit_event server.imported "$imported_instance" "$imported_blueprint" "$imported_library"
+      ;;
+    abort)
+      if [[ -z "$import_id" ]]; then
+        __print_error "Usage: $self import abort <import-id>"
+        return $EC_MISSING_ARG
+      fi
+      __logic_transfer_import_abort "$import_id"
+      rc=$?
+      if [[ $rc -ne 0 ]]; then
+        _print_transfer_failure $rc
+        return $rc
+      fi
+      ;;
+    list)
+      if [[ -n "${json_format:-}" ]]; then
+        __logic_transfer_import_list
+      else
+        __logic_transfer_import_list |
+          jq -r '.[] | "\(.import_id)\t\(.library)\t\(.instance)\t\(.blueprint)\t\(.began)"'
+      fi
+      ;;
+  esac
 
   return 0
 }
@@ -4017,6 +4365,15 @@ function _cmd_help() {
     remove)
       show_usage_remove
       ;;
+    export)
+      show_usage_export
+      ;;
+    unlock)
+      show_usage_unlock
+      ;;
+    import)
+      show_usage_import
+      ;;
     move)
       show_usage_move
       ;;
@@ -4136,7 +4493,7 @@ shift 2> /dev/null || true
 # the rule and nothing inward of it ever sees anything but an id. `create` and
 # `generate-id` are absent on purpose: their first argument is a blueprint.
 case "$command" in
-  remove | move | info | status | find | save | input | announce | \
+  remove | move | export | unlock | info | status | find | save | input | announce | \
     kick | ban | unban | \
     config-get | config-list | config-set | rename | backups | create-backup | \
     restore-backup | delete-backup | pin-backup | unpin-backup | \
@@ -4144,6 +4501,17 @@ case "$command" in
     if [[ -n "${1:-}" ]] && [[ "$1" != -* ]]; then
       resolved_instance="$(__resolve_instance_id "$1")" || exit $?
       set -- "$resolved_instance" "${@:2}"
+    fi
+    ;;
+esac
+
+# A transfer lock keeps a server stopped and its files as they were. Every verb
+# here that would move, update or change the backups of a locked instance is
+# refused before it starts.
+case "$command" in
+  move | update | create-backup | restore-backup | delete-backup | prune-backups)
+    if [[ -n "${1:-}" ]] && [[ "$1" != -* ]]; then
+      __refuse_if_instance_locked "$1" || exit $?
     fi
     ;;
 esac
@@ -4164,6 +4532,18 @@ case "$command" in
     ;;
   move)
     _cmd_move "$@"
+    exit $?
+    ;;
+  export)
+    _cmd_export "$@"
+    exit $?
+    ;;
+  unlock)
+    _cmd_unlock "$@"
+    exit $?
+    ;;
+  import)
+    _cmd_import "$@"
     exit $?
     ;;
   list)

@@ -132,6 +132,17 @@ export EVENT_INSTANCE_INSTALLED
 declare -g -r EVENT_INSTANCE_MOVED="server.moved"
 export EVENT_INSTANCE_MOVED
 
+# An instance left this host: the other machine holds it, and the files, backups
+# and registry entry here are gone. Carries no node: the engine does not know
+# where it went.
+declare -g -r EVENT_INSTANCE_EXPORTED="server.exported"
+export EVENT_INSTANCE_EXPORTED
+
+# An instance arrived from another host under a fresh id. Says where the files
+# landed, as server.installed does.
+declare -g -r EVENT_INSTANCE_IMPORTED="server.imported"
+export EVENT_INSTANCE_IMPORTED
+
 declare -g -r EVENT_INSTANCE_STARTED="server.started"
 export EVENT_INSTANCE_STARTED
 
@@ -456,6 +467,8 @@ declare -g -A EVENT_CONFIGS=(
   # `from_library`/`to_library` are library names, and the instance is still the
   # same instance — only its files went anywhere.
   ["$EVENT_INSTANCE_MOVED"]="instance from_library to_library"
+  ["$EVENT_INSTANCE_EXPORTED"]="instance"
+  ["$EVENT_INSTANCE_IMPORTED"]="instance blueprint library"
   ["$EVENT_INSTANCE_STARTED"]="instance"
   ["$EVENT_INSTANCE_STOPPED"]="instance"
   ["$EVENT_INSTANCE_RESTARTED"]="instance"
@@ -568,6 +581,8 @@ declare -g -A EVENT_GRADES=(
   ["$EVENT_INSTANCE_INSTALLATION_FINISHED"]="info neutral"
   ["$EVENT_INSTANCE_INSTALLED"]="info success"
   ["$EVENT_INSTANCE_MOVED"]="info neutral"
+  ["$EVENT_INSTANCE_EXPORTED"]="info neutral"
+  ["$EVENT_INSTANCE_IMPORTED"]="info success"
   ["$EVENT_INSTANCE_STARTED"]="info neutral"
   ["$EVENT_INSTANCE_STOPPED"]="warn neutral"
   ["$EVENT_INSTANCE_RESTARTED"]="info neutral"
@@ -783,6 +798,12 @@ function __logic_event_summary() {
       ;;
     "$EVENT_INSTANCE_MOVED")
       __logic_event_summary_out="moved $_instance"
+      ;;
+    "$EVENT_INSTANCE_EXPORTED")
+      __logic_event_summary_out="exported $_instance"
+      ;;
+    "$EVENT_INSTANCE_IMPORTED")
+      __logic_event_summary_out="imported $_instance"
       ;;
     "$EVENT_INSTANCE_VERSION_UPDATED")
       __logic_event_summary_out="updated $_instance"
@@ -1073,6 +1094,18 @@ function __logic_build_event_payload() {
         InstanceName: $instance,
         FromLibrary: $from_library,
         ToLibrary: $to_library
+      }'
+      ;;
+    "$EVENT_INSTANCE_EXPORTED")
+      data_object='{
+        InstanceName: $instance
+      }'
+      ;;
+    "$EVENT_INSTANCE_IMPORTED")
+      data_object='{
+        InstanceName: $instance,
+        Blueprint: $blueprint,
+        Library: $library
       }'
       ;;
     "$EVENT_INSTANCE_VERSION_UPDATED")
