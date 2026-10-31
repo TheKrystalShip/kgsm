@@ -47,6 +47,13 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **A maintenance window's author carries a display name (`3.18.0-rc37`).** `config-set
+  maintenance_windows=… --author <account> --author-name <text>` records the name as
+  `maintenance_windows_author_name` beside the author, and `instances info --json` and the detailed
+  listing report it. The text is normalised as a display name is (control characters and `$` dropped)
+  and escaped on write. The key exists only while a name was given: any windows write that names nobody
+  removes it, and `--author-name` without `--author` is refused. The key is protected, settable only
+  through that flag.
 - **An import keeps an id equal to its source's (`3.18.0-rc36`).** `import finish` renames the
   arriving config from the source's id to the minted one; when the target mints the same id, as a
   server returning to a node that no longer holds it does, the rename is skipped instead of failing.

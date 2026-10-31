@@ -97,6 +97,13 @@ function _author_of() {
   "$INSTANCES_MODULE" info "$1" --json 2> /dev/null | jq -r '.maintenance_windows_author // ""'
 }
 
+# The author name an instance's info reports: its value, or "ABSENT" when the
+# field is not in the output at all.
+function _author_name_of() {
+  "$INSTANCES_MODULE" info "$1" --json 2> /dev/null \
+    | jq -r 'if has("maintenance_windows_author_name") then .maintenance_windows_author_name else "ABSENT" end'
+}
+
 function _windows_of() {
   "$INSTANCES_MODULE" info "$1" --json 2> /dev/null | jq -r '.maintenance_windows // ""'
 }
@@ -182,4 +189,65 @@ function test_an_author_must_be_an_account_id() {
 
   assert_not_equals "0" "$exit_code" "An author carrying anything but an id's characters should be refused"
   assert_equals "" "$(_author_of "$CREATED_ID")" "No author should have been written"
+}
+
+# =============================================================================
+# TEST: the author's display name travels with the author
+# =============================================================================
+
+function test_the_author_name_is_recorded_beside_the_author() {
+  log_test_step "Testing --author-name is recorded beside the author"
+
+  _create || return
+  assert_command_succeeds \
+    "'$INSTANCES_MODULE' config-set '$CREATED_ID' 'maintenance_windows=daily@05:00/backup' --author usr_alice --author-name 'Alice \"A\" \$HOME Doe'" \
+    "Writing windows with an author and a name should succeed"
+
+  assert_equals "usr_alice" "$(_author_of "$CREATED_ID")" "The author should be recorded"
+  assert_equals 'Alice "A" HOME Doe' "$(_author_name_of "$CREATED_ID")" "The name should be stored as plain text"
+}
+
+function test_an_instance_without_an_author_name_has_no_field() {
+  log_test_step "Testing a name is absent unless given"
+
+  _create || return
+  assert_equals "ABSENT" "$(_author_name_of "$CREATED_ID")" "A fresh instance should carry no name"
+
+  "$INSTANCES_MODULE" config-set "$CREATED_ID" 'maintenance_windows=daily@05:00/backup' --author usr_alice \
+    > /dev/null 2>&1
+  assert_equals "ABSENT" "$(_author_name_of "$CREATED_ID")" "An author with no name should leave the name absent"
+}
+
+function test_a_write_naming_nobody_clears_the_author_name() {
+  log_test_step "Testing a write naming nobody removes the name"
+
+  _create || return
+  "$INSTANCES_MODULE" config-set "$CREATED_ID" 'maintenance_windows=daily@05:00/backup' \
+    --author usr_alice --author-name 'Alice' > /dev/null 2>&1
+  "$INSTANCES_MODULE" config-set "$CREATED_ID" 'maintenance_windows=weekly.sun@04:00/restart' \
+    --author usr_bob > /dev/null 2>&1
+
+  assert_equals "ABSENT" "$(_author_name_of "$CREATED_ID")" "The previous writer's name should not outlive them"
+}
+
+function test_the_author_name_cannot_be_set_directly() {
+  log_test_step "Testing config-set refuses the author name key"
+
+  _create || return
+  "$INSTANCES_MODULE" config-set "$CREATED_ID" 'maintenance_windows_author_name=Mallory' > /dev/null 2>&1
+  local exit_code=$?
+
+  assert_not_equals "0" "$exit_code" "Setting maintenance_windows_author_name should be refused"
+  assert_equals "ABSENT" "$(_author_name_of "$CREATED_ID")" "No name should have been written"
+}
+
+function test_an_author_name_needs_an_author() {
+  log_test_step "Testing --author-name without --author is refused"
+
+  _create || return
+  "$INSTANCES_MODULE" config-set "$CREATED_ID" 'maintenance_windows=daily@05:00/backup' --author-name 'Alice' \
+    > /dev/null 2>&1
+  local exit_code=$?
+
+  assert_not_equals "0" "$exit_code" "A name with nobody to belong to should be refused"
 }

@@ -695,8 +695,9 @@ export -f __logic_get_instance_paths
 #
   # Three classes are refused:
   #   - identity/structural keys, where a raw edit corrupts the instance, and
-  #     maintenance_windows_author, which the engine writes alongside the windows
-  #     themselves (config-set maintenance_windows=… --author …) so a schedule can
+  #     maintenance_windows_author and maintenance_windows_author_name, which the engine
+  #     writes alongside the windows themselves (config-set maintenance_windows=…
+  #     --author … --author-name …) so a schedule can
   #     never be credited to somebody who did not write it;
   #   - the filesystem paths KGSM owns and manages (every *_dir / *_file, plus
   #     executable_subdirectory);
@@ -716,6 +717,7 @@ export -f __logic_get_instance_paths
       name | blueprint_file | runtime | platform | install_datetime | install_nonce | \
         is_steam_account_required | steam_app_id | \
         client_steam_app_id | ports | maintenance_windows_author | \
+        maintenance_windows_author_name | \
         transfer_lock | transfer_lock_autostart)
         return 0
         ;;
