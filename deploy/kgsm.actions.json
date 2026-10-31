@@ -31,6 +31,5 @@
     { "id": "server.uninstall", "title": "Uninstall servers", "effect": "write", "scope": "instance" },
     { "id": "server.update", "title": "Update servers", "effect": "execute", "scope": "instance" },
     { "id": "server.windows.write", "title": "Change maintenance windows", "effect": "write", "scope": "instance" }
-  ],
-  "requires": []
+  ]
 }

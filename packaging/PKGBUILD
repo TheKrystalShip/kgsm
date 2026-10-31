@@ -69,8 +69,8 @@ package() {
     install -dm755 "${pkgdir}/usr/bin"
     ln -s "/opt/${pkgname}/kgsm.sh" "${pkgdir}/usr/bin/${pkgname}"
 
-    # The engine's action manifest, in the node's actions directory where kgsm-api reports it to the
-    # auth anchor's catalog, stamped with the version this package is built from.
+    # The engine's action manifest, in the node's actions directory where kgsm-api serves it at
+    # /.well-known/tks-actions.json, stamped with the version this package is built from.
     install -dm755 "${pkgdir}/var/lib/kgsm/leaves/actions"
     jq --arg v "$("${repo}/deploy/version.sh")" '.version = $v' "${repo}/deploy/kgsm.actions.json" \
         > "${pkgdir}/var/lib/kgsm/leaves/actions/kgsm.json"
