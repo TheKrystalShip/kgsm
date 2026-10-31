@@ -71,7 +71,7 @@ native:
   # -savedir keeps the world inside the instance; without it Valheim writes to
   # ~/.config/unity3d/IronGate/Valheim and the instance's backups capture nothing.
   # The server REFUSES TO START without a password of at least 5 characters, so one is shipped
-  # and is meant to be replaced — see docs/knowledge/games/valheim/setup.md.
+  # and is meant to be replaced on every server.
   executable_arguments: -nographics -batchmode -name $instance_level_name -world $instance_level_name -savedir $instance_saves_dir -port 2456 -password CHANGE_ME -public 1
   # Valheim reads no console commands. Stopping is a signal, which the server handles by
   # saving the world before it exits, so there is nothing to send it.

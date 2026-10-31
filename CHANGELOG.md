@@ -47,6 +47,10 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 
 ## Work in progress
 
+- **The game knowledge lives with the assistant (`3.18.0-rc38`).** The per-game troubleshooting,
+  settings and launch notes are the KGSM assistant's skill references (`kgsm-assistant`,
+  `profile/skills/`), where they are read; the engine's docs hold what the engine itself uses. The
+  Valheim definition's comment on its shipped password names no document.
 - **A maintenance window's author carries a display name (`3.18.0-rc37`).** `config-set
   maintenance_windows=… --author <account> --author-name <text>` records the name as
   `maintenance_windows_author_name` beside the author, and `instances info --json` and the detailed
