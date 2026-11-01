@@ -5,10 +5,12 @@
 #   ./deploy/version.sh            # the version as declared
 #   ./deploy/version.sh --pkgver   # the same, in a form pacman accepts
 #
-# The version is declared in exactly ONE place — core/bootstrap.sh's KGSM_VERSION — and read from there, so the package,
-# the binary and the changelog can never disagree about what this is.
+# The version is declared in exactly ONE place, named in the PROJECT BLOCK below, and read from
+# there, so the package, the binary and the changelog can never disagree about what this is.
 #
-# The engine is bash, so the version lives in the code it ships rather than in a project file.
+# Vendored per repo from tks/scripts/deploy-template/. A repo's own lines are its PROJECT BLOCK;
+# everything else is the template's, written by the template's vendor.sh and checked by
+# `vendor.sh --check`.
 
 # A pacman pkgver may not contain a hyphen, so --pkgver strips it. That keeps prerelease ordering
 # correct under vercmp: 3.16.0rc3 < 3.16.0rc4 < 3.16.0.
@@ -16,11 +18,14 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# ── PROJECT BLOCK — the one file that declares this project's version, and how it is read ──
+# The engine is bash, so the version lives in the code it ships rather than in a project file.
 SOURCE_FILE="${HERE}/../core/bootstrap.sh"
 
 read_version() {
     grep -oP 'KGSM_VERSION="\K[^"]+' "$SOURCE_FILE" | head -1
 }
+# ── END PROJECT BLOCK ───────────────────────────────────────────────────────────
 
 raw="$(read_version || true)"
 [[ -n "$raw" ]] || { printf 'version.sh: no version found in %s\n' "$SOURCE_FILE" >&2; exit 1; }

@@ -47,7 +47,11 @@ jobs:
       #   SC2148         templates/manage.*.d/ fragments are sourced, never executed
       #   SC2317         handlers are reached through the dispatcher, not by direct call
       #   SC2034         a variable set here is consumed by the script that sourced it
+      #   SC1091         a sourced file is not followed: each script is linted on its own
       # Everything else fails the build.
+      #
+      # One script per call, four at a time. Given every script in one call, shellcheck analyses each
+      # with the whole graph of files it sources, which outgrows the runner and stalls the lint.
       #
       # The version is pinned to the official static build, not apt's. Which checks exist and when
       # they fire changes between releases, so an unpinned lint is a gate a developer cannot
@@ -69,7 +73,7 @@ jobs:
       # The container has neither git nor node, and every JavaScript action needs node present in
       # the container it runs in — so this plain shell step has to come before any `uses:`.
       - name: Provision the container
-        run: pacman -Sy --noconfirm --needed git nodejs rsync jq gnupg github-cli
+        run: pacman -Sy --noconfirm --needed git nodejs rsync gnupg github-cli jq
 
       - uses: actions/checkout@v7
       # makepkg refuses to run as root, and root-owned sources are unreadable to the build user.
