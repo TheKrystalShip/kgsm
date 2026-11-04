@@ -74,12 +74,13 @@ public static partial class HookFiles
 
     /// <summary>
     /// Checks a hooks text: <c>bash -n</c> must accept it, and every function it defines must be one of
-    /// the four hooks or a helper prefixed <c>_hook_</c>.
+    /// the four hooks or a helper prefixed <c>_hook_</c>, and outside a function it may hold only comments
+    /// and blank lines (<see cref="HookScanner"/>).
     /// </summary>
     /// <exception cref="HookFileException">The text is not acceptable.</exception>
     public static void Validate(string path, string text)
     {
-        var problems = new List<string>();
+        var problems = new List<string>(HookScanner.Scan(text));
 
         foreach (string name in DefinedFunctions(text).Distinct(StringComparer.Ordinal))
         {

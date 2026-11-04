@@ -472,7 +472,9 @@ function _send_input() {
 
 # Resolves a moderation template against a target and delivers it. The
 # template carries one {ip}, {name} or {id} placeholder naming the token the
-# game expects.
+# game expects. The target is refused only for a line break or a length over a
+# thousand characters, as an announcement is; every other character reaches the
+# game as written.
 function _send_moderation_command() {
   local template="$1" target="$2" action="$3" resolved
 
@@ -491,6 +493,11 @@ function _send_moderation_command() {
     return $EC_INVALID_ARG
   fi
 
+  if [[ ${#target} -gt 1000 ]]; then
+    _err "Target too long (${#target} characters, max 1000)"
+    return $EC_INVALID_ARG
+  fi
+
   resolved="$template"
   resolved="${resolved//\{ip\}/$target}"
   resolved="${resolved//\{name\}/$target}"
@@ -501,7 +508,8 @@ function _send_moderation_command() {
     return $EC_ERROR
   fi
 
-  _send_input "$resolved"
+  _require_running_for_console || return $EC_ERROR
+  _write_console_line "$resolved"
 }
 
 # announce <message>: the broadcast template with the message in place of

@@ -18,6 +18,7 @@ public partial class ScriptTemplateTests
     private static readonly Dictionary<int, string> Hashes = new()
     {
         [1] = "5ac5ef5f82f1909b361c8efbf862a6b616825c092a814b616d2ed65b86290e08",
+        [2] = "5924a5a7261d124e5a9ebce5600c5a712e449ea9e76140a6785a4dbe5f543da9",
     };
 
     [Fact]

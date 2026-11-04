@@ -259,12 +259,38 @@ public class ScriptConsoleTests
         Assert.Contains("placeholder", run.Err, StringComparison.Ordinal);
     }
 
+    [Theory]
+    [InlineData("Bob[1]")]
+    [InlineData("a;b")]
+    [InlineData("$x")]
+    [InlineData("a & b | c > d")]
+    [InlineData("`id` $(id) \\ * ? ~ !")]
+    public async Task Moderation_PassesEveryOtherCharacterOfATargetThroughLiterally(string target)
+    {
+        using ScriptWorld world = ScriptWorld.Native();
+        await world.StartGameAsync();
+
+        Assert.Equal(0, (await world.RunAsync("kick", target)).Exit);
+
+        await Eventually.Holds(() => world.Recorded("game/input").Contains($"kick {target}"), "the game read the target as written");
+    }
+
     [Fact]
-    public async Task Moderation_RefusesATargetThatCarriesShellSyntax()
+    public async Task Moderation_RefusesATargetOverAThousandCharacters_LikeAnAnnouncement()
     {
         using ScriptWorld world = ScriptWorld.Native();
         world.MakeFifo(world.InputFifo);
 
-        Assert.Equal(1, (await world.RunAsync("kick", "Bob; op Eve")).Exit);
+        Assert.Equal(0, (await world.RunAsync("kick", new string('x', 1000))).Exit);
+        Assert.Equal(8, (await world.RunAsync("kick", new string('x', 1001))).Exit);
+    }
+
+    [Fact]
+    public async Task Moderation_RefusesACarriageReturnToo()
+    {
+        using ScriptWorld world = ScriptWorld.Native();
+        world.MakeFifo(world.InputFifo);
+
+        Assert.Equal(8, (await world.RunAsync("ban", "a\rb")).Exit);
     }
 }

@@ -164,4 +164,73 @@ public class HookFilesTests
 
         Assert.Equal(["a", "b", "c", "d"], names);
     }
+
+    // --- nothing outside a function ---
+
+    [Theory]
+    [InlineData("echo hello\nkgsm_hook_deploy() { :; }\n", 1)]
+    [InlineData("kgsm_hook_deploy() { :; }\nrm -rf /tmp/x\n", 2)]
+    [InlineData("# fine\n\nLEVEL=1\nkgsm_hook_deploy() { :; }\n", 3)]
+    [InlineData("readonly X=1\n", 1)]
+    [InlineData("kgsm_hook_deploy() { :; } && echo after\n", 1)]
+    [InlineData("kgsm_hook_deploy() {\n  :\n}\ncd /\n", 4)]
+    [InlineData("source ./other.sh\n", 1)]
+    [InlineData("if true; then\n  :\nfi\n", 1)]
+    public void ATopLevelStatement_FailsGeneration_NamingTheFileAndTheLine(string text, int line)
+    {
+        var failure = Assert.Throws<HookFileException>(() => HookFiles.Validate("/x/hooks.sh", text));
+
+        Assert.Contains($"line {line}: ", failure.Message, StringComparison.Ordinal);
+        Assert.StartsWith("'/x/hooks.sh'", failure.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void CommentsBlankLinesAShebangAndFunctionDefinitions_Pass()
+    {
+        const string Text = """
+            #!/usr/bin/env bash
+            #
+            # A comment.
+
+            # shellcheck disable=SC2154
+            kgsm_hook_latest_version() { echo 1; }   # trailing comment
+
+            function kgsm_hook_download
+            {
+              local dest="$2" text="a } b { c"
+              echo '}' >"$dest/f"
+              echo "${text#a }"
+              cat >"$dest/g" <<'EOF'
+            } and more }
+            EOF
+              if true; then { echo nested; }; fi
+              echo ${#dest}
+            }
+
+            _hook_helper ()
+            {
+              : # } in a comment
+            }
+            """;
+
+        Assert.Empty(HookScanner.Scan(Text + "\n"));
+        HookFiles.Validate("hooks.sh", Text + "\n");
+    }
+
+    [Fact]
+    public void AFunctionThatNeverCloses_IsReported()
+    {
+        Assert.NotEmpty(HookScanner.Scan("kgsm_hook_deploy() {\n  echo\n"));
+    }
+
+    [Fact]
+    public void TheScan_NeverRunsTheFile()
+    {
+        var sandbox = Sandbox.Create();
+        string marker = sandbox.PathFor("ran");
+
+        Assert.NotEmpty(HookScanner.Scan($"touch {marker}\n"));
+
+        Assert.False(File.Exists(marker));
+    }
 }

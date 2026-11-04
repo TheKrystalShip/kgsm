@@ -114,6 +114,13 @@ bash tree, which it does not touch. The bash engine's `KGSM_VERSION` does not mo
     are substituted, every other `$` is left for compose, and an unknown key fails.
   - The suite runs real generated scripts with bash against fake steamcmd, docker, curl, the game and a
     watchdog socket.
+- **Stricter hooks, looser moderation targets (`engine-v4.0.0-dev.4`).**
+  - A hooks file may hold only comments, blank lines and function definitions outside a function. The
+    generator scans its structure without running it and fails generation naming the file and line of
+    anything else.
+  - `kick`, `ban` and `unban` refuse a target only for a line break or a length over a thousand
+    characters, as `announce` does; every other character reaches the game as written. The template
+    version is 2.
 
 ## Work in progress
 
