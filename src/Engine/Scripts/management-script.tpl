@@ -1051,6 +1051,11 @@ function _start_background() {
     return $EC_ERROR
   fi
 
+  # A file of that name in the launch directory is the game's own binary and wins over a command on PATH.
+  if [[ "$exe" != */* && -f "$exe" ]]; then
+    exe="./${exe}"
+  fi
+
   if [[ "$exe" == */* ]]; then
     if [[ ! -x "$exe" ]]; then
       _err "${exe} is not an executable file in ${instance_launch_dir}"

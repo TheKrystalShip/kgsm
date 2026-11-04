@@ -41,7 +41,8 @@ kgsm_hook_download() {
     return 1
   fi
 
-  curl -fsSL --max-time "$instance_download_timeout_seconds" \
+  curl -fsSL --connect-timeout "$instance_download_timeout_seconds" \
+    --speed-limit 1 --speed-time "$instance_download_timeout_seconds" \
     -o "${dest}/minecraft_server.${version}.jar" "$jar_url"
 }
 

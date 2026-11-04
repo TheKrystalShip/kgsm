@@ -26,6 +26,7 @@ internal static class CliApp
         root.Options.Add(version);
         root.Options.Add(host.JsonOption);
         root.Options.Add(host.FormatOption);
+        root.Options.Add(host.YesOption);
         root.Options.Add(host.ActorOption);
         root.Options.Add(host.OriginOption);
 
@@ -35,6 +36,7 @@ internal static class CliApp
         root.Subcommands.Add(FleetCommands.Library(host));
         root.Subcommands.Add(FleetCommands.Backup(host));
         root.Subcommands.Add(FleetCommands.Port(host));
+        root.Subcommands.Add(EventCommands.Build(host));
 
         root.SetAction((parse, token) => host.RunAsync(
             parse, "kgsm", gated: false,

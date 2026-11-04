@@ -18,7 +18,8 @@ kgsm_hook_latest_version() {
 kgsm_hook_download() {
   local dest="$2"
 
-  curl -fsSL --max-time "$instance_download_timeout_seconds" -o "${dest}/weekly" \
+  curl -fsSL --connect-timeout "$instance_download_timeout_seconds" \
+    --speed-limit 1 --speed-time "$instance_download_timeout_seconds" -o "${dest}/weekly" \
     https://download.veloren.net/latest/linux/x86_64/weekly
   unzip -q "${dest}/weekly" -d "$dest"
   rm -f "${dest}/weekly"

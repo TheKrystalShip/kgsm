@@ -1,6 +1,7 @@
 using TheKrystalShip.KGSM.Cli;
 using TheKrystalShip.KGSM.Engine.Accounts;
 using TheKrystalShip.KGSM.Engine.Blueprints;
+using TheKrystalShip.KGSM.Engine.Operations;
 using TheKrystalShip.KGSM.Engine.Settings;
 using TheKrystalShip.KGSM.Engine.Status;
 using TheKrystalShip.KGSM.Watchdog.Client;
@@ -12,8 +13,59 @@ namespace TheKrystalShip.KGSM.Engine.Tests.Cli;
 internal sealed record CliRun(int Exit, string Out, string Err);
 
 /// <summary>A watchdog that answers what a test tells it to and holds no socket.</summary>
-internal sealed class FakeWatchdog : IWatchdogProbe
+internal sealed class FakeWatchdog : IWatchdogControl
 {
+    /// <summary>What the watchdog was asked to do, in order, as <c>verb instance</c>.</summary>
+    public List<string> Actions { get; } = [];
+
+    /// <summary>The origin each start and stop carried.</summary>
+    public List<string?> Origins { get; } = [];
+
+    public ActionResult StartResult { get; set; } = new("", true, "started");
+
+    public ActionResult StopResult { get; set; } = new("", true, "stopped");
+
+    public ActionResult ForgetResult { get; set; } = new("", true, "forgotten");
+
+    /// <summary>Runs when the watchdog is asked to start an instance, so a test can make the world match what a real start does.</summary>
+    public Action<string>? OnStart { get; set; }
+
+    public Action<string>? OnStop { get; set; }
+
+    public Task<ActionResult> StartAsync(string instance, bool force, string? origin, CancellationToken cancellationToken)
+    {
+        Actions.Add(force ? $"start {instance} --force" : $"start {instance}");
+        Origins.Add(origin);
+        if (StartResult.Ok) OnStart?.Invoke(instance);
+        return Task.FromResult(StartResult with { Instance = instance });
+    }
+
+    public Task<ActionResult> StopAsync(string instance, string? origin, CancellationToken cancellationToken)
+    {
+        Actions.Add($"stop {instance}");
+        Origins.Add(origin);
+        if (StopResult.Ok) OnStop?.Invoke(instance);
+        return Task.FromResult(StopResult with { Instance = instance });
+    }
+
+    public Task<ActionResult> EnableAsync(string instance, CancellationToken cancellationToken)
+    {
+        Actions.Add($"enable {instance}");
+        return Task.FromResult(new ActionResult(instance, true, "enabled"));
+    }
+
+    public Task<ActionResult> DisableAsync(string instance, CancellationToken cancellationToken)
+    {
+        Actions.Add($"disable {instance}");
+        return Task.FromResult(new ActionResult(instance, true, "disabled"));
+    }
+
+    public Task<ActionResult> ForgetAsync(string instance, CancellationToken cancellationToken)
+    {
+        Actions.Add($"forget {instance}");
+        return Task.FromResult(ForgetResult with { Instance = instance });
+    }
+
     public bool SocketPresent { get; set; } = true;
 
     public WatchdogHealth Health { get; set; } = new(true, true, "in the slice");
@@ -56,6 +108,44 @@ internal sealed class FakeContainers : IContainerRuntime
     public Task<int> FollowAsync(string composeFile, int lines, CancellationToken cancellationToken) => Task.FromResult(0);
 }
 
+/// <summary>Runs no program: it records each call and answers what a test scripts.</summary>
+internal sealed class FakeProcesses : IProcessRunner
+{
+    public List<ProcessCall> Calls { get; } = [];
+
+    /// <summary>Answers a call; the default is a silent success.</summary>
+    public Func<ProcessCall, ProcessResult> Handler { get; set; } = _ => new ProcessResult(0, string.Empty, string.Empty);
+
+    /// <summary>The arguments of every call to an instance's management script, as one string each.</summary>
+    public IReadOnlyList<string> ScriptCalls => [.. Calls.Where(c => c.FileName.EndsWith(".manage.sh", StringComparison.Ordinal)).Select(c => string.Join(' ', c.Arguments))];
+
+    public Task<ProcessResult> RunAsync(ProcessCall call, CancellationToken cancellationToken)
+    {
+        lock (Calls) Calls.Add(call);
+        return Task.FromResult(Handler(call));
+    }
+}
+
+/// <summary>A firewall authority that answers what a test tells it to.</summary>
+internal sealed class FakeFirewall : IFirewallClient
+{
+    public List<string> Calls { get; } = [];
+
+    public FirewallVerdict Verdict { get; set; } = FirewallVerdict.Success;
+
+    public Task<FirewallVerdict> EnsureOpenAsync(string instance, IReadOnlyList<TheKrystalShip.KGSM.Engine.Contracts.Network.PortRange> ports, TheKrystalShip.KGSM.Engine.Journal.Provenance provenance, CancellationToken cancellationToken)
+    {
+        Calls.Add($"ensure-open {instance} {string.Join(' ', ports.Select(FirewallCli.Token))}");
+        return Task.FromResult(Verdict);
+    }
+
+    public Task<FirewallVerdict> RemoveAsync(string instance, TheKrystalShip.KGSM.Engine.Journal.Provenance provenance, CancellationToken cancellationToken)
+    {
+        Calls.Add($"remove {instance}");
+        return Task.FromResult(Verdict);
+    }
+}
+
 internal sealed class FakeRequirements(params string[] present) : IRequirementProbe
 {
     public bool IsPresent(string requirementId) => present.Contains(requirementId);
@@ -90,6 +180,18 @@ internal sealed class CliSession
 
     public Func<string, IReadOnlyList<string>, AccountVerdict> AccountGate { get; set; } = (_, _) => AccountVerdict.Ok;
 
+    public FakeProcesses Processes { get; } = new();
+
+    public FakeFirewall Firewall { get; } = new();
+
+    public bool Interactive { get; set; }
+
+    public Func<string, bool>? Ask { get; set; }
+
+    public TextReader? Stdin { get; set; }
+
+    public Microsoft.Extensions.Time.Testing.FakeTimeProvider Clock { get; } = new(new DateTimeOffset(2026, 11, 4, 12, 0, 0, TimeSpan.Zero));
+
     public Dictionary<string, string?> Extra { get; } = [];
 
     public CliEnvironment Environment()
@@ -116,6 +218,15 @@ internal sealed class CliSession
             ProcessAlive = ProcessAlive,
             AccountGate = AccountGate,
             Requirements = Requirements,
+            Processes = Processes,
+            Firewall = Firewall,
+            BinaryPath = "/test/bin/kgsm",
+            Interactive = Interactive,
+            Ask = Ask,
+            Stdin = Stdin,
+            UserName = "tester",
+            SettleTimeout = TimeSpan.Zero,
+            Clock = Clock,
         };
     }
 

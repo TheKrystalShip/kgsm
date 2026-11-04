@@ -27,7 +27,8 @@ kgsm_hook_download() {
   local version="$1" dest="$2"
   local archive="${dest}/factorio_headless.tar.xz"
 
-  curl -fsSL --max-time "$instance_download_timeout_seconds" -o "$archive" \
+  curl -fsSL --connect-timeout "$instance_download_timeout_seconds" \
+    --speed-limit 1 --speed-time "$instance_download_timeout_seconds" -o "$archive" \
     "https://factorio.com/get-download/${version}/headless/linux64"
   tar -xf "$archive" --strip-components=1 -C "$dest"
   rm -f "$archive"
@@ -43,7 +44,9 @@ kgsm_hook_post_deploy() {
     return 0
   fi
 
-  if ! (cd "$instance_launch_dir" && "$instance_executable_file" --create "$save" >/dev/null 2>&1); then
+  local output
+  if ! output="$(cd "$instance_launch_dir" && "./${instance_executable_file}" --create "$save" 2>&1)"; then
+    printf '%s\n' "$output" | tail -n 5 >&2
     echo "Failed to create the save ${instance_level_name}; the server cannot start without it" >&2
     return 1
   fi

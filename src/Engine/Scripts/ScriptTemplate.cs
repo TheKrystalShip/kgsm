@@ -15,7 +15,7 @@ public static partial class ScriptTemplate
     /// The version a generated script records. It changes whenever the template's text does; a script
     /// whose recorded version differs is stale and <c>instance repair</c> regenerates it.
     /// </summary>
-    public const int Version = 2;
+    public const int Version = 3;
 
     private const string ResourceName = "management-script.tpl";
 

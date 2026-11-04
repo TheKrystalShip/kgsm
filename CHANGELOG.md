@@ -121,6 +121,42 @@ bash tree, which it does not touch. The bash engine's `KGSM_VERSION` does not mo
   - `kick`, `ban` and `unban` refuse a target only for a line break or a length over a thousand
     characters, as `announce` does; every other character reaches the game as written. The template
     version is 2.
+- **The write commands (`engine-v4.0.0-dev.5`).**
+  - `instance install|uninstall|start|stop|restart|move|enable|disable|update|check-update|unlock`,
+    `instance config set`, `instance console send|save|announce|kick|ban|unban`,
+    `backup create|restore|delete|prune|pin|unpin`, `blueprint create|update|delete`,
+    `library add|remove|rename`, `event emit` and `event journal status|prune|verify`. Every result is a
+    registered DTO rendered by the one output stage. A destructive command (uninstall, restore, backup
+    delete and prune, library remove, blueprint delete, journal prune) asks at a terminal and otherwise
+    exits 2 asking for `--yes`.
+  - Install checks everything it can refuse before it creates anything (blueprint, requirements, journal,
+    library, room, id), then registers an undo for every step. A failure at any step removes the registry
+    entry, the working directory, the backups directory and the library directories it made, writes
+    `server.install.failed`, and closes the bracket with `server.install.finished`. An existing backups
+    directory is refused and never adopted. A host with no library gets `default` at
+    `$XDG_DATA_HOME/kgsm-library`.
+  - Start, stop and restart route a native instance through the watchdog when it is ready, sending the
+    `origin` and reading the answer from the body (507 is exit 51); otherwise the instance's script runs
+    it unsupervised and says so. A container always goes through its script. Uninstall stops whatever runs,
+    through the watchdog for a supervised instance and the script otherwise, before any file is deleted.
+    Firewall calls are checked: an authority that does not answer is exit 49, one that rejects the rule
+    exit 19, and the command stops there.
+  - Every verb is bracketed by its `*.started` and `*.finished`, the fact in the middle is written only for
+    a real transition, and the archives the script takes (the pre-update and pre-restore ones) are
+    journaled as `backup.created`. An update reports its download and deploy phases through
+    `kgsm event emit`, handed to the script as `--emit-cmd`. `config.changed` names the key and never the
+    value; `library.renamed` is a new fact.
+  - A transfer lock (a file in the instance's directory holding its token) refuses start, restart, move,
+    update, config set and every backup change with exit 59; uninstall passes it with the transfer's token.
+  - `move` renames within one device and copies otherwise, resumably; it starts an instance that has run
+    once at its new place and stops it again, and puts everything back when that fails.
+  - `config set` checks a value against what its key means before the file is replaced, and refuses the
+    protected keys.
+  - `kgsm event emit` writes any event the engine writes, checked against the catalog, with `--field
+    Name=value` for the payload; `event journal verify` reports a torn last line, an empty line, NUL
+    bytes and a line that is not one object.
+  - A bare `executable_file` is looked up in the launch directory before `PATH`, and the bundled download
+    hooks bound a stalled transfer instead of the whole download. The template version is 3.
 
 ## Work in progress
 

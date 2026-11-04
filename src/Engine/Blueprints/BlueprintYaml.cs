@@ -113,7 +113,22 @@ internal sealed class ComposeYamlService
     public string? NetworkMode { get; set; }
 }
 
+// The ports a compose service declares, read only to derive the firewall set of an instance.
+
+[YamlSerializable]
+internal sealed class ComposePortsFile
+{
+    public Dictionary<string, ComposePortsService?>? Services { get; set; }
+}
+
+[YamlSerializable]
+internal sealed class ComposePortsService
+{
+    public List<string>? Ports { get; set; }
+}
+
 [YamlStaticContext]
 [YamlSerializable(typeof(BlueprintYamlFile))]
 [YamlSerializable(typeof(ComposeYamlFile))]
+[YamlSerializable(typeof(ComposePortsFile))]
 public partial class BlueprintYamlContext : YamlDotNet.Serialization.StaticContext;

@@ -1,5 +1,6 @@
 using System.Collections;
 using TheKrystalShip.KGSM.Engine.Accounts;
+using TheKrystalShip.KGSM.Engine.Operations;
 using TheKrystalShip.KGSM.Engine.Paths;
 using TheKrystalShip.KGSM.Engine.Settings;
 using TheKrystalShip.KGSM.Engine.Status;
@@ -19,8 +20,32 @@ internal sealed class CliEnvironment
 
     public required string HomeFallback { get; init; }
 
-    /// <summary>The watchdog probe for the configured socket; the real one when unset.</summary>
-    public Func<WatchdogSettings, IWatchdogProbe>? WatchdogProbe { get; init; }
+    /// <summary>The watchdog for the configured socket; the real one when unset.</summary>
+    public Func<WatchdogSettings, IWatchdogControl>? WatchdogProbe { get; init; }
+
+    /// <summary>How external programs are run; child processes when unset.</summary>
+    public IProcessRunner? Processes { get; init; }
+
+    /// <summary>The firewall authority's client; the bundled command-line client when unset.</summary>
+    public IFirewallClient? Firewall { get; init; }
+
+    /// <summary>The running binary, which an instance's script calls back to report update phases; the process's own path when unset.</summary>
+    public string? BinaryPath { get; init; } = Environment.ProcessPath;
+
+    /// <summary>How long a start or stop waits for the run state to show it.</summary>
+    public TimeSpan SettleTimeout { get; init; } = TimeSpan.FromSeconds(15);
+
+    /// <summary>What a command reads from standard input; the process's when unset.</summary>
+    public TextReader? Stdin { get; init; }
+
+    /// <summary>Whether a person is at a terminal and can be asked; true when both input and output are terminals.</summary>
+    public bool Interactive { get; init; } = !Console.IsInputRedirected && !Console.IsOutputRedirected;
+
+    /// <summary>The account running the command, which names the actor when none is given at a terminal.</summary>
+    public string UserName { get; init; } = Environment.UserName;
+
+    /// <summary>Asks a person a yes-or-no question on the terminal; the real prompt when unset.</summary>
+    public Func<string, bool>? Ask { get; init; }
 
     /// <summary>The container runtime; <c>docker compose</c> when unset.</summary>
     public IContainerRuntime? Containers { get; init; }

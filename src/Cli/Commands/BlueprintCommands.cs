@@ -19,6 +19,7 @@ internal static class BlueprintCommands
         blueprint.Subcommands.Add(Find(host));
         blueprint.Subcommands.Add(Validate(host));
         blueprint.Subcommands.Add(Requirements(host));
+        BlueprintWriteCommands.AddTo(blueprint, host);
         return blueprint;
     }
 

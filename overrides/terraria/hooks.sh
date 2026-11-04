@@ -30,7 +30,8 @@ kgsm_hook_download() {
   local archive="${dest}/terraria-server-${version}.zip"
   local root="${dest}/${version}"
 
-  curl -fsSL --max-time "$instance_download_timeout_seconds" -o "$archive" \
+  curl -fsSL --connect-timeout "$instance_download_timeout_seconds" \
+    --speed-limit 1 --speed-time "$instance_download_timeout_seconds" -o "$archive" \
     "https://terraria.org/api/download/pc-dedicated-server/terraria-server-${version}.zip"
   unzip -q "$archive" -d "$dest"
   rm -f "$archive"

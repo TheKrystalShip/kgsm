@@ -19,23 +19,6 @@ public interface IWatchdogProbe
     Task<InstanceState?> StatusAsync(string instance, CancellationToken cancellationToken);
 }
 
-/// <summary>The probe over the real control socket.</summary>
-public sealed class WatchdogProbe(string socketPath) : IWatchdogProbe, IDisposable
-{
-    private readonly Lazy<WatchdogClient> _client = new(() => new WatchdogClient(socketPath));
-
-    public bool SocketPresent => File.Exists(socketPath);
-
-    public Task<WatchdogHealth> HealthAsync(CancellationToken cancellationToken) => _client.Value.HealthAsync(cancellationToken);
-
-    public Task<InstanceState?> StatusAsync(string instance, CancellationToken cancellationToken) =>
-        _client.Value.StatusAsync(instance, cancellationToken);
-
-    public void Dispose()
-    {
-        if (_client.IsValueCreated) _client.Value.Dispose();
-    }
-}
 
 /// <summary>The state of one service in a compose project, as <c>docker compose ps</c> reports it.</summary>
 public sealed record ComposeService(string Name, string State);

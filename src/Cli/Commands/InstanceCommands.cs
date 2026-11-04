@@ -26,6 +26,7 @@ internal static class InstanceCommands
         instance.Subcommands.Add(Logs(host));
         instance.Subcommands.Add(Config(host));
         instance.Subcommands.Add(Repair(host));
+        InstanceWriteCommands.AddTo(instance, host);
         return instance;
     }
 
@@ -261,6 +262,7 @@ internal static class InstanceCommands
                     : new Result<ConfigEntry>(InstanceConfigKeys.Entry(known, values), EngineJsonContext.Default.ConfigEntry, e => e.Value ?? string.Empty));
             }));
 
+        config.Subcommands.Add(InstanceWriteCommands.ConfigSet(host));
         return config;
     }
 

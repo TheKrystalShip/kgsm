@@ -15,6 +15,21 @@ internal static class CommandBuilder
         return command;
     }
 
+    /// <summary>
+    /// Gives <paramref name="command"/> an action that runs on the instance <paramref name="reference"/> names:
+    /// the instance is resolved first, and an unknown one ends the command with not-found.
+    /// </summary>
+    public static Command ActOnInstance(
+        this Command command, CommandHost host, string name, Argument<string> reference,
+        Func<CommandContext, InstanceDescription, Task<Outcome>> body)
+    {
+        return command.Act(host, name, async context =>
+        {
+            InstanceDescription? instance = Resolve(context, context.Parse.GetValue(reference)!, out Outcome? failure);
+            return instance is null ? failure! : await body(context, instance).ConfigureAwait(false);
+        });
+    }
+
     public static Argument<string> InstanceArgument() =>
         new("instance") { Description = "The instance's id or display name." };
 

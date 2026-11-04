@@ -32,6 +32,32 @@ public class ScriptLifecycleTests
     }
 
     [Fact]
+    public async Task StartDetached_RunsABareExecutableName_FromTheLaunchDirectory_BeforeAnythingOnPath()
+    {
+        using ScriptWorld world = ScriptWorld.Native(c => c with { ExecutableFile = "server" });
+        Assert.True(File.Exists(Path.Combine(world.Install, "server")));
+
+        await world.StartGameAsync();
+
+        Assert.Equal(Path.Combine(world.Install), world.Recorded("game/cwd").Single());
+        Assert.Equal("Active\n", (await world.RunAsync("is-active")).Out);
+    }
+
+    [Fact]
+    public async Task StartDetached_RunsABareExecutableName_FromPath_WhenTheLaunchDirectoryHasNone()
+    {
+        using ScriptWorld world = ScriptWorld.Native(c => c with { ExecutableFile = "pathgame" });
+        string onPath = Path.Combine(world.Bin, "pathgame");
+        File.Copy(Path.Combine(world.Install, "server"), onPath);
+        File.SetUnixFileMode(onPath, File.GetUnixFileMode(Path.Combine(world.Install, "server")));
+        File.Delete(Path.Combine(world.Install, "server"));
+
+        await world.StartGameAsync();
+
+        Assert.Equal("Active\n", (await world.RunAsync("is-active")).Out);
+    }
+
+    [Fact]
     public async Task StartDetached_ConnectsTheConsolePipeToTheGamesStdin_AndItsOutputToTheLog()
     {
         using ScriptWorld world = ScriptWorld.Native();

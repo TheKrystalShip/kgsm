@@ -12,8 +12,35 @@ namespace TheKrystalShip.KGSM.Cli;
 
 /// <summary>What a command's action sees: the parse, the wired modules, who is acting and the way to be cancelled.</summary>
 internal sealed class CommandContext(
-    ParseResult parse, EngineServices services, Provenance provenance, TextWriter output, CancellationToken cancellation)
+    ParseResult parse, EngineServices services, Provenance provenance, TextWriter output, CancellationToken cancellation,
+    CliEnvironment environment, bool yes)
 {
+    /// <summary>What the command reads from standard input.</summary>
+    public TextReader Input => environment.Stdin ?? Console.In;
+
+    /// <summary>
+    /// Asks before something destructive. With <c>--yes</c> it is settled; at a terminal the person is asked;
+    /// with neither the command is refused with exit 2 and told to pass <c>--yes</c>.
+    /// </summary>
+    /// <returns>Null when confirmed, otherwise the failure that ends the command.</returns>
+    public Outcome? Confirm(string question)
+    {
+        if (yes) return null;
+        if (!environment.Interactive)
+            return Failure.Usage($"{question} Nothing is asked without a terminal; pass --yes to confirm.");
+
+        bool answer = environment.Ask is { } ask ? ask(question) : ConsolePrompt(question);
+        return answer ? null : Failure.Of(ErrorCodes.Refused, "cancelled: nothing was changed");
+    }
+
+    private static bool ConsolePrompt(string question)
+    {
+        Console.Error.Write($"{question} [y/N] ");
+        string? reply = Console.In.ReadLine();
+        return reply is not null && reply.Trim().Equals("y", StringComparison.OrdinalIgnoreCase)
+            || reply is not null && reply.Trim().Equals("yes", StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>Stdout, for the one kind of command whose result is a stream: following a log.</summary>
     public TextWriter Output => output;
 
@@ -41,6 +68,8 @@ internal sealed class CommandHost(CliEnvironment environment, TextWriter stdout,
         Recursive = true,
     };
 
+    public Option<bool> YesOption { get; } = new("--yes") { Description = "Confirm a destructive command without asking.", Recursive = true };
+
     public Option<string> ActorOption { get; } = new("--actor") { Description = "Who acts, as provider:name.", Recursive = true };
 
     public Option<string> OriginOption { get; } = new("--origin")
@@ -50,6 +79,20 @@ internal sealed class CommandHost(CliEnvironment environment, TextWriter stdout,
     };
 
     public CliEnvironment Environment => environment;
+
+    /// <summary>
+    /// Who is acting. <c>--actor</c> and <c>--origin</c> win; then the <c>KGSM_EVENT_ACTOR</c> and
+    /// <c>KGSM_EVENT_ORIGIN</c> a calling script or service sets; and at a terminal the actor is the local
+    /// account. Nothing else is invented.
+    /// </summary>
+    private Provenance Acting(ParseResult parse)
+    {
+        string? actor = parse.GetValue(ActorOption) ?? environment.Variable("KGSM_EVENT_ACTOR");
+        string? origin = parse.GetValue(OriginOption) ?? environment.Variable("KGSM_EVENT_ORIGIN");
+        if (actor is null && environment.Interactive) actor = $"local:{environment.UserName}";
+
+        return new Provenance(actor, origin).Normalized();
+    }
 
     public OutputFormat FormatOf(ParseResult parse) =>
         parse.GetValue(JsonOption) || string.Equals(parse.GetValue(FormatOption), "json", StringComparison.OrdinalIgnoreCase)
@@ -75,7 +118,8 @@ internal sealed class CommandHost(CliEnvironment environment, TextWriter stdout,
         var clock = Stopwatch.StartNew();
 
         using var services = new EngineServices(environment);
-        Provenance provenance = new Provenance(parse.GetValue(ActorOption), parse.GetValue(OriginOption)).Normalized();
+        Provenance provenance = Acting(parse);
+        services.Provenance = provenance;
         Outcome outcome;
         ILogger? logger = null;
 
@@ -99,7 +143,7 @@ internal sealed class CommandHost(CliEnvironment environment, TextWriter stdout,
                     }
                 }
 
-                outcome = await action(new CommandContext(parse, services, provenance, stdout, cancellation)).ConfigureAwait(false);
+                outcome = await action(new CommandContext(parse, services, provenance, stdout, cancellation, environment, parse.GetValue(YesOption))).ConfigureAwait(false);
             }
         }
         catch (EngineException ex)
@@ -151,6 +195,7 @@ internal sealed class CommandHost(CliEnvironment environment, TextWriter stdout,
     {
         AmbiguousInstanceException ambiguous => Failure.Of(ex.Code, ex.Message, ExitCodes.Failure, ambiguous.Candidates),
         InvalidSettingsException settings => Failure.Of(ex.Code, ex.Message, ExitCodes.Failure, settings.Problems),
-        _ => Failure.Of(ex.Code, ex.Message),
+        OperationException operation => Failure.Of(ex.Code, ex.Message, ex.ExitCode, operation.Details),
+        _ => Failure.Of(ex.Code, ex.Message, ex.ExitCode),
     };
 }

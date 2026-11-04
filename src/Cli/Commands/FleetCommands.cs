@@ -25,6 +25,7 @@ internal static class FleetCommands
                 return Task.FromResult<Outcome>(new Result<IReadOnlyList<Library>>(
                     libraries, EngineJsonContext.Default.IReadOnlyListLibrary, RenderLibraries));
             }));
+        FleetWriteCommands.AddLibraryVerbs(library, host);
         return library;
     }
 
@@ -43,6 +44,7 @@ internal static class FleetCommands
                 BackupListing listing = BackupReader.List(instance.Config.BackupsDirectory);
                 return Task.FromResult<Outcome>(new Result<BackupListing>(listing, EngineJsonContext.Default.BackupListing, RenderBackups));
             }));
+        FleetWriteCommands.AddBackupVerbs(backup, host);
         return backup;
     }
 

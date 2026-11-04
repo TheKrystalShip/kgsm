@@ -68,6 +68,14 @@ dotnet publish src/Cli/Cli.csproj -c Release -r linux-x64     # must show no IL2
   context, errors on stderr with stdout empty. A command goes in `Commands/`, its DTO in `Engine.Contracts`
   and `EngineJsonContext`, and its test runs the command line in-process through `CliSession` in
   `tests/Engine.Tests/Cli/`. Every command but help, version and paths runs behind the registry-account gate.
+- The write operations are `src/Engine/Operations/`, one service per concern (install, uninstall, lifecycle,
+  move, update, config, console, backup, blueprint, library, journal maintenance), all standing on an
+  `OperationHost`. Its doors to the outside are interfaces (`IProcessRunner` for the instance's script and
+  the firewall client, `IWatchdogControl`, `IContainerRuntime`, `IFirewallClient`), so a test runs an
+  operation against fakes: `tests/Engine.Tests/Operations/OpsFixture.cs` holds a `ScriptEmulator` that
+  leaves what the real script leaves. Whatever changes an instance runs in its script; a service decides,
+  brackets, journals and checks results. A new write needs its refusals decided before it touches a file,
+  its events bracketed with `*.finished` always last, and a test for each.
 - JSON goes through the registered contexts (`EngineJsonContext` camelCase, `EngineEventJsonContext`
   PascalCase for journal payloads) and YAML through `BlueprintYamlContext`; no JSON DOM.
 - A file the engine writes carries `schemaVersion`, and a reader refuses a version it does not know.

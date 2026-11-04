@@ -19,6 +19,12 @@ public static class ExitCodes
     /// <summary>The node has no room to start the instance; a deferral, not a fault.</summary>
     public const int InsufficientMemory = 51;
 
+    /// <summary>The firewall authority did not answer, or is not installed.</summary>
+    public const int FirewallUnreachable = 49;
+
+    /// <summary>The firewall authority answered and could not apply the rule.</summary>
+    public const int FirewallFailed = 19;
+
     public const int InsufficientDisk = 56;
 
     public const int InstanceRunning = 57;

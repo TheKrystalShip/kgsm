@@ -4,6 +4,7 @@ using TheKrystalShip.KGSM.Engine.Contracts.Blueprints;
 using TheKrystalShip.KGSM.Engine.Contracts.Instances;
 using TheKrystalShip.KGSM.Engine.Contracts.Libraries;
 using TheKrystalShip.KGSM.Engine.Contracts.Network;
+using TheKrystalShip.KGSM.Engine.Contracts.Operations;
 using TheKrystalShip.KGSM.Engine.Contracts.Paths;
 using TheKrystalShip.KGSM.Engine.Contracts.Reports;
 
@@ -52,4 +53,21 @@ namespace TheKrystalShip.KGSM.Engine.Contracts;
 [JsonSerializable(typeof(IReadOnlyList<PortUse>))]
 [JsonSerializable(typeof(PortConflict))]
 [JsonSerializable(typeof(IReadOnlyList<PortConflict>))]
+[JsonSerializable(typeof(InstallReport))]
+[JsonSerializable(typeof(LifecycleReport))]
+[JsonSerializable(typeof(UninstallReport))]
+[JsonSerializable(typeof(UpdateReport))]
+[JsonSerializable(typeof(UpdateCheckReport))]
+[JsonSerializable(typeof(MoveReport))]
+[JsonSerializable(typeof(ConfigSetReport))]
+[JsonSerializable(typeof(ActionReport))]
+[JsonSerializable(typeof(BackupCreateReport))]
+[JsonSerializable(typeof(BackupRestoreReport))]
+[JsonSerializable(typeof(BackupPruneReport))]
+[JsonSerializable(typeof(BlueprintWriteReport))]
+[JsonSerializable(typeof(LibraryChangeReport))]
+[JsonSerializable(typeof(EmitReport))]
+[JsonSerializable(typeof(JournalStatusReport))]
+[JsonSerializable(typeof(JournalPruneReport))]
+[JsonSerializable(typeof(JournalVerifyReport))]
 public sealed partial class EngineJsonContext : JsonSerializerContext;

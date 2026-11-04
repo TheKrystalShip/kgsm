@@ -36,6 +36,9 @@ public sealed record InstanceLayout(string WorkingDirectory, string Id, string E
 
     public string PidFile => Path.Combine(WorkingDirectory, $".{Id}.pid");
 
+    /// <summary>Present while a transfer holds the instance; it holds the holder's token.</summary>
+    public string TransferLockFile => Path.Combine(WorkingDirectory, $".{Id}.transfer-lock");
+
     /// <summary>The named pipe console input is written to.</summary>
     public string InputFifo => Path.Combine(WorkingDirectory, $".{Id}.sock");
 

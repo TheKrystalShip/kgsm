@@ -30,4 +30,20 @@ public static class ErrorCodes
     public const string Invalid = "invalid";
 
     public const string Failed = "failed";
+
+    public const string Busy = "busy";
+
+    public const string Locked = "transfer-locked";
+
+    public const string Running = "running";
+
+    public const string InsufficientDisk = "insufficient-disk";
+
+    public const string InsufficientMemory = "insufficient-memory";
+
+    public const string FirewallUnreachable = "firewall-unreachable";
+
+    public const string FirewallFailed = "firewall-failed";
+
+    public const string Refused = "refused";
 }
