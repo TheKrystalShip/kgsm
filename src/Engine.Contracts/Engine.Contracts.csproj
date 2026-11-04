@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>TheKrystalShip.KGSM.Engine.Contracts</RootNamespace>
+    <AssemblyName>TheKrystalShip.KGSM.Engine.Contracts</AssemblyName>
+    <PackageId>TheKrystalShip.KGSM.Engine.Contracts</PackageId>
+    <Description>Every shape the KGSM engine emits, the event vocabulary and payload catalog, and the maintenance-window grammar.</Description>
+    <IsAotCompatible>true</IsAotCompatible>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591</NoWarn>
+  </PropertyGroup>
+
+</Project>

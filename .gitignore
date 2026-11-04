@@ -32,3 +32,8 @@ tests/logs/*
 # Spec documents
 docs/specs/*.md
 docs/specs/**/*.md
+
+# .NET build output
+bin/
+obj/
+src/Cli/kgsm.leaf.actions.json
