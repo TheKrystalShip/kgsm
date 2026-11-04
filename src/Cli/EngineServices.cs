@@ -2,8 +2,10 @@ using Microsoft.Extensions.Logging;
 using TheKrystalShip.KGSM.Engine.Blueprints;
 using TheKrystalShip.KGSM.Engine.Instances;
 using TheKrystalShip.KGSM.Engine.Libraries;
+using TheKrystalShip.KGSM.Engine.Locks;
 using TheKrystalShip.KGSM.Engine.Logging;
 using TheKrystalShip.KGSM.Engine.Paths;
+using TheKrystalShip.KGSM.Engine.Scripts;
 using TheKrystalShip.KGSM.Engine.Settings;
 using TheKrystalShip.KGSM.Engine.Status;
 
@@ -35,6 +37,9 @@ internal sealed class EngineServices(CliEnvironment environment) : IDisposable
     public BlueprintCatalog Blueprints => new(Paths, new BlueprintParser(Loggers.CreateLogger<BlueprintParser>()));
 
     public InstanceStore Instances => new(Paths, Libraries, Loggers.CreateLogger<InstanceStore>());
+
+    public ScriptRepairer ScriptRepairer => new(
+        Paths, Settings.Watchdog.Socket, new EngineLocks(Paths), Loggers.CreateLogger<ScriptRepairer>());
 
     public IRequirementProbe Requirements => environment.Requirements
         ?? new HostRequirementProbe(environment.Variable, EnginePaths.SteamCredentialsFilePath);

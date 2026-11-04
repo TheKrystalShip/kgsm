@@ -5,37 +5,51 @@ using TheKrystalShip.KGSM.Engine.Placeholders;
 namespace TheKrystalShip.KGSM.Engine.Tests;
 
 /// <summary>
-/// The launch-argument cases. The generated management script resolves the same grammar; its suite runs
-/// <see cref="Cases"/> against the script so the two resolvers cannot drift.
+/// The launch-argument cases. The generated management script resolves the same grammar;
+/// <c>ScriptPlaceholderTests</c> runs <see cref="Cases"/> against the script so the two resolvers cannot drift.
+/// The values are real placeholder keys, so a script reads them from an instance config; <see cref="WorkingDirectory"/>
+/// stands for the working directory each resolver runs in.
 /// </summary>
 public class PlaceholderTests
 {
+    /// <summary>What the cases use for the working directory the instance's saves lie under.</summary>
+    public const string WorkingDirectory = "%WD%";
+
     public sealed record Case(string Name, string Template, IReadOnlyDictionary<string, string> Values, string[]? Expected, string? ErrorContains = null);
+
+    /// <summary>The instance id the cases are written for; the script's directory is named after it.</summary>
+    public const string InstanceId = "g-1";
+
+    /// <summary>The value of <c>displayName</c> in the cases: everything a shell would act on.</summary>
+    public const string Tricky = "$(rm -rf /) `id` ; | & > ' \" \\ *";
 
     private static readonly Dictionary<string, string> Values = new()
     {
-        ["name"] = "g-1",
+        ["name"] = InstanceId,
         ["levelName"] = "my world",
-        ["savesDir"] = "/lib/instances/g/g-1/saves",
-        ["tricky"] = "$(rm -rf /) `id` ; | & > ' \" \\ *",
-        ["empty"] = "",
+        ["savesDir"] = WorkingDirectory + "/saves",
+        ["displayName"] = Tricky,
+        ["platform"] = "",
     };
+
+    /// <summary>A text with the working directory filled in.</summary>
+    public static string In(string workingDirectory, string text) => text.Replace(WorkingDirectory, workingDirectory, StringComparison.Ordinal);
 
     public static IReadOnlyList<Case> Cases { get; } =
     [
         new("plain text is literal", "--dedicated -port 7777", Values, ["--dedicated", "-port", "7777"]),
         new("one placeholder", "--name {name}", Values, ["--name", "g-1"]),
         new("a value with spaces stays one argument", "-world {levelName}", Values, ["-world", "my world"]),
-        new("a placeholder inside an argument", "--save {savesDir}/{levelName}.wld", Values, ["--save", "/lib/instances/g/g-1/saves/my world.wld"]),
+        new("a placeholder inside an argument", "--save {savesDir}/{levelName}.wld", Values, ["--save", WorkingDirectory + "/saves/my world.wld"]),
         new("two placeholders in one argument", "{name}-{name}", Values, ["g-1-g-1"]),
-        new("whitespace of any kind separates arguments", "a  b\tc\nd", Values, ["a", "b", "c", "d"]),
+        new("whitespace of any kind separates arguments", "a  b\tc\nd\re\vf\fg", Values, ["a", "b", "c", "d", "e", "f", "g"]),
         new("no arguments", "   ", Values, []),
         new("doubled braces are literal", "{{name}} }}", Values, ["{name}", "}"]),
         new("literal braces around a placeholder", "{{{name}}}", Values, ["{g-1}"]),
-        new("a value is never shell syntax", "x={tricky}", Values, ["x=$(rm -rf /) `id` ; | & > ' \" \\ *"]),
+        new("a value is never shell syntax", "x={displayName}", Values, ["x=" + Tricky]),
         new("a dollar sign is literal and ${name} is a dollar then the value", "$HOME $(date) ${name}", Values, ["$HOME", "$(date)", "$g-1"]),
         new("a bare dollar and quotes are literal", "$HOME \"quoted\" 'single'", Values, ["$HOME", "\"quoted\"", "'single'"]),
-        new("an empty value leaves an empty argument", "a{empty}b {empty}", Values, ["ab", ""]),
+        new("an empty value leaves an empty argument", "a{platform}b {platform}", Values, ["ab", ""]),
         new("a key with no value fails", "--x {nothing}", Values, null, "{nothing}"),
         new("a brace that opens nothing fails", "{name", Values, null, "never closes"),
         new("a brace that closes nothing fails", "name}", Values, null, "closes nothing"),
@@ -43,6 +57,10 @@ public class PlaceholderTests
         new("whitespace splits before substitution, so a split placeholder fails", "{a b}", Values, null, "never closes"),
         new("an empty placeholder fails", "{}", Values, null, "not a placeholder"),
         new("a key must start lowercase", "{Name}", Values, null, "not a placeholder"),
+        new("a closing brace after a placeholder closes nothing", "{name}}", Values, null, "closes nothing"),
+        new("an escaped brace then a placeholder", "{{{{name}}", Values, ["{{name}"]),
+        new("an opening brace inside a key's braces is not a key", "{a{b}", Values, null, "not a placeholder"),
+        new("a value that holds braces is not resolved again", "{displayName}{{x}}", Values, [Tricky + "{x}"]),
     ];
 
     public static TheoryData<int> CaseIndexes()
@@ -58,12 +76,13 @@ public class PlaceholderTests
     {
         Case c = Cases[index];
 
-        bool ok = LaunchArguments.TryResolve(c.Template, c.Values, out IReadOnlyList<string> arguments, out string? error);
+        IReadOnlyDictionary<string, string> values = c.Values.ToDictionary(v => v.Key, v => In("/lib/g/g-1", v.Value));
+        bool ok = LaunchArguments.TryResolve(c.Template, values, out IReadOnlyList<string> arguments, out string? error);
 
         if (c.Expected is { } expected)
         {
             Assert.True(ok, $"{c.Name}: {error}");
-            Assert.Equal(expected, arguments);
+            Assert.Equal(expected.Select(e => In("/lib/g/g-1", e)), arguments);
         }
         else
         {
@@ -118,7 +137,7 @@ public class PlaceholderTests
     {
         string stored = LaunchArguments.FromBlueprint("-world $instance_saves_dir/$instance_level_name -autocreate 3 -worldname $instance_level_name", Known);
 
-        IReadOnlyList<string> arguments = LaunchArguments.Resolve(stored, Values);
+        IReadOnlyList<string> arguments = LaunchArguments.Resolve(stored, Values.ToDictionary(v => v.Key, v => In("/lib/instances/g/g-1", v.Value)));
 
         Assert.Equal(["-world", "/lib/instances/g/g-1/saves/my world", "-autocreate", "3", "-worldname", "my world"], arguments);
     }

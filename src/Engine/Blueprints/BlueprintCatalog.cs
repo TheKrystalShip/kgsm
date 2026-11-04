@@ -81,18 +81,7 @@ public sealed class BlueprintCatalog(EnginePaths paths, BlueprintParser parser)
     /// The hooks file for a game: <c>overrides/&lt;name&gt;/hooks.sh</c>, found by the blueprint's <c>name:</c>.
     /// A user file replaces the system file whole. Null when the game has none.
     /// </summary>
-    public string? FindHooks(string blueprintName)
-    {
-        if (!BlueprintParser.IsValidName(blueprintName)) return null;
-
-        foreach (string directory in new[] { paths.UserOverridesDirectory, paths.SystemOverridesDirectory })
-        {
-            string file = Path.Combine(directory, blueprintName, "hooks.sh");
-            if (File.Exists(file)) return file;
-        }
-
-        return null;
-    }
+    public string? FindHooks(string blueprintName) => Scripts.HookFiles.FindPath(paths, blueprintName);
 
     private static BlueprintCandidate Candidate(BlueprintTier tier, string directory, string key)
     {

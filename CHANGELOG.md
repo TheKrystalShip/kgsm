@@ -85,6 +85,35 @@ bash tree, which it does not touch. The bash engine's `KGSM_VERSION` does not mo
     milliseconds.
   - The engine's config descriptor has no unit: `applyMode` is `next-invocation` (ComponentConfig 4.2.0).
   - The watchdog's control-socket client comes from `TheKrystalShip.KGSM.Watchdog.Client`.
+- **The management script and its hooks (`engine-v4.0.0-dev.3`).**
+  - One template, embedded in the binary, generates `<id>.manage.sh` for both runtimes. The script reads
+    the JSON instance config with `jq` (refusing a `schemaVersion` it does not know), derives every path
+    from its own location, reads Steam credentials from the environment and then `/etc/kgsm/kgsm.env`, and
+    records its template version and the digest of the hooks it was built from. Messages go to stderr and
+    stdout carries only a command's result.
+  - The script covers lifecycle, console input, announcements and moderation, status (disk in bytes, a
+    three-outcome version check: `available <v>`, `current <v>` or `unknown` with its own exit status),
+    logs and rotation, versions and the latest-version record, download, deploy, `update` with
+    `--run-state` and `--emit-cmd`, and the backups (camelCase manifest, staged and renamed into place,
+    pre-restore safety backup, pin and unpin).
+  - `stop` sends the save command and the stop command, waits the stop timeout, then escalates to TERM and
+    KILL. A native instance the watchdog runs is read and stopped through its control socket with
+    `curl --unix-socket`; without the socket the pid file is the answer.
+  - Launch arguments split on whitespace first and substitute `{key}` inside each argument, with `{{` and
+    `}}` as escapes, in the script and in the engine core, against one shared set of cases. The script
+    uses neither `envsubst` nor `eval`.
+  - A native game's `overrides/<name>/hooks.sh` defines `kgsm_hook_latest_version`, `kgsm_hook_download`,
+    `kgsm_hook_deploy` and `kgsm_hook_post_deploy`, inlined at generation and run in a subshell under
+    `set -e`. The generator runs `bash -n` and allows only those names and helpers prefixed `_hook_`. A
+    user file replaces the system file whole. Factorio, Minecraft, Terraria, Veloren, Barotrauma and
+    Project Zomboid ship one beside their bash modules.
+  - `kgsm instance repair <instance>` rewrites one script, `kgsm instance repair --all` only the stale
+    ones (another template version, runtime or hooks digest), each under the instance's lock.
+    `kgsm engine placeholders` lists the keys a launch argument may name.
+  - A container's compose file renders without `eval`: only `${instance_<key>}` and `$instance_<key>`
+    are substituted, every other `$` is left for compose, and an unknown key fails.
+  - The suite runs real generated scripts with bash against fake steamcmd, docker, curl, the game and a
+    watchdog socket.
 
 ## Work in progress
 

@@ -5,8 +5,8 @@ namespace TheKrystalShip.KGSM.Engine.Backups;
 
 /// <summary>
 /// Reads backups from a backups directory. A backup is a directory <c>&lt;id&gt;/</c> holding
-/// <c>manifest.json</c> and either <c>data.tar.gz</c> or <c>data/</c>. Archives are staged outside the
-/// listing and renamed into place, so a listing never shows a partial one.
+/// <c>manifest.json</c> and either <c>data.tar.gz</c> or <c>data/</c>. Archives are staged in a hidden
+/// directory beside their final place and renamed into it, so a listing never shows a partial one.
 /// </summary>
 public static class BackupReader
 {
@@ -28,6 +28,8 @@ public static class BackupReader
             foreach (string directory in Directory.EnumerateDirectories(backupsDirectory))
             {
                 string id = Path.GetFileName(directory);
+                if (id.StartsWith('.')) continue;
+
                 string manifestPath = Path.Combine(directory, ManifestFileName);
 
                 if (!File.Exists(manifestPath))

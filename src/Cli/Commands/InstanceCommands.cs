@@ -8,6 +8,7 @@ using TheKrystalShip.KGSM.Engine.Contracts.Libraries;
 using TheKrystalShip.KGSM.Engine.Contracts.Network;
 using TheKrystalShip.KGSM.Engine.Instances;
 using TheKrystalShip.KGSM.Engine.Network;
+using TheKrystalShip.KGSM.Engine.Scripts;
 
 namespace TheKrystalShip.KGSM.Cli.Commands;
 
@@ -24,6 +25,7 @@ internal static class InstanceCommands
         instance.Subcommands.Add(Status(host));
         instance.Subcommands.Add(Logs(host));
         instance.Subcommands.Add(Config(host));
+        instance.Subcommands.Add(Repair(host));
         return instance;
     }
 
@@ -48,6 +50,54 @@ internal static class InstanceCommands
                 return Task.FromResult<Outcome>(new Result<IReadOnlyList<InstanceSummary>>(
                     summaries, EngineJsonContext.Default.IReadOnlyListInstanceSummary, RenderList));
             });
+
+    private static Command Repair(CommandHost host)
+    {
+        var reference = new Argument<string>("instance")
+        {
+            Description = "The instance's id or display name; its script is rewritten whatever it holds.",
+            Arity = ArgumentArity.ZeroOrOne,
+        };
+        var all = new Option<bool>("--all") { Description = "Regenerate the scripts that are stale, and only those." };
+
+        return new Command("repair", "Regenerate an instance's management script.") { reference, all }
+            .Act(host, "instance repair", context =>
+            {
+                string? named = context.Parse.GetValue(reference);
+                bool everything = context.Parse.GetValue(all);
+                if (everything == (named is not null))
+                    return Task.FromResult<Outcome>(Failure.Usage("Name one instance, or pass --all."));
+
+                IReadOnlyList<InstanceDescription> targets;
+                if (named is not null)
+                {
+                    InstanceDescription? instance = CommandBuilder.Resolve(context, named, out Outcome? failure);
+                    if (instance is null) return Task.FromResult(failure!);
+                    targets = [instance];
+                }
+                else
+                {
+                    targets = context.Services.Instances.List();
+                }
+
+                ScriptRepairer repairer = context.Services.ScriptRepairer;
+                IReadOnlyList<ScriptRepairEntry> entries = [.. targets.Select(i => repairer.Repair(i, onlyIfStale: everything))];
+                bool failed = entries.Any(e => e.Outcome == ScriptRepairOutcome.Failed);
+
+                return Task.FromResult<Outcome>(new Result<ScriptRepairReport>(
+                    new ScriptRepairReport { Instances = entries },
+                    EngineJsonContext.Default.ScriptRepairReport,
+                    RenderRepair,
+                    failed ? ExitCodes.Failure : ExitCodes.Success));
+            });
+    }
+
+    private static string RenderRepair(ScriptRepairReport report) =>
+        report.Instances.Count == 0
+            ? "No instances."
+            : Table.Render(
+                ["INSTANCE", "SCRIPT", "DETAIL"],
+                report.Instances.Select(e => new[] { e.Id, e.Outcome.ToString().ToLowerInvariant(), CommandBuilder.Text(e.Detail) }));
 
     private static Command Show(CommandHost host)
     {

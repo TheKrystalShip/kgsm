@@ -71,6 +71,12 @@ dotnet publish src/Cli/Cli.csproj -c Release -r linux-x64     # must show no IL2
 - JSON goes through the registered contexts (`EngineJsonContext` camelCase, `EngineEventJsonContext`
   PascalCase for journal payloads) and YAML through `BlueprintYamlContext`; no JSON DOM.
 - A file the engine writes carries `schemaVersion`, and a reader refuses a version it does not know.
+- The management script is one template, `src/Engine/Scripts/management-script.tpl`, rendered per runtime by
+  `ScriptGenerator`. A change to its text bumps `ScriptTemplate.Version` and records the new hash in
+  `tests/Engine.Tests/Scripts/ScriptTemplateTests.cs`, which is what makes `instance repair --all` rewrite
+  the scripts built from the old text. A script test builds a `ScriptWorld` (a generated script in a
+  sandbox with fakes for every external tool, `Scripts/FakeTools.cs`) and runs it with bash; none touches a
+  real host. A game's hooks are `overrides/<name>/hooks.sh`.
 - The config descriptor `src/Cli/kgsm.leaf.json` is generated from the settings class on every build.
   Edit `src/Engine/Settings/EngineSettings.cs` and `src/Cli/kgsm.settings.json`, never the JSON.
 - A test builds its world in a `Sandbox` (its own XDG homes, install root and journal directory under the

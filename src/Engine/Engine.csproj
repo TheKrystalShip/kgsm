@@ -35,6 +35,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Scripts/management-script.tpl" LogicalName="management-script.tpl" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="../Engine.Contracts/Engine.Contracts.csproj" />
   </ItemGroup>
 

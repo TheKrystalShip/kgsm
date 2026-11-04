@@ -7,7 +7,8 @@ namespace TheKrystalShip.KGSM.Engine.Placeholders;
 public sealed class PlaceholderException(string message) : EngineException("placeholder", message);
 
 /// <summary>
-/// Launch-argument placeholders. A template is split on whitespace first, then each <c>{key}</c> is
+/// Launch-argument placeholders. A template is split on whitespace (space, tab, line feed, carriage
+/// return, vertical tab and form feed) first, then each <c>{key}</c> is
 /// replaced inside its own argument, so a value with spaces stays one argument and nothing in a value is
 /// shell syntax. <c>{{</c> and <c>}}</c> are literal braces and every other character is literal. A key with
 /// no value fails, and so does a brace that opens or closes nothing. There is no quoting syntax, no
@@ -106,8 +107,11 @@ public static partial class LaunchArguments
     private static string EscapeBraces(string text) =>
         text.Replace("{", "{{", StringComparison.Ordinal).Replace("}", "}}", StringComparison.Ordinal);
 
+    /// <summary>The characters that separate arguments: space, tab, line feed, carriage return, vertical tab and form feed.</summary>
+    private static readonly char[] Whitespace = [' ', '\t', '\n', '\r', '\v', '\f'];
+
     private static IEnumerable<string> Tokens(string template) =>
-        template.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        template.Split(Whitespace, StringSplitOptions.RemoveEmptyEntries);
 
     private static string Substitute(string token, IReadOnlyDictionary<string, string> values) =>
         Walk(token, key => values.TryGetValue(key, out string? value)

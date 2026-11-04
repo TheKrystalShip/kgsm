@@ -35,6 +35,19 @@ public static class InstancePlaceholders
         };
     }
 
+    /// <summary><c>levelName</c> to <c>level_name</c>: the spelling a blueprint's <c>$instance_&lt;key&gt;</c> uses.</summary>
+    public static string CamelToSnake(string camel)
+    {
+        var snake = new System.Text.StringBuilder(camel.Length + 4);
+        foreach (char c in camel)
+        {
+            if (char.IsAsciiLetterUpper(c)) snake.Append('_').Append(char.ToLowerInvariant(c));
+            else snake.Append(c);
+        }
+
+        return snake.ToString();
+    }
+
     /// <summary>The keys a blueprint's launch arguments may reference.</summary>
     public static IReadOnlySet<string> Keys { get; } = new HashSet<string>(
     [

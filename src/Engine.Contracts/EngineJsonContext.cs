@@ -46,6 +46,8 @@ namespace TheKrystalShip.KGSM.Engine.Contracts;
 [JsonSerializable(typeof(LogTail))]
 [JsonSerializable(typeof(ConfigEntry))]
 [JsonSerializable(typeof(IReadOnlyList<ConfigEntry>))]
+[JsonSerializable(typeof(ScriptRepairReport))]
+[JsonSerializable(typeof(LaunchPlaceholderReport))]
 [JsonSerializable(typeof(PortUse))]
 [JsonSerializable(typeof(IReadOnlyList<PortUse>))]
 [JsonSerializable(typeof(PortConflict))]

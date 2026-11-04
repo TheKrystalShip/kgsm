@@ -1,7 +1,9 @@
 using System.CommandLine;
 using TheKrystalShip.KGSM.Cli.Output;
 using TheKrystalShip.KGSM.Engine.Contracts;
+using TheKrystalShip.KGSM.Engine.Contracts.Instances;
 using TheKrystalShip.KGSM.Engine.Contracts.Reports;
+using TheKrystalShip.KGSM.Engine.Instances;
 using TheKrystalShip.KGSM.Engine.Journal;
 using TheKrystalShip.KGSM.Engine.Settings;
 
@@ -20,6 +22,11 @@ internal static class EngineCommands
 
         engine.Subcommands.Add(new Command("version", "The engine's release number.")
             .Act(host, "engine version", _ => Task.FromResult(Version()), gated: false));
+
+        engine.Subcommands.Add(new Command("placeholders", "The values a launch argument may name.")
+            .Act(host, "engine placeholders", _ => Task.FromResult<Outcome>(new Result<LaunchPlaceholderReport>(
+                new LaunchPlaceholderReport { Keys = [.. InstancePlaceholders.Keys.Order(StringComparer.Ordinal)] },
+                EngineJsonContext.Default.LaunchPlaceholderReport, report => string.Join('\n', report.Keys))), gated: false));
 
         var config = new Command("config", "The settings the engine runs with.");
         config.Subcommands.Add(new Command("list", "Every setting, its value and the source that set it.")
