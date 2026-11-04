@@ -1,0 +1,50 @@
+{
+  "Libraries": {
+    "DefaultLibrary": "",
+    "InstallFreeSpaceMarginMb": 1024
+  },
+  "Instances": {
+    "IdSuffixLength": 2,
+    "SaveCommandTimeoutSeconds": 5,
+    "StopCommandTimeoutSeconds": 30,
+    "AutoUpdateBeforeStart": false,
+    "MaintenanceWindows": "",
+    "AnnounceLeadMinutes": "",
+    "AnnounceMaintenanceMessage": "Server restart in {minutes} min",
+    "AnnounceMaintenanceCancelledMessage": "Server restart cancelled",
+    "EnableFirewallManagement": false,
+    "EnablePortForwarding": false
+  },
+  "Backups": {
+    "Directory": "",
+    "Compress": true
+  },
+  "Journal": {
+    "Directory": "/var/lib/kgsm/events",
+    "RetentionDays": 90
+  },
+  "Cgroup": {
+    "MountPoint": "/sys/fs/cgroup",
+    "BaseName": "kgsm.slice/kgsm-watchdog.service"
+  },
+  "Watchdog": {
+    "Socket": "/run/kgsm-watchdog/control.sock",
+    "Enabled": true
+  },
+  "Firewall": {
+    "Client": "kgsm-firewall",
+    "Socket": "/run/kgsm-firewall/firewall.sock"
+  },
+  "Downloads": {
+    "TimeoutSeconds": 60
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information"
+    },
+    "File": {
+      "MaxSizeKb": 10240,
+      "MaxFiles": 5
+    }
+  }
+}

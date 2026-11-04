@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    The command-line layer. This project is a stub whose job is to prove that the engine core publishes as a
+    clean Native-AOT binary:  dotnet publish src/Cli/Cli.csproj -c Release -r linux-x64
+    It is also the host that generates the config descriptor from the core's settings class.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>kgsm</AssemblyName>
+    <RootNamespace>TheKrystalShip.KGSM.Cli</RootNamespace>
+    <PublishAot>true</PublishAot>
+    <IsAotCompatible>true</IsAotCompatible>
+    <OptimizationPreference>Size</OptimizationPreference>
+    <StripSymbols>true</StripSymbols>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <ConcurrentGarbageCollection>false</ConcurrentGarbageCollection>
+    <!-- The generator that turns the settings file's keys into the descriptor needs these two files. -->
+    <ComponentSettingsFile>kgsm.settings.json</ComponentSettingsFile>
+    <ComponentDescriptorFile>$(MSBuildProjectDirectory)/kgsm.leaf.json</ComponentDescriptorFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TheKrystalShip.KGSM.ComponentConfig" Version="4.0.0" PrivateAssets="all" />
+    <PackageReference Include="System.CommandLine" Version="2.0.14" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Engine/Engine.csproj" />
+    <ProjectReference Include="../Engine.Contracts/Engine.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Roots the whole core so the AOT pass analyses all of it, not only what this stub calls. -->
+    <TrimmerRootAssembly Include="TheKrystalShip.KGSM.Engine" />
+    <TrimmerRootAssembly Include="TheKrystalShip.KGSM.Engine.Contracts" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The settings file sits beside the binary; it is the lowest-precedence settings source. -->
+    <Content Include="kgsm.settings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

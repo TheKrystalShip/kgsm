@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <AssemblyName>Engine.Tests</AssemblyName>
+    <RootNamespace>TheKrystalShip.KGSM.Engine.Tests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageReference Include="xunit" Version="2.9.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.4" />
+    <PackageReference Include="TheKrystalShip.Testing" Version="1.0.0-dev.1" />
+    <PackageReference Include="Microsoft.Extensions.TimeProvider.Testing" Version="10.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../../src/Engine/Engine.csproj" />
+    <ProjectReference Include="../../src/Engine.Contracts/Engine.Contracts.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Test inputs, copied beside the test binary so a test reads its own copy: the settings file the
+         binary ships and every system blueprint. -->
+    <Content Include="../../src/Cli/kgsm.settings.json" Link="kgsm.settings.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../blueprints/*.bp.yaml" Link="blueprints/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+</Project>

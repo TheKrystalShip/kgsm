@@ -2,6 +2,7 @@
 
 - [Changelog](#changelog)
   - [Ideas for the future](#ideas-for-the-future)
+  - [Unreleased](#unreleased)
   - [Work in progress](#work-in-progress)
   - [2.1.0](#210)
   - [2.0.1](#201)
@@ -44,6 +45,27 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 - Allow instances to start automatically on system boot without going through systemd
 - Podman as an alternative for Docker
 - More game servers
+
+## [Unreleased]
+
+The native engine (`src/`, `tests/`, version `4.0.0-dev.N` in `Directory.Build.props`) grows beside the
+bash tree, which it does not touch. The bash engine's `KGSM_VERSION` does not move until the cutover.
+
+- **The engine core and its contracts, read side (`engine-v4.0.0-dev.1`).**
+  - `TheKrystalShip.KGSM.Engine.Contracts` holds the shapes the engine stores and emits (instance
+    config, instance and library registries, library marker, backup manifest, blueprint, validation and
+    requirements reports, paths report), the event vocabulary with its payload catalog, and the
+    maintenance-window grammar and clock.
+  - `TheKrystalShip.KGSM.Engine` reads: XDG paths, the settings (the file beside the binary, the
+    person's file, the environment, floors checked and every problem listed), the engine's size-rotating
+    file logger, the instance and library registries, blueprint resolution, YAML parsing through the
+    static context, validation and requirements, backup listing, launch-argument placeholders, and the
+    per-instance and global locks that fail fast with a busy error.
+  - The event journal writer appends the V2 envelope in one `O_APPEND` write, so concurrent writers land
+    whole lines. Blueprint events are spelled `blueprint.created`, `blueprint.updated` and
+    `blueprint.removed`.
+  - `src/Cli` is a stub that proves the core publishes as a clean Native-AOT binary and generates the
+    config descriptor from the settings class. The command-line layer follows.
 
 ## Work in progress
 

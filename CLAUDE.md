@@ -49,6 +49,28 @@ shellcheck path/to/script.sh         # must pass clean; SC2086 is disabled globa
 - Events are always appended to the on-disk journal (`commands/events.journal.sh`); `docs/events.md`
   holds the engine's event reference.
 
+## The C# engine (`src/`, `tests/`)
+
+The engine's rewrite as a Native-AOT binary grows beside the bash tree (`../kgsm-docs/plans/kgsm-native-engine.md`).
+The bash tree is the shipped product until the cutover and is not touched by this work.
+
+```bash
+dotnet build kgsm.slnx
+dotnet test tests/Engine.Tests
+dotnet publish src/Cli/Cli.csproj -c Release -r linux-x64     # must show no IL2xxx, IL3xxx or ILC warning
+```
+
+- `src/Engine.Contracts` (shapes, event vocabulary, maintenance-window grammar) and `src/Engine` (the
+  core) are the two packages; `src/Cli` is the binary. `Directory.Build.props` carries the one version,
+  `4.0.0-dev.N`; a phase's commit is tagged `engine-v<version>`, never `v*`.
+- JSON goes through the registered contexts (`EngineJsonContext` camelCase, `EngineEventJsonContext`
+  PascalCase for journal payloads) and YAML through `BlueprintYamlContext`; no JSON DOM.
+- A file the engine writes carries `schemaVersion`, and a reader refuses a version it does not know.
+- The config descriptor `src/Cli/kgsm.leaf.json` is generated from the settings class on every build.
+  Edit `src/Engine/Settings/EngineSettings.cs` and `src/Cli/kgsm.settings.json`, never the JSON.
+- A test builds its world in a `Sandbox` (its own XDG homes, install root and journal directory under the
+  run's temporary root). No test touches `/var/lib/kgsm/events` or any live path.
+
 ## Conventions
 
 - Google Shell Style Guide, 2-space indent, lines at most 80 characters (never over 120),

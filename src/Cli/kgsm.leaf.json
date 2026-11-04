@@ -1,0 +1,346 @@
+{
+  "schemaVersion": 1,
+  "id": "engine",
+  "displayName": "Engine",
+  "unit": "kgsm-journal-prune.service",
+  "role": "The command-line engine that installs, configures and manages game server instances.",
+  "onDemand": true,
+  "applyMode": "restart",
+  "floorSources": [
+    {
+      "kind": "appsettings",
+      "path": "/usr/bin/kgsm.settings.json"
+    }
+  ],
+  "groups": [
+    {
+      "id": "libraries",
+      "label": "Libraries",
+      "order": 1
+    },
+    {
+      "id": "instances",
+      "label": "Instance defaults",
+      "order": 2
+    },
+    {
+      "id": "backups",
+      "label": "Backups",
+      "order": 3
+    },
+    {
+      "id": "journal",
+      "label": "Event journal",
+      "order": 4
+    },
+    {
+      "id": "cgroup",
+      "label": "Cgroup layout",
+      "order": 5
+    },
+    {
+      "id": "watchdog",
+      "label": "Watchdog",
+      "order": 6
+    },
+    {
+      "id": "firewall",
+      "label": "Firewall",
+      "order": 7
+    },
+    {
+      "id": "downloads",
+      "label": "Downloads",
+      "order": 8
+    },
+    {
+      "id": "logging",
+      "label": "Logging",
+      "order": 9
+    }
+  ],
+  "fields": [
+    {
+      "key": "defaultLibrary",
+      "env": "Libraries__DefaultLibrary",
+      "label": "Default library",
+      "description": "The library a new instance is placed in when the install names none. Empty uses the only registered library, and an install is refused when several exist and none is chosen.",
+      "group": "libraries",
+      "type": "string",
+      "default": "",
+      "risk": "safe"
+    },
+    {
+      "key": "installFreeSpaceMarginMb",
+      "env": "Libraries__InstallFreeSpaceMarginMb",
+      "label": "Install free-space margin",
+      "description": "Free space an install requires beyond the game's declared disk footprint before it proceeds.",
+      "group": "libraries",
+      "type": "int",
+      "default": "1024",
+      "min": 0,
+      "unit": "MB",
+      "risk": "safe"
+    },
+    {
+      "key": "idSuffixLength",
+      "env": "Instances__IdSuffixLength",
+      "label": "Instance id suffix length",
+      "description": "How many characters the random suffix of a generated instance id has.",
+      "group": "instances",
+      "type": "int",
+      "default": "2",
+      "min": 1,
+      "max": 16,
+      "risk": "safe"
+    },
+    {
+      "key": "saveCommandTimeoutSeconds",
+      "env": "Instances__SaveCommandTimeoutSeconds",
+      "label": "Save command timeout",
+      "description": "How long a backup or stop waits after sending a game its save command. Copied into a new instance.",
+      "group": "instances",
+      "type": "int",
+      "default": "5",
+      "min": 0,
+      "unit": "s",
+      "risk": "safe"
+    },
+    {
+      "key": "stopCommandTimeoutSeconds",
+      "env": "Instances__StopCommandTimeoutSeconds",
+      "label": "Stop command timeout",
+      "description": "How long a stop waits for the game to exit after its stop command before it escalates. Copied into a new instance.",
+      "group": "instances",
+      "type": "int",
+      "default": "30",
+      "min": 0,
+      "unit": "s",
+      "risk": "safe"
+    },
+    {
+      "key": "autoUpdateBeforeStart",
+      "env": "Instances__AutoUpdateBeforeStart",
+      "label": "Update before start",
+      "description": "Whether a new instance checks for and applies a game update every time it starts.",
+      "group": "instances",
+      "type": "bool",
+      "default": "false",
+      "risk": "safe"
+    },
+    {
+      "key": "maintenanceWindows",
+      "env": "Instances__MaintenanceWindows",
+      "label": "Maintenance windows",
+      "description": "Maintenance windows a new instance starts with, written schedule then tasks, for example daily@05:00/backup. Empty means no maintenance.",
+      "group": "instances",
+      "type": "string",
+      "default": "",
+      "risk": "safe"
+    },
+    {
+      "key": "announceLeadMinutes",
+      "env": "Instances__AnnounceLeadMinutes",
+      "label": "Announcement lead times",
+      "description": "Minutes before a disruptive maintenance window at which a new instance tells its players, for example 15,5,1. Empty announces nothing.",
+      "group": "instances",
+      "type": "string",
+      "default": "",
+      "risk": "safe"
+    },
+    {
+      "key": "announceMaintenanceMessage",
+      "env": "Instances__AnnounceMaintenanceMessage",
+      "label": "Announcement message",
+      "description": "What each lead-time announcement says. The words {minutes}, {reason} and {instance} are replaced.",
+      "group": "instances",
+      "type": "string",
+      "default": "Server restart in {minutes} min",
+      "risk": "safe"
+    },
+    {
+      "key": "announceMaintenanceCancelledMessage",
+      "env": "Instances__AnnounceMaintenanceCancelledMessage",
+      "label": "Cancellation message",
+      "description": "What players are told when an announced maintenance window is abandoned.",
+      "group": "instances",
+      "type": "string",
+      "default": "Server restart cancelled",
+      "risk": "safe"
+    },
+    {
+      "key": "enableFirewallManagement",
+      "env": "Instances__EnableFirewallManagement",
+      "label": "Manage firewall",
+      "description": "Whether a new instance has its host firewall rules opened and closed with it.",
+      "group": "instances",
+      "type": "bool",
+      "default": "false",
+      "risk": "safe"
+    },
+    {
+      "key": "enablePortForwarding",
+      "env": "Instances__EnablePortForwarding",
+      "label": "Forward ports",
+      "description": "Whether a new instance has its ports forwarded on the router while it runs.",
+      "group": "instances",
+      "type": "bool",
+      "default": "false",
+      "risk": "safe"
+    },
+    {
+      "key": "backupsDirectory",
+      "env": "Backups__Directory",
+      "label": "Backups directory",
+      "description": "Directory every instance's backups are kept under. Empty uses the engine's data directory. Existing instances keep the directory they were installed with.",
+      "group": "backups",
+      "type": "path",
+      "default": "",
+      "risk": "wiring"
+    },
+    {
+      "key": "compressBackups",
+      "env": "Backups__Compress",
+      "label": "Compress backups",
+      "description": "Whether new backups are compressed archives rather than plain copies.",
+      "group": "backups",
+      "type": "bool",
+      "default": "true",
+      "risk": "safe"
+    },
+    {
+      "key": "journalDirectory",
+      "env": "Journal__Directory",
+      "label": "Journal directory",
+      "description": "Directory the engine's event journal is written to. Readers find the journal here.",
+      "group": "journal",
+      "type": "path",
+      "default": "/var/lib/kgsm/events",
+      "risk": "wiring"
+    },
+    {
+      "key": "journalRetentionDays",
+      "env": "Journal__RetentionDays",
+      "label": "Journal retention",
+      "description": "How many days of event journal are kept. Zero keeps everything.",
+      "group": "journal",
+      "type": "int",
+      "default": "90",
+      "unit": "days",
+      "risk": "destructive"
+    },
+    {
+      "key": "cgroupMountPoint",
+      "env": "Cgroup__MountPoint",
+      "label": "Cgroup v2 mount point",
+      "description": "Where the cgroup v2 hierarchy is mounted.",
+      "group": "cgroup",
+      "type": "path",
+      "default": "/sys/fs/cgroup",
+      "risk": "wiring"
+    },
+    {
+      "key": "cgroupBaseName",
+      "env": "Cgroup__BaseName",
+      "label": "Watchdog cgroup",
+      "description": "The watchdog's cgroup below the mount point. An instance's cgroup path is derived from it.",
+      "group": "cgroup",
+      "type": "string",
+      "default": "kgsm.slice/kgsm-watchdog.service",
+      "risk": "wiring"
+    },
+    {
+      "key": "watchdogSocket",
+      "env": "Watchdog__Socket",
+      "label": "Watchdog socket",
+      "description": "Unix socket the engine reaches the watchdog on to start and stop native instances.",
+      "group": "watchdog",
+      "type": "path",
+      "default": "/run/kgsm-watchdog/control.sock",
+      "risk": "wiring"
+    },
+    {
+      "key": "watchdogEnabled",
+      "env": "Watchdog__Enabled",
+      "label": "Use the watchdog",
+      "description": "Whether starts and stops of native instances go through the watchdog. Off starts them unsupervised.",
+      "group": "watchdog",
+      "type": "bool",
+      "default": "true",
+      "risk": "wiring"
+    },
+    {
+      "key": "firewallClient",
+      "env": "Firewall__Client",
+      "label": "Firewall client",
+      "description": "The firewall client the engine runs to open and close an instance's ports.",
+      "group": "firewall",
+      "type": "string",
+      "default": "kgsm-firewall",
+      "risk": "wiring"
+    },
+    {
+      "key": "firewallSocket",
+      "env": "Firewall__Socket",
+      "label": "Firewall socket",
+      "description": "Unix socket of the firewall authority.",
+      "group": "firewall",
+      "type": "path",
+      "default": "/run/kgsm-firewall/firewall.sock",
+      "risk": "wiring"
+    },
+    {
+      "key": "downloadTimeoutSeconds",
+      "env": "Downloads__TimeoutSeconds",
+      "label": "Download timeout",
+      "description": "How long a game file download waits on a stalled connection before it gives up.",
+      "group": "downloads",
+      "type": "int",
+      "default": "60",
+      "min": 1,
+      "unit": "s",
+      "risk": "safe"
+    },
+    {
+      "key": "logLevel",
+      "env": "Logging__LogLevel__Default",
+      "label": "Log level",
+      "description": "Minimum severity the engine writes to its log file.",
+      "group": "logging",
+      "type": "enum",
+      "values": [
+        "Trace",
+        "Debug",
+        "Information",
+        "Warning",
+        "Error",
+        "Critical"
+      ],
+      "default": "Information",
+      "risk": "safe"
+    },
+    {
+      "key": "logMaxSizeKb",
+      "env": "Logging__File__MaxSizeKb",
+      "label": "Log rotation size",
+      "description": "Size at which the engine's log file is rotated.",
+      "group": "logging",
+      "type": "int",
+      "default": "10240",
+      "min": 1,
+      "unit": "KB",
+      "risk": "safe"
+    },
+    {
+      "key": "logMaxFiles",
+      "env": "Logging__File__MaxFiles",
+      "label": "Rotated log files",
+      "description": "How many rotated log files are kept beside the current one. Zero keeps none.",
+      "group": "logging",
+      "type": "int",
+      "default": "5",
+      "min": 0,
+      "risk": "safe"
+    }
+  ]
+}
