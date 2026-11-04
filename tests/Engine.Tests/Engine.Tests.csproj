@@ -18,6 +18,7 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Engine/Engine.csproj" />
     <ProjectReference Include="../../src/Engine.Contracts/Engine.Contracts.csproj" />
+    <ProjectReference Include="../../src/Cli/Cli.csproj" />
   </ItemGroup>
 
   <ItemGroup>

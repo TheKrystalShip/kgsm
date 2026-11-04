@@ -22,7 +22,12 @@ public sealed class LibraryCatalog(EnginePaths paths)
         return file?.Libraries ?? [];
     }
 
-    /// <summary>The marker in a root, or null when the root has none or its marker is unreadable or of a version this engine does not know.</summary>
+    /// <summary>The marker in a root, or null when the root has none or its marker is not JSON of the marker's shape.</summary>
+    /// <exception cref="UnsupportedSchemaVersionException">
+    /// The marker's <c>schemaVersion</c> is one this engine does not know. A marker of another version may mean
+    /// something else entirely, so every command touching the library fails and names the marker's path until it
+    /// is fixed or the engine upgraded.
+    /// </exception>
     public static LibraryMarker? ReadMarker(string root)
     {
         try
@@ -31,12 +36,13 @@ public sealed class LibraryCatalog(EnginePaths paths)
                 Path.Combine(root, LibraryRules.MarkerFileName), EngineJsonContext.Default.LibraryMarker,
                 SchemaVersions.LibraryMarker, m => m.SchemaVersion);
         }
-        catch (EngineException)
+        catch (EngineFormatException)
         {
             return null;
         }
     }
 
+    /// <exception cref="UnsupportedSchemaVersionException">The library's marker is of a version this engine does not know.</exception>
     public static LibraryState StateOf(LibraryRecord library) =>
         Directory.Exists(library.Path) && ReadMarker(library.Path)?.Id == library.Id
             ? LibraryState.Online

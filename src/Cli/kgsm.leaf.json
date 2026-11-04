@@ -2,10 +2,9 @@
   "schemaVersion": 1,
   "id": "engine",
   "displayName": "Engine",
-  "unit": "kgsm-journal-prune.service",
   "role": "The command-line engine that installs, configures and manages game server instances.",
-  "onDemand": true,
-  "applyMode": "restart",
+  "onDemand": false,
+  "applyMode": "next-invocation",
   "floorSources": [
     {
       "kind": "appsettings",

@@ -287,6 +287,5 @@ public partial class EventJournalTests
     public void TheProducerVersion_IsAReleaseNumber_NotAFourPartAssemblyVersion()
     {
         Assert.Matches(@"^\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?$", EngineVersion.Current);
-        Assert.Equal("4.0.0-dev.1", EngineVersion.Current);
     }
 }

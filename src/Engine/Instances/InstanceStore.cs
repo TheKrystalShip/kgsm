@@ -63,6 +63,31 @@ public sealed class InstanceStore(EnginePaths paths, LibraryCatalog libraries, I
         return Describe(id, entry, libraries.Registered());
     }
 
+    /// <summary>
+    /// One instance by id, or else by display name. An id matches exactly; a display name matches exactly
+    /// and only when no id does.
+    /// </summary>
+    /// <returns>The instance, or null when nothing matches.</returns>
+    /// <exception cref="AmbiguousInstanceException">Several instances carry that display name.</exception>
+    public InstanceDescription? Resolve(string reference)
+    {
+        InstanceDescription? byId = Find(reference);
+        if (byId is not null) return byId;
+
+        InstanceDescription[] named =
+        [
+            .. List().Where(i => i.Config is { DisplayName.Length: > 0 } c
+                && string.Equals(c.DisplayName, reference, StringComparison.Ordinal)),
+        ];
+
+        return named.Length switch
+        {
+            0 => null,
+            1 => named[0],
+            _ => throw new AmbiguousInstanceException(reference, [.. named.Select(i => i.Id)]),
+        };
+    }
+
     private InstanceDescription Describe(string id, InstanceRegistryEntry entry, IReadOnlyList<LibraryRecord> registered)
     {
         LibraryRecord? library = LibraryRules.Membership(registered, entry.WorkingDirectory);

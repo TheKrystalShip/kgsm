@@ -66,6 +66,25 @@ bash tree, which it does not touch. The bash engine's `KGSM_VERSION` does not mo
     `blueprint.removed`.
   - `src/Cli` is a stub that proves the core publishes as a clean Native-AOT binary and generates the
     config descriptor from the settings class. The command-line layer follows.
+- **The read commands (`engine-v4.0.0-dev.2`).**
+  - `kgsm <noun> <verb>` over System.CommandLine: `engine paths|version|config list|get`,
+    `instance list|show|status|logs`, `instance config list|get`, `blueprint list|show|find|validate|requirements`,
+    `library list`, `backup list`, `port list|conflicts`. One output stage renders every result as text or,
+    with `--json` / `--format=json`, as JSON through the source-generated context; a failure is an error
+    report on stderr with stdout empty. Exit codes are 0, 1, 2 and the contract codes (25 for not found);
+    validate and requirements print their result whether or not they pass. `--actor` and `--origin` are
+    accepted and normalised. Every command but help, version and paths is refused when the journal
+    directory belongs to another account, with the `sudo -u` line to run instead.
+  - Native run state is the watchdog's, read from its control socket (health, then the instance's state),
+    with the pid file as the witness for a run outside its supervision; a container's is `docker compose ps`.
+    A state that could not be measured is `unknown`, never `stopped`. Without a recorded update check no
+    update is claimed or ruled out. Disk usage is measured in bytes only with `--disk`.
+  - A library marker of a `schemaVersion` the engine does not know refuses every command touching the
+    library and names the marker.
+  - The settings and the log are built without a service container, so a read command answers in single-digit
+    milliseconds.
+  - The engine's config descriptor has no unit: `applyMode` is `next-invocation` (ComponentConfig 4.2.0).
+  - The watchdog's control-socket client comes from `TheKrystalShip.KGSM.Watchdog.Client`.
 
 ## Work in progress
 

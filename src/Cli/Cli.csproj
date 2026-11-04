@@ -1,8 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!--
-    The command-line layer. This project is a stub whose job is to prove that the engine core publishes as a
-    clean Native-AOT binary:  dotnet publish src/Cli/Cli.csproj -c Release -r linux-x64
+    The command-line layer: the `kgsm` binary, System.CommandLine over the engine core.
+    It publishes as a clean Native-AOT binary:  dotnet publish src/Cli/Cli.csproj -c Release -r linux-x64
     It is also the host that generates the config descriptor from the core's settings class.
   -->
   <PropertyGroup>
@@ -21,19 +21,21 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="TheKrystalShip.KGSM.ComponentConfig" Version="4.0.0" PrivateAssets="all" />
+    <PackageReference Include="TheKrystalShip.KGSM.ComponentConfig" Version="4.2.0" PrivateAssets="all" />
     <PackageReference Include="System.CommandLine" Version="2.0.14" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="TheKrystalShip.KGSM.Engine.Contracts.Reports" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Engine.Tests" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="../Engine/Engine.csproj" />
     <ProjectReference Include="../Engine.Contracts/Engine.Contracts.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <!-- Roots the whole core so the AOT pass analyses all of it, not only what this stub calls. -->
-    <TrimmerRootAssembly Include="TheKrystalShip.KGSM.Engine" />
-    <TrimmerRootAssembly Include="TheKrystalShip.KGSM.Engine.Contracts" />
   </ItemGroup>
 
   <ItemGroup>

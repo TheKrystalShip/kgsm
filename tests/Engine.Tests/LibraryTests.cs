@@ -195,11 +195,29 @@ public class LibraryCatalogTests
     }
 
     [Fact]
-    public void AMarkerOfAnUnknownVersion_IsNotTrusted_SoTheLibraryIsOffline()
+    public void AMarkerOfAnUnknownVersion_IsARefusalThatNamesTheMarker_ForEveryCommandTouchingTheLibrary()
     {
         var sandbox = Sandbox.Create();
         LibraryRecord record = sandbox.AddLibrary("ssd");
-        File.WriteAllText(Path.Combine(record.Path, LibraryRules.MarkerFileName), $$"""{"schemaVersion":99,"id":"{{record.Id}}","name":"ssd"}""");
+        sandbox.AddInstance(record, "factorio", "factorio-a");
+        string marker = Path.Combine(record.Path, LibraryRules.MarkerFileName);
+        File.WriteAllText(marker, $$"""{"schemaVersion":99,"id":"{{record.Id}}","name":"ssd"}""");
+        var libraries = new LibraryCatalog(sandbox.Paths);
+
+        var fromState = Assert.Throws<UnsupportedSchemaVersionException>(() => LibraryCatalog.StateOf(record));
+        Assert.Equal(marker, fromState.Path);
+        Assert.Equal(99, fromState.Found);
+        Assert.Throws<UnsupportedSchemaVersionException>(() => LibraryCatalog.ReadMarker(record.Path));
+        Assert.Throws<UnsupportedSchemaVersionException>(() => libraries.List(new Dictionary<string, InstanceRegistryEntry>()));
+        Assert.Throws<UnsupportedSchemaVersionException>(() => new InstanceStore(sandbox.Paths, libraries).List());
+    }
+
+    [Fact]
+    public void AMarkerThatIsNotJson_IsNotAMarker_SoTheLibraryIsOffline()
+    {
+        var sandbox = Sandbox.Create();
+        LibraryRecord record = sandbox.AddLibrary("ssd");
+        File.WriteAllText(Path.Combine(record.Path, LibraryRules.MarkerFileName), "not json");
 
         Assert.Equal(LibraryState.Offline, LibraryCatalog.StateOf(record));
         Assert.Null(LibraryCatalog.ReadMarker(record.Path));

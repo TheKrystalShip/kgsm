@@ -63,6 +63,11 @@ dotnet publish src/Cli/Cli.csproj -c Release -r linux-x64     # must show no IL2
 - `src/Engine.Contracts` (shapes, event vocabulary, maintenance-window grammar) and `src/Engine` (the
   core) are the two packages; `src/Cli` is the binary. `Directory.Build.props` carries the one version,
   `4.0.0-dev.N`; a phase's commit is tagged `engine-v<version>`, never `v*`.
+- `src/Cli` is the command line: a command returns an `Outcome` (a result DTO with its text, or a failure) and
+  never writes; `Output/` is the one stage that renders it, as text or as JSON through the registered
+  context, errors on stderr with stdout empty. A command goes in `Commands/`, its DTO in `Engine.Contracts`
+  and `EngineJsonContext`, and its test runs the command line in-process through `CliSession` in
+  `tests/Engine.Tests/Cli/`. Every command but help, version and paths runs behind the registry-account gate.
 - JSON goes through the registered contexts (`EngineJsonContext` camelCase, `EngineEventJsonContext`
   PascalCase for journal payloads) and YAML through `BlueprintYamlContext`; no JSON DOM.
 - A file the engine writes carries `schemaVersion`, and a reader refuses a version it does not know.

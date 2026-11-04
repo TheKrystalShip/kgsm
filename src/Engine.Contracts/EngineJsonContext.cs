@@ -3,7 +3,9 @@ using TheKrystalShip.KGSM.Engine.Contracts.Backups;
 using TheKrystalShip.KGSM.Engine.Contracts.Blueprints;
 using TheKrystalShip.KGSM.Engine.Contracts.Instances;
 using TheKrystalShip.KGSM.Engine.Contracts.Libraries;
+using TheKrystalShip.KGSM.Engine.Contracts.Network;
 using TheKrystalShip.KGSM.Engine.Contracts.Paths;
+using TheKrystalShip.KGSM.Engine.Contracts.Reports;
 
 namespace TheKrystalShip.KGSM.Engine.Contracts;
 
@@ -33,4 +35,19 @@ namespace TheKrystalShip.KGSM.Engine.Contracts;
 [JsonSerializable(typeof(BlueprintListing))]
 [JsonSerializable(typeof(IReadOnlyList<BlueprintListing>))]
 [JsonSerializable(typeof(PathsReport))]
+[JsonSerializable(typeof(ErrorReport))]
+[JsonSerializable(typeof(EngineVersionReport))]
+[JsonSerializable(typeof(EngineSetting))]
+[JsonSerializable(typeof(IReadOnlyList<EngineSetting>))]
+[JsonSerializable(typeof(InstanceSummary))]
+[JsonSerializable(typeof(IReadOnlyList<InstanceSummary>))]
+[JsonSerializable(typeof(InstanceInfo))]
+[JsonSerializable(typeof(InstanceStatus))]
+[JsonSerializable(typeof(LogTail))]
+[JsonSerializable(typeof(ConfigEntry))]
+[JsonSerializable(typeof(IReadOnlyList<ConfigEntry>))]
+[JsonSerializable(typeof(PortUse))]
+[JsonSerializable(typeof(IReadOnlyList<PortUse>))]
+[JsonSerializable(typeof(PortConflict))]
+[JsonSerializable(typeof(IReadOnlyList<PortConflict>))]
 public sealed partial class EngineJsonContext : JsonSerializerContext;

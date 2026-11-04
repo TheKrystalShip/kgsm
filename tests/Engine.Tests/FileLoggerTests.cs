@@ -165,4 +165,25 @@ public class FileLoggerTests
         Assert.DoesNotContain("debug-hidden", text, StringComparison.Ordinal);
         Assert.Contains("info-shown", text, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public void ACategoryRule_OverridesTheDefaultForThatCategoryOnly()
+    {
+        var sandbox = Sandbox.Create();
+        EngineConfiguration configuration = EngineSettingsLoader.Load(sandbox.Paths, new Dictionary<string, string?>
+        {
+            ["Logging__LogLevel__Default"] = "Warning",
+            ["Logging__LogLevel__Loud"] = "Debug",
+        });
+
+        using (ILoggerFactory factory = EngineLogging.CreateFactory(configuration, sandbox.Paths))
+        {
+            factory.CreateLogger("Quiet").LogInformation("quiet-hidden");
+            factory.CreateLogger("Loud").LogDebug("loud-shown");
+        }
+
+        string text = File.ReadAllText(sandbox.Paths.LogFile);
+        Assert.DoesNotContain("quiet-hidden", text, StringComparison.Ordinal);
+        Assert.Contains("loud-shown", text, StringComparison.Ordinal);
+    }
 }

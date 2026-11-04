@@ -2,14 +2,15 @@ using TheKrystalShip.KGSM.ComponentConfig;
 
 // What the Control Panel shows about the engine's settings, declared beside the host that publishes them.
 // TheKrystalShip.KGSM.ComponentConfig reads the settings sections out of the core assembly and writes
-// kgsm.leaf.json from them; the binary never reads any of this.
+// kgsm.leaf.json from them; the binary never reads any of this. The engine is no process and has no unit:
+// a change to its settings applies the next time it runs and nothing restarts.
 
 [assembly: Leaf(
     id: "engine",
     displayName: "Engine",
-    unit: "kgsm-journal-prune.service",
+    unit: "",
     role: "The command-line engine that installs, configures and manages game server instances.",
-    OnDemand = true)]
+    ApplyMode = "next-invocation")]
 
 [assembly: ConfigSectionAssembly("TheKrystalShip.KGSM.Engine")]
 

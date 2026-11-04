@@ -1,5 +1,6 @@
 using System.Collections;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Configuration.Json;
 using TheKrystalShip.KGSM.Engine.Contracts.Scheduling;
 using TheKrystalShip.KGSM.Engine.Paths;
 
@@ -96,16 +97,46 @@ public static class EngineSettingsLoader
         if (value < floor) problems.Add($"{key} is {value}, below its floor of {floor}");
     }
 
-    private static void AddFile(ConfigurationBuilder builder, string path) =>
-        builder.AddJsonFile(source =>
+    /// <summary>
+    /// Adds a settings file when it exists. The file is read straight into the configuration: a command line
+    /// pays for every provider it constructs, and a settings file is read once and never watched.
+    /// </summary>
+    private static void AddFile(ConfigurationBuilder builder, string path)
+    {
+        byte[] content;
+        try
         {
-            source.Path = path;
-            source.Optional = true;
-            source.ReloadOnChange = false;
-            source.ResolveFileProvider();
-            source.OnLoadException = context =>
-                throw new EngineFormatException(path, "the settings file is not valid JSON", context.Exception);
-        });
+            if (!File.Exists(path)) return;
+            content = File.ReadAllBytes(path);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            throw new EngineFormatException(path, "the settings file cannot be read", ex);
+        }
+
+        builder.Add(new JsonBytesSource(path, content));
+    }
+
+    /// <summary>A settings file's bytes as a configuration source; invalid JSON is the engine's format error.</summary>
+    private sealed class JsonBytesSource(string path, byte[] content) : IConfigurationSource
+    {
+        public IConfigurationProvider Build(IConfigurationBuilder builder) => new Provider(path, content);
+
+        private sealed class Provider(string path, byte[] content) : JsonStreamConfigurationProvider(new JsonStreamConfigurationSource())
+        {
+            public override void Load()
+            {
+                try
+                {
+                    Load(new MemoryStream(content));
+                }
+                catch (Exception ex) when (ex is FormatException or InvalidDataException or System.Text.Json.JsonException)
+                {
+                    throw new EngineFormatException(path, "the settings file is not valid JSON", ex);
+                }
+            }
+        }
+    }
 
     private static IEnumerable<KeyValuePair<string, string?>> EnvironmentKeys(IReadOnlyDictionary<string, string?> environment)
     {

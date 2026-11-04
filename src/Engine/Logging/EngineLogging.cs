@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 using TheKrystalShip.KGSM.Engine.Paths;
 using TheKrystalShip.KGSM.Engine.Settings;
@@ -24,11 +25,19 @@ public static class EngineLogging
             MaxFiles = file.MaxFiles,
         };
 
-        return LoggerFactory.Create(builder =>
+        // The factory is built directly rather than through a service collection: a command line pays for
+        // everything it constructs, and the log needs only the one provider and its level rules.
+        var filters = new LoggerFilterOptions { MinLevel = LogLevel.Information };
+        foreach (IConfigurationSection rule in configuration.Configuration.GetSection("Logging:LogLevel").GetChildren())
         {
-            builder.AddConfiguration(configuration.Configuration.GetSection("Logging"));
-            builder.SetMinimumLevel(LogLevel.Information);
-            builder.AddProvider(new FileLoggerProvider(options, clock));
-        });
+            if (!Enum.TryParse(rule.Value, ignoreCase: true, out LogLevel level)) continue;
+
+            if (string.Equals(rule.Key, "Default", StringComparison.OrdinalIgnoreCase))
+                filters.MinLevel = level;
+            else
+                filters.Rules.Add(new LoggerFilterRule(providerName: null, categoryName: rule.Key, logLevel: level, filter: null));
+        }
+
+        return new LoggerFactory([new FileLoggerProvider(options, clock)], filters);
     }
 }

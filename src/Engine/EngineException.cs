@@ -35,3 +35,10 @@ public sealed class EngineFormatException(string path, string detail, Exception?
 {
     public string Path { get; } = path;
 }
+
+/// <summary>A display name matches several instances, so it names none of them.</summary>
+public sealed class AmbiguousInstanceException(string reference, IReadOnlyList<string> candidates)
+    : EngineException("ambiguous", $"'{reference}' matches several instances: {string.Join(", ", candidates)}")
+{
+    public IReadOnlyList<string> Candidates { get; } = candidates;
+}
