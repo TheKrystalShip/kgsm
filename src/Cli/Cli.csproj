@@ -18,10 +18,16 @@
     <!-- The generator that turns the settings file's keys into the descriptor needs these two files. -->
     <ComponentSettingsFile>kgsm.settings.json</ComponentSettingsFile>
     <ComponentDescriptorFile>$(MSBuildProjectDirectory)/kgsm.leaf.json</ComponentDescriptorFile>
+    <!-- The actions the commands declare are the `kgsm` namespace's; the build writes them as the manifest
+         beside the descriptor and as the constants the engine's callers name. -->
+    <ComponentActionConstantsFile>$(MSBuildProjectDirectory)/../Engine.Contracts/Actions/EngineActions.g.cs</ComponentActionConstantsFile>
+    <ComponentActionConstantsNamespace>TheKrystalShip.KGSM.Engine.Contracts</ComponentActionConstantsNamespace>
+    <ComponentActionConstantsClass>EngineActions</ComponentActionConstantsClass>
+    <ComponentActionConstantsComponent>kgsm</ComponentActionConstantsComponent>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="TheKrystalShip.KGSM.ComponentConfig" Version="4.2.0" PrivateAssets="all" />
+    <PackageReference Include="TheKrystalShip.KGSM.ComponentConfig" Version="4.3.0" PrivateAssets="all" />
     <PackageReference Include="System.CommandLine" Version="2.0.14" />
   </ItemGroup>
 

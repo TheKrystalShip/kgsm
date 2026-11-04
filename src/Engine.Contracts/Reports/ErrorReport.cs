@@ -46,4 +46,8 @@ public static class ErrorCodes
     public const string FirewallFailed = "firewall-failed";
 
     public const string Refused = "refused";
+
+    public const string Integrity = "transfer-integrity";
+
+    public const string ImportNotFound = "import-not-found";
 }

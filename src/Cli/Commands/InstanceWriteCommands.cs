@@ -1,3 +1,4 @@
+using TheKrystalShip.KGSM.ComponentConfig;
 using System.CommandLine;
 using TheKrystalShip.KGSM.Cli.Output;
 using TheKrystalShip.KGSM.Engine.Contracts;
@@ -15,9 +16,9 @@ internal static class InstanceWriteCommands
     {
         instance.Subcommands.Add(Install(host));
         instance.Subcommands.Add(Uninstall(host));
-        instance.Subcommands.Add(Lifecycle(host, "start", "Start an instance."));
-        instance.Subcommands.Add(Lifecycle(host, "stop", "Stop an instance, whoever runs it."));
-        instance.Subcommands.Add(Lifecycle(host, "restart", "Stop an instance, then start it."));
+        instance.Subcommands.Add(Start(host));
+        instance.Subcommands.Add(Stop(host));
+        instance.Subcommands.Add(Restart(host));
         instance.Subcommands.Add(Move(host));
         instance.Subcommands.Add(Autostart(host, "enable", "Start an instance at boot, through the watchdog.", enable: true));
         instance.Subcommands.Add(Autostart(host, "disable", "Stop starting an instance at boot.", enable: false));
@@ -27,6 +28,8 @@ internal static class InstanceWriteCommands
         instance.Subcommands.Add(Console(host));
     }
 
+    [Action("kgsm:server.config.write", "Change server settings", DeclaredEffect.Write, DeclaredScope.Instance)]
+    [Action("kgsm:server.windows.write", "Change maintenance windows", DeclaredEffect.Write, DeclaredScope.Instance)]
     public static Command ConfigSet(CommandHost host)
     {
         Argument<string> reference = CommandBuilder.InstanceArgument();
@@ -48,6 +51,7 @@ internal static class InstanceWriteCommands
             });
     }
 
+    [Action("kgsm:server.install", "Install servers", DeclaredEffect.Write, DeclaredScope.Node)]
     private static Command Install(CommandHost host)
     {
         var blueprint = new Argument<string>("blueprint") { Description = "The blueprint's file name without .bp.yaml." };
@@ -70,6 +74,7 @@ internal static class InstanceWriteCommands
             });
     }
 
+    [Action("kgsm:server.uninstall", "Uninstall servers", DeclaredEffect.Write, DeclaredScope.Instance)]
     private static Command Uninstall(CommandHost host)
     {
         Argument<string> reference = CommandBuilder.InstanceArgument();
@@ -90,6 +95,15 @@ internal static class InstanceWriteCommands
                 return new Result<UninstallReport>(report, EngineJsonContext.Default.UninstallReport, RenderUninstall);
             });
     }
+
+    [Action("kgsm:server.start", "Start servers", DeclaredEffect.Execute, DeclaredScope.Instance)]
+    private static Command Start(CommandHost host) => Lifecycle(host, "start", "Start an instance.");
+
+    [Action("kgsm:server.stop", "Stop servers", DeclaredEffect.Execute, DeclaredScope.Instance)]
+    private static Command Stop(CommandHost host) => Lifecycle(host, "stop", "Stop an instance, whoever runs it.");
+
+    [Action("kgsm:server.restart", "Restart servers", DeclaredEffect.Execute, DeclaredScope.Instance)]
+    private static Command Restart(CommandHost host) => Lifecycle(host, "restart", "Stop an instance, then start it.");
 
     private static Command Lifecycle(CommandHost host, string verb, string description)
     {
@@ -112,6 +126,7 @@ internal static class InstanceWriteCommands
         });
     }
 
+    [Action("kgsm:server.move", "Move servers between libraries", DeclaredEffect.Write, DeclaredScope.Instance)]
     private static Command Move(CommandHost host)
     {
         Argument<string> reference = CommandBuilder.InstanceArgument();
@@ -129,6 +144,7 @@ internal static class InstanceWriteCommands
             });
     }
 
+    [Action("kgsm:server.config.write", "Change server settings", DeclaredEffect.Write, DeclaredScope.Instance)]
     private static Command Autostart(CommandHost host, string verb, string description, bool enable)
     {
         Argument<string> reference = CommandBuilder.InstanceArgument();
@@ -141,6 +157,7 @@ internal static class InstanceWriteCommands
             });
     }
 
+    [Action("kgsm:server.update", "Update servers", DeclaredEffect.Execute, DeclaredScope.Instance)]
     private static Command Update(CommandHost host)
     {
         Argument<string> reference = CommandBuilder.InstanceArgument();
@@ -152,6 +169,7 @@ internal static class InstanceWriteCommands
             });
     }
 
+    [Action("kgsm:server.read", "See servers", DeclaredEffect.Read, DeclaredScope.Instance)]
     private static Command CheckUpdate(CommandHost host)
     {
         Argument<string> reference = CommandBuilder.InstanceArgument();
@@ -169,41 +187,62 @@ internal static class InstanceWriteCommands
             });
     }
 
+    [Action("kgsm:server.export", "Transfer servers out", DeclaredEffect.Write, DeclaredScope.Instance)]
     private static Command Unlock(CommandHost host)
     {
         Argument<string> reference = CommandBuilder.InstanceArgument();
-        return new Command("unlock", "Release the lock a transfer left on an instance.") { reference }
-            .ActOnInstance(host, "instance unlock", reference, (context, instance) =>
+        var token = new Option<string>("--lock") { Description = "Release only if this token holds the lock; without it the lock is released whoever holds it." };
+        return new Command("unlock", "Release the lock a transfer left on an instance and restore its autostart.") { reference, token }
+            .ActOnInstance(host, "instance unlock", reference, async (context, instance) =>
             {
-                ActionReport report = new InstanceAdminService(context.Services.Operations).Unlock(instance);
-                return Task.FromResult<Outcome>(new Result<ActionReport>(report, EngineJsonContext.Default.ActionReport, r => $"{r.Subject}: {r.Message}"));
+                ActionReport report = await new InstanceAdminService(context.Services.Operations)
+                    .UnlockAsync(instance, context.Parse.GetValue(token), context.Cancellation).ConfigureAwait(false);
+                return new Result<ActionReport>(report, EngineJsonContext.Default.ActionReport, r => $"{r.Subject}: {r.Message}");
             });
     }
 
     private static Command Console(CommandHost host)
     {
         var console = new Command("console", "An instance's console.");
+        console.Subcommands.Add(Send(host));
+        console.Subcommands.Add(Save(host));
+        console.Subcommands.Add(Announce(host));
+        console.Subcommands.Add(Kick(host));
+        console.Subcommands.Add(Ban(host));
+        console.Subcommands.Add(Unban(host));
+        return console;
+    }
 
-        console.Subcommands.Add(Console(host, "send", "Send a line to the console.", "line",
-            (service, instance, text, token) => service.SendAsync(instance, text, token)));
-        console.Subcommands.Add(Console(host, "announce", "Broadcast a message to the players.", "message",
-            (service, instance, text, token) => service.AnnounceAsync(instance, text, token)));
-        console.Subcommands.Add(Console(host, "kick", "Kick a player.", "target",
-            (service, instance, text, token) => service.ModerateAsync(instance, ModerationVerb.Kick, text, token)));
-        console.Subcommands.Add(Console(host, "ban", "Ban a player.", "target",
-            (service, instance, text, token) => service.ModerateAsync(instance, ModerationVerb.Ban, text, token)));
-        console.Subcommands.Add(Console(host, "unban", "Lift a player's ban.", "target",
-            (service, instance, text, token) => service.ModerateAsync(instance, ModerationVerb.Unban, text, token)));
+    [Action("kgsm:server.console.write", "Send console commands", DeclaredEffect.Execute, DeclaredScope.Instance)]
+    private static Command Send(CommandHost host) =>
+        Console(host, "send", "Send a line to the console.", "line", (service, instance, text, token) => service.SendAsync(instance, text, token));
 
+    [Action("kgsm:server.announce", "Announce to players", DeclaredEffect.Execute, DeclaredScope.Instance)]
+    private static Command Announce(CommandHost host) =>
+        Console(host, "announce", "Broadcast a message to the players.", "message", (service, instance, text, token) => service.AnnounceAsync(instance, text, token));
+
+    [Action("kgsm:server.players.kick", "Kick players", DeclaredEffect.Execute, DeclaredScope.Instance)]
+    private static Command Kick(CommandHost host) =>
+        Console(host, "kick", "Kick a player.", "target", (service, instance, text, token) => service.ModerateAsync(instance, ModerationVerb.Kick, text, token));
+
+    [Action("kgsm:server.players.ban", "Ban and unban players", DeclaredEffect.Execute, DeclaredScope.Instance)]
+    private static Command Ban(CommandHost host) =>
+        Console(host, "ban", "Ban a player.", "target", (service, instance, text, token) => service.ModerateAsync(instance, ModerationVerb.Ban, text, token));
+
+    [Action("kgsm:server.players.ban", "Ban and unban players", DeclaredEffect.Execute, DeclaredScope.Instance)]
+    private static Command Unban(CommandHost host) =>
+        Console(host, "unban", "Lift a player's ban.", "target", (service, instance, text, token) => service.ModerateAsync(instance, ModerationVerb.Unban, text, token));
+
+    [Action("kgsm:server.console.write", "Send console commands", DeclaredEffect.Execute, DeclaredScope.Instance)]
+    private static Command Save(CommandHost host)
+    {
         Argument<string> reference = CommandBuilder.InstanceArgument();
-        console.Subcommands.Add(new Command("save", "Send the save command.") { reference }
+        return new Command("save", "Send the save command.") { reference }
             .ActOnInstance(host, "instance console save", reference, async (context, instance) =>
             {
                 ActionReport report = await new ConsoleService(context.Services.Operations).SaveAsync(instance, context.Cancellation).ConfigureAwait(false);
                 return new Result<ActionReport>(report, EngineJsonContext.Default.ActionReport, r => $"{r.Subject}: {r.Message}");
-            }));
-
-        return console;
+            });
     }
 
     private static Command Console(

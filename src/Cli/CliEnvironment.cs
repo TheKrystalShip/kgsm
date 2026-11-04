@@ -38,6 +38,18 @@ internal sealed class CliEnvironment
     /// <summary>What a command reads from standard input; the process's when unset.</summary>
     public TextReader? Stdin { get; init; }
 
+    /// <summary>The bytes a command streams to standard output (a transfer part); the process's own output when unset.</summary>
+    public Stream? RawStdout { get; init; }
+
+    /// <summary>The bytes a command streams from standard input (a transfer part); the process's own input when unset.</summary>
+    public Stream? RawStdin { get; init; }
+
+    /// <summary>The container runtime's images; the <c>docker</c> command line when unset.</summary>
+    public IImageStore? Images { get; init; }
+
+    /// <summary>The engine version a transfer compares; the running build's when unset.</summary>
+    public string? EngineVersion { get; init; }
+
     /// <summary>Whether a person is at a terminal and can be asked; true when both input and output are terminals.</summary>
     public bool Interactive { get; init; } = !Console.IsInputRedirected && !Console.IsOutputRedirected;
 

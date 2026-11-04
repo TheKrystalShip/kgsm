@@ -43,6 +43,8 @@ namespace TheKrystalShip.KGSM.Engine.Contracts.Events;
 [JsonSerializable(typeof(UpdateAvailable))]
 [JsonSerializable(typeof(Moved))]
 [JsonSerializable(typeof(Renamed))]
+[JsonSerializable(typeof(AutostartEnabled))]
+[JsonSerializable(typeof(AutostartDisabled))]
 [JsonSerializable(typeof(Exported))]
 [JsonSerializable(typeof(Imported))]
 [JsonSerializable(typeof(BackupStarted))]

@@ -7,6 +7,7 @@ using TheKrystalShip.KGSM.Engine.Contracts.Network;
 using TheKrystalShip.KGSM.Engine.Contracts.Operations;
 using TheKrystalShip.KGSM.Engine.Contracts.Paths;
 using TheKrystalShip.KGSM.Engine.Contracts.Reports;
+using TheKrystalShip.KGSM.Engine.Contracts.Transfers;
 
 namespace TheKrystalShip.KGSM.Engine.Contracts;
 
@@ -70,4 +71,14 @@ namespace TheKrystalShip.KGSM.Engine.Contracts;
 [JsonSerializable(typeof(JournalStatusReport))]
 [JsonSerializable(typeof(JournalPruneReport))]
 [JsonSerializable(typeof(JournalVerifyReport))]
+[JsonSerializable(typeof(TransferManifest))]
+[JsonSerializable(typeof(ImportVerdict))]
+[JsonSerializable(typeof(ImportBegun))]
+[JsonSerializable(typeof(ImportedInstance))]
+[JsonSerializable(typeof(StagedImport))]
+[JsonSerializable(typeof(IReadOnlyList<StagedImport>))]
+[JsonSerializable(typeof(ImportAbortReport))]
+[JsonSerializable(typeof(ExportCommitReport))]
+[JsonSerializable(typeof(TransferLockRecord))]
+[JsonSerializable(typeof(ImportStageMeta))]
 public sealed partial class EngineJsonContext : JsonSerializerContext;

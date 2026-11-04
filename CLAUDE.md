@@ -70,8 +70,10 @@ dotnet publish src/Cli/Cli.csproj -c Release -r linux-x64     # must show no IL2
   `tests/Engine.Tests/Cli/`. Every command but help, version and paths runs behind the registry-account gate.
 - The write operations are `src/Engine/Operations/`, one service per concern (install, uninstall, lifecycle,
   move, update, config, console, backup, blueprint, library, journal maintenance), all standing on an
-  `OperationHost`. Its doors to the outside are interfaces (`IProcessRunner` for the instance's script and
-  the firewall client, `IWatchdogControl`, `IContainerRuntime`, `IFirewallClient`), so a test runs an
+  `OperationHost`. Transfer is `src/Engine/Transfers/`: the export service (manifest, locked parts, commit),
+  the import service (check, begin, part, finish, abort, list), the tree part's archive and the sealed image
+  stream. Its doors to the outside are interfaces (`IProcessRunner` for the instance's script and
+  the firewall client, `IWatchdogControl`, `IContainerRuntime`, `IImageStore`, `IFirewallClient`), so a test runs an
   operation against fakes: `tests/Engine.Tests/Operations/OpsFixture.cs` holds a `ScriptEmulator` that
   leaves what the real script leaves. Whatever changes an instance runs in its script; a service decides,
   brackets, journals and checks results. A new write needs its refusals decided before it touches a file,
@@ -87,6 +89,10 @@ dotnet publish src/Cli/Cli.csproj -c Release -r linux-x64     # must show no IL2
   real host. A game's hooks are `overrides/<name>/hooks.sh`.
 - The config descriptor `src/Cli/kgsm.leaf.json` is generated from the settings class on every build.
   Edit `src/Engine/Settings/EngineSettings.cs` and `src/Cli/kgsm.settings.json`, never the JSON.
+- A transfer test builds a `TransferWorld` (tests/Engine.Tests/Transfers/): two nodes, each an `OpsFixture`
+  with a runtime of its own, and the command lines that carry an instance from one to the other through the
+  parts' standard streams. An image the fake runtime saves is `reference|chain|size`, loaded under an id of
+  the loading runtime's own.
 - A test builds its world in a `Sandbox` (its own XDG homes, install root and journal directory under the
   run's temporary root). No test touches `/var/lib/kgsm/events` or any live path.
 
@@ -116,9 +122,12 @@ runs once per host: it creates `/opt/kgsm` owned by you, the `kgsm` symlink on `
 `kgsm-journal-prune` timer, so no polkit grant is needed. Run `deploy.sh` after changing engine code.
 `deploy/deploy-common.sh` holds the shared paths; the scripts are self-contained.
 
-`deploy/kgsm.actions.json` is the engine's action manifest, written by hand. kgsm-lib's `KgsmActions`
+`deploy/kgsm.actions.json` is the shipped engine's action manifest, written by hand. kgsm-lib's `KgsmActions`
 mirrors it and a kgsm-lib test fails when the two disagree, so an action added here is added there in the
-same change. Format: `../kgsm-docs/reference/action-manifest.md`.
+same change. The binary's own is generated: each command declares `[Action("kgsm:...")]` on the method that
+builds it, the build writes `src/Cli/kgsm.kgsm.actions.json` and the constants in
+`src/Engine.Contracts/Actions/EngineActions.g.cs`, and `ActionManifestTests` holds the generated manifest
+equal to the hand-written one. Format: `../kgsm-docs/reference/action-manifest.md`.
 
 ## Version tracking
 

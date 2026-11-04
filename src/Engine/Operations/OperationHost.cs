@@ -46,6 +46,9 @@ public sealed class OperationHost
 
     public required IRequirementProbe Requirements { get; init; }
 
+    /// <summary>The container runtime's images, which a transfer moves.</summary>
+    public required IImageStore Images { get; init; }
+
     public required TimeProvider Clock { get; init; }
 
     public required ILoggerFactory Loggers { get; init; }
@@ -55,6 +58,9 @@ public sealed class OperationHost
 
     /// <summary>How long a start or stop waits for the run state to show it; measured in real time.</summary>
     public TimeSpan SettleTimeout { get; init; } = TimeSpan.FromSeconds(15);
+
+    /// <summary>The engine version a transfer compares exactly; both nodes must run it.</summary>
+    public string EngineVersion { get; init; } = Journal.EngineVersion.Current;
 
     public ILogger Logger(string category) => Loggers.CreateLogger(category);
 

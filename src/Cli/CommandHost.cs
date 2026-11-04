@@ -18,6 +18,12 @@ internal sealed class CommandContext(
     /// <summary>What the command reads from standard input.</summary>
     public TextReader Input => environment.Stdin ?? Console.In;
 
+    /// <summary>The bytes a command streams out; only a transfer part writes here.</summary>
+    public Stream RawOutput => environment.RawStdout ?? Console.OpenStandardOutput();
+
+    /// <summary>The bytes a command streams in; only a transfer part reads from here.</summary>
+    public Stream RawInput => environment.RawStdin ?? Console.OpenStandardInput();
+
     /// <summary>
     /// Asks before something destructive. With <c>--yes</c> it is settled; at a terminal the person is asked;
     /// with neither the command is refused with exit 2 and told to pass <c>--yes</c>.

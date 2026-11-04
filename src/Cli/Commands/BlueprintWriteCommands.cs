@@ -1,3 +1,4 @@
+using TheKrystalShip.KGSM.ComponentConfig;
 using System.CommandLine;
 using TheKrystalShip.KGSM.Cli.Output;
 using TheKrystalShip.KGSM.Engine.Contracts;
@@ -14,8 +15,14 @@ internal static class BlueprintWriteCommands
         blueprint.Subcommands.Add(Write(host, "create", "Add a user blueprint from a YAML file or standard input.", update: false));
         blueprint.Subcommands.Add(Write(host, "update", "Replace a user blueprint from a YAML file or standard input.", update: true));
 
+        blueprint.Subcommands.Add(Delete(host));
+    }
+
+    [Action("kgsm:blueprints.write", "Write custom blueprints", DeclaredEffect.Write, DeclaredScope.Node)]
+    private static Command Delete(CommandHost host)
+    {
         var name = new Argument<string>("blueprint") { Description = "The user blueprint's file name without .bp.yaml." };
-        blueprint.Subcommands.Add(new Command("delete", "Remove a user blueprint; a system blueprint it shadowed shows again.") { name }
+        return new Command("delete", "Remove a user blueprint; a system blueprint it shadowed shows again.") { name }
             .Act(host, "blueprint delete", context =>
             {
                 string key = context.Parse.GetValue(name)!;
@@ -25,9 +32,11 @@ internal static class BlueprintWriteCommands
                 return Task.FromResult<Outcome>(new Result<BlueprintWriteReport>(
                     report, EngineJsonContext.Default.BlueprintWriteReport,
                     r => $"{r.Name} deleted" + (r.SystemBlueprintInvolved ? "; the system blueprint of that name is visible again" : string.Empty)));
-            }));
+            });
     }
 
+
+    [Action("kgsm:blueprints.write", "Write custom blueprints", DeclaredEffect.Write, DeclaredScope.Node)]
     private static Command Write(CommandHost host, string verb, string description, bool update)
     {
         var name = new Argument<string>("blueprint") { Description = "The file name without .bp.yaml." };

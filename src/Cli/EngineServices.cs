@@ -87,6 +87,8 @@ internal sealed class EngineServices(CliEnvironment environment) : IDisposable
             Status = Status,
             Repairer = ScriptRepairer,
             Requirements = Requirements,
+            Images = environment.Images ?? new DockerImages(processes),
+            EngineVersion = environment.EngineVersion ?? EngineVersion.Current,
             Clock = environment.Clock,
             Loggers = Loggers,
             BinaryPath = environment.BinaryPath,

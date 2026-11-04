@@ -157,6 +157,29 @@ bash tree, which it does not touch. The bash engine's `KGSM_VERSION` does not mo
     bytes and a line that is not one object.
   - A bare `executable_file` is looked up in the launch directory before `PATH`, and the bundled download
     hooks bound a stalled transfer instead of the whole download. The template version is 3.
+- **Transfer and the generated action manifest (`engine-v4.0.0-dev.6`).**
+  - `transfer export <instance> --manifest|--part <id>|--commit [--lock <token>]` and `transfer import
+    check|begin|part|finish|abort|list`, driven in the order kgsm-api drives them. A manifest taken under a
+    token locks the instance and switches its autostart off, then measures it, so nothing can start it
+    between the check and the lock; a part is streamed on standard output and read from standard input,
+    the commit removes the instance, its backups and the images no other instance uses, and `instance
+    unlock [--lock <token>]` releases a lock and restores the autostart it found.
+  - The manifest is camelCase and carries `schemaVersion`. The tree part is a tar closed by a digest of
+    every name, length and byte before it, and an image part is the runtime's saved image closed by a
+    SHA-256 trailer, so a byte damaged in transit is exit 63 where a tar or a `docker load` alone would
+    accept it. An image's identity in the manifest is the digest of its layer chain, which two image
+    stores agree on where the id a runtime reports differs.
+  - `import check` lists every refusal and writes nothing: the exact engine version (60), a missing
+    requirement (61), a port another instance holds (62), room (56), the library, the blueprint and a
+    suffix. `import begin` stages the import in the library; `finish` decides all of it again, renames the
+    staged tree into place under a new id, rewrites no path, gives the backups a directory of their own and
+    never merges into one that exists, and when anything fails puts back exactly what it made and leaves the
+    staging for `abort`. `abort` removes only the images the import loaded and verified, and puts a
+    reference back on the image it named before.
+  - The action manifest is generated from the commands: each declares its `kgsm` action, the build writes
+    `src/Cli/kgsm.kgsm.actions.json` and the constants in `Engine.Contracts/Actions/EngineActions.g.cs`
+    (ComponentConfig 4.3.0), and a test holds the manifest equal to `deploy/kgsm.actions.json`.
+  - `instance enable` and `disable` write `server.autostart.enabled` and `server.autostart.disabled`.
 
 ## Work in progress
 

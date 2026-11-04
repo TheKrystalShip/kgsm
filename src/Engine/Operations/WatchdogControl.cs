@@ -22,6 +22,10 @@ public interface IWatchdogControl : IWatchdogProbe
 
     /// <summary>Drops an instance from supervision, stopping it first; not Ok while it is still live.</summary>
     Task<ActionResult> ForgetAsync(string instance, CancellationToken cancellationToken);
+
+    /// <summary>The instances in the boot-autostart set.</summary>
+    /// <exception cref="WatchdogUnavailableException">The daemon stopped answering.</exception>
+    Task<IReadOnlyList<string>> EnabledAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -56,6 +60,9 @@ public sealed class WatchdogControl(string socketPath) : IWatchdogControl, IDisp
 
     public Task<ActionResult> ForgetAsync(string instance, CancellationToken cancellationToken) =>
         _actions.Value.ForgetAsync(instance, cancellationToken);
+
+    public Task<IReadOnlyList<string>> EnabledAsync(CancellationToken cancellationToken) =>
+        _reads.Value.EnabledAsync(cancellationToken);
 
     public void Dispose()
     {

@@ -98,7 +98,7 @@ public static partial class FileSystem
     }
 
     /// <summary>Whether a path is a regular file, as the kernel types it: a pipe, socket or device is not.</summary>
-    private static bool IsRegular(string path)
+    internal static bool IsRegular(string path)
     {
         byte[] buffer = new byte[StatxSize];
         if (Statx(CurrentDirectory, path, 0, TypeAndModeMask, buffer) != 0) return false;

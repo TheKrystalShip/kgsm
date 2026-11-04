@@ -16,6 +16,12 @@ public static class SchemaVersions
 
     public const int BackupManifest = 1;
 
+    public const int TransferManifest = 1;
+
+    public const int TransferLock = 1;
+
+    public const int ImportStage = 1;
+
     /// <summary>The <c>schema_version</c> a blueprint file declares.</summary>
     public const int Blueprint = 1;
 }

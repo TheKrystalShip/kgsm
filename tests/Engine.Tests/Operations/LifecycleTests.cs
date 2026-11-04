@@ -200,7 +200,7 @@ public class LifecycleTests
     {
         var fx = OpsFixture.Create();
         var (instance, _) = fx.AddInstance();
-        File.WriteAllText(instance.Layout.TransferLockFile, "token-1\n");
+        TransferLock.Place(instance.Layout, "token-1", autostart: false);
 
         CliRun run = await fx.Run("instance", "start", "g-1", "--json");
 
@@ -392,7 +392,7 @@ public class LifecycleTests
         var fx = OpsFixture.Create();
         var (instance, wd) = fx.AddInstance();
         fx.Simulate("g-1", wd);
-        File.WriteAllText(instance.Layout.TransferLockFile, "token-1");
+        TransferLock.Place(instance.Layout, "token-1", autostart: false);
 
         CliRun run = await fx.Run("instance", "stop", "g-1");
 

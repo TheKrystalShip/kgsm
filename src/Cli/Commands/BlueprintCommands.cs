@@ -1,3 +1,4 @@
+using TheKrystalShip.KGSM.ComponentConfig;
 using System.CommandLine;
 using System.Globalization;
 using TheKrystalShip.KGSM.Cli.Output;
@@ -26,6 +27,7 @@ internal static class BlueprintCommands
     private static Argument<string> Name() =>
         new("blueprint") { Description = "The blueprint's file name without .bp.yaml." };
 
+    [Action("kgsm:library.read", "See the blueprint catalog", DeclaredEffect.Read, DeclaredScope.Cluster)]
     private static Command List(CommandHost host)
     {
         var onlySystem = new Option<bool>("--default") { Description = "Only the blueprints that ship with the engine." };
@@ -48,6 +50,7 @@ internal static class BlueprintCommands
             });
     }
 
+    [Action("kgsm:library.read", "See the blueprint catalog", DeclaredEffect.Read, DeclaredScope.Cluster)]
     private static Command Show(CommandHost host)
     {
         Argument<string> name = Name();
@@ -66,6 +69,7 @@ internal static class BlueprintCommands
             });
     }
 
+    [Action("kgsm:library.read", "See the blueprint catalog", DeclaredEffect.Read, DeclaredScope.Cluster)]
     private static Command Find(CommandHost host)
     {
         Argument<string> name = Name();
@@ -82,6 +86,7 @@ internal static class BlueprintCommands
             });
     }
 
+    [Action("kgsm:library.read", "See the blueprint catalog", DeclaredEffect.Read, DeclaredScope.Cluster)]
     private static Command Validate(CommandHost host)
     {
         var target = new Argument<string>("blueprint") { Description = "A blueprint's file name, or the path of a blueprint file." };
@@ -110,6 +115,7 @@ internal static class BlueprintCommands
             });
     }
 
+    [Action("kgsm:library.read", "See the blueprint catalog", DeclaredEffect.Read, DeclaredScope.Cluster)]
     private static Command Requirements(CommandHost host)
     {
         Argument<string> name = Name();

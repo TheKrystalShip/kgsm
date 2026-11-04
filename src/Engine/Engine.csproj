@@ -21,7 +21,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="TheKrystalShip.KGSM.ComponentConfig" Version="4.2.0" PrivateAssets="all" />
+    <PackageReference Include="TheKrystalShip.KGSM.ComponentConfig" Version="4.3.0" PrivateAssets="all" />
     <PackageReference Include="TheKrystalShip.KGSM.Watchdog.Client" Version="1.0.0-dev.1" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.11" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="10.0.11" />

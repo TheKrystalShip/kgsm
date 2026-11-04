@@ -193,7 +193,7 @@ public class ConfigSetTests
     {
         var fx = OpsFixture.Create();
         var (instance, _) = fx.AddInstance();
-        File.WriteAllText(instance.Layout.TransferLockFile, "t");
+        TransferLock.Place(instance.Layout, "t", autostart: false);
 
         CliRun run = await fx.Run("instance", "config", "set", "g-1", "levelName", "x", "--json");
 
@@ -578,7 +578,7 @@ public class BackupWriteTests
     {
         var fx = OpsFixture.Create();
         var (instance, _) = fx.AddInstance();
-        File.WriteAllText(instance.Layout.TransferLockFile, "t");
+        TransferLock.Place(instance.Layout, "t", autostart: false);
 
         CliRun run = await fx.Run("backup", verb, "g-1", "--yes");
 
@@ -595,7 +595,7 @@ public class BackupWriteTests
         var fx = OpsFixture.Create();
         var (instance, wd) = fx.AddInstance();
         string id = fx.Script.WriteBackup(wd, "g-1", "manual");
-        File.WriteAllText(instance.Layout.TransferLockFile, "t");
+        TransferLock.Place(instance.Layout, "t", autostart: false);
 
         CliRun run = await fx.Run("backup", verb, "g-1", id, "--yes");
 

@@ -60,7 +60,7 @@ public sealed class MoveService(OperationHost host)
         bool rename = FileSystem.SameDevice(instance.WorkingDirectory, Path.GetDirectoryName(destination)!);
         if (!rename) CheckSpace(instance, target);
 
-        bool hadRun = HadRun(instance.Layout);
+        bool hadRun = InstanceHistory.HasRun(instance.Layout);
         string method = rename ? "rename" : "copy";
         bool renamed = false;
 
@@ -166,15 +166,6 @@ public sealed class MoveService(OperationHost host)
                 ExitCodes.InsufficientDisk);
         }
     }
-
-    /// <summary>
-    /// Whether the instance has run: a native one leaves its log (or a rotated one), a container the
-    /// lifecycle record its script appends to when it stops.
-    /// </summary>
-    private static bool HadRun(InstanceLayout layout) =>
-        File.Exists(layout.LogFile)
-        || File.Exists(Path.Combine(layout.EventsDirectory, "lifecycle.ndjson"))
-        || (Directory.Exists(layout.LogsDirectory) && Directory.EnumerateFileSystemEntries(layout.LogsDirectory).Any());
 
     private static void TryDelete(string directory, ILogger log)
     {

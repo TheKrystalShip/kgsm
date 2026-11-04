@@ -208,7 +208,7 @@ public class TransferLockTests
         Assert.Null(TransferLock.Holder(instance.Layout));
         TransferLock.Require(instance, "anything");
 
-        File.WriteAllText(instance.Layout.TransferLockFile, "token-1\n");
+        TransferLock.Place(instance.Layout, "token-1", autostart: false);
 
         Assert.Equal("token-1", TransferLock.Holder(instance.Layout));
         Assert.Throws<TransferLockedException>(() => TransferLock.Require(instance, "start"));
@@ -221,7 +221,7 @@ public class TransferLockTests
     {
         var fx = OpsFixture.Create();
         var (instance, _) = fx.AddInstance();
-        File.WriteAllText(instance.Layout.TransferLockFile, "t");
+        TransferLock.Place(instance.Layout, "t", autostart: false);
 
         CliRun first = await fx.Run("instance", "unlock", "g-1");
         CliRun second = await fx.Run("instance", "unlock", "g-1");

@@ -306,6 +306,22 @@ public sealed record Renamed : InstanceEventData, IEngineEvent<Renamed>
     public static IReadOnlyList<EventField> Fields { get; } = [new("OldDisplayName"), new("NewDisplayName")];
 }
 
+public sealed record AutostartEnabled : InstanceEventData, IEngineEvent<AutostartEnabled>
+{
+    public static EventName Name { get; } = EventName.Parse("server.autostart.enabled");
+    public static EventSubject Subject => EventSubject.Instance;
+    public static EventTraits Traits => EventTraits.Fact();
+    public static JsonTypeInfo<AutostartEnabled> TypeInfo => EngineEventJsonContext.Default.AutostartEnabled;
+}
+
+public sealed record AutostartDisabled : InstanceEventData, IEngineEvent<AutostartDisabled>
+{
+    public static EventName Name { get; } = EventName.Parse("server.autostart.disabled");
+    public static EventSubject Subject => EventSubject.Instance;
+    public static EventTraits Traits => EventTraits.Fact();
+    public static JsonTypeInfo<AutostartDisabled> TypeInfo => EngineEventJsonContext.Default.AutostartDisabled;
+}
+
 public sealed record Exported : InstanceEventData, IEngineEvent<Exported>
 {
     public static EventName Name { get; } = EventName.Parse("server.exported");

@@ -1,3 +1,4 @@
+using TheKrystalShip.KGSM.ComponentConfig;
 using System.CommandLine;
 using TheKrystalShip.KGSM.Cli.Output;
 using TheKrystalShip.KGSM.Engine.Contracts;
@@ -29,13 +30,25 @@ internal static class EngineCommands
                 EngineJsonContext.Default.LaunchPlaceholderReport, report => string.Join('\n', report.Keys))), gated: false));
 
         var config = new Command("config", "The settings the engine runs with.");
-        config.Subcommands.Add(new Command("list", "Every setting, its value and the source that set it.")
+        config.Subcommands.Add(ConfigList(host));
+        config.Subcommands.Add(ConfigGet(host));
+
+        engine.Subcommands.Add(config);
+        return engine;
+    }
+
+    [Action("kgsm:engine.config.read", "Read the engine's settings", DeclaredEffect.Read, DeclaredScope.Node)]
+    private static Command ConfigList(CommandHost host) =>
+        new Command("list", "Every setting, its value and the source that set it.")
             .Act(host, "engine config list", context => Task.FromResult<Outcome>(new Result<IReadOnlyList<EngineSetting>>(
                 SettingsView.List(context.Services.Configuration, context.Services.Paths),
-                EngineJsonContext.Default.IReadOnlyListEngineSetting, Settings))));
+                EngineJsonContext.Default.IReadOnlyListEngineSetting, Settings)));
 
+    [Action("kgsm:engine.config.read", "Read the engine's settings", DeclaredEffect.Read, DeclaredScope.Node)]
+    private static Command ConfigGet(CommandHost host)
+    {
         var key = new Argument<string>("key") { Description = "The setting as Section:Key or Section__Key." };
-        config.Subcommands.Add(new Command("get", "One setting.") { key }
+        return new Command("get", "One setting.") { key }
             .Act(host, "engine config get", context =>
             {
                 string name = context.Parse.GetValue(key)!;
@@ -43,10 +56,7 @@ internal static class EngineCommands
                 return Task.FromResult<Outcome>(setting is null
                     ? Failure.NotFound($"The engine has no setting '{name}'.")
                     : new Result<EngineSetting>(setting, EngineJsonContext.Default.EngineSetting, s => s.Value));
-            }));
-
-        engine.Subcommands.Add(config);
-        return engine;
+            });
     }
 
     public static Outcome Version() => new Result<EngineVersionReport>(

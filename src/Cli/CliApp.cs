@@ -36,6 +36,7 @@ internal static class CliApp
         root.Subcommands.Add(FleetCommands.Library(host));
         root.Subcommands.Add(FleetCommands.Backup(host));
         root.Subcommands.Add(FleetCommands.Port(host));
+        root.Subcommands.Add(TransferCommands.Build(host));
         root.Subcommands.Add(EventCommands.Build(host));
 
         root.SetAction((parse, token) => host.RunAsync(

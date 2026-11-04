@@ -1,3 +1,4 @@
+using TheKrystalShip.KGSM.ComponentConfig;
 using System.CommandLine;
 using System.Globalization;
 using TheKrystalShip.KGSM.Cli.Output;
@@ -30,6 +31,7 @@ internal static class InstanceCommands
         return instance;
     }
 
+    [Action("kgsm:server.read", "See servers", DeclaredEffect.Read, DeclaredScope.Instance)]
     private static Command List(CommandHost host) =>
         new Command("list", "Every registered instance.")
             .Act(host, "instance list", context =>
@@ -52,6 +54,7 @@ internal static class InstanceCommands
                     summaries, EngineJsonContext.Default.IReadOnlyListInstanceSummary, RenderList));
             });
 
+    [Action("kgsm:server.config.write", "Change server settings", DeclaredEffect.Write, DeclaredScope.Instance)]
     private static Command Repair(CommandHost host)
     {
         var reference = new Argument<string>("instance")
@@ -100,6 +103,7 @@ internal static class InstanceCommands
                 ["INSTANCE", "SCRIPT", "DETAIL"],
                 report.Instances.Select(e => new[] { e.Id, e.Outcome.ToString().ToLowerInvariant(), CommandBuilder.Text(e.Detail) }));
 
+    [Action("kgsm:server.read", "See servers", DeclaredEffect.Read, DeclaredScope.Instance)]
     private static Command Show(CommandHost host)
     {
         Argument<string> reference = CommandBuilder.InstanceArgument();
@@ -130,6 +134,7 @@ internal static class InstanceCommands
             });
     }
 
+    [Action("kgsm:server.read", "See servers", DeclaredEffect.Read, DeclaredScope.Instance)]
     private static Command Status(CommandHost host)
     {
         Argument<string> reference = CommandBuilder.InstanceArgument();
@@ -146,6 +151,7 @@ internal static class InstanceCommands
             });
     }
 
+    [Action("kgsm:server.console.read", "Read consoles", DeclaredEffect.Read, DeclaredScope.Instance)]
     private static Command Logs(CommandHost host)
     {
         Argument<string> reference = CommandBuilder.InstanceArgument();
@@ -230,6 +236,7 @@ internal static class InstanceCommands
         return new Streamed(0);
     }
 
+    [Action("kgsm:server.config.read", "Read server settings", DeclaredEffect.Read, DeclaredScope.Instance)]
     private static Command Config(CommandHost host)
     {
         var config = new Command("config", "An instance's configuration.");

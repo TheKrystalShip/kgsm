@@ -1,4 +1,5 @@
 using TheKrystalShip.KGSM.Engine.Instances;
+using TheKrystalShip.KGSM.Engine.Contracts.Events;
 using TheKrystalShip.KGSM.Engine.Contracts.Instances;
 using TheKrystalShip.KGSM.Engine.Contracts.Operations;
 using TheKrystalShip.KGSM.Engine.Contracts.Reports;
@@ -26,6 +27,9 @@ public sealed class InstanceAdminService(OperationHost host)
                 : await host.Watchdog.DisableAsync(instance.Id, cancellationToken).ConfigureAwait(false);
             if (!result.Ok) throw new OperationException(ErrorCodes.Failed, $"the watchdog refused: {result.Message}");
 
+            if (enable) host.Events.Append(new AutostartEnabled { InstanceName = instance.Id });
+            else host.Events.Append(new AutostartDisabled { InstanceName = instance.Id });
+
             return new ActionReport
             {
                 Action = enable ? "enable" : "disable",
@@ -39,17 +43,21 @@ public sealed class InstanceAdminService(OperationHost host)
         }
     }
 
-    /// <summary>Releases the lock a transfer left on an instance.</summary>
-    public ActionReport Unlock(InstanceDescription instance)
+    /// <summary>Releases the lock a transfer left on an instance and restores the autostart flag the lock switched off.</summary>
+    /// <param name="instance">The instance.</param>
+    /// <param name="token">The holder's token; null releases the lock whoever holds it.</param>
+    /// <param name="cancellationToken">Cancellation of the command.</param>
+    public async Task<ActionReport> UnlockAsync(InstanceDescription instance, string? token, CancellationToken cancellationToken)
     {
         Guards.Online(instance, "unlock");
         using IDisposable held = host.Locks.AcquireInstance(instance.Id);
 
+        bool released = await new TransferLocking(host).ReleaseAsync(instance, token, cancellationToken).ConfigureAwait(false);
         return new ActionReport
         {
             Action = "unlock",
             Subject = instance.Id,
-            Message = TransferLock.Release(instance.Layout) ? "the transfer lock is released" : "the instance was not locked",
+            Message = released ? "the transfer lock is released" : "the instance was not locked",
         };
     }
 }

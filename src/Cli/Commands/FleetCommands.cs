@@ -1,3 +1,4 @@
+using TheKrystalShip.KGSM.ComponentConfig;
 using System.CommandLine;
 using System.Globalization;
 using TheKrystalShip.KGSM.Cli.Output;
@@ -18,22 +19,34 @@ internal static class FleetCommands
     public static Command Library(CommandHost host)
     {
         var library = new Command("library", "Storage roots instances are placed in.");
-        library.Subcommands.Add(new Command("list", "Every library with its state, free and total bytes, and instance count.")
+        library.Subcommands.Add(LibraryList(host));
+        FleetWriteCommands.AddLibraryVerbs(library, host);
+        return library;
+    }
+
+    [Action("kgsm:server.read", "See servers", DeclaredEffect.Read, DeclaredScope.Instance)]
+    private static Command LibraryList(CommandHost host) =>
+        new Command("list", "Every library with its state, free and total bytes, and instance count.")
             .Act(host, "library list", context =>
             {
                 IReadOnlyList<Library> libraries = context.Services.Libraries.List(context.Services.Instances.Registered());
                 return Task.FromResult<Outcome>(new Result<IReadOnlyList<Library>>(
                     libraries, EngineJsonContext.Default.IReadOnlyListLibrary, RenderLibraries));
-            }));
-        FleetWriteCommands.AddLibraryVerbs(library, host);
-        return library;
-    }
+            });
 
     public static Command Backup(CommandHost host)
     {
         var backup = new Command("backup", "Instance backups.");
+        backup.Subcommands.Add(BackupList(host));
+        FleetWriteCommands.AddBackupVerbs(backup, host);
+        return backup;
+    }
+
+    [Action("kgsm:server.backups.read", "See backups", DeclaredEffect.Read, DeclaredScope.Instance)]
+    private static Command BackupList(CommandHost host)
+    {
         Argument<string> reference = CommandBuilder.InstanceArgument();
-        backup.Subcommands.Add(new Command("list", "An instance's backups, newest first.") { reference }
+        return new Command("list", "An instance's backups, newest first.") { reference }
             .Act(host, "backup list", context =>
             {
                 InstanceDescription? instance = CommandBuilder.Resolve(context, context.Parse.GetValue(reference)!, out Outcome? failure);
@@ -43,33 +56,36 @@ internal static class FleetCommands
 
                 BackupListing listing = BackupReader.List(instance.Config.BackupsDirectory);
                 return Task.FromResult<Outcome>(new Result<BackupListing>(listing, EngineJsonContext.Default.BackupListing, RenderBackups));
-            }));
-        FleetWriteCommands.AddBackupVerbs(backup, host);
-        return backup;
+            });
     }
 
     public static Command Port(CommandHost host)
     {
         var port = new Command("port", "Ports instances declare.");
+        port.Subcommands.Add(PortList(host));
+        port.Subcommands.Add(PortConflicts(host));
+        return port;
+    }
 
-        port.Subcommands.Add(new Command("list", "Every port range every instance declares.")
+    [Action("kgsm:server.read", "See servers", DeclaredEffect.Read, DeclaredScope.Instance)]
+    private static Command PortList(CommandHost host) =>
+        new Command("list", "Every port range every instance declares.")
             .Act(host, "port list", context =>
             {
                 IReadOnlyList<PortUse> used = PortSpecs.Used(context.Services.Instances.List());
                 return Task.FromResult<Outcome>(new Result<IReadOnlyList<PortUse>>(
                     used, EngineJsonContext.Default.IReadOnlyListPortUse, RenderUsed));
-            }));
+            });
 
-        port.Subcommands.Add(new Command("conflicts", "Instances whose declared ports overlap.")
+    [Action("kgsm:server.read", "See servers", DeclaredEffect.Read, DeclaredScope.Instance)]
+    private static Command PortConflicts(CommandHost host) =>
+        new Command("conflicts", "Instances whose declared ports overlap.")
             .Act(host, "port conflicts", context =>
             {
                 IReadOnlyList<PortConflict> conflicts = PortSpecs.Conflicts(PortSpecs.Used(context.Services.Instances.List()));
                 return Task.FromResult<Outcome>(new Result<IReadOnlyList<PortConflict>>(
                     conflicts, EngineJsonContext.Default.IReadOnlyListPortConflict, RenderConflicts));
-            }));
-
-        return port;
-    }
+            });
 
     private static string RenderLibraries(IReadOnlyList<Library> libraries) => libraries.Count == 0
         ? "No libraries are registered."

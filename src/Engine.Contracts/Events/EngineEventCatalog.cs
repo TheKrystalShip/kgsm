@@ -50,6 +50,8 @@ public static class EngineEventCatalog
         Describe<UpdateAvailable>(),
         Describe<Moved>(),
         Describe<Renamed>(),
+        Describe<AutostartEnabled>(),
+        Describe<AutostartDisabled>(),
         Describe<Exported>(),
         Describe<Imported>(),
         Describe<BackupStarted>(),

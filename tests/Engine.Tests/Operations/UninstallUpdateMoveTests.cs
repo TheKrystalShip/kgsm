@@ -203,7 +203,7 @@ public class UninstallTests
     {
         var fx = OpsFixture.Create();
         var (instance, _) = fx.AddInstance();
-        File.WriteAllText(instance.Layout.TransferLockFile, "token-1\n");
+        TransferLock.Place(instance.Layout, "token-1", autostart: false);
 
         CliRun other = await fx.Run("instance", "uninstall", "g-1", "--yes", "--transfer-token", "token-2", "--json");
         CliRun held = await fx.Run("instance", "uninstall", "g-1", "--yes", "--json");
@@ -329,7 +329,7 @@ public class UpdateTests
     {
         var fx = OpsFixture.Create();
         var (instance, _) = fx.AddInstance();
-        File.WriteAllText(instance.Layout.TransferLockFile, "t");
+        TransferLock.Place(instance.Layout, "t", autostart: false);
 
         CliRun run = await fx.Run("instance", "update", "g-1");
 
@@ -491,7 +491,7 @@ public class MoveTests
         CliRun same = await fx.Run("instance", "move", "g-1", "main");
         CliRun offline = await fx.Run("instance", "move", "g-1", "away");
         CliRun unknown = await fx.Run("instance", "move", "g-1", "nowhere");
-        File.WriteAllText(instance.Layout.TransferLockFile, "t");
+        TransferLock.Place(instance.Layout, "t", autostart: false);
         fx.Sandbox.AddLibrary("other");
         CliRun locked = await fx.Run("instance", "move", "g-1", "other");
 

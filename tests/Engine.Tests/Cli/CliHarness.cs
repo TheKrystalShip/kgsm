@@ -1,5 +1,6 @@
 using TheKrystalShip.KGSM.Cli;
 using TheKrystalShip.KGSM.Engine.Accounts;
+using TheKrystalShip.KGSM.Engine.Contracts.Reports;
 using TheKrystalShip.KGSM.Engine.Blueprints;
 using TheKrystalShip.KGSM.Engine.Operations;
 using TheKrystalShip.KGSM.Engine.Settings;
@@ -48,16 +49,31 @@ internal sealed class FakeWatchdog : IWatchdogControl
         return Task.FromResult(StopResult with { Instance = instance });
     }
 
+    /// <summary>The boot-autostart set.</summary>
+    public HashSet<string> Autostart { get; } = [];
+
+    /// <summary>Whether enabling is refused.</summary>
+    public bool RefuseEnable { get; set; }
+
     public Task<ActionResult> EnableAsync(string instance, CancellationToken cancellationToken)
     {
         Actions.Add($"enable {instance}");
+        if (RefuseEnable) return Task.FromResult(new ActionResult(instance, false, "refused"));
+        Autostart.Add(instance);
         return Task.FromResult(new ActionResult(instance, true, "enabled"));
     }
 
     public Task<ActionResult> DisableAsync(string instance, CancellationToken cancellationToken)
     {
         Actions.Add($"disable {instance}");
+        Autostart.Remove(instance);
         return Task.FromResult(new ActionResult(instance, true, "disabled"));
+    }
+
+    public Task<IReadOnlyList<string>> EnabledAsync(CancellationToken cancellationToken)
+    {
+        if (ThrowOnStatus) throw new WatchdogUnavailableException("the watchdog went away");
+        return Task.FromResult<IReadOnlyList<string>>([.. Autostart.Order(StringComparer.Ordinal)]);
     }
 
     public Task<ActionResult> ForgetAsync(string instance, CancellationToken cancellationToken)
@@ -106,6 +122,84 @@ internal sealed class FakeContainers : IContainerRuntime
         Task.FromResult(Logs);
 
     public Task<int> FollowAsync(string composeFile, int lines, CancellationToken cancellationToken) => Task.FromResult(0);
+}
+
+/// <summary>
+/// A container runtime's images that answer what a test tells them to. A saved image is the text
+/// <c>reference|chain|size</c>, and loading reads that text back under an id of the loading runtime's own,
+/// as a second runtime would, so a stream a test damages loads as something else or not at all.
+/// </summary>
+internal sealed class FakeImages : IImageStore
+{
+    public Dictionary<string, ImageInfo> Held { get; } = new(StringComparer.Ordinal);
+
+    /// <summary>The references each compose file resolves to.</summary>
+    public Dictionary<string, string[]> Compose { get; } = new(StringComparer.Ordinal);
+
+    public long? Free { get; set; }
+
+    public bool RemoveFails { get; set; }
+
+    public List<string> Calls { get; } = [];
+
+    public List<string> Removed { get; } = [];
+
+    public ImageInfo Add(string reference, string chain, long size = 100)
+    {
+        var image = new ImageInfo("local-" + chain, size, chain);
+        Held[reference] = image;
+        return image;
+    }
+
+    public Task<IReadOnlyList<string>> ReferencedByAsync(string composeFile, string workingDirectory, CancellationToken cancellationToken)
+    {
+        Calls.Add($"references {Path.GetFileName(composeFile)}");
+        return Compose.TryGetValue(composeFile, out string[]? references)
+            ? Task.FromResult<IReadOnlyList<string>>(references)
+            : throw new OperationException(ErrorCodes.Failed, $"the container runtime cannot resolve the images of {composeFile}");
+    }
+
+    public Task<ImageInfo?> InspectAsync(string reference, CancellationToken cancellationToken)
+    {
+        Calls.Add($"inspect {reference}");
+        ImageInfo? found = Held.TryGetValue(reference, out ImageInfo? byReference) ? byReference : Held.Values.FirstOrDefault(i => i.Id == reference);
+        return Task.FromResult(found);
+    }
+
+    public async Task SaveAsync(string reference, Stream destination, CancellationToken cancellationToken)
+    {
+        Calls.Add($"save {reference}");
+        ImageInfo image = Held[reference];
+        await destination.WriteAsync(System.Text.Encoding.UTF8.GetBytes($"{reference}|{image.Chain}|{image.Size}"), cancellationToken);
+    }
+
+    public async Task LoadAsync(Stream source, CancellationToken cancellationToken)
+    {
+        Calls.Add("load");
+        using var reader = new StreamReader(source, System.Text.Encoding.UTF8, leaveOpen: true);
+        string[] fields = (await reader.ReadToEndAsync(cancellationToken)).Split('|');
+        if (fields.Length != 3 || !long.TryParse(fields[2], out long size)) throw new OperationException(ErrorCodes.Failed, "docker load failed: not an image");
+        Held[fields[0]] = new ImageInfo("loaded-" + fields[1], size, fields[1]);
+    }
+
+    public Task TagAsync(string imageId, string reference, CancellationToken cancellationToken)
+    {
+        Calls.Add($"tag {imageId} {reference}");
+        Held[reference] = Held.Values.First(i => i.Id == imageId);
+        return Task.CompletedTask;
+    }
+
+    public Task<bool> RemoveAsync(string idOrReference, CancellationToken cancellationToken)
+    {
+        Calls.Add($"remove {idOrReference}");
+        if (RemoveFails) return Task.FromResult(false);
+
+        foreach (string key in Held.Where(h => h.Key == idOrReference || h.Value.Id == idOrReference).Select(h => h.Key).ToList()) Held.Remove(key);
+        Removed.Add(idOrReference);
+        return Task.FromResult(true);
+    }
+
+    public Task<long?> FreeBytesAsync(CancellationToken cancellationToken) => Task.FromResult(Free);
 }
 
 /// <summary>Runs no program: it records each call and answers what a test scripts.</summary>
@@ -184,6 +278,16 @@ internal sealed class CliSession
 
     public FakeFirewall Firewall { get; } = new();
 
+    public FakeImages Images { get; } = new();
+
+    /// <summary>What a command streams out as raw bytes.</summary>
+    public MemoryStream RawStdout { get; set; } = new();
+
+    /// <summary>What a command streams in as raw bytes.</summary>
+    public Stream RawStdin { get; set; } = new MemoryStream();
+
+    public string? EngineVersion { get; set; }
+
     public bool Interactive { get; set; }
 
     public Func<string, bool>? Ask { get; set; }
@@ -220,6 +324,10 @@ internal sealed class CliSession
             Requirements = Requirements,
             Processes = Processes,
             Firewall = Firewall,
+            Images = Images,
+            RawStdout = RawStdout,
+            RawStdin = RawStdin,
+            EngineVersion = EngineVersion,
             BinaryPath = "/test/bin/kgsm",
             Interactive = Interactive,
             Ask = Ask,

@@ -14,6 +14,17 @@ using TheKrystalShip.KGSM.ComponentConfig;
 
 [assembly: ConfigSectionAssembly("TheKrystalShip.KGSM.Engine")]
 
+// The engine's actions are the `kgsm` namespace, declared on the commands that perform them. The engine
+// enforces none of them: whoever calls it checks the person on whose behalf it acts. A caller names an
+// action by the constants the build writes into the contracts package.
+[assembly: ExtraActionNamespace("kgsm")]
+
+// Actions with no command of the engine behind them: the node's API performs them against what the
+// engine leaves on disk, and the Control Panel edits the engine's settings file through the descriptor.
+[assembly: Action("kgsm:server.files.read", "Read server files", DeclaredEffect.Read, DeclaredScope.Instance)]
+[assembly: Action("kgsm:server.files.write", "Change server files", DeclaredEffect.Write, DeclaredScope.Instance)]
+[assembly: Action("kgsm:engine.config.write", "Change the engine's settings", DeclaredEffect.Write, DeclaredScope.Node)]
+
 [assembly: ConfigGroup("libraries", "Libraries", 1)]
 [assembly: ConfigGroup("instances", "Instance defaults", 2)]
 [assembly: ConfigGroup("backups", "Backups", 3)]

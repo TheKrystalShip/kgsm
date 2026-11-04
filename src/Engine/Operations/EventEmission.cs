@@ -85,6 +85,8 @@ public static class EventEmission
             "server.update.available" => recorder.Append(new UpdateAvailable { InstanceName = subject, CurrentVersion = Text("CurrentVersion"), LatestVersion = Text("LatestVersion") }),
             "server.moved" => recorder.Append(new Moved { InstanceName = subject, FromLibrary = Text("FromLibrary"), ToLibrary = Text("ToLibrary") }),
             "server.renamed" => recorder.Append(new Renamed { InstanceName = subject, OldDisplayName = Text("OldDisplayName"), NewDisplayName = Text("NewDisplayName") }),
+            "server.autostart.enabled" => recorder.Append(new AutostartEnabled { InstanceName = subject }),
+            "server.autostart.disabled" => recorder.Append(new AutostartDisabled { InstanceName = subject }),
             "server.exported" => recorder.Append(new Exported { InstanceName = subject }),
             "server.imported" => recorder.Append(new Imported { InstanceName = subject, Blueprint = Text("Blueprint"), Library = Text("Library") }),
             "backup.started" => recorder.Append(new BackupStarted { InstanceName = subject }),
