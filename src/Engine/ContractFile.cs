@@ -56,7 +56,11 @@ internal static class ContractFile
     /// Writes a file whole: the content is staged beside it and renamed into place, so a reader sees the old
     /// file or the new one and never a partial.
     /// </summary>
-    public static void Write<T>(string path, T value, JsonTypeInfo<T> typeInfo)
+    public static void Write<T>(string path, T value, JsonTypeInfo<T> typeInfo) =>
+        WriteBytes(path, JsonSerializer.SerializeToUtf8Bytes(value, typeInfo));
+
+    /// <summary>Writes already-serialized content the way <see cref="Write{T}"/> does.</summary>
+    public static void WriteBytes(string path, byte[] content)
     {
         string directory = Path.GetDirectoryName(Path.GetFullPath(path))!;
         Directory.CreateDirectory(directory);
@@ -64,7 +68,7 @@ internal static class ContractFile
         string staged = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
         try
         {
-            File.WriteAllBytes(staged, JsonSerializer.SerializeToUtf8Bytes(value, typeInfo));
+            File.WriteAllBytes(staged, content);
             File.Move(staged, path, overwrite: true);
         }
         finally

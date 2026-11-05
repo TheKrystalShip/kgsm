@@ -127,6 +127,15 @@ public sealed record InstanceConfig
 
     public required bool CompressBackups { get; init; }
 
+    /// <summary>The operator's free-text note about the server (mods, rules, a heads-up before joining); null when none is set.</summary>
+    public string? Note { get; init; }
+
+    /// <summary>Who wrote the note last, as <c>provider:name</c>, taken from the engine's actor; null with no note.</summary>
+    public string? NoteUpdatedBy { get; init; }
+
+    /// <summary>When the note was last written.</summary>
+    public DateTimeOffset? NoteUpdatedAt { get; init; }
+
     /// <summary>What a display shows: the display name, or the id when none is set.</summary>
     public string Label => string.IsNullOrEmpty(DisplayName) ? Name : DisplayName;
 }

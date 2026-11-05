@@ -13,6 +13,44 @@ namespace TheKrystalShip.KGSM.Engine.Network;
 public static class PortSpecs
 {
     /// <summary>
+    /// The spec with its primary port replaced. The primary port is the start of the first pipe-separated
+    /// token; every start, and every range end, equal to it becomes <paramref name="port"/>, so a tcp and udp
+    /// pair on one port moves together while protocols, ranges and distinct secondary ports stay. An empty
+    /// spec becomes just the port.
+    /// </summary>
+    public static string OverridePrimary(string? spec, int port)
+    {
+        string replacement = port.ToString(CultureInfo.InvariantCulture);
+        if (string.IsNullOrEmpty(spec)) return replacement;
+
+        string? primary = null;
+        var rebuilt = new List<string>();
+        foreach (string token in spec.Split('|'))
+        {
+            string protocol = string.Empty;
+            string range = token;
+            int slash = token.IndexOf('/', StringComparison.Ordinal);
+            if (slash >= 0)
+            {
+                protocol = token[slash..];
+                range = token[..slash];
+            }
+
+            int colon = range.IndexOf(':', StringComparison.Ordinal);
+            string start = colon < 0 ? range : range[..colon];
+            string end = colon < 0 ? string.Empty : range[(colon + 1)..];
+
+            primary ??= start;
+            if (start == primary) start = replacement;
+            if (end.Length > 0 && end == primary) end = replacement;
+
+            rebuilt.Add((end.Length > 0 ? $"{start}:{end}" : start) + protocol);
+        }
+
+        return string.Join('|', rebuilt);
+    }
+
+    /// <summary>
     /// Parses a spec. A token that is not a port range is left out: the engine writes the spec itself and
     /// checks it at install, so a stray token is not a reason to refuse a read.
     /// </summary>

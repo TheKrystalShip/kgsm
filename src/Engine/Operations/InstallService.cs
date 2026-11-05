@@ -10,6 +10,7 @@ using TheKrystalShip.KGSM.Engine.Contracts.Operations;
 using TheKrystalShip.KGSM.Engine.Contracts.Reports;
 using TheKrystalShip.KGSM.Engine.Instances;
 using TheKrystalShip.KGSM.Engine.Libraries;
+using TheKrystalShip.KGSM.Engine.Network;
 using TheKrystalShip.KGSM.Engine.Scripts;
 
 namespace TheKrystalShip.KGSM.Engine.Operations;
@@ -22,9 +23,10 @@ namespace TheKrystalShip.KGSM.Engine.Operations;
 /// <param name="Version">The version to install; the latest when null.</param>
 /// <param name="Start">Whether to start the instance once it is installed.</param>
 /// <param name="SkipSpaceCheck">Downgrades a shortage of disk to a warning.</param>
+/// <param name="Port">Replaces the blueprint's primary game port (1 to 65535); null keeps the blueprint's ports.</param>
 public sealed record InstallRequest(
     string Blueprint, string? Id = null, string? DisplayName = null, string? Library = null,
-    string? Version = null, bool Start = false, bool SkipSpaceCheck = false);
+    string? Version = null, bool Start = false, bool SkipSpaceCheck = false, int? Port = null);
 
 /// <summary>
 /// Installs an instance. Everything that can be refused is refused before anything is created. From the
@@ -40,6 +42,8 @@ public sealed class InstallService(OperationHost host)
     {
         ILogger log = host.Logger("install");
 
+        if (request.Port is { } requested && requested is < 1 or > 65535)
+            throw OperationException.Invalid($"--port {request.Port} is not a port: 1 to 65535");
         if (request.Id is not null && !InstanceIds.IsValid(request.Id))
             throw OperationException.Invalid($"'{request.Id}' is not an instance id: letters, digits, '.', '_' and '-', starting with a letter or digit, at most {InstanceIds.MaxLength} characters");
         if (!BlueprintParser.IsValidName(request.Blueprint))
@@ -83,6 +87,7 @@ public sealed class InstallService(OperationHost host)
         InstanceConfig config = InstanceConfigFactory.Create(
             blueprint, host.Settings, id, displayName, backupsDirectory, host.Clock.GetUtcNow(),
             Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16)));
+        if (request.Port is { } port) config = config with { Ports = PortSpecs.OverridePrimary(config.Ports, port) };
         var layout = new InstanceLayout(workingDirectory, id, config.ExecutableSubdirectory);
         HookFile? hooks = blueprint.Runtime == BlueprintRuntime.Native ? HookFiles.Find(host.Paths, blueprint.Name) : null;
         string script = ScriptGenerator.Render(config, hooks, host.Settings.Watchdog.Socket);

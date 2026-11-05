@@ -25,8 +25,38 @@ internal static class InstanceWriteCommands
         instance.Subcommands.Add(Update(host));
         instance.Subcommands.Add(CheckUpdate(host));
         instance.Subcommands.Add(Unlock(host));
+        instance.Subcommands.Add(Note(host));
         instance.Subcommands.Add(Console(host));
     }
+
+    [Action("kgsm:server.config.write", "Change server settings", DeclaredEffect.Write, DeclaredScope.Instance)]
+    private static Command Note(CommandHost host)
+    {
+        var note = new Command("note", "An instance's note.");
+
+        Argument<string> setReference = CommandBuilder.InstanceArgument();
+        var text = new Argument<string[]>("text") { Description = "The note; several words are joined with spaces.", Arity = ArgumentArity.OneOrMore };
+        note.Subcommands.Add(new Command("set", "Write the note; the author is the actor and the time is now.") { setReference, text }
+            .ActOnInstance(host, "instance note set", setReference, (context, instance) =>
+            {
+                NoteReport report = new InstanceAdminService(context.Services.Operations)
+                    .SetNote(instance, string.Join(' ', context.Parse.GetValue(text)!));
+                return Task.FromResult<Outcome>(new Result<NoteReport>(report, EngineJsonContext.Default.NoteReport, RenderNote));
+            }));
+
+        Argument<string> clearReference = CommandBuilder.InstanceArgument();
+        note.Subcommands.Add(new Command("clear", "Remove the note.") { clearReference }
+            .ActOnInstance(host, "instance note clear", clearReference, (context, instance) =>
+            {
+                NoteReport report = new InstanceAdminService(context.Services.Operations).SetNote(instance, null);
+                return Task.FromResult<Outcome>(new Result<NoteReport>(report, EngineJsonContext.Default.NoteReport, RenderNote));
+            }));
+
+        return note;
+    }
+
+    private static string RenderNote(NoteReport report) =>
+        report.Note is null ? $"{report.Instance}: no note" : $"{report.Instance}: note by {report.UpdatedBy ?? "nobody named"} at {report.UpdatedAt:u}\n{report.Note}";
 
     [Action("kgsm:server.config.write", "Change server settings", DeclaredEffect.Write, DeclaredScope.Instance)]
     [Action("kgsm:server.windows.write", "Change maintenance windows", DeclaredEffect.Write, DeclaredScope.Instance)]
@@ -61,13 +91,14 @@ internal static class InstanceWriteCommands
         var version = new Option<string>("--game-version") { Description = "The game version to install; the latest when omitted." };
         var start = new Option<bool>("--start") { Description = "Start the instance once it is installed." };
         var skip = new Option<bool>("--skip-space-check") { Description = "Install even when the library has less room than the blueprint asks for." };
+        var port = new Option<int?>("--port") { Description = "Replace the blueprint's primary game port (1 to 65535)." };
 
-        return new Command("install", "Install an instance from a blueprint.") { blueprint, id, name, library, version, start, skip }
+        return new Command("install", "Install an instance from a blueprint.") { blueprint, id, name, library, version, start, skip, port }
             .Act(host, "instance install", async context =>
             {
                 var request = new InstallRequest(
                     context.Parse.GetValue(blueprint)!, context.Parse.GetValue(id), context.Parse.GetValue(name),
-                    context.Parse.GetValue(library), context.Parse.GetValue(version), context.Parse.GetValue(start), context.Parse.GetValue(skip));
+                    context.Parse.GetValue(library), context.Parse.GetValue(version), context.Parse.GetValue(start), context.Parse.GetValue(skip), context.Parse.GetValue(port));
 
                 InstallReport report = await new InstallService(context.Services.Operations).InstallAsync(request, context.Cancellation).ConfigureAwait(false);
                 return new Result<InstallReport>(report, EngineJsonContext.Default.InstallReport, RenderInstall);

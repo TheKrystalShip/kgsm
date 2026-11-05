@@ -242,3 +242,31 @@ public sealed record JournalVerifyReport
     [JsonIgnore]
     public bool WellFormed => Problems.Count == 0;
 }
+
+/// <summary>An instance's note after a write.</summary>
+public sealed record NoteReport
+{
+    public required string Instance { get; init; }
+
+    /// <summary>The stored note; null once cleared.</summary>
+    public string? Note { get; init; }
+
+    /// <summary>Who the engine recorded as the author, from its actor.</summary>
+    public string? UpdatedBy { get; init; }
+
+    public DateTimeOffset? UpdatedAt { get; init; }
+
+    public required bool Changed { get; init; }
+}
+
+/// <summary>A listening socket on the host.</summary>
+public sealed record ListeningPort
+{
+    public required int Port { get; init; }
+
+    /// <summary><c>tcp</c> or <c>udp</c>.</summary>
+    public required string Protocol { get; init; }
+
+    /// <summary>The process that holds it, where /proc allowed the engine to see it; null when unknown, never guessed.</summary>
+    public string? Process { get; init; }
+}

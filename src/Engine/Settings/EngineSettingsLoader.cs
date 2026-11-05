@@ -33,14 +33,35 @@ public static class EngineSettingsLoader
     /// <param name="environment">The environment to read; a name with <c>__</c> maps to a configuration key.</param>
     /// <exception cref="EngineFormatException">A settings file is not valid JSON.</exception>
     /// <exception cref="InvalidSettingsException">A value is below its floor or unreadable.</exception>
-    public static EngineConfiguration Load(EnginePaths paths, IReadOnlyDictionary<string, string?> environment)
+    public static EngineConfiguration Load(EnginePaths paths, IReadOnlyDictionary<string, string?> environment) =>
+        Load(paths, environment, userSettings: null);
+
+    /// <summary>
+    /// The problems the settings would have if the person's file held <paramref name="userSettings"/>; empty
+    /// when they would be valid. Nothing is written.
+    /// </summary>
+    public static IReadOnlyList<string> Check(EnginePaths paths, IReadOnlyDictionary<string, string?> environment, byte[] userSettings)
+    {
+        try
+        {
+            Load(paths, environment, userSettings);
+            return [];
+        }
+        catch (InvalidSettingsException ex)
+        {
+            return ex.Problems;
+        }
+    }
+
+    private static EngineConfiguration Load(EnginePaths paths, IReadOnlyDictionary<string, string?> environment, byte[]? userSettings)
     {
         ArgumentNullException.ThrowIfNull(paths);
         ArgumentNullException.ThrowIfNull(environment);
 
         var builder = new ConfigurationBuilder();
         AddFile(builder, paths.SystemSettingsFile);
-        AddFile(builder, paths.UserSettingsFile);
+        if (userSettings is null) AddFile(builder, paths.UserSettingsFile);
+        else builder.Add(new JsonBytesSource(paths.UserSettingsFile, userSettings));
         builder.AddInMemoryCollection(EnvironmentKeys(environment));
 
         IConfigurationRoot configuration = builder.Build();

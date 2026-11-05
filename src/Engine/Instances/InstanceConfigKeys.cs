@@ -74,6 +74,9 @@ public static class InstanceConfigKeys
         Text("unbanCommand", c => c.UnbanCommand, (c, v) => c with { UnbanCommand = v }),
         Text("broadcastCommand", c => c.BroadcastCommand, (c, v) => c with { BroadcastCommand = v }),
         Bool("compressBackups", c => c.CompressBackups, (c, v) => c with { CompressBackups = v }),
+        Fixed("note", "string", c => c.Note),
+        Fixed("noteUpdatedBy", "string", c => c.NoteUpdatedBy),
+        Fixed("noteUpdatedAt", "datetime", c => c.NoteUpdatedAt?.ToString("yyyy-MM-ddTHH:mm:sszzz", CultureInfo.InvariantCulture)),
     ];
 
     /// <summary>The key by its JSON name, or null when the config has none by that name.</summary>

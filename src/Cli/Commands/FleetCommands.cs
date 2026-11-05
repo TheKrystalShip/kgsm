@@ -64,6 +64,7 @@ internal static class FleetCommands
         var port = new Command("port", "Ports instances declare.");
         port.Subcommands.Add(PortList(host));
         port.Subcommands.Add(PortConflicts(host));
+        port.Subcommands.Add(PortListening(host));
         return port;
     }
 
@@ -75,6 +76,19 @@ internal static class FleetCommands
                 IReadOnlyList<PortUse> used = PortSpecs.Used(context.Services.Instances.List());
                 return Task.FromResult<Outcome>(new Result<IReadOnlyList<PortUse>>(
                     used, EngineJsonContext.Default.IReadOnlyListPortUse, RenderUsed));
+            });
+
+    [Action("kgsm:server.read", "See servers", DeclaredEffect.Read, DeclaredScope.Instance)]
+    private static Command PortListening(CommandHost host) =>
+        new Command("listening", "Every port the host is listening on, with the process that holds it where it can be seen.")
+            .Act(host, "port listening", _ =>
+            {
+                IReadOnlyList<Engine.Contracts.Operations.ListeningPort> listening = HostSockets.Listening();
+                return Task.FromResult<Outcome>(new Result<IReadOnlyList<Engine.Contracts.Operations.ListeningPort>>(
+                    listening, EngineJsonContext.Default.IReadOnlyListListeningPort,
+                    ports => ports.Count == 0
+                        ? "Nothing is listening."
+                        : Table.Render(["PORT", "PROTOCOL", "PROCESS"], ports.Select(p => new[] { Span(p.Port, p.Port), p.Protocol, CommandBuilder.Text(p.Process) }))));
             });
 
     [Action("kgsm:server.read", "See servers", DeclaredEffect.Read, DeclaredScope.Instance)]

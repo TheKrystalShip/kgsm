@@ -34,3 +34,18 @@ public sealed record EngineSetting
 
     public required SettingSource Source { get; init; }
 }
+
+/// <summary>What setting one engine setting did.</summary>
+public sealed record SettingSetReport
+{
+    public required string Key { get; init; }
+
+    /// <summary>What the person's settings file now holds for the key.</summary>
+    public required string Stored { get; init; }
+
+    /// <summary>Whether the file changed.</summary>
+    public required bool Changed { get; init; }
+
+    /// <summary>The setting as the engine now resolves it; an environment variable still wins over the file.</summary>
+    public required EngineSetting Effective { get; init; }
+}

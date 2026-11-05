@@ -184,6 +184,12 @@ public sealed class EngineReader : IDisposable
 
     public IReadOnlyList<PortConflict> PortConflicts() => PortSpecs.Conflicts(PortSpecs.Used(Store.List()));
 
+    /// <summary>
+    /// The ports the host is listening on, TCP and UDP, each once, with the process that holds it where
+    /// the caller may see it and unknown otherwise.
+    /// </summary>
+    public IReadOnlyList<Contracts.Operations.ListeningPort> ListeningPorts() => HostSockets.Listening();
+
     public void Dispose() => _loggers.Dispose();
 
     private static IReadOnlyDictionary<string, string?> ProcessEnvironment() =>

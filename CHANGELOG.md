@@ -192,6 +192,24 @@ bash tree, which it does not touch. The bash engine's `KGSM_VERSION` does not mo
     blueprint and a manifest on standard input, a transfer part as a stream. `IEngineProcess` is its door to
     the operating system.
 
+- **What the consumers needed (`engine-v4.0.0-dev.8`).**
+  - `instance note set <instance> <text>` and `instance note clear <instance>` keep an instance's note in its
+    config (`note`, `noteUpdatedBy`, `noteUpdatedAt`). The body is plain text, at most 600 characters after
+    control characters are dropped; the author is the engine's actor and the time its clock, never the caller's
+    word. The note keys are protected from `config set`.
+  - `instance install --port <1-65535>` replaces the blueprint's primary game port: every start, and every
+    range end, equal to the first token's start becomes the port, so a tcp and udp pair on one port moves
+    together and secondary ports stay.
+  - `port listening` and `EngineReader.ListeningPorts()` list the host's listening TCP and UDP ports from
+    `/proc/net`, each with the process that holds it where `/proc/<pid>/fd` is readable and none otherwise.
+  - `engine config set <Section:Key> <value>` writes the person's settings file, holding only what was set. A
+    value is checked against its key's type and the engine's floors before anything is written; the report
+    names the effective value and the source that wins, since an environment variable still overrides the file.
+  - `BlueprintScaffold` renders a native blueprint draft (`NativeBlueprintDraft`) into the blueprint YAML and
+    reads such a file back, so the blueprint format is written in one place.
+  - `EngineCli.VersionAsync` reports the deployed binary's version; `SetNoteAsync`, `ClearNoteAsync`,
+    `SetSettingAsync` and `install`'s `port` complete the typed invocation.
+
 ## Work in progress
 
 - **The game knowledge lives with the assistant (`3.18.0-rc38`).** The per-game troubleshooting,

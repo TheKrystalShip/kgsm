@@ -32,6 +32,7 @@ internal static class EngineCommands
         var config = new Command("config", "The settings the engine runs with.");
         config.Subcommands.Add(ConfigList(host));
         config.Subcommands.Add(ConfigGet(host));
+        config.Subcommands.Add(ConfigSet(host));
 
         engine.Subcommands.Add(config);
         return engine;
@@ -56,6 +57,23 @@ internal static class EngineCommands
                 return Task.FromResult<Outcome>(setting is null
                     ? Failure.NotFound($"The engine has no setting '{name}'.")
                     : new Result<EngineSetting>(setting, EngineJsonContext.Default.EngineSetting, s => s.Value));
+            });
+    }
+
+    private static Command ConfigSet(CommandHost host)
+    {
+        var key = new Argument<string>("key") { Description = "The setting as Section:Key." };
+        var value = new Argument<string>("value") { Description = "The new value; an empty string clears a text setting." };
+        return new Command("set", "Set one setting in the person's settings file.") { key, value }
+            .Act(host, "engine config set", context =>
+            {
+                SettingChange change = SettingsWriter.Set(
+                    context.Services.Paths, context.Services.Environment.Variables,
+                    context.Parse.GetValue(key)!, context.Parse.GetValue(value)!);
+                return Task.FromResult<Outcome>(new Result<SettingSetReport>(
+                    new SettingSetReport { Key = change.Key, Stored = change.Stored, Changed = change.Changed, Effective = change.Effective },
+                    EngineJsonContext.Default.SettingSetReport,
+                    report => $"{report.Key} = {report.Stored}" + (report.Effective.Source == SettingSource.Environment ? $"\nan environment variable still sets it to {report.Effective.Value}" : string.Empty)));
             });
     }
 

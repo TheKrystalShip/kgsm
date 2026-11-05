@@ -145,6 +145,7 @@ public class ConfigKeyTests
                 "name", "blueprint", "runtime", "installDatetime", "installNonce", "backupsDirectory", "platform",
                 "maintenanceWindowsAuthor", "maintenanceWindowsAuthorName", "executableFile", "executableSubdirectory",
                 "steamAppId", "clientSteamAppId", "isSteamAccountRequired", "ports", "enableFirewallManagement",
+                "note", "noteUpdatedBy", "noteUpdatedAt",
             }.Order(StringComparer.Ordinal),
             protectedKeys.Order(StringComparer.Ordinal));
     }

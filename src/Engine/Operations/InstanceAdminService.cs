@@ -1,3 +1,4 @@
+using TheKrystalShip.KGSM.Engine.Contracts;
 using TheKrystalShip.KGSM.Engine.Instances;
 using TheKrystalShip.KGSM.Engine.Contracts.Events;
 using TheKrystalShip.KGSM.Engine.Contracts.Instances;
@@ -8,7 +9,7 @@ using TheKrystalShip.KGSM.Watchdog.Model;
 
 namespace TheKrystalShip.KGSM.Engine.Operations;
 
-/// <summary>Autostart (the watchdog's boot set) and the release of a transfer lock.</summary>
+/// <summary>Autostart (the watchdog's boot set), the instance note and the release of a transfer lock.</summary>
 public sealed class InstanceAdminService(OperationHost host)
 {
     /// <summary>Adds an instance to, or removes it from, the set the watchdog starts at boot.</summary>
@@ -41,6 +42,47 @@ public sealed class InstanceAdminService(OperationHost host)
         {
             throw new OperationException(ErrorCodes.Failed, ex.Message, inner: ex);
         }
+    }
+
+    /// <summary>
+    /// Writes the instance's note, or clears it when the body is empty. The author is the engine's actor and
+    /// the time is the engine's clock; a caller supplies neither.
+    /// </summary>
+    public NoteReport SetNote(InstanceDescription instance, string? body)
+    {
+        InstanceConfig config = Guards.Config(instance);
+        Guards.Online(instance, "note");
+        TransferLock.Require(instance, "note");
+
+        string clean = InstanceNote.Sanitize(body);
+        if (clean.Length > InstanceNote.MaxLength)
+            throw OperationException.Invalid($"the note is {clean.Length} characters; the longest is {InstanceNote.MaxLength}");
+
+        using IDisposable held = host.Locks.AcquireInstance(instance.Id);
+
+        if (clean.Length == 0)
+        {
+            bool had = config.Note is not null || config.NoteUpdatedBy is not null || config.NoteUpdatedAt is not null;
+            if (had)
+            {
+                ContractFile.Write(
+                    instance.Layout.ConfigFile, config with { Note = null, NoteUpdatedBy = null, NoteUpdatedAt = null },
+                    EngineJsonContext.Default.InstanceConfig);
+                host.Events.Append(new ConfigChanged { InstanceName = instance.Id, Key = "note" });
+            }
+
+            return new NoteReport { Instance = instance.Id, Changed = had };
+        }
+
+        string? actor = host.Events.Provenance.Normalized().Actor;
+        DateTimeOffset now = host.Clock.GetUtcNow();
+        InstanceConfig updated = config with { Note = clean, NoteUpdatedBy = actor, NoteUpdatedAt = now };
+        bool changed = !string.Equals(config.Note, clean, StringComparison.Ordinal);
+
+        ContractFile.Write(instance.Layout.ConfigFile, updated, EngineJsonContext.Default.InstanceConfig);
+        if (changed) host.Events.Append(new ConfigChanged { InstanceName = instance.Id, Key = "note" });
+
+        return new NoteReport { Instance = instance.Id, Note = clean, UpdatedBy = actor, UpdatedAt = now, Changed = changed };
     }
 
     /// <summary>Releases the lock a transfer left on an instance and restores the autostart flag the lock switched off.</summary>

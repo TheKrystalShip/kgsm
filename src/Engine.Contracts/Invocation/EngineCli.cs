@@ -41,9 +41,10 @@ public sealed class EngineCli(EngineCliOptions options, IEngineProcess? process 
 
     public Task<EngineResult<InstallReport>> InstallAsync(
         string blueprint, string? id = null, string? name = null, string? library = null, string? gameVersion = null,
-        bool start = false, bool skipSpaceCheck = false, EngineCaller? caller = null, CancellationToken cancellationToken = default)
+        bool start = false, bool skipSpaceCheck = false, int? port = null, EngineCaller? caller = null, CancellationToken cancellationToken = default)
     {
         var args = new List<string> { "instance", "install", blueprint };
+        if (port is { } primary) AddOption(args, "--port", primary.ToString(System.Globalization.CultureInfo.InvariantCulture));
         AddOption(args, "--id", id);
         AddOption(args, "--name", name);
         AddOption(args, "--library", library);
@@ -132,6 +133,31 @@ public sealed class EngineCli(EngineCliOptions options, IEngineProcess? process 
         AddOption(args, "--author-name", authorName);
         return RunAsync(args, EngineJsonContext.Default.ConfigSetReport, caller, null, cancellationToken);
     }
+
+    /// <summary>
+    /// Writes the instance's note. The engine records the author from the caller and the time from its clock;
+    /// an empty body clears the note.
+    /// </summary>
+    public Task<EngineResult<NoteReport>> SetNoteAsync(
+        string instance, string body, EngineCaller? caller = null, CancellationToken cancellationToken = default) =>
+        string.IsNullOrWhiteSpace(body)
+            ? ClearNoteAsync(instance, caller, cancellationToken)
+            : RunAsync(["instance", "note", "set", instance, body], EngineJsonContext.Default.NoteReport, caller, null, cancellationToken);
+
+    public Task<EngineResult<NoteReport>> ClearNoteAsync(
+        string instance, EngineCaller? caller = null, CancellationToken cancellationToken = default) =>
+        RunAsync(["instance", "note", "clear", instance], EngineJsonContext.Default.NoteReport, caller, null, cancellationToken);
+
+    // ── The engine ────────────────────────────────────────────────────────────────────────────
+
+    /// <summary>The release number of the deployed binary, which is the version a transfer compares.</summary>
+    public Task<EngineResult<EngineVersionReport>> VersionAsync(CancellationToken cancellationToken = default) =>
+        RunAsync(["engine", "version"], EngineJsonContext.Default.EngineVersionReport, null, null, cancellationToken);
+
+    /// <summary>Sets one engine setting (<c>Section:Key</c>) in the person's settings file.</summary>
+    public Task<EngineResult<SettingSetReport>> SetSettingAsync(
+        string key, string value, EngineCaller? caller = null, CancellationToken cancellationToken = default) =>
+        RunAsync(["engine", "config", "set", key, value], EngineJsonContext.Default.SettingSetReport, caller, null, cancellationToken);
 
     // ── Console ───────────────────────────────────────────────────────────────────────────────
 
