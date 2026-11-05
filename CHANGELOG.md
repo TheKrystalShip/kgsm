@@ -2,6 +2,7 @@
 
 - [Changelog](#changelog)
   - [Ideas for the future](#ideas-for-the-future)
+  - [4.0.1](#401)
   - [4.0.0](#400)
   - [Work in progress](#work-in-progress)
   - [2.1.0](#210)
@@ -45,6 +46,10 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 - Allow instances to start automatically on system boot without going through systemd
 - Podman as an alternative for Docker
 - More game servers
+
+## [4.0.1]
+
+- The generated script declares its hook functions as called indirectly, so shellcheck 0.11 and later pass it.
 
 ## [4.0.0]
 

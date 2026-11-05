@@ -9,7 +9,7 @@
 #
 # kgsm-script: template=@@TEMPLATE_VERSION@@ hooks=@@HOOKS_DIGEST@@ runtime=@@RUNTIME@@
 #
-# shellcheck disable=SC2034,SC2154,SC2329
+# shellcheck disable=SC2034,SC2154,SC2317,SC2329
 # The instance_* variables are set from the config file by _load_config and are
 # the values a hook reads, so a script need not use each one; the hook functions
 # are called by name.
