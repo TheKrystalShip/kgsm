@@ -20,6 +20,7 @@ public partial class ScriptTemplateTests
         [1] = "5ac5ef5f82f1909b361c8efbf862a6b616825c092a814b616d2ed65b86290e08",
         [2] = "5924a5a7261d124e5a9ebce5600c5a712e449ea9e76140a6785a4dbe5f543da9",
         [3] = "cefb2cbd2d39211a8ad8d937d04d2e98ade2f5ed2f10eeae8df365d3e71c5791",
+        [4] = "e0dd04854029cf243c454de4c35606306eaef9c83ed9638e21a9726f94effb18",
     };
 
     [Fact]
