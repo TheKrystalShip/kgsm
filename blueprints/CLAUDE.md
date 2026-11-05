@@ -8,9 +8,8 @@ parameters. KGSM creates **instances** from them. Full reference:
 
 One **unified YAML** file per game: `<name>.bp.yaml`, in a single **flat**
 `blueprints/` directory. The `runtime` field inside the file
-(`native` | `container`) decides how the server runs. Parsing is done with **mikefarah/yq** (Arch package `go-yq`), a **hard
-dependency**: a blueprint operation on a host without it fails fast with an
-actionable error (`__require_yq` in `core/loader.sh`).
+(`native` | `container`) decides how the server runs. The engine parses it through YamlDotNet's static context into
+registered types; nothing on the host parses YAML.
 
 These are the **system** (read-only, shipped) blueprints. User blueprints live
 under `~/.local/share/kgsm/blueprints/*.bp.yaml` (respects `$XDG_DATA_HOME`) and
@@ -21,7 +20,7 @@ directory instead.
 ## Required fields (both runtimes)
 
 - `schema_version` — currently `1` (future migration hook).
-- `name` — lowercase, no spaces. Also the **override-binding key** (see below).
+- `name` — lowercase, no spaces. Also the **hook-file key** (see below).
 - `runtime` — `native` | `container`.
 - `metadata:` — a block of advisory, presentation-oriented fields for catalog /
   control-panel UIs. All keys are **required to be present** but every value
@@ -63,8 +62,9 @@ fields are declared but no poller reads them.
   `ports: '1111:2222/tcp|3333/udp'`.
 - `executable_arguments` is single-quoted YAML so `$instance_*` variables survive
   to runtime (e.g. `'--start-server $instance_saves_dir/$instance_level_name'`);
-  the eval-cat in `__logic_create_base_instance` substitutes them. The full
-  variable list is in `docs/blueprints.md` and `templates/blueprint.tp`.
+  the engine rewrites each `$instance_<name>` into a `{camelCase}` placeholder and resolves them into an
+  argument list at launch, never through a shell. `kgsm engine placeholders` lists the names and
+  `docs/blueprints.md` describes the grammar.
 
 - `rcon_port` (int, nullable) — the game server's RCON port. Null = no RCON
   detection. The watchdog polls this port for connected players when log-based
@@ -109,24 +109,24 @@ ban is a fabricated outcome.
 
 Required: `container.compose` — a YAML **literal block scalar** (`compose: |`)
 holding the Docker Compose **verbatim** (comments and `${instance_*}` preserved).
-KGSM extracts it to the instance's `docker-compose.yml` at create time and
-substitutes `${instance_*}`. Inside the compose: set
+KGSM writes it to the instance's `<id>.docker-compose.yml` at install and
+substitutes only `${instance_*}` and `$instance_*`, without `eval`. Inside the compose: set
 `container_name: ${instance_name}`, prefer `network_mode: host`, and bind-mount
 KGSM dirs via `${instance_install_dir}`, `${instance_backups_dir}`, etc. Official
 images: `ghcr.io/thekrystalship/` (see the kgsm-containers project).
 
-- **UFW ports are derived** from the embedded compose (`__derive_ufw_ports_from_compose`),
+- **UFW ports are derived** from the embedded compose,
   so there is **no** top-level/native `ports` for a container — the compose is the
   single source.
 
-## The critical gotcha: name → override binding
+## The critical gotcha: name → hook-file binding
 
 A blueprint binds to an override directory by its **logical `name`, not its
 filename**, for **both** runtimes: a blueprint with `name: terraria` uses
-`overrides/terraria/` regardless of the file name.
+`overrides/terraria/hooks.sh` regardless of the file name.
 
 Multiple blueprint variants can share one `name` (and thus one override dir) on
-purpose. See `overrides/CLAUDE.md` and `docs/overrides.md`.
+purpose. See `overrides/CLAUDE.md` and `docs/hooks.md`.
 
 ## Editing checklist
 
@@ -134,9 +134,9 @@ purpose. See `overrides/CLAUDE.md` and `docs/overrides.md`.
 - Keep native `ports` single-quoted; for containers, declare ports only inside
   the embedded compose (KGSM derives the firewall rules from it).
 - Leave any unknown `metadata` value as `null` — never invent a number.
-- The file must pass `./kgsm.sh blueprints validate <name>`, which is the
+- The file must pass `kgsm blueprint validate <name>`, which is the
   schema authority — YAML syntax plus every required field for the runtime.
   `--json` lists every problem at once, and a path argument checks a file that
-  is not yet under a blueprint name: `blueprints validate /tmp/draft.bp.yaml --json`.
+  is not yet under a blueprint name: `kgsm blueprint validate /tmp/draft.bp.yaml --json`.
 - If you add a blueprint that needs custom install/update logic, it needs a
-  matching `overrides/<name>/` directory — the `name` must line up.
+  matching `overrides/<name>/hooks.sh` — the `name` must line up.

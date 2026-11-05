@@ -2,7 +2,7 @@
 
 - [Changelog](#changelog)
   - [Ideas for the future](#ideas-for-the-future)
-  - [Unreleased](#unreleased)
+  - [4.0.0](#400)
   - [Work in progress](#work-in-progress)
   - [2.1.0](#210)
   - [2.0.1](#201)
@@ -46,10 +46,24 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 - Podman as an alternative for Docker
 - More game servers
 
-## [Unreleased]
+## [4.0.0]
 
-The native engine (`src/`, `tests/`, version `4.0.0-dev.N` in `Directory.Build.props`) grows beside the
-bash tree, which it does not touch. The bash engine's `KGSM_VERSION` does not move until the cutover.
+The engine is a Native-AOT binary. `kgsm` replaces the bash CLI, and the pacman package is the engine's only
+deploy source on every node.
+
+- **The binary is the engine.** `/usr/bin/kgsm` is the one AOT binary; the bash tree, its tests, its module
+  overrides, the config migrations and the checkout deploy (`deploy/setup.sh`, `deploy/deploy.sh`) are gone.
+  Games keep their own steps as `overrides/<name>/hooks.sh`.
+- **The package is lean and uniform.** It carries the binary, `kgsm.settings.json`, the system blueprints and
+  hook files under `/opt/kgsm`, the config descriptor and the generated action manifests in
+  `/var/lib/kgsm/leaves`, and the journal-prune service and timer. Its dependencies are `bash`, `coreutils`,
+  `findutils`, `jq`, `curl`, `tar` and `procps-ng`; the post-upgrade hook runs `kgsm instance repair --all`
+  as the `kgsm` account.
+- **Releasing is a `v*` tag.** The release workflow tests, publishes the AOT binary and packages it.
+- **A package node's engine data** lives under the `kgsm` account's XDG homes; existing bash installs move
+  over through the conversion script.
+- Every entry below shipped as a `4.0.0-dev` prerelease of the engine's packages, `TheKrystalShip.KGSM.Engine`
+  and `TheKrystalShip.KGSM.Engine.Contracts`.
 
 - **The engine core and its contracts, read side (`engine-v4.0.0-dev.1`).**
   - `TheKrystalShip.KGSM.Engine.Contracts` holds the shapes the engine stores and emits (instance

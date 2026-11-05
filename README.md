@@ -2,146 +2,71 @@
 
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPL--3.0-blue.svg)](LICENSE)
 
-A lightweight, powerful tool for managing game servers on Linux with minimal hassle.
+The engine of the KGSM ecosystem: one Native-AOT binary, `kgsm`, that installs, runs, backs up, updates
+and removes game servers on a Linux host, as native processes or as containers, from declarative
+blueprints.
 
-## What is KGSM?
-
-KGSM simplifies setting up and managing game servers on Linux. Whether you're hosting a casual Minecraft server for friends or running a dedicated Valheim community, KGSM handles the technical details so you can focus on playing games.
-
-**Key Features:**
-- **Simple Management** - Install, update, and manage servers through an intuitive interface
-- **Flexible Deployment** - Native Linux or Docker container support
-- **Automation-Ready** - Full CLI for scripting
-- **Low Overhead** - Minimalist design keeps resource usage low
+- **One binary, one writer.** Every change to engine state goes through `kgsm`; components read the same
+  state in-process through the `TheKrystalShip.KGSM.Engine` package and write by running the binary through
+  the typed invocation in `TheKrystalShip.KGSM.Engine.Contracts`.
+- **Scriptable.** Every command prints text, or JSON with `--json`; errors go to stderr as a JSON error
+  report in that mode; exit codes are few and documented.
+- **Native or container.** A blueprint's `runtime` decides which.
+- **Low overhead.** No resident process: the watchdog is the resident half and supervises native instances.
 
 ## Installation
 
-### Arch Linux
-
-KGSM is published as a signed pacman package in the KGSM repository. Point pacman at the
-repository and its signing key once — the block is in
-[`kgsm-meta`](https://github.com/TheKrystalShip/kgsm-meta#installing-a-node) — then:
+KGSM is published as a signed pacman package in the KGSM repository. Point pacman at the repository and its
+signing key once (the block is in [`kgsm-meta`](https://github.com/TheKrystalShip/kgsm-meta#installing-a-node)),
+then:
 
 ```sh
 pacman -S kgsm
 ```
 
-The package installs the engine to `/opt/kgsm` and symlinks it onto `PATH` as
-`/usr/bin/kgsm`, and pulls in everything it needs. Upgrades are `pacman -Syu`.
+The package installs the binary, the system blueprints and the system hook files under `/opt/kgsm`, links
+it onto `PATH` as `/usr/bin/kgsm`, and pulls in the tools the generated management scripts run (`bash`,
+`jq`, `curl`, `tar`, procps, coreutils, findutils). Upgrades are `pacman -Syu`; each upgrade regenerates
+the instances' management scripts that went stale (`kgsm instance repair --all`).
 
-### From Source
+Optional: `kgsm-watchdog` (supervision, autostart, crash restart), `kgsm-firewall` (host firewall ports),
+`steamcmd` (Steam-distributed servers), `docker` and `docker-compose` (container instances).
 
-```sh
-git clone https://github.com/TheKrystalShip/KGSM.git
-cd KGSM
-./kgsm.sh --help
-```
-
-Run it straight from the checkout as above, or install it system-wide at `/opt/kgsm` with
-the two deploy scripts:
+## Quick start
 
 ```sh
-./deploy/setup.sh    # ONCE per host — asks for sudo; creates /opt/kgsm owned by you + the PATH symlink
-./deploy/deploy.sh   # every time — rsync the checkout to /opt/kgsm. NO sudo, NO prompts
+kgsm blueprint list                     # what can be installed
+kgsm instance install factorio --start  # install, then start
+kgsm instance list                      # every registered instance
+kgsm instance status factorio-a1        # run state, version, ports, backups, recent output
+kgsm backup create factorio-a1
+kgsm instance stop factorio-a1
 ```
 
-Because `setup.sh` makes `/opt/kgsm` yours, updating the install is an ordinary file copy —
-`deploy.sh` never needs a password and never prompts. The sync prunes, so a deleted command
-or override doesn't linger; your instances, config and logs live under `~/.local/share/kgsm`
-and `~/.config/kgsm` and are never touched.
+Every command: `kgsm --help`, and [docs/commands.md](docs/commands.md).
 
-### Dependencies
-
-**Required:**
-```sh
-grep jq wget unzip tar sed coreutils findutils steamcmd inotify-tools
-```
-
-**Optional:**
-| Package     | Purpose             | Config Setting                    |
-| ----------- | ------------------- | --------------------------------- |
-| `ufw`   | Firewall management | `enable_firewall_management=true` |
-
-> **Note:** If SteamCMD isn't in your package manager, [install manually](https://developer.valvesoftware.com/wiki/SteamCMD#Linux).
-
-## Directory Structure
-
-KGSM follows [XDG Base Directory](https://specifications.freedesktop.org/basedir-spec/latest/) conventions:
-
-| Location                          | Purpose                                    |
-| --------------------------------- | ------------------------------------------ |
-| `~/.config/kgsm/config.ini`       | Global settings (logging, firewall, ports) |
-| `~/.local/share/kgsm/instances/`  | Your deployed game servers live here       |
-| `~/.local/share/kgsm/blueprints/` | Custom server blueprints you create        |
-| `~/.local/share/kgsm/overrides/`  | Custom install/update logic per game       |
-| `~/.local/share/kgsm/logs/`       | Operation logs (when logging enabled)      |
-
-**Instance directory structure:**
-```
-instances/
-└── my-minecraft-server/
-    ├── server/          # Game server files
-    ├── saves/           # World data and saves
-    ├── backups/         # Automatic backups
-    └── logs/            # Server-specific logs
-```
-
-## Usage
+## Building from source
 
 ```sh
-kgsm --help              # Show all commands
-kgsm blueprints list     # List available game servers
-kgsm install <game>      # Install a game server
-kgsm start <instance>    # Start a server
-kgsm stop <instance>     # Stop a server
+dotnet build kgsm.slnx
+dotnet test tests/Engine.Tests
+dotnet publish src/Cli/Cli.csproj -c Release -r linux-x64     # the Native-AOT binary
 ```
 
-### Example: Setting up a Minecraft server
-
-```sh
-# See what's available
-kgsm blueprints list
-
-# Install Minecraft with a custom name
-kgsm install minecraft --name survival
-
-# Start it
-kgsm start survival
-
-# Check status
-kgsm status survival
-```
-
-### Configuration
-
-```sh
-kgsm config list         # Show current settings
-kgsm config set key=val  # Change a setting
-```
+`scripts/pkg-local.sh kgsm` in the workspace builds the package the release workflow builds, from this
+checkout.
 
 ## Documentation
 
-For detailed guides on configuration, blueprints, overrides, and more, see the [docs](docs/) directory.
-
----
+[docs/README.md](docs/README.md) indexes the guides. The engine's place among the other components, its
+contracts and its rules are documented in the `kgsm-docs` repository.
 
 ## Contributing
 
-We welcome contributions of all kinds:
-
-- **New game server blueprints** - The most valuable contribution
-- **Bug fixes and compatibility improvements** - KGSM is tested on limited distributions, so fixes that improve compatibility with other Linux systems are highly appreciated
-- **New features** - Enhancements that benefit the community
-- **Documentation improvements** - Clearer docs help everyone
-
-### Adding a New Game Server
-
-1. Create a blueprint in `~/.local/share/kgsm/blueprints/native/` using the template at `templates/blueprint.tp`
-2. Test the full lifecycle: install, start, stop, restart, uninstall
-3. Submit a pull request
-
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
+A new game is a blueprint in `blueprints/` and, when its install or update is not the generic Steam one, a
+hook file in `overrides/<name>/hooks.sh`. See [docs/blueprints.md](docs/blueprints.md) and
+[docs/hooks.md](docs/hooks.md). Code changes follow `CLAUDE.md`.
 
 ## License
 
-[GNU General Public License v3.0](LICENSE)
+GPL-3.0. See [LICENSE](LICENSE).

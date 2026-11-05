@@ -2,8 +2,8 @@
 # symlink manipulation on disk, so it works during the transaction and in a chroot alike. Starting
 # anything is the node's post-transaction hook's job, which is where a running system is available.
 #
-# post_install only. An administrator who disabled the timer keeps it disabled across every later
-# version — re-presetting on upgrade would quietly undo that.
+# post_install presets only. An administrator who disabled the timer keeps it disabled across every
+# later version: re-presetting on upgrade would quietly undo that.
 
 post_install() {
     systemctl preset kgsm-journal-prune.timer >/dev/null 2>&1 || true
@@ -12,8 +12,9 @@ post_install() {
 
   The engine is installed at /opt/kgsm, on PATH as /usr/bin/kgsm.
 
-  Instances, blueprints and overrides live under the kgsm account's XDG paths and survive every
-  upgrade. Nothing here needs configuring before the engine works.
+  Instances, blueprints and hook files live under the kgsm account's XDG paths and survive every
+  upgrade. Nothing here needs configuring before the engine works. Steam credentials, where a game
+  needs them, go in /etc/kgsm/kgsm.env.
 
   Native instances are supervised by kgsm-watchdog. Without it kgsm spawns a game directly and run
   state is unreliable, so install it unless this host runs container instances only.
@@ -21,11 +22,17 @@ post_install() {
 MSG
 }
 
+# A management script records the template and hook digest it was built from; regenerating the
+# stale ones makes every instance run the scripts of the engine now installed. It runs as the
+# account that owns the registry, which the engine requires of every command.
 post_upgrade() {
-    cat <<'MSG'
+    if ! runuser -u kgsm -- /usr/bin/kgsm instance repair --all; then
+        cat <<'MSG'
 
-  If pacman wrote a .pacnew beside a file under /etc, merge it. The engine's own config is under
-  the kgsm account's home and is migrated in place on the next run.
+  Regenerating the instances' management scripts failed. Run it as the engine's account:
+
+      sudo -u kgsm kgsm instance repair --all
 
 MSG
+    fi
 }

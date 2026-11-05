@@ -1,8 +1,7 @@
 <Project>
 
   <!--
-    The engine's C# projects (src/ and tests/) share one version and one set of language defaults.
-    The bash tree beside them has no project files and is not affected.
+    The engine's projects share one version and one set of language defaults.
   -->
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
@@ -10,7 +9,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <Version>4.0.0-dev.9</Version>
+    <Version>4.0.0</Version>
     <Authors>TheKrystalShip</Authors>
     <RepositoryUrl>https://github.com/TheKrystalShip/kgsm</RepositoryUrl>
   </PropertyGroup>

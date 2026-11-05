@@ -1,68 +1,28 @@
 # CLAUDE.md
 
-KGSM (Krystal Game Server Manager) is a bash game-server manager for Linux: native processes and
-containers, installed and run from declarative blueprints through one CLI. It is the engine's stateless
-half; `kgsm-watchdog` is the resident half. Role, contracts and peers: `../kgsm-docs/components/kgsm.md`.
-The engine model: `../kgsm-docs/systems/engine/`.
+KGSM (Krystal Game Server Manager) is the engine of the KGSM ecosystem: one Native-AOT binary, `kgsm`,
+that installs, runs and manages game-server instances (native processes and containers) from declarative
+blueprints. It is the engine's stateless half; `kgsm-watchdog` is the resident half. Role, contracts and
+peers: `../kgsm-docs/components/kgsm.md`. The engine model: `../kgsm-docs/systems/engine/`.
 
 ## Commands
-
-```bash
-./kgsm.sh --help
-./kgsm.sh --debug <command>          # trace output; also: export KGSM_DEBUG=true
-
-shellcheck path/to/script.sh         # must pass clean; SC2086 is disabled globally for unquoted exit codes
-
-./tests/run.sh                                   # all (unit + integration + e2e)
-./tests/run.sh unit                              # one type (unit | integration | e2e)
-./tests/run.sh --pattern 'test_config_*.sh'      # filename glob (or a fragment: 'config')
-./tests/run.sh --pattern 'test_config_merge_logic.sh' --function 'test_merge_preserves_user_values'
-./tests/run.sh --debug-run tests/unit/test_x.sh  # inline run of one file, full trace
-```
-
-`tests/run.sh` emits TAP v14 (the VS Code Test Adapter entry point).
-
-## Code map
-
-- `kgsm.sh` dispatches the first argument to a command module in `commands/`. Every module sources
-  `core/bootstrap.sh` first, which exports `KGSM_ROOT` and loads `core/common.sh` and the library.
-- Locate files with `__find_command()`, `__find_core_module()`, `__find_or_fail()`; never hardcode paths.
-  Modules lazy-load behind guards (`if [[ ! $KGSM_COMMON_LOADED ]]`).
-- **A function called from a subshell must be exported with `export -f`**, or it does not exist in the
-  child. This is the most common silent breakage. `--debug` / `KGSM_DEBUG=true` propagates to sub-shells.
-- `commands/*.sh` are the I/O layer (argument parsing, `__print_*` messages). Logic lives in
-  `commands/handlers/*.sh` as pure functions returning exit codes, paired by name
-  (`commands/instances.sh` and `commands/handlers/instances.sh`). Keep `commands/` thin.
-- Exit codes are `EC_*` constants in `core/errors.sh`, written unquoted (`return $EC_GENERAL`); return
-  those, never magic numbers.
-- Config is sectioned INI (`core/config.sh`, `config.default.ini`), flattened to `config_*` variables at
-  runtime. A schema change is a sequential idempotent migration in `migrations/config/`, a bumped
-  `config_schema_version` in `config.default.ini`, and a case in `tests/unit/test_config_migrations.sh`.
-  Paths follow XDG (`core/paths.sh`).
-- Blueprints (`blueprints/*.bp.yaml`, parsed with mikefarah/yq, a hard dependency) and overrides
-  (`overrides/<name>/NN-*.sh`) are governed by `blueprints/CLAUDE.md` and `overrides/CLAUDE.md`. A blueprint
-  binds to an override directory by its `name` field, not its filename, for both runtimes. Blueprint
-  metadata is nullable: `null` is unknown, never a fabricated `0`. Only override modules `03`-`08`, `10`
-  and `11` exist to be overridden; `templates/overrides.tp` is the API reference.
-- Native lifecycle routes to the watchdog (`commands/handlers/watchdog.sh`); `autostart` controls boot
-  start through the watchdog's desired-state.
-- Events are always appended to the on-disk journal (`commands/events.journal.sh`); `docs/events.md`
-  holds the engine's event reference.
-
-## The C# engine (`src/`, `tests/`)
-
-The engine's rewrite as a Native-AOT binary grows beside the bash tree (`../kgsm-docs/plans/kgsm-native-engine.md`).
-The bash tree is the shipped product until the cutover and is not touched by this work.
 
 ```bash
 dotnet build kgsm.slnx
 dotnet test tests/Engine.Tests
 dotnet publish src/Cli/Cli.csproj -c Release -r linux-x64     # must show no IL2xxx, IL3xxx or ILC warning
+../scripts/pkg-local.sh kgsm [--test] [--no-install]         # the release workflow's build, as a package
 ```
+
+`pkg-local.sh` runs the workflow's own Test and Publish steps, `makepkg`s into `../.packages/kgsm/` and
+installs with `sudo pacman -U`; `--no-install` stops after the package. That is how a change reaches a host:
+nothing is copied onto a host by hand, and there is no checkout deploy.
+
+## Code map
 
 - `src/Engine.Contracts` (shapes, event vocabulary, maintenance-window grammar) and `src/Engine` (the
   core) are the two packages; `src/Cli` is the binary. `Directory.Build.props` carries the one version,
-  `4.0.0-dev.N`; a phase's commit is tagged `engine-v<version>`, never `v*`.
+  which `./deploy/version.sh` prints (`--pkgver` for the pacman form).
 - `src/Cli` is the command line: a command returns an `Outcome` (a result DTO with its text, or a failure) and
   never writes; `Output/` is the one stage that renders it, as text or as JSON through the registered
   context, errors on stderr with stdout empty. A command goes in `Commands/`, its DTO in `Engine.Contracts`
@@ -103,50 +63,35 @@ dotnet publish src/Cli/Cli.csproj -c Release -r linux-x64     # must show no IL2
 
 ## Conventions
 
-- Google Shell Style Guide, 2-space indent, lines at most 80 characters (never over 120),
-  `#!/usr/bin/env bash`, the `function` keyword, `[[` over `[`, every expansion quoted (exit codes excepted).
-- Private functions `_name()`, internal library helpers `__name()`. Prefixes: `config_*`, `instance_*`,
-  `_var` for locals.
-- Avoid `eval`; sanitize user input that reaches a command.
-- Every code path has one defined, testable outcome. A check either always runs or never runs; it is
-  never conditional on incidental state.
+- Code follows `.editorconfig` and the workspace rules: registered JSON types only, no JSON DOM, no
+  fabricated values (`null` is unknown), logging per `../kgsm-docs/reference/logging-convention.md`.
+- Every code path has one defined, testable outcome. A check either always runs or never runs; it is never
+  conditional on incidental state.
+- The generated management script is bash; the hook files under `overrides/` are bash too.
 
-## Testing
+## Packaging and release
 
-Tests run against full sandboxed copies of KGSM under `/tmp/kgsm-test-sandbox-*/` with no mocking; the
-sandbox isolates XDG paths from the real `~/.config` and `~/.local/share`. Before writing or modifying
-anything under `tests/`, read `docs/specs/testing-framework/testing_specification.md` and
-`tests/templates/test.template.sh`, and model a new test on an existing file of the same type.
-`.github/agents/testing.agent.md` and `.github/skills/create-test/` describe the workflow.
-
-## Deployment
-
-`/opt/kgsm` is a byte-identical copy of this checkout, published by `./deploy/deploy.sh` (rsync, no sudo,
-no prompts, prunes deleted files; instances, config and logs under XDG are untouched). `./deploy/setup.sh`
-runs once per host: it creates `/opt/kgsm` owned by you, the `kgsm` symlink on `PATH`, and the
-`kgsm-journal-prune` timer, so no polkit grant is needed. Run `deploy.sh` after changing engine code.
-`deploy/deploy-common.sh` holds the shared paths; the scripts are self-contained.
-
-`deploy/kgsm.actions.json` is the shipped engine's action manifest, written by hand. kgsm-lib's `KgsmActions`
-mirrors it and a kgsm-lib test fails when the two disagree, so an action added here is added there in the
-same change. The binary's own is generated: each command declares `[Action("kgsm:...")]` on the method that
-builds it, the build writes `src/Cli/kgsm.kgsm.actions.json` and the constants in
-`src/Engine.Contracts/Actions/EngineActions.g.cs`, and `ActionManifestTests` holds the generated manifest
-equal to the hand-written one. Format: `../kgsm-docs/reference/action-manifest.md`.
+- `packaging/PKGBUILD` places the published stage: the binary and `kgsm.settings.json` under `/opt/kgsm`,
+  the system blueprints (`blueprints/*.bp.yaml`), the hook files (`overrides/<name>/hooks.sh`), the
+  descriptor and the two generated manifests under `/var/lib/kgsm/leaves`, and the journal-prune units from
+  `deploy/`. `/usr/bin/kgsm` links to the binary; its real directory is the install root.
+- `packaging/kgsm.install` presets the prune timer and runs `kgsm instance repair --all` as the `kgsm`
+  account after an upgrade.
+- `.github/workflows/release.yml` is generated by `../scripts/ci-template/vendor-ci.sh`; edit the template.
+- A pushed `v*` tag fires the release into the public pacman repository.
 
 ## Version tracking
 
-- The version is `KGSM_VERSION` in `core/bootstrap.sh`; `./deploy/version.sh` prints it (`--pkgver` for the
-  pacman form) and packaging asks for it.
+- The version is `<Version>` in `Directory.Build.props`; `./deploy/version.sh` prints it and packaging asks
+  for it. Both packages, `Engine` and `Engine.Contracts`, publish at it.
 - Bump it for every user-facing change: patch for fixes, minor for features, major for breaking changes.
-- Add a `CHANGELOG.md` entry under `## [Unreleased]` for every meaningful change.
+- Add a `CHANGELOG.md` entry for every meaningful change.
 - Tag the bump commit `git tag -a v<version> -m "kgsm v<version>"`.
 
 ## Read before changing
 
-- `templates/overrides.tp`: the override API.
-- `docs/`: `execution_flows.md`, `blueprints.md`, `overrides.md`, `instances.md`, `libraries.md`,
-  `configuration_management.md`, `events.md`.
+- `blueprints/CLAUDE.md` and `overrides/CLAUDE.md`: the system blueprints and hook files.
+- `docs/`: the guides for the binary.
 - `../kgsm-docs/reference/event-envelope.md`, `event-journal.md`, `event-vocabulary.md`: the journal
   line the engine writes.
 - `../kgsm-docs/reference/maintenance-windows.md` and `../kgsm-docs/systems/operations/`: windows and

@@ -1,79 +1,26 @@
 # CLAUDE.md — overrides/
 
-Overrides are game-specific module files that **replace** individual default
-management-script modules during assembly. They externalize per-game logic
-(custom version checks, non-Steam downloads, special deploy steps) so the core
-stays generic. Full reference: `docs/overrides.md`; API reference:
-`templates/overrides.tp`.
+One directory per game: `overrides/<name>/hooks.sh`, where `<name>` is a blueprint's `name:` field. The
+file holds the game's own version check, download, deploy and post-deploy steps as `kgsm_hook_*` functions
+the engine inlines into the instance's generated management script. Reference: `docs/hooks.md`.
 
-## Structure (module-based)
+## Binding
 
-Each game gets a directory named after the blueprint's **logical name**:
+The directory name is the blueprint's logical `name`, not its filename: `terraria-modded.bp.yaml` with
+`name: terraria` uses `overrides/terraria/hooks.sh`, and several blueprint variants may deliberately share
+one directory. A name that does not line up leaves the game on the script's defaults, silently.
 
-```
-overrides/<name>/05-version.sh
-overrides/<name>/06-download.sh
-...
-```
+## Resolution
 
-An override module is a **complete copy** of the corresponding default module
-from `templates/manage.{native,container}.d/`, with only the functions that need
-game-specific behavior changed. Bundled examples: `factorio/`, `terraria/`,
-`minecraft/`, `veloren/`, `barotrauma/`, `projectzomboid/` (each overrides only
-the modules it needs, typically 05/06/07).
+A user file, `<data home>/kgsm/overrides/<name>/hooks.sh`, replaces the system file whole. These system
+files ship in the package and are never edited on a host.
 
-## How binding works (the critical gotcha)
+## Writing one
 
-The override directory name comes from the blueprint's logical name, **not** its
-filename: the `name:` field in the blueprint (`<file>.bp.yaml`), for **both**
-runtimes.
-
-So `terraria-modded.bp.yaml` with `name: terraria` resolves to
-`overrides/terraria/`, and several blueprint variants can deliberately share one
-override dir. If the name doesn't line up, KGSM silently falls back to the
-default module.
-
-## Resolution order
-
-For each overridable module, first match wins:
-1. User: `~/.local/share/kgsm/overrides/<name>/<module>.sh` (respects `$XDG_DATA_HOME`)
-2. System: `<KGSM_ROOT>/overrides/<name>/<module>.sh` (this directory)
-3. Default: `templates/manage.{runtime}.d/<module>.sh`
-
-Prefer the user dir for customization; system files here ship with KGSM.
-
-## What may be overridden
-
-Only modules **03–08, 10, 11** (the modules in the table below). `00–02` and
-`12–13` are structural and cannot be overridden.
-
-| Module | Key functions |
-|--------|---------------|
-| `03-lifecycle.sh` | `_start`, `_start_background`, `_stop_server` |
-| `04-io.sh` | `_send_save_command`, `_send_input`, `_is_active` |
-| `05-version.sh` | `_get_latest_version`, `_get_installed_version`, `_compare_versions`, `_save_version` |
-| `06-download.sh` | `_download` |
-| `07-deploy.sh` | `_deploy`, `_update` |
-| `08-backup.sh` | `_create_backup`, `_list_backups`, `_restore_backup`, `_set_backup_retention`, `_clean_old_backups` |
-| `10-logging.sh` | `_print_logs`, `_rotate_logs` |
-| `11-status.sh` | status reporting |
-
-Function signatures and return-code contracts are in `docs/overrides.md` and
-`templates/overrides.tp` (e.g. `_get_latest_version` echoes a version or
-`exit 1`; `_download`/`_deploy` return 0/1).
-
-## Authoring rules
-
-- **Copy the default module, then modify** — start from
-  `templates/manage.{native,container}.d/<module>.sh`.
-- **Keep every function** from the default present; the assembled script must be
-  complete. Don't ship a partial module with only the changed function.
-- Override functions run with all `$instance_*` and `$config_*` variables
-  available; operate on those (`$instance_temp_dir`, `$instance_install_dir`,
-  `$instance_saves_dir`, …).
-- Use `__print_error` / `__print_warning` / `__print_info` for output and the
-  `EC_*` codes (`return $EC_SUCCESS` / `return $EC_ERROR`), not magic numbers.
-- Private helpers use the `__override_` prefix. Verify with `bash -n` and
-  `shellcheck`; files must be readable (`chmod 644`).
-- Behavioral certainty: a given code path must always have one defined outcome —
-  don't make a check conditional on incidental state.
+- Define only `kgsm_hook_latest_version`, `kgsm_hook_download`, `kgsm_hook_deploy`, `kgsm_hook_post_deploy`
+  and helpers prefixed `_hook_`; any other function name is refused.
+- Read the instance's values as `instance_<snake_case>` variables, write diagnostics to stderr and fail
+  with a non-zero exit. Each hook runs in a subshell under `set -e`.
+- A hook that does what the default does is not written: an absent hook is the default.
+- A change to a hook file changes its digest, which makes every instance script built from it stale until
+  `kgsm instance repair` regenerates it.

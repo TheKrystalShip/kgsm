@@ -13,8 +13,8 @@ internal sealed record ManifestAction(string Id, string Title, string Effect, st
 internal sealed partial class ManifestJson : JsonSerializerContext;
 
 /// <summary>
-/// The engine's action manifest is generated from the commands that declare their actions. Until the bash
-/// engine is gone, the hand-written manifest is the other record of the same ids, and the two must agree.
+/// The engine's action manifest is generated from the commands that declare their actions, and the constants
+/// callers name are generated beside it.
 /// </summary>
 public class ActionManifestTests
 {
@@ -23,27 +23,11 @@ public class ActionManifestTests
             ?? throw new InvalidOperationException(name);
 
     [Fact]
-    public void TheGeneratedManifest_IsTheHandWrittenOne_InIdsEffectsAndScopes()
+    public void TheGeneratedManifest_IsTheKgsmComponents_SortedById_WithNoSelfAction()
     {
         ManifestFile generated = Read("generated.actions.json");
-        ManifestFile handwritten = Read("handwritten.actions.json");
 
         Assert.Equal("kgsm", generated.Component);
-        Assert.Equal(handwritten.Component, generated.Component);
-        Assert.Equal(
-            handwritten.Actions.Select(a => (a.Id, a.Effect, a.Scope)).OrderBy(a => a.Id, StringComparer.Ordinal),
-            generated.Actions.Select(a => (a.Id, a.Effect, a.Scope)).OrderBy(a => a.Id, StringComparer.Ordinal));
-    }
-
-    [Fact]
-    public void TheGeneratedManifest_KeepsTheTitles_AndIsSortedById()
-    {
-        ManifestFile generated = Read("generated.actions.json");
-        ManifestFile handwritten = Read("handwritten.actions.json");
-
-        Assert.Equal(
-            handwritten.Actions.OrderBy(a => a.Id, StringComparer.Ordinal).Select(a => a.Title),
-            generated.Actions.Select(a => a.Title));
         Assert.Equal(generated.Actions.Select(a => a.Id).Order(StringComparer.Ordinal), generated.Actions.Select(a => a.Id));
         Assert.All(generated.Actions, a => Assert.Null(a.Self));
     }

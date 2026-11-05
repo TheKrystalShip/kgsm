@@ -36,35 +36,39 @@ jobs:
           fi
           echo "version ${declared}"
 
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: '10.0.x'
 
-      # Nothing to build: the engine is bash and the package is arch=any. shellcheck is the closest
-      # thing it has to a compiler, so it stands in as the gate.
-      #
-      # The exclusions are the categories a per-file lint of this codebase cannot answer, not a
-      # way to quieten real findings:
-      #   SC2086/SC2254  exit codes are written unquoted, in expansions and in case patterns alike
-      #   SC2154         config_*/instance_* are parsed out of .config.ini at runtime
-      #   SC2148         templates/manage.*.d/ fragments are sourced, never executed
-      #   SC2317         handlers are reached through the dispatcher, not by direct call
-      #   SC2034         a variable set here is consumed by the script that sourced it
-      #   SC1091         a sourced file is not followed: each script is linted on its own
-      # Everything else fails the build.
-      #
-      # One script per call, four at a time. Given every script in one call, shellcheck analyses each
-      # with the whole graph of files it sources, which outgrows the runner and stalls the lint.
-      #
-      # The version is pinned to the official static build, not apt's. Which checks exist and when
-      # they fire changes between releases, so an unpinned lint is a gate a developer cannot
-      # reproduce: the runner's shellcheck reported findings on optional-argument functions that
-      # the same command run locally did not.
-      - name: Lint
+      # Native AOT links with clang against zlib; without them the ILC pass fails at link time.
+      - name: Install the Native AOT toolchain
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+
+      - name: Authenticate the package feed
         run: |
-          v=v0.11.0
-          curl -fsSL "https://github.com/koalaman/shellcheck/releases/download/${v}/shellcheck-${v}.linux.x86_64.tar.xz" \
-            | sudo tar -xJf - --strip-components=1 -C /usr/local/bin "shellcheck-${v}/shellcheck"
-          shellcheck --version
-          find . -name '*.sh' -not -path './tests/*' -print0 \
-            | xargs -0 -r -n1 -P4 shellcheck -e SC2086,SC2254,SC2154,SC2148,SC2317,SC2034,SC1091
+          dotnet nuget update source github \
+            --username ci \
+            --password "${{ secrets.GITHUB_TOKEN }}" \
+            --store-password-in-clear-text \
+            --configfile nuget.config
+
+
+      - name: Test
+        run: dotnet test kgsm.slnx -c Release --nologo
+
+      - name: Publish
+        run: |
+          dotnet publish src/Cli/Cli.csproj -c Release -r linux-x64 -o artifacts/publish
+          cp src/Cli/kgsm.leaf.json src/Cli/kgsm.leaf.actions.json src/Cli/kgsm.kgsm.actions.json artifacts/publish/
+
+      - name: Pack the stage, modes included
+        run: tar -C artifacts/publish -cf stage.tar .
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: stage
+          path: stage.tar
+          retention-days: 1
   package:
     needs: build
     runs-on: ubuntu-latest
@@ -73,9 +77,16 @@ jobs:
       # The container has neither git nor node, and every JavaScript action needs node present in
       # the container it runs in — so this plain shell step has to come before any `uses:`.
       - name: Provision the container
-        run: pacman -Sy --noconfirm --needed git nodejs rsync gnupg github-cli jq
+        run: pacman -Sy --noconfirm --needed git nodejs rsync gnupg github-cli
 
       - uses: actions/checkout@v7
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: stage
+
+      - name: Unpack the stage
+        run: mkdir -p artifacts/publish && tar -C artifacts/publish -xf stage.tar
       # makepkg refuses to run as root, and root-owned sources are unreadable to the build user.
       - name: Create the build user
         run: |

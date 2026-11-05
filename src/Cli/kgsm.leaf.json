@@ -8,7 +8,7 @@
   "floorSources": [
     {
       "kind": "appsettings",
-      "path": "/usr/bin/kgsm.settings.json"
+      "path": "/opt/kgsm/kgsm.settings.json"
     }
   ],
   "groups": [

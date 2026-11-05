@@ -1,4 +1,0 @@
-# Test logs directory
-# All test logs are temporary and should not be committed
-*
-!.gitignore

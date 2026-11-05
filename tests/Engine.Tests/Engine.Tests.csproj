@@ -25,7 +25,6 @@
     <!-- Test inputs, copied beside the test binary so a test reads its own copy: the settings file the
          binary ships, every system blueprint and every bundled hooks file. -->
     <Content Include="../../src/Cli/kgsm.settings.json" Link="kgsm.settings.json" CopyToOutputDirectory="PreserveNewest" />
-    <Content Include="../../deploy/kgsm.actions.json" Link="actions/handwritten.actions.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../src/Cli/kgsm.kgsm.actions.json" Link="actions/generated.actions.json" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../blueprints/*.bp.yaml" Link="blueprints/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../overrides/**/hooks.sh" Link="overrides/%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />

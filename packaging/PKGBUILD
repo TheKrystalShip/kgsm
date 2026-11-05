@@ -1,44 +1,45 @@
 # Maintainer: Cristian Moraru <info@thekrystalship.com>
 #
-# The KGSM engine. Builds nothing — the engine is bash, so packaging is placing the tree.
+# The KGSM engine: one Native-AOT binary with the system blueprints, the system hook files and the
+# manifests that describe it.
 #
 # Build from this directory:  cd packaging && makepkg
 #
-# The install prefix stays /opt/kgsm, the same path deploy.sh uses on a development host, so the
-# systemd units every leaf ships are byte-identical whether they came from a package or a deploy.
-# That is deliberate: a unit rewritten at packaging time is a unit nobody tested.
+# Compiles nothing. CI publishes first and this places the result, so the packaged bytes are the
+# tested bytes. Point KGSM_STAGE at that publish output, or leave it unset to use
+# ../artifacts/publish.
+#
+# The install prefix is /opt/kgsm, the directory the binary resolves its install root from: the
+# system blueprints, the system hook files and kgsm.settings.json sit beside it. /usr/bin/kgsm is
+# the link every unit and every component names.
 
 pkgname=kgsm
 # A placeholder: pkgver() below replaces it with what deploy/version.sh reports, so the number is
 # declared in exactly one place and this file never carries a copy that can fall behind.
-pkgver=3.18.0rc18
+pkgver=4.0.0
 pkgrel=1
-pkgdesc="Krystal Game Server Manager — multi-entrypoint game-server manager for Linux"
-arch=('any')
+pkgdesc="Krystal Game Server Manager — native engine for game-server instances"
+arch=('x86_64')
 url="https://github.com/TheKrystalShip/kgsm"
 license=('GPL-3.0-or-later')
 groups=('kgsm-node')
 # No separate debug package: these are shipped to a private fleet, not a distro archive.
-options=('!debug')
+options=('!debug' '!strip')
 install="${pkgname}.install"
 
-# Read from deploy/kgsm.requires.json — the one place this project declares what a host must
-# satisfy. Keep the two in step; the requires file explains why each of these is here.
 depends=(
     # The shared base: the kgsm service account, the /var/lib/kgsm tree every component writes
     # into, and the preset policy deciding which units a node runs.
     'kgsm-base'
-    'bash>=5.0'
-    'grep' 'sed' 'gawk' 'findutils' 'coreutils'
-    'go-yq'          # the .bp.yaml blueprint parser — NOT Debian's unrelated python yq
-    'jq'
-    'curl' 'wget' 'tar' 'unzip' 'rsync'
-    'iproute2'       # ss, for listening-port checks
-    'lsof'
+    'glibc'
     'systemd'
-    'openssl'        # HMAC signature on an outgoing event webhook
-    'procps-ng'      # pgrep, walking a native instance's children when stopping it
-    'diffutils'      # config diff
+    # The tools a generated management script runs.
+    'bash'
+    'coreutils' 'findutils'
+    'jq'
+    'curl'
+    'tar'
+    'procps-ng'
 )
 optdepends=(
     'kgsm-watchdog: supervision, autostart and crash-restart for native instances'
@@ -46,43 +47,65 @@ optdepends=(
     'steamcmd: install and update Steam-distributed game servers'
     'docker: container-kind instances'
     'docker-compose: multi-service container instances'
-    'ufw: firewall rules when enable_firewall_management=true'
     'openbsd-netcat: probing whether an instance port is reachable from outside'
-    'ncurses: coloured terminal output'
 )
+
+_stage() { printf '%s' "${KGSM_STAGE:-${startdir}/../artifacts/publish}"; }
 
 pkgver() {
     "${startdir}/../deploy/version.sh" --pkgver
 }
 
+build() {
+    local stage; stage="$(_stage)"
+    [[ -e "${stage}/kgsm" ]] || {
+        printf '\n  no publish output at %s\n' "$stage" >&2
+        printf '  build it first:  dotnet publish src/Cli/Cli.csproj -c Release -r linux-x64 -o artifacts/publish\n' >&2
+        printf '  or point KGSM_STAGE at an existing one.\n\n' >&2
+        return 1
+    }
+}
+
 package() {
-    local repo="${startdir}/.."
+    local repo="${startdir}/.." stage; stage="$(_stage)"
     local prefix="${pkgdir}/opt/${pkgname}"
 
-    # The engine tree. The exclude list is deploy/tree-excludes.txt, the same file deploy.sh reads,
-    # so a packaged /opt/kgsm and a deployed one hold the same files.
+    # The binary and the settings file beside it, which is the lowest-precedence settings source.
     install -dm755 "$prefix"
-    rsync -a --exclude-from="${repo}/deploy/tree-excludes.txt" "${repo}/" "$prefix/"
+    install -m755 "${stage}/kgsm" "${prefix}/kgsm"
+    install -m644 "${stage}/kgsm.settings.json" "${prefix}/kgsm.settings.json"
 
-    # The entry point on PATH. /usr/bin, never /usr/local/bin — /usr/local belongs to the local
-    # administrator and no package may write there. Every unit's KgsmPath names this path.
+    # The system blueprints, one flat directory of .bp.yaml files.
+    install -dm755 "${prefix}/blueprints"
+    install -m644 "${repo}"/blueprints/*.bp.yaml "${prefix}/blueprints/"
+
+    # The system hook files, one per game: overrides/<name>/hooks.sh.
+    local hooks name
+    for hooks in "${repo}"/overrides/*/hooks.sh; do
+        name="$(basename "$(dirname "$hooks")")"
+        install -Dm644 "$hooks" "${prefix}/overrides/${name}/hooks.sh"
+    done
+
+    # The entry point on PATH. /usr/bin, never /usr/local/bin: /usr/local belongs to the local
+    # administrator and no package may write there.
     install -dm755 "${pkgdir}/usr/bin"
-    ln -s "/opt/${pkgname}/kgsm.sh" "${pkgdir}/usr/bin/${pkgname}"
+    ln -s "/opt/${pkgname}/kgsm" "${pkgdir}/usr/bin/${pkgname}"
 
-    # The engine's action manifest, in the node's actions directory where kgsm-api serves it at
-    # /.well-known/tks-actions.json, stamped with the version this package is built from.
-    install -dm755 "${pkgdir}/var/lib/kgsm/leaves/actions"
-    jq --arg v "$("${repo}/deploy/version.sh")" '.version = $v' "${repo}/deploy/kgsm.actions.json" \
-        > "${pkgdir}/var/lib/kgsm/leaves/actions/kgsm.json"
-    chmod 644 "${pkgdir}/var/lib/kgsm/leaves/actions/kgsm.json"
+    # The config descriptor and the two generated action manifests, in the directories kgsm-api
+    # scans and serves. The build generates them from the settings class and the commands and the
+    # stage carries them, so they can never describe a different build than the binary beside them.
+    install -Dm644 "${stage}/kgsm.leaf.json" \
+        "${pkgdir}/var/lib/kgsm/leaves/engine.json"
+    install -Dm644 "${stage}/kgsm.leaf.actions.json" \
+        "${pkgdir}/var/lib/kgsm/leaves/actions/engine.json"
+    install -Dm644 "${stage}/kgsm.kgsm.actions.json" \
+        "${pkgdir}/var/lib/kgsm/leaves/actions/kgsm.json"
 
     # The service account and the /var/lib/kgsm tree belong to kgsm-base, which every kgsm package
-    # depends on: they are written by several components and owned by none of them, so declaring
-    # them here would make the engine's presence a precondition for a leaf's state directory.
+    # depends on: they are written by several components and owned by none of them.
 
     # Journal retention. System units running as the kgsm account: one `systemctl enable` covers a
-    # node with no login session, which `systemctl --user` cannot — it acts on one user's session
-    # and a package scriptlet has no user to act for.
+    # node with no login session, which `systemctl --user` cannot.
     install -Dm644 "${repo}/deploy/kgsm-journal-prune.service" \
         "${pkgdir}/usr/lib/systemd/system/kgsm-journal-prune.service"
     install -Dm644 "${repo}/deploy/kgsm-journal-prune.timer" \

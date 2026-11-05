@@ -19,11 +19,10 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # ── PROJECT BLOCK — the one file that declares this project's version, and how it is read ──
-# The engine is bash, so the version lives in the code it ships rather than in a project file.
-SOURCE_FILE="${HERE}/../core/bootstrap.sh"
+SOURCE_FILE="${HERE}/../Directory.Build.props"
 
 read_version() {
-    grep -oP 'KGSM_VERSION="\K[^"]+' "$SOURCE_FILE" | head -1
+    grep -oP '<Version>\K[0-9][^<]*(?=</Version>)' "$SOURCE_FILE" | head -1
 }
 # ── END PROJECT BLOCK ───────────────────────────────────────────────────────────
 

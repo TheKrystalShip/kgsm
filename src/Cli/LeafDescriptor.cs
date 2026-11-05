@@ -36,7 +36,7 @@ using TheKrystalShip.KGSM.ComponentConfig;
 [assembly: ConfigGroup("logging", "Logging", 9)]
 
 // Lowest precedence first: the settings file beside the binary declares the whole surface.
-[assembly: ConfigFloorSource("appsettings", "/usr/bin/kgsm.settings.json")]
+[assembly: ConfigFloorSource("appsettings", "/opt/kgsm/kgsm.settings.json")]
 
 [assembly: ConfigFrameworkNamespace("Logging__LogLevel__",
     "per-category filtering is open-ended: any category name is a valid key")]

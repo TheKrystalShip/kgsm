@@ -1,39 +1,9 @@
-# KGSM .gitignore
-
-# Ignore node_modules directory
 node_modules/
-
-# Ignore build output
-dist/
-out/
-
-# User defined config.ini
-config.ini
-
-# User defined blueprints
-blueprints/*.bp
-
-# Don't ignore default blueprints
-!blueprints/default/*.bp
-
-# Instance config files
-instances/*.ini
-instances/**/*.ini
-
-# KGSM Log files
-logs/*
-
-# KGSM version file
-.kgsm.version
-
-# The test logs
-tests/logs/*
-
-# Spec documents
-docs/specs/*.md
-docs/specs/**/*.md
 
 # .NET build output
 bin/
 obj/
+artifacts/
+
+# Generated beside the descriptor on every build
 src/Cli/kgsm.leaf.actions.json
