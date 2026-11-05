@@ -2,6 +2,7 @@
 
 - [Changelog](#changelog)
   - [Ideas for the future](#ideas-for-the-future)
+  - [4.0.4](#404)
   - [4.0.3](#403)
   - [4.0.2](#402)
   - [4.0.1](#401)
@@ -48,6 +49,10 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 - Allow instances to start automatically on system boot without going through systemd
 - Podman as an alternative for Docker
 - More game servers
+
+## [4.0.4]
+
+- A first install registers the default library in the same transaction that installs kgsm-base: the install script creates the `kgsm` account from kgsm-base's declaration before it registers the library.
 
 ## [4.0.3]
 

@@ -7,8 +7,12 @@
 
 # A node nobody has configured can install a game: when the engine's account has no library yet, the
 # first install registers `default` at /var/lib/kgsm/library, outside the engine's own data tree.
+# pacman creates system accounts in a hook after every package's install script has run, so the
+# account and its tree are created here from kgsm-base's own declarations first; both are idempotent.
 seed_library() {
     local home
+    systemd-sysusers kgsm.conf >/dev/null 2>&1 || true
+    systemd-tmpfiles --create kgsm.conf >/dev/null 2>&1 || true
     home="$(getent passwd kgsm | cut -d: -f6)"
     [[ -n "$home" ]] || return 0
     [[ -e "${home}/.local/share/kgsm/libraries.json" ]] && return 0
