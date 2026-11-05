@@ -2,6 +2,7 @@
 
 - [Changelog](#changelog)
   - [Ideas for the future](#ideas-for-the-future)
+  - [4.0.3](#403)
   - [4.0.2](#402)
   - [4.0.1](#401)
   - [4.0.0](#400)
@@ -47,6 +48,10 @@ Features that I'd like to consider implementing in order to make KGSM more versa
 - Allow instances to start automatically on system boot without going through systemd
 - Podman as an alternative for Docker
 - More game servers
+
+## [4.0.3]
+
+- Installing the package registers the library `default` at `/var/lib/kgsm/library` when the engine's account has none, so a fresh node can install a game.
 
 ## [4.0.2]
 

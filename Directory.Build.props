@@ -9,7 +9,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
     <InvariantGlobalization>true</InvariantGlobalization>
-    <Version>4.0.2</Version>
+    <Version>4.0.3</Version>
     <Authors>TheKrystalShip</Authors>
     <RepositoryUrl>https://github.com/TheKrystalShip/kgsm</RepositoryUrl>
   </PropertyGroup>

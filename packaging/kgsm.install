@@ -5,16 +5,29 @@
 # post_install presets only. An administrator who disabled the timer keeps it disabled across every
 # later version: re-presetting on upgrade would quietly undo that.
 
+# A node nobody has configured can install a game: when the engine's account has no library yet, the
+# first install registers `default` at /var/lib/kgsm/library, outside the engine's own data tree.
+seed_library() {
+    local home
+    home="$(getent passwd kgsm | cut -d: -f6)"
+    [[ -n "$home" ]] || return 0
+    [[ -e "${home}/.local/share/kgsm/libraries.json" ]] && return 0
+    install -d -o kgsm -g kgsm -m 0755 /var/lib/kgsm/library
+    runuser -u kgsm -- env HOME="$home" /usr/bin/kgsm library add default /var/lib/kgsm/library >/dev/null \
+        || echo "  Registering the default library failed: sudo -u kgsm kgsm library add default /var/lib/kgsm/library"
+}
+
 post_install() {
     systemctl preset kgsm-journal-prune.timer >/dev/null 2>&1 || true
+    seed_library
 
     cat <<'MSG'
 
   The engine is installed at /opt/kgsm, on PATH as /usr/bin/kgsm.
 
   Instances, blueprints and hook files live under the kgsm account's XDG paths and survive every
-  upgrade. Nothing here needs configuring before the engine works. Steam credentials, where a game
-  needs them, go in /etc/kgsm/kgsm.env.
+  upgrade. Game servers go in the library `default` at /var/lib/kgsm/library. Steam credentials,
+  where a game needs them, go in /etc/kgsm/kgsm.env, readable by the kgsm group.
 
   Native instances are supervised by kgsm-watchdog. Without it kgsm spawns a game directly and run
   state is unreliable, so install it unless this host runs container instances only.
