@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "component": "kgsm",
-  "version": "4.0.0-dev.6",
+  "version": "4.0.0-dev.7",
   "actions": [
     {
       "id": "blueprints.write",

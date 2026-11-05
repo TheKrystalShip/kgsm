@@ -181,6 +181,17 @@ bash tree, which it does not touch. The bash engine's `KGSM_VERSION` does not mo
     (ComponentConfig 4.3.0), and a test holds the manifest equal to `deploy/kgsm.actions.json`.
   - `instance enable` and `disable` write `server.autostart.enabled` and `server.autostart.disabled`.
 
+- **The component-facing surface (`engine-v4.0.0-dev.7`).**
+  - `EngineReader` (`TheKrystalShip.KGSM.Engine`) answers the binary's read commands in-process, with the
+    same rules and shapes: instances, info, status, config entries, logs, backups, blueprints, libraries,
+    ports, settings, paths, and an instance's resolved launch arguments. The binary's `instance list` and
+    `instance show` build their reports through the same `InstanceReportBuilder`.
+  - `EngineCli` (`TheKrystalShip.KGSM.Engine.Contracts`) is the typed invocation of the `kgsm` binary for
+    every write: each method runs one command with `--json` and returns an `EngineResult<T>` holding the exit
+    code, the report the command printed and the error report it wrote. A value travels as one argument, a
+    blueprint and a manifest on standard input, a transfer part as a stream. `IEngineProcess` is its door to
+    the operating system.
+
 ## Work in progress
 
 - **The game knowledge lives with the assistant (`3.18.0-rc38`).** The per-game troubleshooting,

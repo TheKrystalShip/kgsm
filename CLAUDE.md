@@ -68,6 +68,11 @@ dotnet publish src/Cli/Cli.csproj -c Release -r linux-x64     # must show no IL2
   context, errors on stderr with stdout empty. A command goes in `Commands/`, its DTO in `Engine.Contracts`
   and `EngineJsonContext`, and its test runs the command line in-process through `CliSession` in
   `tests/Engine.Tests/Cli/`. Every command but help, version and paths runs behind the registry-account gate.
+- Components reach the engine through two classes: `EngineReader` (`src/Engine/Reading/`, every read, in-process,
+  built on the same modules as the read commands) and `EngineCli` (`src/Engine.Contracts/Invocation/`, every
+  write, the typed invocation of the binary). A new command that components call gets its method on
+  `EngineCli`; a new read gets its method on `EngineReader` and, when the binary prints it too, a shared
+  builder both use.
 - The write operations are `src/Engine/Operations/`, one service per concern (install, uninstall, lifecycle,
   move, update, config, console, backup, blueprint, library, journal maintenance), all standing on an
   `OperationHost`. Transfer is `src/Engine/Transfers/`: the export service (manifest, locked parts, commit),

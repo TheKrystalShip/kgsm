@@ -36,19 +36,7 @@ internal static class InstanceCommands
         new Command("list", "Every registered instance.")
             .Act(host, "instance list", context =>
             {
-                IReadOnlyList<InstanceSummary> summaries =
-                [
-                    .. context.Services.Instances.List().Select(i => new InstanceSummary
-                    {
-                        Id = i.Id,
-                        Label = i.Config?.Label ?? i.Id,
-                        Blueprint = i.Blueprint,
-                        Runtime = i.Config?.Runtime,
-                        Library = i.Library?.Name,
-                        LibraryState = i.LibraryState,
-                        ConfigProblem = i.ConfigProblem,
-                    }),
-                ];
+                IReadOnlyList<InstanceSummary> summaries = [.. context.Services.Instances.List().Select(Engine.Reading.InstanceReportBuilder.Summary)];
 
                 return Task.FromResult<Outcome>(new Result<IReadOnlyList<InstanceSummary>>(
                     summaries, EngineJsonContext.Default.IReadOnlyListInstanceSummary, RenderList));
@@ -113,22 +101,7 @@ internal static class InstanceCommands
                 InstanceDescription? instance = CommandBuilder.Resolve(context, context.Parse.GetValue(reference)!, out Outcome? failure);
                 if (instance is null) return Task.FromResult(failure!);
 
-                InstanceLayout layout = instance.Layout;
-                var cgroup = context.Services.Settings.Cgroup;
-                var info = new InstanceInfo
-                {
-                    Id = instance.Id,
-                    Label = instance.Config?.Label ?? instance.Id,
-                    Blueprint = instance.Blueprint,
-                    Runtime = instance.Config?.Runtime,
-                    Library = instance.Library is { } library ? new InstanceLibraryRef(library.Name, library.Id, library.Path) : null,
-                    LibraryState = instance.LibraryState,
-                    Paths = PathsOf(instance, layout),
-                    CgroupPath = layout.CgroupPath(cgroup.MountPoint, cgroup.BaseName),
-                    Ports = PortSpecs.Parse(instance.Config?.Ports),
-                    Config = instance.Config,
-                    ConfigProblem = instance.ConfigProblem,
-                };
+                InstanceInfo info = Engine.Reading.InstanceReportBuilder.Info(instance, context.Services.Settings.Cgroup);
 
                 return Task.FromResult<Outcome>(new Result<InstanceInfo>(info, EngineJsonContext.Default.InstanceInfo, RenderInfo));
             });
@@ -287,26 +260,6 @@ internal static class InstanceCommands
         failure = null;
         return instance.Config;
     }
-
-    private static InstancePaths PathsOf(InstanceDescription instance, InstanceLayout layout) => new()
-    {
-        WorkingDirectory = layout.WorkingDirectory,
-        ConfigFile = layout.ConfigFile,
-        ManagementScript = layout.ManagementScript,
-        InstallDirectory = layout.InstallDirectory,
-        SavesDirectory = layout.SavesDirectory,
-        LogsDirectory = layout.LogsDirectory,
-        TempDirectory = layout.TempDirectory,
-        EventsDirectory = layout.EventsDirectory,
-        LaunchDirectory = layout.LaunchDirectory,
-        VersionFile = layout.VersionFile,
-        LatestVersionFile = layout.LatestVersionFile,
-        PidFile = layout.PidFile,
-        InputFifo = layout.InputFifo,
-        LogFile = layout.LogFile,
-        ComposeFile = layout.ComposeFile,
-        BackupsDirectory = instance.Config?.BackupsDirectory,
-    };
 
     private static string RenderList(IReadOnlyList<InstanceSummary> summaries) => summaries.Count == 0
         ? "No instances are registered."
