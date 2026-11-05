@@ -174,6 +174,9 @@ public sealed class EngineReader : IDisposable
                 key => System.Environment.GetEnvironmentVariable(key), EnginePaths.SteamCredentialsFilePath))
             : null;
 
+    /// <summary>The commented blueprint template an author copies and fills in.</summary>
+    public string BlueprintTemplate() => BlueprintScaffold.Template;
+
     public BlueprintValidation ValidateBlueprintFile(string path) => new BlueprintParser().ParseFile(path).Validation;
 
     // ── Libraries and ports ───────────────────────────────────────────────────────────────────

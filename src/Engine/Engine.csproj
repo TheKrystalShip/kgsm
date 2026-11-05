@@ -36,6 +36,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Scripts/management-script.tpl" LogicalName="management-script.tpl" />
+    <EmbeddedResource Include="Blueprints/blueprint-template.yaml" LogicalName="blueprint-template.yaml" />
   </ItemGroup>
 
   <ItemGroup>

@@ -43,4 +43,13 @@ public class BlueprintScaffoldTests
         Assert.False(BlueprintScaffold.IsSafeName("../x"));
         Assert.True(BlueprintScaffold.IsSafeName("my-game"));
     }
+
+    [Fact]
+    public void TheAuthoringTemplateIsAValidNativeBlueprintOnceItsExampleNameIsKept()
+    {
+        var parsed = new BlueprintParser().Parse(BlueprintScaffold.Template, "example.bp.yaml");
+
+        Assert.True(parsed.Valid, string.Join("; ", parsed.Validation.Errors));
+        Assert.DoesNotContain("kgsm.sh", BlueprintScaffold.Template, StringComparison.Ordinal);
+    }
 }

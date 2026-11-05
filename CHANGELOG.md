@@ -210,6 +210,10 @@ bash tree, which it does not touch. The bash engine's `KGSM_VERSION` does not mo
   - `EngineCli.VersionAsync` reports the deployed binary's version; `SetNoteAsync`, `ClearNoteAsync`,
     `SetSettingAsync` and `install`'s `port` complete the typed invocation.
 
+- **The blueprint authoring template (`engine-v4.0.0-dev.9`).** `EngineReader.BlueprintTemplate()` returns the
+  commented blueprint an author copies and fills in. The template is embedded in the engine that reads the
+  format, so a surface offering a starting point asks the core and finds no file on disk to read.
+
 ## Work in progress
 
 - **The game knowledge lives with the assistant (`3.18.0-rc38`).** The per-game troubleshooting,

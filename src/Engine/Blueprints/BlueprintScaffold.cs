@@ -15,6 +15,20 @@ public static partial class BlueprintScaffold
 {
     private const int MaxNameLength = 64;
 
+    /// <summary>
+    /// The authoring template: a commented blueprint listing every field with what it means, to copy and fill in.
+    /// It is the engine's reference for the blueprint format, carried with the engine that reads the format.
+    /// </summary>
+    public static string Template { get; } = ReadTemplate();
+
+    private static string ReadTemplate()
+    {
+        using Stream stream = typeof(BlueprintScaffold).Assembly.GetManifestResourceStream("blueprint-template.yaml")
+            ?? throw new InvalidOperationException("the blueprint template is not embedded in this build");
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd();
+    }
+
     [GeneratedRegex(@"^[a-z0-9]+(?:[-_][a-z0-9]+)*$")]
     private static partial Regex SafeNamePattern();
 
